@@ -11,6 +11,7 @@ GPClient::GPClient(QWidget *parent)
     QObject::connect(this, &GPClient::connectFailed, [this]() {
         ui->connectButton->setDisabled(false);
         ui->connectButton->setText("Connect");
+        ui->statusLabel->setText("Not Connected");
     });
 
     // QNetworkAccessManager setup
@@ -26,6 +27,12 @@ GPClient::GPClient(QWidget *parent)
     QObject::connect(vpn, &com::yuezk::qt::GPService::connected, this, &GPClient::onVPNConnected);
     QObject::connect(vpn, &com::yuezk::qt::GPService::disconnected, this, &GPClient::onVPNDisconnected);
     QObject::connect(vpn, &com::yuezk::qt::GPService::logAvailable, this, &GPClient::onVPNLogAvailable);
+
+    int status = vpn->status();
+    if (status != 0) {
+        ui->statusLabel->setText("Connected");
+        ui->connectButton->setText("Disconnect");
+    }
 }
 
 GPClient::~GPClient()
@@ -39,16 +46,20 @@ GPClient::~GPClient()
 
 void GPClient::on_connectButton_clicked()
 {
-    if (ui->connectButton->text() == "Connect") {
+    QString btnText = ui->connectButton->text();
+
+    if (btnText == "Connect") {
         QString portal = ui->portalInput->text();
-
+        ui->statusLabel->setText("Authenticating...");
         ui->connectButton->setDisabled(true);
-        ui->connectButton->setText("Connecting...");
         samlLogin(portal);
-    } else {
+    } else if (btnText == "Cancel") {
+        ui->statusLabel->setText("Canceling...");
         ui->connectButton->setDisabled(true);
-        ui->connectButton->setText("Disconnecting...");
-
+        vpn->disconnect();
+    } else {
+        ui->statusLabel->setText("Disconnecting...");
+        ui->connectButton->setDisabled(true);
         vpn->disconnect();
     }
 }
@@ -123,21 +134,23 @@ void GPClient::onLoginSuccess(QJsonObject loginResult)
     qDebug() << "Server:" << host << ", User:" << user << "Cookie:" << cookieValue;
     qDebug() << "openconnect --protocol=gp -u" << user << "--passwd-on-stdin" << host;
 
+    ui->statusLabel->setText("Connecting...");
+    ui->connectButton->setText("Cancel");
     vpn->connect(host, user, cookieValue);
 }
 
 void GPClient::onVPNConnected()
 {
-    qDebug() << "VPN connected";
-    ui->connectButton->setDisabled(false);
+    ui->statusLabel->setText("Connected");
     ui->connectButton->setText("Disconnect");
+    ui->connectButton->setDisabled(false);
 }
 
 void GPClient::onVPNDisconnected()
 {
-    qDebug() << "VPN disconnected";
-    ui->connectButton->setDisabled(false);
+    ui->statusLabel->setText("Not Connected");
     ui->connectButton->setText("Connect");
+    ui->connectButton->setDisabled(false);
 }
 
 void GPClient::onVPNLogAvailable(QString log)
