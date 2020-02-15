@@ -19,7 +19,7 @@ EnhancedWebView::~EnhancedWebView()
 
 void EnhancedWebView::initialize()
 {
-    QString port = QProcessEnvironment::systemEnvironment().value("QTWEBENGINE_REMOTE_DEBUGGING");
+    QString port = QProcessEnvironment::systemEnvironment().value(ENV_CDP_PORT);
     qDebug() << "port:" << port;
     cdp->initialize("http://127.0.0.1:" + port + "/json");
 }
