@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     sigwatch.watchForSignal(SIGTERM);
     sigwatch.watchForSignal(SIGQUIT);
     sigwatch.watchForSignal(SIGHUP);
-    QObject::connect(&sigwatch, SIGNAL(unixSignal(int)), &service, SLOT(quit()));
+    QObject::connect(&sigwatch, &UnixSignalWatcher::unixSignal, &service, &GPService::quit);
 
     return app.exec();
 }
