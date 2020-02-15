@@ -32,6 +32,13 @@ public slots:
     void disconnect();
     int status();
 
+private slots:
+    void onProcessStarted();
+    void onProcessError(QProcess::ProcessError error);
+    void onProcessStdout();
+    void onProcessStderr();
+    void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
+
 private:
     QProcess *openconnect;
 

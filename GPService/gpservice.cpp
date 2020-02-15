@@ -47,23 +47,28 @@ GPService::GPService(QObject *parent)
     : QObject(parent)
     , openconnect(new SandboxProcess)
 {
+    // Register the DBus service
     new GPServiceAdaptor(this);
     QDBusConnection dbus = QDBusConnection::systemBus();
     dbus.registerObject("/", this);
     dbus.registerService("com.yuezk.qt.GPService");
+
+    // Setup the openconnect process
+    QObject::connect(openconnect, &QProcess::started, this, &GPService::onProcessStarted);
+    QObject::connect(openconnect, &QProcess::errorOccurred, this, &GPService::onProcessError);
+    QObject::connect(openconnect, &QProcess::readyReadStandardOutput, this, &GPService::onProcessStdout);
+    QObject::connect(openconnect, &QProcess::readyReadStandardError, this, &GPService::onProcessStderr);
+    QObject::connect(openconnect, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &GPService::onProcessFinished);
 }
 
 void GPService::connect(QString server, QString username, QString passwd)
 {
-    qDebug() << server << username << passwd;
-
     if (status() != QProcess::NotRunning) {
         log("Openconnect has already started on PID " + QString::number(openconnect->processId()) + ", nothing changed.");
         return;
     }
 
     QString bin = findBinary();
-
     if (bin == nullptr) {
         log("Could not found openconnect binary, make sure openconnect is installed, exiting.");
         return;
@@ -76,50 +81,20 @@ void GPService::connect(QString server, QString username, QString passwd)
         return;
     }
 
-    qDebug() << tunName;
-
     // openconnect --protocol=gp -i vpn0 -s 'sudo -E /etc/vpnc/vpnc-script' -u "zyue@microstrategy.com" --passwd-on-stdin "https://vpn.microstrategy.com/gateway:prelogin-cookie"
     QStringList args;
     args << "--protocol=gp"
+         << "--no-dtls"
         // << "-i" << tunName
         // << "-s" << "sudo -E /etc/vpnc/vpnc-script"
         // << "-U" << NM_OPENCONNECT_USER
-     << "-u" << username
-     << "--passwd-on-stdin"
-     << server;
+         << "-u" << username
+         << "--passwd-on-stdin"
+         << server;
 
     openconnect->start(bin, args);
     openconnect->write(passwd.toUtf8());
     openconnect->closeWriteChannel();
-
-    QObject::connect(openconnect, &QProcess::started, [this]() {
-        log("Openconnect started successfully, PID=" + QString::number(openconnect->processId()));
-    });
-
-    QObject::connect(openconnect, &QProcess::errorOccurred, [tunName, this](QProcess::ProcessError error) {
-        log("Error occurred: Openconnect started failed");
-        destroyPersistentTundev(tunName);
-        emit disconnected();
-    });
-
-    QObject::connect(openconnect, &QProcess::readyReadStandardOutput, [this] () {
-        QString output = openconnect->readAllStandardOutput();
-
-        log(output);
-        if (output.startsWith("Connected as")) {
-            emit connected();
-        }
-    });
-
-    QObject::connect(openconnect, &QProcess::readyReadStandardError, [this] () {
-        log(openconnect->readAllStandardError());
-    });
-
-    QObject::connect(openconnect, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), [tunName, this](int exitCode, QProcess::ExitStatus exitStatus) {
-        log("Openconnect process exited with code " + QString::number(exitCode) + " and exit status " + QVariant::fromValue(exitStatus).toString());
-        destroyPersistentTundev(tunName);
-        emit disconnected();
-    });
 }
 
 void GPService::disconnect()
@@ -132,6 +107,38 @@ void GPService::disconnect()
 int GPService::status()
 {
     return openconnect->state();
+}
+
+void GPService::onProcessStarted()
+{
+    log("Openconnect started successfully, PID=" + QString::number(openconnect->processId()));
+}
+
+void GPService::onProcessError(QProcess::ProcessError error)
+{
+    log("Error occurred: Openconnect started failed " + QVariant::fromValue(error).toString());
+    emit disconnected();
+}
+
+void GPService::onProcessStdout()
+{
+    QString output = openconnect->readAllStandardOutput();
+
+    log(output);
+    if (output.startsWith("Connected as")) {
+        emit connected();
+    }
+}
+
+void GPService::onProcessStderr()
+{
+    log(openconnect->readAllStandardError());
+}
+
+void GPService::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    log("Openconnect process exited with code " + QString::number(exitCode) + " and exit status " + QVariant::fromValue(exitStatus).toString());
+    emit disconnected();
 }
 
 void GPService::log(QString msg)
