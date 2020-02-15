@@ -61,6 +61,16 @@ GPService::GPService(QObject *parent)
     QObject::connect(openconnect, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &GPService::onProcessFinished);
 }
 
+void GPService::quit()
+{
+    if (openconnect->state() == QProcess::NotRunning) {
+        exit(0);
+    } else {
+        aboutToQuit = true;
+        openconnect->terminate();
+    }
+}
+
 void GPService::connect(QString server, QString username, QString passwd)
 {
     if (status() != QProcess::NotRunning) {
@@ -139,6 +149,10 @@ void GPService::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     log("Openconnect process exited with code " + QString::number(exitCode) + " and exit status " + QVariant::fromValue(exitStatus).toString());
     emit disconnected();
+
+    if (aboutToQuit) {
+        exit(0);
+    };
 }
 
 void GPService::log(QString msg)

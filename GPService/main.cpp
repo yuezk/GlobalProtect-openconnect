@@ -1,6 +1,7 @@
 #include <QtDBus>
 #include "gpservice.h"
 #include "singleapplication.h"
+#include "sigwatch.h"
 
 int main(int argc, char *argv[])
 {
@@ -12,7 +13,14 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    new GPService;
+    GPService service;
+
+    UnixSignalWatcher sigwatch;
+    sigwatch.watchForSignal(SIGINT);
+    sigwatch.watchForSignal(SIGTERM);
+    sigwatch.watchForSignal(SIGQUIT);
+    sigwatch.watchForSignal(SIGHUP);
+    QObject::connect(&sigwatch, SIGNAL(unixSignal(int)), &service, SLOT(quit()));
 
     return app.exec();
 }

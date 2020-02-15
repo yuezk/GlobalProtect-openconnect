@@ -31,6 +31,7 @@ public slots:
     void connect(QString server, QString username, QString passwd);
     void disconnect();
     int status();
+    void quit();
 
 private slots:
     void onProcessStarted();
@@ -41,6 +42,7 @@ private slots:
 
 private:
     QProcess *openconnect;
+    bool aboutToQuit = false;
 
     void log(QString msg);
     static QString findBinary();

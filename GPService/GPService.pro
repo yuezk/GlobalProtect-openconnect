@@ -19,11 +19,13 @@ DEFINES += QT_DEPRECATED_WARNINGS
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 HEADERS += \
-    gpservice.h
+    gpservice.h \
+    sigwatch.h
 
 SOURCES += \
         gpservice.cpp \
-        main.cpp
+        main.cpp \
+        sigwatch.cpp
 
 DBUS_ADAPTORS += gpservice.xml
 
