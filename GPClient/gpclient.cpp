@@ -2,11 +2,16 @@
 #include "ui_gpclient.h"
 #include "samlloginwindow.h"
 
+#include <QDesktopWidget>
+
 GPClient::GPClient(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::GPClient)
 {
     ui->setupUi(this);
+
+    setFixedSize(width(), height());
+    moveCenter();
 
     QObject::connect(this, &GPClient::connectFailed, [this]() {
         ui->connectButton->setDisabled(false);
@@ -136,6 +141,7 @@ void GPClient::onLoginSuccess(QJsonObject loginResult)
 
     ui->statusLabel->setText("Connecting...");
     ui->connectButton->setText("Cancel");
+    ui->connectButton->setDisabled(false);
     vpn->connect(host, user, cookieValue);
 }
 
@@ -156,6 +162,28 @@ void GPClient::onVPNDisconnected()
 void GPClient::onVPNLogAvailable(QString log)
 {
     qDebug() << log;
+}
+
+void GPClient::moveCenter()
+{
+    QDesktopWidget *desktop = QApplication::desktop();
+
+    int screenWidth, width;
+    int screenHeight, height;
+    int x, y;
+    QSize windowSize;
+
+    screenWidth = desktop->width();
+    screenHeight = desktop->height();
+
+    windowSize = size();
+    width = windowSize.width();
+    height = windowSize.height();
+
+    x = (screenWidth - width) / 2;
+    y = (screenHeight - height) / 2;
+    y -= 50;
+    move(x, y);
 }
 
 void GPClient::samlLogin(const QString portal)

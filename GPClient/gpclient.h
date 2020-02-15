@@ -39,6 +39,7 @@ private:
     QNetworkReply *reply;
     com::yuezk::qt::GPService *vpn;
 
+    void moveCenter();
     void samlLogin(const QString portal);
 };
 #endif // GPCLIENT_H
