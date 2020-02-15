@@ -1,11 +1,10 @@
-#include <QCoreApplication>
 #include <QtDBus>
-
 #include "gpservice.h"
+#include "singleapplication.h"
 
 int main(int argc, char *argv[])
 {
-    QCoreApplication a(argc, argv);
+    SingleApplication app(argc, argv);
 
     if (!QDBusConnection::systemBus().isConnected()) {
         qWarning("Cannot connect to the D-Bus session bus.\n"
@@ -15,5 +14,5 @@ int main(int argc, char *argv[])
 
     new GPService;
 
-    return a.exec();
+    return app.exec();
 }
