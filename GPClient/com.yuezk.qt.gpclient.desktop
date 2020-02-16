@@ -1,0 +1,10 @@
+[Desktop Entry]
+
+Type=Application
+Version=1.0.0
+Name=GlobalProtect VPN
+Comment=GlobalProtect VPN client, supports SAML auth mode
+Exec=env QTWEBENGINE_REMOTE_DEBUGGING=12315 /usr/local/bin/gpclient
+Icon=
+Categories=Network;VPN;Utility;Qt;
+Keywords=GlobalProtect;Openconnect;SAML;

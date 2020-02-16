@@ -42,3 +42,11 @@ DBUS_INTERFACES += ../GPService/gpservice.xml
 # Default rules for deployment.
 target.path = /usr/local/bin
 INSTALLS += target
+
+DISTFILES += \
+    com.yuezk.qt.gpclient.desktop
+
+desktop_entry.path = /usr/share/applications/
+desktop_entry.files = com.yuezk.qt.gpclient.desktop
+
+INSTALLS += desktop_entry

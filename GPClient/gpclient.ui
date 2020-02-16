@@ -68,6 +68,9 @@
         <property name="text">
          <string>vpn.microstrategy.com</string>
         </property>
+        <property name="placeholderText">
+         <string>Please enter your portal address</string>
+        </property>
        </widget>
       </item>
       <item>
