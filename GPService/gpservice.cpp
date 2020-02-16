@@ -126,7 +126,7 @@ void GPService::onProcessStarted()
 
 void GPService::onProcessError(QProcess::ProcessError error)
 {
-    log("Error occurred: Openconnect started failed " + QVariant::fromValue(error).toString());
+    log("Error occurred: " + QVariant::fromValue(error).toString());
     emit disconnected();
 }
 
