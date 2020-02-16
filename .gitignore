@@ -1,3 +1,7 @@
+# Binaries
+gpclient
+gpservice
+
 # C++ objects and libs
 *.slo
 *.lo
