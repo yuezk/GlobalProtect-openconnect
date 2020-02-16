@@ -1,51 +1,14 @@
 #include "gpservice.h"
 #include "gpservice_adaptor.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <sys/ioctl.h>
-#include <linux/if_tun.h>
-#include <net/if.h>
-#include <pwd.h>
-#include <grp.h>
-
 #include <QFileInfo>
-#include <QDebug>
 #include <QtDBus>
-#include <QIODevice>
-#include <QProcess>
 #include <QDateTime>
 #include <QVariant>
 
-struct {
-    uid_t tun_owner;
-    gid_t tun_group;
-} tun_user;
-
-class SandboxProcess : public QProcess
-{
-protected:
-    void setupChildProcess() override;
-};
-
-void SandboxProcess::setupChildProcess()
-{
-    /*if (initgroups (NM_OPENCONNECT_USER, tun_user.tun_group) ||
-            setgid (tun_user.tun_group) ||
-            setuid (tun_user.tun_owner)) {
-        qDebug() << "Failed to drop privileges when spawning openconnect";
-    }*/
-}
-
 GPService::GPService(QObject *parent)
     : QObject(parent)
-    , openconnect(new SandboxProcess)
+    , openconnect(new QProcess)
 {
     // Register the DBus service
     new GPServiceAdaptor(this);
@@ -59,6 +22,21 @@ GPService::GPService(QObject *parent)
     QObject::connect(openconnect, &QProcess::readyReadStandardOutput, this, &GPService::onProcessStdout);
     QObject::connect(openconnect, &QProcess::readyReadStandardError, this, &GPService::onProcessStderr);
     QObject::connect(openconnect, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &GPService::onProcessFinished);
+}
+
+GPService::~GPService()
+{
+    delete openconnect;
+}
+
+QString GPService::findBinary()
+{
+    for (int i = 0; i < binaryPaths->length(); i++) {
+        if (QFileInfo::exists(binaryPaths[i])) {
+            return binaryPaths[i];
+        }
+    }
+    return nullptr;
 }
 
 void GPService::quit()
@@ -84,23 +62,12 @@ void GPService::connect(QString server, QString username, QString passwd)
         return;
     }
 
-    char *tunName = "tun0"; // createPersistentTundev();
-    // Failed to create device
-    if (tunName == nullptr) {
-        log("Could not create tun, exiting.");
-        return;
-    }
-
-    // openconnect --protocol=gp -i vpn0 -s 'sudo -E /etc/vpnc/vpnc-script' -u "zyue@microstrategy.com" --passwd-on-stdin "https://vpn.microstrategy.com/gateway:prelogin-cookie"
     QStringList args;
-    args << "--protocol=gp"
-         << "--no-dtls"
-        // << "-i" << tunName
-        // << "-s" << "sudo -E /etc/vpnc/vpnc-script"
-        // << "-U" << NM_OPENCONNECT_USER
-         << "-u" << username
-         << "--passwd-on-stdin"
-         << server;
+    args << QCoreApplication::arguments().mid(1)
+     << "--protocol=gp"
+     << "-u" << username
+     << "--passwd-on-stdin"
+     << server;
 
     openconnect->start(bin, args);
     openconnect->write(passwd.toUtf8());
@@ -161,96 +128,4 @@ void GPService::log(QString msg)
     QString record = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz") + ": " + msg;
     qDebug() << record;
     emit logAvailable(record);
-}
-
-QString GPService::findBinary()
-{
-    for (int i = 0; i < binaryPaths->length(); i++) {
-        if (QFileInfo::exists(binaryPaths[i])) {
-            return binaryPaths[i];
-        }
-    }
-
-    return nullptr;
-}
-
-char *GPService::createPersistentTundev()
-{
-    struct passwd *pw;
-    struct ifreq ifr;
-    int fd;
-    int i;
-
-    pw = getpwnam(NM_OPENCONNECT_USER);
-    if (!pw)
-        return nullptr;
-
-    tun_user.tun_owner = pw->pw_uid;
-    tun_user.tun_group = pw->pw_gid;
-
-    fd = open("/dev/net/tun", O_RDWR);
-    if (fd < 0) {
-        qDebug("Failed to open /dev/net/tun");
-        return nullptr;
-    }
-
-    memset(&ifr, 0, sizeof(ifr));
-    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-
-    for (i = 0; i < 256; i++) {
-        sprintf(ifr.ifr_name, "gpvpn%d", i);
-
-        int retcode = ioctl(fd, TUNSETIFF, (void *)&ifr);
-
-        if (!retcode) {
-            break;
-        }
-    }
-
-    if (i == 256) {
-        qDebug("Failed to create tun");
-        return nullptr;
-    }
-
-    if (ioctl(fd, TUNSETOWNER, tun_user.tun_owner) < 0) {
-        qDebug("TUNSETOWNER");
-        return nullptr;
-    }
-
-    if (ioctl(fd, TUNSETPERSIST, 1)) {
-        qDebug("TUNSETPERSIST");
-        return nullptr;
-    }
-    close(fd);
-    qDebug("Created tundev %s\n", ifr.ifr_name);
-    return strdup(ifr.ifr_name);
-}
-
-void GPService::destroyPersistentTundev(char *tun_name)
-{
-    struct ifreq ifr;
-    int fd;
-
-    fd = open("/dev/net/tun", O_RDWR);
-    if (fd < 0) {
-        qDebug() << "Failed to open /dev/net/tun";
-        return;
-    }
-
-    memset(&ifr, 0, sizeof(ifr));
-    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-    strcpy(ifr.ifr_name, tun_name);
-
-    if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) {
-        qDebug() << "TUNSETIFF";
-        return;
-    }
-
-    if (ioctl(fd, TUNSETPERSIST, 0)) {
-        qDebug() << "TUNSETPERSIST";
-        return;
-    }
-
-    qDebug() << "Destroyed  tundev %s\n" << tun_name;
-    close(fd);
 }

@@ -4,8 +4,6 @@
 #include <QObject>
 #include <QProcess>
 
-#define NM_OPENCONNECT_USER "nm-openconnect"
-
 static const QString binaryPaths[] {
     "/usr/bin/openconnect",
     "/usr/sbin/openconnect",
@@ -21,6 +19,7 @@ class GPService : public QObject
     Q_CLASSINFO("D-Bus Interface", "com.yuezk.qt.GPService")
 public:
     explicit GPService(QObject *parent = nullptr);
+    ~GPService();
 
 signals:
     void connected();
@@ -46,8 +45,6 @@ private:
 
     void log(QString msg);
     static QString findBinary();
-    static char *createPersistentTundev();
-    static void destroyPersistentTundev(char *tun_name);
 };
 
 #endif // GLOBALPROTECTSERVICE_H
