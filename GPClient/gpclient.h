@@ -38,6 +38,7 @@ private:
     QNetworkAccessManager *networkManager;
     QNetworkReply *reply;
     com::yuezk::qt::GPService *vpn;
+    QSettings *settings;
 
     void moveCenter();
     void samlLogin(const QString portal);

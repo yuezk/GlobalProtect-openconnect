@@ -13,6 +13,9 @@ GPClient::GPClient(QWidget *parent)
     setFixedSize(width(), height());
     moveCenter();
 
+    settings = new QSettings("com.yuezk.qt", "GPClient");
+    ui->portalInput->setText(settings->value("portal", "").toString());
+
     QObject::connect(this, &GPClient::connectFailed, [this]() {
         ui->connectButton->setDisabled(false);
         ui->connectButton->setText("Connect");
@@ -47,6 +50,7 @@ GPClient::~GPClient()
     delete reply;
     delete loginWindow;
     delete vpn;
+    delete settings;
 }
 
 void GPClient::on_connectButton_clicked()
@@ -55,6 +59,7 @@ void GPClient::on_connectButton_clicked()
 
     if (btnText == "Connect") {
         QString portal = ui->portalInput->text();
+        settings->setValue("portal", portal);
         ui->statusLabel->setText("Authenticating...");
         ui->connectButton->setDisabled(true);
         samlLogin(portal);

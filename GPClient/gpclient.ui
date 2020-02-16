@@ -66,7 +66,7 @@
       <item>
        <widget class="QLineEdit" name="portalInput">
         <property name="text">
-         <string>vpn.microstrategy.com</string>
+         <string/>
         </property>
         <property name="placeholderText">
          <string>Please enter your portal address</string>
