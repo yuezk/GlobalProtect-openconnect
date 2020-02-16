@@ -1,0 +1,9 @@
+[Unit]
+Description=GlobalProtect openconnect DBus service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=dbus
+BusName=com.yuezk.qt.GPService
+ExecStart=/usr/local/bin/gpservice

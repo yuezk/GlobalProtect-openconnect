@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=com.yuezk.qt.GPService
+Exec=/usr/local/bin/gpservice
+User=root
+SystemdService=gpservice.service
