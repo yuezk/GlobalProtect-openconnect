@@ -6,4 +6,4 @@ Wants=network.target
 [Service]
 Type=dbus
 BusName=com.yuezk.qt.GPService
-ExecStart=/usr/local/bin/gpservice --no-dtls -U nm-openconnect
+ExecStart=/usr/local/bin/gpservice

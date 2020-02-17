@@ -54,3 +54,6 @@ desktop_icon.path = /usr/share/pixmaps/
 desktop_icon.files = com.yuezk.qt.GPClient.svg
 
 INSTALLS += desktop_entry desktop_icon
+
+RESOURCES += \
+    resources.qrc

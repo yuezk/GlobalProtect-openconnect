@@ -41,6 +41,7 @@ private:
     QSettings *settings;
 
     void moveCenter();
+    void updateConnectionStatus(QString status);
     void samlLogin(const QString portal);
 };
 #endif // GPCLIENT_H

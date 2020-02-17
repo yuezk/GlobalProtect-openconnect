@@ -7,15 +7,18 @@
     <x>0</x>
     <y>0</y>
     <width>260</width>
-    <height>300</height>
+    <height>338</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>GP VPN Client</string>
   </property>
   <property name="windowIcon">
-   <iconset>
-    <normaloff>com.yuezk.qt.GPClient.svg</normaloff>com.yuezk.qt.GPClient.svg</iconset>
+   <iconset resource="resources.qrc">
+    <normaloff>:/images/logo.svg</normaloff>:/images/logo.svg</iconset>
+  </property>
+  <property name="styleSheet">
+   <string notr="true"/>
   </property>
   <property name="iconSize">
    <size>
@@ -47,12 +50,28 @@
      <number>15</number>
     </property>
     <item>
-     <layout class="QVBoxLayout" name="verticalLayout" stretch="0">
+     <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0">
+      <property name="bottomMargin">
+       <number>15</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="statusImage">
+        <property name="styleSheet">
+         <string notr="true">#statusImage {
+	image: url(:/images/not_connected.png);
+	padding: 15
+}</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QLabel" name="statusLabel">
         <property name="font">
          <font>
-          <pointsize>18</pointsize>
+          <pointsize>14</pointsize>
           <weight>50</weight>
           <bold>false</bold>
           <underline>false</underline>
@@ -101,6 +120,8 @@
    </layout>
   </widget>
  </widget>
- <resources/>
+ <resources>
+  <include location="resources.qrc"/>
+ </resources>
  <connections/>
 </ui>

@@ -3,23 +3,26 @@
 #include "samlloginwindow.h"
 
 #include <QDesktopWidget>
+#include <QGraphicsScene>
+#include <QGraphicsView>
+#include <QGraphicsPixmapItem>
+#include <QImage>
+#include <QStyle>
 
 GPClient::GPClient(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::GPClient)
 {
     ui->setupUi(this);
-
     setFixedSize(width(), height());
     moveCenter();
 
+    // Restore portal from the previous settings
     settings = new QSettings("com.yuezk.qt", "GPClient");
     ui->portalInput->setText(settings->value("portal", "").toString());
 
     QObject::connect(this, &GPClient::connectFailed, [this]() {
-        ui->connectButton->setDisabled(false);
-        ui->connectButton->setText("Connect");
-        ui->statusLabel->setText("Not Connected");
+        updateConnectionStatus("not_connected");
     });
 
     // QNetworkAccessManager setup
@@ -38,8 +41,7 @@ GPClient::GPClient(QWidget *parent)
 
     int status = vpn->status();
     if (status != 0) {
-        ui->statusLabel->setText("Connected");
-        ui->connectButton->setText("Disconnect");
+        updateConnectionStatus("connected");
     }
 }
 
@@ -61,15 +63,19 @@ void GPClient::on_connectButton_clicked()
         QString portal = ui->portalInput->text();
         settings->setValue("portal", portal);
         ui->statusLabel->setText("Authenticating...");
-        ui->connectButton->setDisabled(true);
+        updateConnectionStatus("pending");
         samlLogin(portal);
     } else if (btnText == "Cancel") {
         ui->statusLabel->setText("Canceling...");
-        ui->connectButton->setDisabled(true);
+        updateConnectionStatus("pending");
+
+        if (reply->isRunning()) {
+            reply->abort();
+        }
         vpn->disconnect();
     } else {
         ui->statusLabel->setText("Disconnecting...");
-        ui->connectButton->setDisabled(true);
+        updateConnectionStatus("pending");
         vpn->disconnect();
     }
 }
@@ -118,7 +124,6 @@ void GPClient::preloginResultFinished()
         loginWindow->login(samlRequest);
         loginWindow->exec();
     }
-    delete reply;
 }
 
 void GPClient::onLoginSuccess(QJsonObject loginResult)
@@ -141,27 +146,38 @@ void GPClient::onLoginSuccess(QJsonObject loginResult)
     }
 
     QString host = QString("https://%1/%2:%3").arg(loginResult.value("server").toString(), shortpath, cookieName);
-    qDebug() << "Server:" << host << ", User:" << user << "Cookie:" << cookieValue;
-    qDebug() << "openconnect --protocol=gp -u" << user << "--passwd-on-stdin" << host;
-
-    ui->statusLabel->setText("Connecting...");
-    ui->connectButton->setText("Cancel");
-    ui->connectButton->setDisabled(false);
     vpn->connect(host, user, cookieValue);
+    ui->statusLabel->setText("Connecting...");
+    updateConnectionStatus("pending");
+}
+
+void GPClient::updateConnectionStatus(QString status)
+{
+    if (status == "not_connected") {
+        ui->statusLabel->setText("Not Connected");
+        ui->statusImage->setStyleSheet("image: url(:/images/not_connected.png); padding: 15;");
+        ui->connectButton->setText("Connect");
+        ui->connectButton->setDisabled(false);
+    } else if (status == "pending") {
+        ui->statusImage->setStyleSheet("image: url(:/images/pending.png); padding: 15;");
+        ui->connectButton->setText("Cancel");
+        ui->connectButton->setDisabled(false);
+    } else if (status == "connected") {
+        ui->statusLabel->setText("Connected");
+        ui->statusImage->setStyleSheet("image: url(:/images/connected.png); padding: 15;");
+        ui->connectButton->setText("Disconnect");
+        ui->connectButton->setDisabled(false);
+    }
 }
 
 void GPClient::onVPNConnected()
 {
-    ui->statusLabel->setText("Connected");
-    ui->connectButton->setText("Disconnect");
-    ui->connectButton->setDisabled(false);
+    updateConnectionStatus("connected");
 }
 
 void GPClient::onVPNDisconnected()
 {
-    ui->statusLabel->setText("Not Connected");
-    ui->connectButton->setText("Connect");
-    ui->connectButton->setDisabled(false);
+    updateConnectionStatus("not_connected");
 }
 
 void GPClient::onVPNLogAvailable(QString log)
