@@ -22,6 +22,7 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 ```sh
 git clone https://github.com/yuezk/GlobalProtect-openconnect.git
 cd GlobalProtect-openconnect
+git submodule init && git submodule update
 qmake CONFIG+=release
 make
 sudo make install
