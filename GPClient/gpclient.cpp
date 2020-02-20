@@ -8,6 +8,7 @@
 #include <QGraphicsPixmapItem>
 #include <QImage>
 #include <QStyle>
+#include <QMessageBox>
 
 GPClient::GPClient(QWidget *parent)
     : QMainWindow(parent)
@@ -105,8 +106,10 @@ void GPClient::preloginResultFinished()
 
     if (samlMethod == "POST") {
         // TODO
-        qDebug("TODO: SAML method is POST");
         emit connectFailed();
+        QMessageBox msgBox;
+        msgBox.setText("TODO: SAML method is POST");
+        msgBox.exec();
     } else if (samlMethod == "REDIRECT") {
         samlLogin(samlRequest);
     }
