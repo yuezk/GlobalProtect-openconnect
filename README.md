@@ -2,7 +2,7 @@
 A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Qt5, supports SAML auth mode, inspired by [gp-saml-gui](https://github.com/dlenski/gp-saml-gui).
 
 <p align="center">
-![GlobalProtect openconnect](./screenshot.png);
+![GlobalProtect openconnect](screenshot.png)
 </p>
 
 ## Prerequisites
