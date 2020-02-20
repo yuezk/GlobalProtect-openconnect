@@ -74,14 +74,12 @@ void GPClient::on_connectButton_clicked()
 void GPClient::preloginResultFinished()
 {
     if (reply->error()) {
-        qDebug() << "Prelogin request error";
+        qWarning() << "Prelogin request error";
         emit connectFailed();
         return;
     }
 
     QByteArray bytes = reply->readAll();
-    qDebug("response is: %s", bytes.toStdString().c_str());
-
     const QString tagMethod = "saml-auth-method";
     const QString tagRequest = "saml-request";
     QString samlMethod;
@@ -100,7 +98,7 @@ void GPClient::preloginResultFinished()
     }
 
     if (samlMethod == nullptr || samlRequest == nullptr) {
-        qDebug("This does not appear to be a SAML prelogin response (<saml-auth-method> or <saml-request> tags missing)");
+        qWarning("This does not appear to be a SAML prelogin response (<saml-auth-method> or <saml-request> tags missing)");
         emit connectFailed();
         return;
     }
@@ -110,15 +108,12 @@ void GPClient::preloginResultFinished()
         qDebug("TODO: SAML method is POST");
         emit connectFailed();
     } else if (samlMethod == "REDIRECT") {
-        qInfo() << "Request URL is: %s" << samlRequest;
         samlLogin(samlRequest);
     }
 }
 
 void GPClient::onLoginSuccess(QJsonObject loginResult)
 {
-    qDebug() << "Login success:" << loginResult;
-
     QString fullpath = "/ssl-vpn/login.esp";
     QString shortpath = "gateway";
     QString user = loginResult.value("saml-username").toString();
@@ -166,18 +161,16 @@ void GPClient::onVPNConnected()
 
 void GPClient::onVPNDisconnected()
 {
-    qDebug("========= disconnected");
     updateConnectionStatus("not_connected");
 }
 
 void GPClient::onVPNLogAvailable(QString log)
 {
-    qDebug() << log;
+    qInfo() << log;
 }
 
 void GPClient::initVpnStatus() {
     int status = vpn->status();
-    qDebug() << "VPN status:" << status;
     if (status == 1) {
         ui->statusLabel->setText("Connecting...");
         updateConnectionStatus("pending");
@@ -214,8 +207,6 @@ void GPClient::moveCenter()
 void GPClient::doAuth(const QString portal)
 {
     const QString preloginUrl = "https://" + portal + "/ssl-vpn/prelogin.esp";
-    qDebug("%s", preloginUrl.toStdString().c_str());
-
     reply = networkManager->post(QNetworkRequest(preloginUrl), (QByteArray) nullptr);
     connect(reply, &QNetworkReply::finished, this, &GPClient::preloginResultFinished);
 }

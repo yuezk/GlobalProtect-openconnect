@@ -1,5 +1,6 @@
 #include "singleapplication.h"
 #include "gpclient.h"
+#include "enhancedwebview.h"
 
 int main(int argc, char *argv[])
 {

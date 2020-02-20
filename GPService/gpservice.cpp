@@ -130,6 +130,6 @@ void GPService::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 
 void GPService::log(QString msg)
 {
-    qDebug() << msg;
+    qInfo() << msg;
     emit logAvailable(msg);
 }
