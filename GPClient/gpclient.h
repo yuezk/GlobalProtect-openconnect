@@ -2,7 +2,6 @@
 #define GPCLIENT_H
 
 #include "gpservice_interface.h"
-#include "samlloginwindow.h"
 #include <QMainWindow>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -34,14 +33,15 @@ private slots:
 
 private:
     Ui::GPClient *ui;
-    SAMLLoginWindow *loginWindow;
     QNetworkAccessManager *networkManager;
     QNetworkReply *reply;
     com::yuezk::qt::GPService *vpn;
     QSettings *settings;
 
+    void initVpnStatus();
     void moveCenter();
     void updateConnectionStatus(QString status);
-    void samlLogin(const QString portal);
+    void doAuth(const QString portal);
+    void samlLogin(const QString loginUrl);
 };
 #endif // GPCLIENT_H

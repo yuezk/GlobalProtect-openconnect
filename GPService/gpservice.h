@@ -21,6 +21,13 @@ public:
     explicit GPService(QObject *parent = nullptr);
     ~GPService();
 
+    enum VpnStatus {
+        VpnNotConnected,
+        VpnConnecting,
+        VpnConnected,
+        VpnDisconnecting,
+    };
+
 signals:
     void connected();
     void disconnected();
@@ -42,6 +49,7 @@ private slots:
 private:
     QProcess *openconnect;
     bool aboutToQuit = false;
+    int vpnStatus = GPService::VpnNotConnected;
 
     void log(QString msg);
     static QString findBinary();

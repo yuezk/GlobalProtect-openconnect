@@ -28,21 +28,13 @@ GPClient::GPClient(QWidget *parent)
     // QNetworkAccessManager setup
     networkManager = new QNetworkAccessManager(this);
 
-    // Login window setup
-    loginWindow = new SAMLLoginWindow(this);
-    QObject::connect(loginWindow, &SAMLLoginWindow::success, this, &GPClient::onLoginSuccess);
-    QObject::connect(loginWindow, &SAMLLoginWindow::rejected, this, &GPClient::connectFailed);
-
     // DBus service setup
     vpn = new com::yuezk::qt::GPService("com.yuezk.qt.GPService", "/", QDBusConnection::systemBus(), this);
     QObject::connect(vpn, &com::yuezk::qt::GPService::connected, this, &GPClient::onVPNConnected);
     QObject::connect(vpn, &com::yuezk::qt::GPService::disconnected, this, &GPClient::onVPNDisconnected);
     QObject::connect(vpn, &com::yuezk::qt::GPService::logAvailable, this, &GPClient::onVPNLogAvailable);
 
-    int status = vpn->status();
-    if (status != 0) {
-        updateConnectionStatus("connected");
-    }
+    initVpnStatus();
 }
 
 GPClient::~GPClient()
@@ -50,7 +42,6 @@ GPClient::~GPClient()
     delete ui;
     delete networkManager;
     delete reply;
-    delete loginWindow;
     delete vpn;
     delete settings;
 }
@@ -64,7 +55,7 @@ void GPClient::on_connectButton_clicked()
         settings->setValue("portal", portal);
         ui->statusLabel->setText("Authenticating...");
         updateConnectionStatus("pending");
-        samlLogin(portal);
+        doAuth(portal);
     } else if (btnText == "Cancel") {
         ui->statusLabel->setText("Canceling...");
         updateConnectionStatus("pending");
@@ -83,7 +74,7 @@ void GPClient::on_connectButton_clicked()
 void GPClient::preloginResultFinished()
 {
     if (reply->error()) {
-        qDebug() << "request error";
+        qDebug() << "Prelogin request error";
         emit connectFailed();
         return;
     }
@@ -109,20 +100,18 @@ void GPClient::preloginResultFinished()
     }
 
     if (samlMethod == nullptr || samlRequest == nullptr) {
-        qCritical("This does not appear to be a SAML prelogin response (<saml-auth-method> or <saml-request> tags missing)");
+        qDebug("This does not appear to be a SAML prelogin response (<saml-auth-method> or <saml-request> tags missing)");
         emit connectFailed();
         return;
     }
 
     if (samlMethod == "POST") {
         // TODO
-        qInfo("TODO: SAML method is POST");
+        qDebug("TODO: SAML method is POST");
         emit connectFailed();
     } else if (samlMethod == "REDIRECT") {
         qInfo() << "Request URL is: %s" << samlRequest;
-
-        loginWindow->login(samlRequest);
-        loginWindow->exec();
+        samlLogin(samlRequest);
     }
 }
 
@@ -177,12 +166,27 @@ void GPClient::onVPNConnected()
 
 void GPClient::onVPNDisconnected()
 {
+    qDebug("========= disconnected");
     updateConnectionStatus("not_connected");
 }
 
 void GPClient::onVPNLogAvailable(QString log)
 {
     qDebug() << log;
+}
+
+void GPClient::initVpnStatus() {
+    int status = vpn->status();
+    qDebug() << "VPN status:" << status;
+    if (status == 1) {
+        ui->statusLabel->setText("Connecting...");
+        updateConnectionStatus("pending");
+    } else if (status == 2) {
+        updateConnectionStatus("connected");
+    } else if (status == 3) {
+        ui->statusLabel->setText("Disconnecting...");
+        updateConnectionStatus("pending");
+    }
 }
 
 void GPClient::moveCenter()
@@ -207,11 +211,23 @@ void GPClient::moveCenter()
     move(x, y);
 }
 
-void GPClient::samlLogin(const QString portal)
+void GPClient::doAuth(const QString portal)
 {
     const QString preloginUrl = "https://" + portal + "/ssl-vpn/prelogin.esp";
     qDebug("%s", preloginUrl.toStdString().c_str());
 
     reply = networkManager->post(QNetworkRequest(preloginUrl), (QByteArray) nullptr);
     connect(reply, &QNetworkReply::finished, this, &GPClient::preloginResultFinished);
+}
+
+void GPClient::samlLogin(const QString loginUrl)
+{
+    SAMLLoginWindow *loginWindow = new SAMLLoginWindow(this);
+
+    QObject::connect(loginWindow, &SAMLLoginWindow::success, this, &GPClient::onLoginSuccess);
+    QObject::connect(loginWindow, &SAMLLoginWindow::rejected, this, &GPClient::connectFailed);
+
+    loginWindow->login(loginUrl);
+    loginWindow->exec();
+    delete loginWindow;
 }

@@ -51,8 +51,8 @@ void GPService::quit()
 
 void GPService::connect(QString server, QString username, QString passwd)
 {
-    if (status() != QProcess::NotRunning) {
-        log("Openconnect has already started on PID " + QString::number(openconnect->processId()) + ", nothing changed.");
+    if (vpnStatus != GPService::VpnNotConnected) {
+        log("VPN status is: " + QVariant::fromValue(vpnStatus).toString());
         return;
     }
 
@@ -67,6 +67,7 @@ void GPService::connect(QString server, QString username, QString passwd)
      << "--protocol=gp"
      << "-u" << username
      << "--passwd-on-stdin"
+     << "--timestamp"
      << server;
 
     openconnect->start(bin, args);
@@ -77,23 +78,26 @@ void GPService::connect(QString server, QString username, QString passwd)
 void GPService::disconnect()
 {
     if (openconnect->state() != QProcess::NotRunning) {
+        vpnStatus = GPService::VpnDisconnecting;
         openconnect->terminate();
     }
 }
 
 int GPService::status()
 {
-    return openconnect->state();
+    return vpnStatus;
 }
 
 void GPService::onProcessStarted()
 {
     log("Openconnect started successfully, PID=" + QString::number(openconnect->processId()));
+    vpnStatus = GPService::VpnConnecting;
 }
 
 void GPService::onProcessError(QProcess::ProcessError error)
 {
     log("Error occurred: " + QVariant::fromValue(error).toString());
+    vpnStatus = GPService::VpnNotConnected;
     emit disconnected();
 }
 
@@ -102,7 +106,8 @@ void GPService::onProcessStdout()
     QString output = openconnect->readAllStandardOutput();
 
     log(output);
-    if (output.startsWith("Connected as")) {
+    if (output.indexOf("Connected as") >= 0) {
+        vpnStatus = GPService::VpnConnected;
         emit connected();
     }
 }
@@ -115,6 +120,7 @@ void GPService::onProcessStderr()
 void GPService::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     log("Openconnect process exited with code " + QString::number(exitCode) + " and exit status " + QVariant::fromValue(exitStatus).toString());
+    vpnStatus = GPService::VpnNotConnected;
     emit disconnected();
 
     if (aboutToQuit) {
@@ -124,8 +130,6 @@ void GPService::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 
 void GPService::log(QString msg)
 {
-    // 2020-02-12 15:33:45.120: log messsage
-    QString record = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz") + ": " + msg;
-    qDebug() << record;
-    emit logAvailable(record);
+    qDebug() << msg;
+    emit logAvailable(msg);
 }
