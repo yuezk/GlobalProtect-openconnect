@@ -5,7 +5,4 @@
         <file>pending.png</file>
         <file>not_connected.png</file>
     </qresource>
-    <qresource prefix="/">
-        <file>styles.css</file>
-    </qresource>
 </RCC>
