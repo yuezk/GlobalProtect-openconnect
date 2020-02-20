@@ -5,10 +5,10 @@
 #include <QProcess>
 
 static const QString binaryPaths[] {
-    "/usr/bin/openconnect",
-    "/usr/sbin/openconnect",
     "/usr/local/bin/openconnect",
     "/usr/local/sbin/openconnect",
+    "/usr/bin/openconnect",
+    "/usr/sbin/openconnect",
     "/opt/bin/openconnect",
     "/opt/sbin/openconnect"
 };
