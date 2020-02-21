@@ -19,10 +19,16 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
     ```
 ## Install
 
+### Install from AUR (Arch/Manjaro)
+
+Install [globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/).
+
+### Build from source code
+
 ```sh
 git clone https://github.com/yuezk/GlobalProtect-openconnect.git
 cd GlobalProtect-openconnect
-git submodule init && git submodule update
+git submodule update --init
 qmake CONFIG+=release
 make
 sudo make install
