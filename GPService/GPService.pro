@@ -32,7 +32,7 @@ SOURCES += \
 DBUS_ADAPTORS += gpservice.xml
 
 # Default rules for deployment.
-target.path = /usr/local/bin
+target.path = /usr/bin
 INSTALLS += target
 
 DISTFILES += \
