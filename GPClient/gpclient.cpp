@@ -80,13 +80,13 @@ void GPClient::preloginResultFinished()
         return;
     }
 
-    QByteArray bytes = reply->readAll();
+    QByteArray xmlBytes = reply->readAll();
     const QString tagMethod = "saml-auth-method";
     const QString tagRequest = "saml-request";
     QString samlMethod;
     QString samlRequest;
 
-    QXmlStreamReader xml(bytes);
+    QXmlStreamReader xml(xmlBytes);
     while (!xml.atEnd()) {
         xml.readNext();
         if (xml.tokenType() == xml.StartElement) {
@@ -105,11 +105,7 @@ void GPClient::preloginResultFinished()
     }
 
     if (samlMethod == "POST") {
-        // TODO
-        emit connectFailed();
-        QMessageBox msgBox;
-        msgBox.setText("TODO: SAML method is POST");
-        msgBox.exec();
+        samlLogin(reply->url().toString(), samlRequest);
     } else if (samlMethod == "REDIRECT") {
         samlLogin(samlRequest);
     }
@@ -214,14 +210,14 @@ void GPClient::doAuth(const QString portal)
     connect(reply, &QNetworkReply::finished, this, &GPClient::preloginResultFinished);
 }
 
-void GPClient::samlLogin(const QString loginUrl)
+void GPClient::samlLogin(const QString loginUrl, const QString html)
 {
     SAMLLoginWindow *loginWindow = new SAMLLoginWindow(this);
 
     QObject::connect(loginWindow, &SAMLLoginWindow::success, this, &GPClient::onLoginSuccess);
     QObject::connect(loginWindow, &SAMLLoginWindow::rejected, this, &GPClient::connectFailed);
 
-    loginWindow->login(loginUrl);
+    loginWindow->login(loginUrl, html);
     loginWindow->exec();
     delete loginWindow;
 }

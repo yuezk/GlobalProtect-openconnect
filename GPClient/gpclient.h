@@ -42,6 +42,6 @@ private:
     void moveCenter();
     void updateConnectionStatus(QString status);
     void doAuth(const QString portal);
-    void samlLogin(const QString loginUrl);
+    void samlLogin(const QString loginUrl, const QString html = "");
 };
 #endif // GPCLIENT_H

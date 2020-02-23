@@ -27,9 +27,13 @@ void SAMLLoginWindow::closeEvent(QCloseEvent *event)
     reject();
 }
 
-void SAMLLoginWindow::login(QString url)
+void SAMLLoginWindow::login(QString url, QString html)
 {
-    webView->load(QUrl(url));
+    if (html == "") {
+        webView->load(QUrl(url));
+    } else {
+        webView->setHtml(html, url);
+    }
 }
 
 void SAMLLoginWindow::onResponseReceived(QJsonObject params)

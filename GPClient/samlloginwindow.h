@@ -15,7 +15,7 @@ public:
     explicit SAMLLoginWindow(QWidget *parent = nullptr);
     ~SAMLLoginWindow();
 
-    void login(QString url);
+    void login(QString url, QString html = "");
 
 signals:
     void success(QJsonObject samlResult);
