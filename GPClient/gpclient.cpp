@@ -74,8 +74,9 @@ void GPClient::on_connectButton_clicked()
 
 void GPClient::preloginResultFinished()
 {
-    if (reply->error()) {
-        qWarning() << "Prelogin request error";
+    QNetworkReply::NetworkError err = reply->error();
+    if (err) {
+        qWarning() << "Prelogin request error: " << err;
         emit connectFailed();
         return;
     }
