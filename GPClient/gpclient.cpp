@@ -51,13 +51,13 @@ void GPClient::on_connectButton_clicked()
 {
     QString btnText = ui->connectButton->text();
 
-    if (btnText == "Connect") {
+    if (btnText.endsWith("Connect")) {
         QString portal = ui->portalInput->text();
         settings->setValue("portal", portal);
         ui->statusLabel->setText("Authenticating...");
         updateConnectionStatus("pending");
         doAuth(portal);
-    } else if (btnText == "Cancel") {
+    } else if (btnText.endsWith("Cancel")) {
         ui->statusLabel->setText("Canceling...");
         updateConnectionStatus("pending");
 
