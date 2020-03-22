@@ -12,7 +12,9 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 
 ### Ubuntu
 1. Install openconnect v8.x
-    Update openconnect to 8.x, for ubuntu 18.04 you might need to [build the latest openconnect from source code](https://gist.github.com/yuezk/ab9a4b87a9fa0182bdb2df41fab5f613).
+
+   For Ubuntu 18.04 you might need to [build the latest openconnect from source code](https://gist.github.com/yuezk/ab9a4b87a9fa0182bdb2df41fab5f613).
+   
 2. Install the Qt dependencies
     ```sh
     sudo apt install qt5-default libqt5websockets5-dev qtwebengine5-dev
