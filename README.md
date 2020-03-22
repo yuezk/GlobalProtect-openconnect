@@ -17,6 +17,13 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
     ```sh
     sudo apt install qt5-default libqt5websockets5-dev qtwebengine5-dev
     ```
+### OpenSUSE
+Install the Qt dependencies
+
+```sh
+sudo zypper install libqt5-qtbase-devel libqt5-qtwebsockets-devel libqt5-qtwebengine-devel
+```
+
 ## Install
 
 ### Install from AUR (Arch/Manjaro)
@@ -29,6 +36,8 @@ Install [globalprotect-openconnect](https://aur.archlinux.org/packages/globalpro
 git clone https://github.com/yuezk/GlobalProtect-openconnect.git
 cd GlobalProtect-openconnect
 git submodule update --init
+
+# qmake or qmake-qt5
 qmake CONFIG+=release
 make
 sudo make install
