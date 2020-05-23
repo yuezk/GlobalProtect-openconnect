@@ -4,7 +4,7 @@
 #include "enhancedwebview.h"
 
 #include <QDialog>
-#include <QJsonObject>
+#include <QMap>
 #include <QCloseEvent>
 
 class SAMLLoginWindow : public QDialog
@@ -18,14 +18,15 @@ public:
     void login(QString url, QString html = "");
 
 signals:
-    void success(QJsonObject samlResult);
+    void success(QMap<QString, QString> samlResult);
 
 private slots:
     void onResponseReceived(QJsonObject params);
+    void onLoadFinished();
 
 private:
     EnhancedWebView *webView;
-    QJsonObject samlResult;
+    QMap<QString, QString> samlResult;
 
     void closeEvent(QCloseEvent *event);
 };

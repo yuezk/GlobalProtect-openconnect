@@ -15,6 +15,8 @@ DEFINES += QAPPLICATION_CLASS=QApplication
 # deprecated API in order to know how to port your code away from it.
 DEFINES += QT_DEPRECATED_WARNINGS
 
+INCLUDEPATH += ../plog/include
+
 # You can also make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
 # You can also select to disable deprecated APIs only up to a certain version of Qt.
@@ -23,7 +25,15 @@ SOURCES += \
     cdpcommand.cpp \
     cdpcommandmanager.cpp \
     enhancedwebview.cpp \
+    gatewayauthenticator.cpp \
+    gpgateway.cpp \
+    gphelper.cpp \
+    loginparams.cpp \
     main.cpp \
+    normalloginwindow.cpp \
+    portalauthenticator.cpp \
+    portalconfigresponse.cpp \
+    preloginresponse.cpp \
     samlloginwindow.cpp \
     gpclient.cpp
 
@@ -31,11 +41,20 @@ HEADERS += \
     cdpcommand.h \
     cdpcommandmanager.h \
     enhancedwebview.h \
+    gatewayauthenticator.h \
+    gpgateway.h \
+    gphelper.h \
+    loginparams.h \
+    normalloginwindow.h \
+    portalauthenticator.h \
+    portalconfigresponse.h \
+    preloginresponse.h \
     samlloginwindow.h \
     gpclient.h
 
 FORMS += \
-    gpclient.ui
+    gpclient.ui \
+    normalloginwindow.ui
 
 DBUS_INTERFACES += ../GPService/gpservice.xml
 

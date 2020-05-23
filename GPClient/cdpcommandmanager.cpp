@@ -1,5 +1,6 @@
 #include "cdpcommandmanager.h"
 #include <QVariantMap>
+#include <plog/Log.h>
 
 CDPCommandManager::CDPCommandManager(QObject *parent)
     : QObject(parent)
@@ -27,7 +28,7 @@ void CDPCommandManager::initialize(QString endpoint)
         reply, &QNetworkReply::finished,
         [reply, this]() {
             if (reply->error()) {
-                qDebug() << "CDP request error";
+                PLOGE << "CDP request error";
                 return;
             }
 
@@ -76,10 +77,10 @@ void CDPCommandManager::onTextMessageReceived(QString message)
 
 void CDPCommandManager::onSocketDisconnected()
 {
-    qDebug() << "WebSocket disconnected";
+    PLOGI << "WebSocket disconnected";
 }
 
 void CDPCommandManager::onSocketError(QAbstractSocket::SocketError error)
 {
-    qDebug() << "WebSocket error" << error;
+    PLOGE << "WebSocket error" << error;
 }

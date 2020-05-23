@@ -66,13 +66,10 @@ void GPService::connect(QString server, QString username, QString passwd)
     args << QCoreApplication::arguments().mid(1)
      << "--protocol=gp"
      << "-u" << username
-     << "--passwd-on-stdin"
-     << "--timestamp"
+     << "-C" << passwd
      << server;
 
     openconnect->start(bin, args);
-    openconnect->write(passwd.toUtf8());
-    openconnect->closeWriteChannel();
 }
 
 void GPService::disconnect()
@@ -130,6 +127,5 @@ void GPService::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 
 void GPService::log(QString msg)
 {
-    qInfo() << msg;
     emit logAvailable(msg);
 }
