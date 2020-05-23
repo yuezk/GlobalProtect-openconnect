@@ -19,24 +19,7 @@ public:
     QByteArray toUtf8() const;
 
 private:
-    QUrlQuery params {
-        {"prot", QUrl::toPercentEncoding("https:")},
-        {"server", ""},
-        {"inputSrc", ""},
-        {"jnlpReady", "jnlpReady"},
-        {"user", ""},
-        {"passwd", ""},
-        {"computer", QUrl::toPercentEncoding(QSysInfo::machineHostName())},
-        {"ok", "Login"},
-        {"direct", "yes"},
-        {"clientVer", "4100"},
-        {"os-version", QUrl::toPercentEncoding(QSysInfo::prettyProductName())},
-        {"clientos", "Linux"},
-        {"portal-userauthcookie", ""},
-        {"portal-prelogonuserauthcookie", ""},
-        {"prelogin-cookie", ""},
-        {"ipv6-support", "yes"}
-    };
+    QUrlQuery params;
 
     void updateQueryItem(const QString &key, const QString &value);
 };

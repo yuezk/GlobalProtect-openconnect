@@ -8,6 +8,7 @@ SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
     : QDialog(parent)
 {
     setWindowTitle("GlobalProtect SAML Login");
+    setModal(true);
     resize(700, 550);
 
     QVBoxLayout *verticalLayout = new QVBoxLayout(this);
@@ -70,6 +71,6 @@ void SAMLLoginWindow::onLoadFinished()
         emit success(samlResult);
         accept();
     } else {
-        open();
+        this->show();
     }
 }

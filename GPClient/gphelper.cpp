@@ -33,14 +33,15 @@ SAMLLoginWindow* gpclient::helper::samlLogin(QString samlMethod, QString samlReq
         PLOGE << "Unknown saml-auth-method expected POST or REDIRECT, got " << samlMethod;
         return nullptr;
     }
+
     return loginWindow;
 }
 
-GPGateway &gpclient::helper::filterPreferredGateway(QList<GPGateway> &gateways, QString ruleName)
+GPGateway gpclient::helper::filterPreferredGateway(QList<GPGateway> *gateways, const QString ruleName)
 {
-    GPGateway& gateway = gateways.first();
+    GPGateway gateway = gateways->first();
 
-    for (GPGateway& g : gateways) {
+    for (GPGateway g : *gateways) {
         if (g.priorityOf(ruleName) > gateway.priorityOf(ruleName)) {
             gateway = g;
         }

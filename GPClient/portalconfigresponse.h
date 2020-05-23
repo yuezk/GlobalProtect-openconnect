@@ -11,6 +11,7 @@ class PortalConfigResponse
 {
 public:
     PortalConfigResponse();
+    ~PortalConfigResponse();
 
     static PortalConfigResponse parse(const QByteArray& xml);
 
@@ -19,7 +20,7 @@ public:
     QString password() const;
     QString userAuthCookie() const;
     QString prelogonUserAuthCookie() const;
-    QList<GPGateway>& allGateways();
+    QList<GPGateway>* allGateways();
 
     void setUsername(const QString& username);
     void setPassword(const QString& password);
@@ -35,14 +36,13 @@ private:
     QString _userAuthCookie;
     QString _prelogonAuthCookie;
 
-    QList<GPGateway> _gateways;
+    QList<GPGateway> *_gateways;
 
     void setRawResponse(const QByteArray& response);
     void setUserAuthCookie(const QString& cookie);
     void setPrelogonUserAuthCookie(const QString& cookie);
-    void setGateways(const QList<GPGateway>& gateways);
 
-    static QList<GPGateway> parseGateways(QXmlStreamReader &xmlReader);
+    static void parseGateways(QXmlStreamReader &xmlReader, QList<GPGateway> *gateways);
     static QMap<QString, int> parsePriorityRules(QXmlStreamReader &xmlReader);
     static QString parseGatewayName(QXmlStreamReader &xmlReader);
 };

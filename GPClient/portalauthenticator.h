@@ -26,6 +26,7 @@ private slots:
     void onPreloginFinished();
     void onPerformNormalLogin(const QString &username, const QString &password);
     void onLoginWindowRejected();
+    void onLoginWindowFinished();
     void onSAMLLoginSuccess(const QMap<QString, QString> &samlResult);
     void onFetchConfigFinished();
 

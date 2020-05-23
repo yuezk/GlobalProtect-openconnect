@@ -22,7 +22,7 @@ namespace gpclient {
 
         SAMLLoginWindow *samlLogin(QString samlMethod, QString samlRequest, QString preloginUrl);
 
-        GPGateway& filterPreferredGateway(QList<GPGateway> &gateways, QString ruleName);
+        GPGateway filterPreferredGateway(QList<GPGateway> *gateways, const QString ruleName);
 
         QUrlQuery parseGatewayResponse(const QByteArray& xml);
 

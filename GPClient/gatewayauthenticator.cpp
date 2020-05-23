@@ -111,10 +111,9 @@ void GatewayAuthenticator::normalAuth(QString labelUsername, QString labelPasswo
     // Do login
     connect(normalLoginWindow, &NormalLoginWindow::performLogin, this, &GatewayAuthenticator::onPerformNormalLogin);
     connect(normalLoginWindow, &NormalLoginWindow::rejected, this, &GatewayAuthenticator::onLoginWindowRejected);
+    connect(normalLoginWindow, &NormalLoginWindow::finished, this, &GatewayAuthenticator::onLoginWindowFinished);
 
-    normalLoginWindow->exec();
-    delete normalLoginWindow;
-    normalLoginWindow = nullptr;
+    normalLoginWindow->show();
 }
 
 void GatewayAuthenticator::onPerformNormalLogin(const QString &username, const QString &password)
@@ -131,6 +130,12 @@ void GatewayAuthenticator::onLoginWindowRejected()
     emit fail();
 }
 
+void GatewayAuthenticator::onLoginWindowFinished()
+{
+    delete normalLoginWindow;
+    normalLoginWindow = nullptr;
+}
+
 void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QString preloginUrl)
 {
     PLOGI << "Trying to perform SAML login with saml-method " << samlMethod;
@@ -144,8 +149,6 @@ void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QSt
 
     connect(loginWindow, &SAMLLoginWindow::success, this, &GatewayAuthenticator::onSAMLLoginFinished);
     connect(loginWindow, &SAMLLoginWindow::rejected, this, &GatewayAuthenticator::onLoginWindowRejected);
-//    loginWindow->exec();
-//    delete loginWindow;
 }
 
 void GatewayAuthenticator::onSAMLLoginFinished(const QMap<QString, QString> &samlResult)

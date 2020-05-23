@@ -23,8 +23,9 @@ private slots:
     void onLoginFinished();
     void onPreloginFinished();
     void onPerformNormalLogin(const QString &username, const QString &password);
-    void onSAMLLoginFinished(const QMap<QString, QString> &samlResult);
     void onLoginWindowRejected();
+    void onLoginWindowFinished();
+    void onSAMLLoginFinished(const QMap<QString, QString> &samlResult);
 
 private:
     QString gateway;

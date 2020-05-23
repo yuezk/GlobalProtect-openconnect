@@ -8,7 +8,9 @@ NormalLoginWindow::NormalLoginWindow(QWidget *parent) :
     ui(new Ui::NormalLoginWindow)
 {
     ui->setupUi(this);
+    setWindowTitle("GlobalProtect Login");
     setFixedSize(width(), height());
+    setModal(true);
 }
 
 NormalLoginWindow::~NormalLoginWindow()

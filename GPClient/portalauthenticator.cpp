@@ -24,7 +24,6 @@ PortalAuthenticator::~PortalAuthenticator()
     delete normalLoginWindow;
 }
 
-
 void PortalAuthenticator::authenticate()
 {
     PLOGI << "Preform portal prelogin at " << preloginUrl;
@@ -88,10 +87,9 @@ void PortalAuthenticator::normalAuth()
     // Do login
     connect(normalLoginWindow, &NormalLoginWindow::performLogin, this, &PortalAuthenticator::onPerformNormalLogin);
     connect(normalLoginWindow, &NormalLoginWindow::rejected, this, &PortalAuthenticator::onLoginWindowRejected);
+    connect(normalLoginWindow, &NormalLoginWindow::finished, this, &PortalAuthenticator::onLoginWindowFinished);
 
-    normalLoginWindow->exec();
-    delete normalLoginWindow;
-    normalLoginWindow = nullptr;
+    normalLoginWindow->show();
 }
 
 void PortalAuthenticator::onPerformNormalLogin(const QString &username, const QString &password)
@@ -103,6 +101,12 @@ void PortalAuthenticator::onPerformNormalLogin(const QString &username, const QS
 void PortalAuthenticator::onLoginWindowRejected()
 {
     emitFail();
+}
+
+void PortalAuthenticator::onLoginWindowFinished()
+{
+    delete normalLoginWindow;
+    normalLoginWindow = nullptr;
 }
 
 void PortalAuthenticator::samlAuth()

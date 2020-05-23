@@ -29,7 +29,7 @@ void GPGateway::setPriorityRules(const QMap<QString, int> &priorityRules)
     _priorityRules = priorityRules;
 }
 
-int GPGateway::priorityOf(QString ruleName)
+int GPGateway::priorityOf(QString ruleName) const
 {
     if (_priorityRules.contains(ruleName)) {
         return _priorityRules.value(ruleName);

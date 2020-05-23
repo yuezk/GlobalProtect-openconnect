@@ -15,7 +15,7 @@ public:
     void setName(const QString &name);
     void setAddress(const QString &address);
     void setPriorityRules(const QMap<QString, int> &priorityRules);
-    int priorityOf(QString ruleName);
+    int priorityOf(QString ruleName) const;
 
 private:
     QString _name;
