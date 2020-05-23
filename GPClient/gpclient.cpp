@@ -1,224 +1,262 @@
 #include "gpclient.h"
+#include "gphelper.h"
 #include "ui_gpclient.h"
-#include "samlloginwindow.h"
+#include "portalauthenticator.h"
+#include "gatewayauthenticator.h"
 
-#include <QDesktopWidget>
-#include <QGraphicsScene>
-#include <QGraphicsView>
-#include <QGraphicsPixmapItem>
-#include <QImage>
-#include <QStyle>
-#include <QMessageBox>
+#include <plog/Log.h>
+#include <QIcon>
+
+using namespace gpclient::helper;
 
 GPClient::GPClient(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::GPClient)
+    , systemTrayIcon(new QSystemTrayIcon(parent))
+    , contextMenu(new QMenu("GlobalProtect", parent))
 {
     ui->setupUi(this);
+    setWindowTitle("GlobalProtect");
     setFixedSize(width(), height());
-    moveCenter();
+    gpclient::helper::moveCenter(this);
 
     // Restore portal from the previous settings
-    settings = new QSettings("com.yuezk.qt", "GPClient");
-    ui->portalInput->setText(settings->value("portal", "").toString());
-
-    QObject::connect(this, &GPClient::connectFailed, [this]() {
-        updateConnectionStatus("not_connected");
-    });
-
-    // QNetworkAccessManager setup
-    networkManager = new QNetworkAccessManager(this);
+    ui->portalInput->setText(settings::get("portal", "").toString());
 
     // DBus service setup
     vpn = new com::yuezk::qt::GPService("com.yuezk.qt.GPService", "/", QDBusConnection::systemBus(), this);
-    QObject::connect(vpn, &com::yuezk::qt::GPService::connected, this, &GPClient::onVPNConnected);
-    QObject::connect(vpn, &com::yuezk::qt::GPService::disconnected, this, &GPClient::onVPNDisconnected);
-    QObject::connect(vpn, &com::yuezk::qt::GPService::logAvailable, this, &GPClient::onVPNLogAvailable);
+    connect(vpn, &com::yuezk::qt::GPService::connected, this, &GPClient::onVPNConnected);
+    connect(vpn, &com::yuezk::qt::GPService::disconnected, this, &GPClient::onVPNDisconnected);
+    connect(vpn, &com::yuezk::qt::GPService::logAvailable, this, &GPClient::onVPNLogAvailable);
+
+    connect(systemTrayIcon, &QSystemTrayIcon::activated, this, &GPClient::onSystemTrayActivated);
+
+    // Initiallize the context menu of system tray.
+    openAction = contextMenu->addAction(QIcon::fromTheme("system-run"), "Open", this, &GPClient::activiate);
+    connectAction = contextMenu->addAction(QIcon::fromTheme("preferences-system-network"), "Connect", this, &GPClient::doConnect);
+    contextMenu->addSeparator();
+    quitAction = contextMenu->addAction(QIcon::fromTheme("application-exit"), "Quit", this, &GPClient::quit);
+    systemTrayIcon->setContextMenu(contextMenu);
+    systemTrayIcon->setToolTip("GlobalProtect");
 
     initVpnStatus();
+    systemTrayIcon->show();
 }
 
 GPClient::~GPClient()
 {
     delete ui;
-    delete networkManager;
-    delete reply;
     delete vpn;
-    delete settings;
+    delete systemTrayIcon;
+    delete openAction;
+    delete connectAction;
+    delete quitAction;
+    delete contextMenu;
 }
 
 void GPClient::on_connectButton_clicked()
 {
-    QString btnText = ui->connectButton->text();
-
-    if (btnText.endsWith("Connect")) {
-        QString portal = ui->portalInput->text();
-        settings->setValue("portal", portal);
-        ui->statusLabel->setText("Authenticating...");
-        updateConnectionStatus("pending");
-        doAuth(portal);
-    } else if (btnText.endsWith("Cancel")) {
-        ui->statusLabel->setText("Canceling...");
-        updateConnectionStatus("pending");
-
-        if (reply->isRunning()) {
-            reply->abort();
-        }
-        vpn->disconnect();
-    } else {
-        ui->statusLabel->setText("Disconnecting...");
-        updateConnectionStatus("pending");
-        vpn->disconnect();
-    }
+    doConnect();
 }
 
-void GPClient::preloginResultFinished()
+void GPClient::on_portalInput_returnPressed()
 {
-    QNetworkReply::NetworkError err = reply->error();
-    if (err) {
-        qWarning() << "Prelogin request error: " << err;
-        emit connectFailed();
-        return;
-    }
-
-    QByteArray xmlBytes = reply->readAll();
-    const QString tagMethod = "saml-auth-method";
-    const QString tagRequest = "saml-request";
-    QString samlMethod;
-    QString samlRequest;
-
-    QXmlStreamReader xml(xmlBytes);
-    while (!xml.atEnd()) {
-        xml.readNext();
-        if (xml.tokenType() == xml.StartElement) {
-            if (xml.name() == tagMethod) {
-                samlMethod = xml.readElementText();
-            } else if (xml.name() == tagRequest) {
-                samlRequest = QByteArray::fromBase64(QByteArray::fromStdString(xml.readElementText().toStdString()));
-            }
-        }
-    }
-
-    if (samlMethod == nullptr || samlRequest == nullptr) {
-        qWarning("This does not appear to be a SAML prelogin response (<saml-auth-method> or <saml-request> tags missing)");
-        emit connectFailed();
-        return;
-    }
-
-    if (samlMethod == "POST") {
-        samlLogin(reply->url().toString(), samlRequest);
-    } else if (samlMethod == "REDIRECT") {
-        samlLogin(samlRequest);
-    }
+    doConnect();
 }
 
-void GPClient::onLoginSuccess(QJsonObject loginResult)
+void GPClient::updateConnectionStatus(const GPClient::VpnStatus &status)
 {
-    QString fullpath = "/ssl-vpn/login.esp";
-    QString shortpath = "gateway";
-    QString user = loginResult.value("saml-username").toString();
-    QString cookieName;
-    QString cookieValue;
-    QString cookies[]{"prelogin-cookie", "portal-userauthcookie"};
+    switch (status) {
+        case VpnStatus::disconnected:
+            ui->statusLabel->setText("Not Connected");
+            ui->statusImage->setStyleSheet("image: url(:/images/not_connected.png); padding: 15;");
+            ui->connectButton->setText("Connect");
+            ui->connectButton->setDisabled(false);
+            ui->portalInput->setReadOnly(false);
 
-    for (int i = 0; i < cookies->length(); i++) {
-        cookieValue = loginResult.value(cookies[i]).toString();
-        if (cookieValue != nullptr) {
-            cookieName = cookies[i];
+            systemTrayIcon->setIcon(QIcon{ ":/images/not_connected.png" });
+            connectAction->setEnabled(true);
+            connectAction->setText("Connect");
             break;
-        }
-    }
+        case VpnStatus::pending:
+            ui->statusImage->setStyleSheet("image: url(:/images/pending.png); padding: 15;");
+            ui->connectButton->setDisabled(true);
+            ui->portalInput->setReadOnly(true);
 
-    QString host = QString("https://%1/%2:%3").arg(loginResult.value("server").toString(), shortpath, cookieName);
-    vpn->connect(host, user, cookieValue);
-    ui->statusLabel->setText("Connecting...");
-    updateConnectionStatus("pending");
-}
+            systemTrayIcon->setIcon(QIcon{ ":/images/pending.png" });
+            connectAction->setEnabled(false);
+            break;
+        case VpnStatus::connected:
+            ui->statusLabel->setText("Connected");
+            ui->statusImage->setStyleSheet("image: url(:/images/connected.png); padding: 15;");
+            ui->connectButton->setText("Disconnect");
+            ui->connectButton->setDisabled(false);
+            ui->portalInput->setReadOnly(true);
 
-void GPClient::updateConnectionStatus(QString status)
-{
-    if (status == "not_connected") {
-        ui->statusLabel->setText("Not Connected");
-        ui->statusImage->setStyleSheet("image: url(:/images/not_connected.png); padding: 15;");
-        ui->connectButton->setText("Connect");
-        ui->connectButton->setDisabled(false);
-    } else if (status == "pending") {
-        ui->statusImage->setStyleSheet("image: url(:/images/pending.png); padding: 15;");
-        ui->connectButton->setText("Cancel");
-        ui->connectButton->setDisabled(false);
-    } else if (status == "connected") {
-        ui->statusLabel->setText("Connected");
-        ui->statusImage->setStyleSheet("image: url(:/images/connected.png); padding: 15;");
-        ui->connectButton->setText("Disconnect");
-        ui->connectButton->setDisabled(false);
+            systemTrayIcon->setIcon(QIcon{ ":/images/connected.png" });
+            connectAction->setEnabled(true);
+            connectAction->setText("Disconnect");
+            break;
+        default:
+            break;
     }
 }
 
 void GPClient::onVPNConnected()
 {
-    updateConnectionStatus("connected");
+    updateConnectionStatus(VpnStatus::connected);
 }
 
 void GPClient::onVPNDisconnected()
 {
-    updateConnectionStatus("not_connected");
+    updateConnectionStatus(VpnStatus::disconnected);
 }
 
 void GPClient::onVPNLogAvailable(QString log)
 {
-    qInfo() << log;
+    PLOGI << log;
+}
+
+void GPClient::onSystemTrayActivated(QSystemTrayIcon::ActivationReason reason)
+{
+    switch (reason) {
+        case QSystemTrayIcon::Trigger:
+        case QSystemTrayIcon::DoubleClick:
+            this->activiate();
+            break;
+        default:
+            break;
+    }
+}
+
+void GPClient::activiate()
+{
+    activateWindow();
+    showNormal();
+}
+
+QString GPClient::portal() const
+{
+    const QString input = ui->portalInput->text().trimmed();
+
+    if (input.startsWith("http")) {
+        return QUrl(input).authority();
+    }
+    return input;
 }
 
 void GPClient::initVpnStatus() {
     int status = vpn->status();
+
     if (status == 1) {
         ui->statusLabel->setText("Connecting...");
-        updateConnectionStatus("pending");
+        updateConnectionStatus(VpnStatus::pending);
     } else if (status == 2) {
-        updateConnectionStatus("connected");
+        updateConnectionStatus(VpnStatus::connected);
     } else if (status == 3) {
         ui->statusLabel->setText("Disconnecting...");
-        updateConnectionStatus("pending");
+        updateConnectionStatus(VpnStatus::pending);
+    } else {
+        updateConnectionStatus(VpnStatus::disconnected);
     }
 }
 
-void GPClient::moveCenter()
+void GPClient::doConnect()
 {
-    QDesktopWidget *desktop = QApplication::desktop();
+    const QString btnText = ui->connectButton->text();
+    const QString portal = this->portal();
 
-    int screenWidth, width;
-    int screenHeight, height;
-    int x, y;
-    QSize windowSize;
+    if (portal.isEmpty()) {
+        activiate();
+        return;
+    }
 
-    screenWidth = desktop->width();
-    screenHeight = desktop->height();
+    if (btnText.endsWith("Connect")) {
+        settings::save("portal", portal);
+        ui->statusLabel->setText("Authenticating...");
+        updateConnectionStatus(VpnStatus::pending);
 
-    windowSize = size();
-    width = windowSize.width();
-    height = windowSize.height();
+        // Perform the portal login
+        portalLogin(portal);
+    } else {
+        ui->statusLabel->setText("Disconnecting...");
+        updateConnectionStatus(VpnStatus::pending);
 
-    x = (screenWidth - width) / 2;
-    y = (screenHeight - height) / 2;
-    y -= 50;
-    move(x, y);
+        vpn->disconnect();
+    }
 }
 
-void GPClient::doAuth(const QString portal)
+// Login to the portal interface to get the portal config and preferred gateway
+void GPClient::portalLogin(const QString& portal)
 {
-    const QString preloginUrl = "https://" + portal + "/ssl-vpn/prelogin.esp";
-    reply = networkManager->post(QNetworkRequest(preloginUrl), (QByteArray) nullptr);
-    connect(reply, &QNetworkReply::finished, this, &GPClient::preloginResultFinished);
+    PortalAuthenticator *portalAuth = new PortalAuthenticator(portal);
+
+    connect(portalAuth, &PortalAuthenticator::success, this, &GPClient::onPortalSuccess);
+    // Prelogin failed on the portal interface, try to treat the portal as a gateway interface
+    connect(portalAuth, &PortalAuthenticator::preloginFailed, this, &GPClient::onPortalPreloginFail);
+    // Portal login failed
+    connect(portalAuth, &PortalAuthenticator::fail, this, &GPClient::onPortalFail);
+
+    portalAuth->authenticate();
 }
 
-void GPClient::samlLogin(const QString loginUrl, const QString html)
+void GPClient::onPortalSuccess(const PortalConfigResponse &portalConfig, const GPGateway &gateway)
 {
-    SAMLLoginWindow *loginWindow = new SAMLLoginWindow(this);
+    this->portalConfig = portalConfig;
+    this->gateway = gateway;
 
-    QObject::connect(loginWindow, &SAMLLoginWindow::success, this, &GPClient::onLoginSuccess);
-    QObject::connect(loginWindow, &SAMLLoginWindow::rejected, this, &GPClient::connectFailed);
+    gatewayLogin();
+}
 
-    loginWindow->login(loginUrl, html);
-    loginWindow->exec();
-    delete loginWindow;
+void GPClient::onPortalPreloginFail()
+{
+    PLOGI << "Portal prelogin failed, try to preform login on the the gateway interface...";
+
+    // Set the gateway address to portal input
+    gateway.setAddress(portal());
+    gatewayLogin();
+}
+
+void GPClient::onPortalFail(const QString &msg)
+{
+    if (!msg.isEmpty()) {
+        openMessageBox("Portal authentication failed.", msg);
+    }
+
+    updateConnectionStatus(VpnStatus::disconnected);
+}
+
+// Login to the gateway
+void GPClient::gatewayLogin() const
+{
+    GatewayAuthenticator *gatewayAuth = new GatewayAuthenticator(gateway.address(), portalConfig);
+
+    connect(gatewayAuth, &GatewayAuthenticator::success, this, &GPClient::onGatewaySuccess);
+    connect(gatewayAuth, &GatewayAuthenticator::fail, this, &GPClient::onGatewayFail);
+
+    gatewayAuth->authenticate();
+}
+
+void GPClient::quit()
+{
+    vpn->disconnect();
+    QApplication::quit();
+}
+
+void GPClient::onGatewaySuccess(const QString &authCookie)
+{
+    PLOGI << "Gateway login succeeded, got the cookie " << authCookie;
+
+    vpn->connect(gateway.address(), portalConfig.username(), authCookie);
+    ui->statusLabel->setText("Connecting...");
+    updateConnectionStatus(VpnStatus::pending);
+}
+
+void GPClient::onGatewayFail(const QString &msg)
+{
+    if (!msg.isEmpty()) {
+        openMessageBox("Portal authentication failed.", msg);
+    }
+
+    updateConnectionStatus(VpnStatus::disconnected);
 }

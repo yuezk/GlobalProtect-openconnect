@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>GP VPN Client</string>
+   <string>GlobalProtect OpenConnect</string>
   </property>
   <property name="windowIcon">
    <iconset resource="resources.qrc">
@@ -112,6 +112,12 @@
         </property>
         <property name="text">
          <string>Connect</string>
+        </property>
+        <property name="autoDefault">
+         <bool>true</bool>
+        </property>
+        <property name="default">
+         <bool>false</bool>
         </property>
        </widget>
       </item>
