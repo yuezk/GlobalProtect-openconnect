@@ -19,23 +19,27 @@ class GPClient : public QMainWindow
 public:
     GPClient(QWidget *parent = nullptr);
     ~GPClient();
+
     void activiate();
 
 private slots:
     void on_connectButton_clicked();
     void on_portalInput_returnPressed();
+    void on_portalInput_editingFinished();
 
-    void onPortalSuccess(const PortalConfigResponse &portalConfig, const GPGateway &gateway);
+    void onSystemTrayActivated(QSystemTrayIcon::ActivationReason reason);
+    void onGatewayChanged(QAction *action);
+
+    void onPortalSuccess(const PortalConfigResponse portalConfig, const GPGateway gateway, QList<GPGateway> allGateways);
     void onPortalPreloginFail();
     void onPortalFail(const QString &msg);
+
     void onGatewaySuccess(const QString &authCookie);
     void onGatewayFail(const QString &msg);
 
     void onVPNConnected();
     void onVPNDisconnected();
     void onVPNLogAvailable(QString log);
-
-    void onSystemTrayActivated(QSystemTrayIcon::ActivationReason reason);
 
 private:
     enum class VpnStatus
@@ -52,20 +56,34 @@ private:
     QMenu *contextMenu;
     QAction *openAction;
     QAction *connectAction;
+
+    QMenu *gatewaySwitchMenu;
+    QAction *clearAction;
     QAction *quitAction;
 
-    GPGateway gateway;
+    bool isQuickConnect { false };
+    bool isSwitchingGateway { false };
     PortalConfigResponse portalConfig;
 
-    QString portal() const;
-
+    void initSystemTrayIcon();
     void initVpnStatus();
-    void doConnect();
+    void populateGatewayMenu();
     void updateConnectionStatus(const VpnStatus &status);
 
-    void portalLogin(const QString& portal);
-    void gatewayLogin() const;
+    void doConnect();
+    void portalLogin();
+    void gatewayLogin();
 
+    QString portal() const;
+    bool connected() const;
+
+    QList<GPGateway> allGateways() const;
+    void setAllGateways(QList<GPGateway> gateways);
+
+    GPGateway currentGateway() const;
+    void setCurrentGateway(const GPGateway gateway);
+
+    void clearSettings();
     void quit();
 };
 #endif // GPCLIENT_H

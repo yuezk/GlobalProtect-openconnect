@@ -25,7 +25,8 @@ private slots:
     void onPerformNormalLogin(const QString &username, const QString &password);
     void onLoginWindowRejected();
     void onLoginWindowFinished();
-    void onSAMLLoginFinished(const QMap<QString, QString> &samlResult);
+    void onSAMLLoginSuccess(const QMap<QString, QString> &samlResult);
+    void onSAMLLoginFail(const QString msg);
 
 private:
     QString gateway;
@@ -34,7 +35,7 @@ private:
 
     const PortalConfigResponse& portalConfig;
 
-    NormalLoginWindow *normalLoginWindow{nullptr};
+    NormalLoginWindow *normalLoginWindow{ nullptr };
 
     void login(const LoginParams& params);
     void doAuth();

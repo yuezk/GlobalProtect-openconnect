@@ -18,7 +18,7 @@ public:
     void authenticate();
 
 signals:
-    void success(const PortalConfigResponse&, const GPGateway&);
+    void success(const PortalConfigResponse, const GPGateway, QList<GPGateway> allGateways);
     void fail(const QString& msg);
     void preloginFailed(const QString& msg);
 
@@ -27,7 +27,8 @@ private slots:
     void onPerformNormalLogin(const QString &username, const QString &password);
     void onLoginWindowRejected();
     void onLoginWindowFinished();
-    void onSAMLLoginSuccess(const QMap<QString, QString> &samlResult);
+    void onSAMLLoginSuccess(const QMap<QString, QString> samlResult);
+    void onSAMLLoginFail(const QString msg);
     void onFetchConfigFinished();
 
 private:

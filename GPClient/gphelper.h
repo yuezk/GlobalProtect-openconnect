@@ -20,9 +20,7 @@ namespace gpclient {
 
         QNetworkReply* createRequest(QString url, QByteArray params = nullptr);
 
-        SAMLLoginWindow *samlLogin(QString samlMethod, QString samlRequest, QString preloginUrl);
-
-        GPGateway filterPreferredGateway(QList<GPGateway> *gateways, const QString ruleName);
+        GPGateway filterPreferredGateway(QList<GPGateway> gateways, const QString ruleName);
 
         QUrlQuery parseGatewayResponse(const QByteArray& xml);
 
@@ -36,6 +34,7 @@ namespace gpclient {
 
             QVariant get(const QString &key, const QVariant &defaultValue = QVariant());
             void save(const QString &key, const QVariant &value);
+            void clear();
         }
     }
 }

@@ -4,5 +4,7 @@
         <file>connected.png</file>
         <file>pending.png</file>
         <file>not_connected.png</file>
+        <file>radio_unselected.png</file>
+        <file>radio_selected.png</file>
     </qresource>
 </RCC>

@@ -21,27 +21,11 @@ QNetworkReply* gpclient::helper::createRequest(QString url, QByteArray params)
     return networkManager->post(request, params);
 }
 
-SAMLLoginWindow* gpclient::helper::samlLogin(QString samlMethod, QString samlRequest, QString preloginUrl)
+GPGateway gpclient::helper::filterPreferredGateway(QList<GPGateway> gateways, const QString ruleName)
 {
-    SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
+    GPGateway gateway = gateways.first();
 
-    if (samlMethod == "POST") {
-        loginWindow->login(preloginUrl, samlRequest);
-    } else if (samlMethod == "REDIRECT") {
-        loginWindow->login(samlRequest);
-    } else {
-        PLOGE << "Unknown saml-auth-method expected POST or REDIRECT, got " << samlMethod;
-        return nullptr;
-    }
-
-    return loginWindow;
-}
-
-GPGateway gpclient::helper::filterPreferredGateway(QList<GPGateway> *gateways, const QString ruleName)
-{
-    GPGateway gateway = gateways->first();
-
-    for (GPGateway g : *gateways) {
+    for (GPGateway g : gateways) {
         if (g.priorityOf(ruleName) > gateway.priorityOf(ruleName)) {
             gateway = g;
         }
@@ -76,7 +60,7 @@ QUrlQuery gpclient::helper::parseGatewayResponse(const QByteArray &xml)
 void gpclient::helper::openMessageBox(const QString &message, const QString& informativeText)
 {
     QMessageBox msgBox;
-    msgBox.setWindowTitle("GlobalProtect");
+    msgBox.setWindowTitle("Notice");
     msgBox.setText(message);
     msgBox.setFixedWidth(500);
     msgBox.setStyleSheet("QLabel{min-width: 250px}");
@@ -116,4 +100,9 @@ QVariant gpclient::helper::settings::get(const QString &key, const QVariant &def
 void gpclient::helper::settings::save(const QString &key, const QVariant &value)
 {
     _settings->setValue(key, value);
+}
+
+void gpclient::helper::settings::clear()
+{
+    _settings->clear();
 }

@@ -20,7 +20,8 @@ public:
     QString password() const;
     QString userAuthCookie() const;
     QString prelogonUserAuthCookie() const;
-    QList<GPGateway>* allGateways();
+    QList<GPGateway> allGateways();
+    void setAllGateways(QList<GPGateway> gateways);
 
     void setUsername(const QString& username);
     void setPassword(const QString& password);
@@ -36,13 +37,13 @@ private:
     QString _userAuthCookie;
     QString _prelogonAuthCookie;
 
-    QList<GPGateway> *_gateways;
+    QList<GPGateway> _gateways;
 
     void setRawResponse(const QByteArray& response);
     void setUserAuthCookie(const QString& cookie);
     void setPrelogonUserAuthCookie(const QString& cookie);
 
-    static void parseGateways(QXmlStreamReader &xmlReader, QList<GPGateway> *gateways);
+    static QList<GPGateway> parseGateways(QXmlStreamReader &xmlReader);
     static QMap<QString, int> parsePriorityRules(QXmlStreamReader &xmlReader);
     static QString parseGatewayName(QXmlStreamReader &xmlReader);
 };

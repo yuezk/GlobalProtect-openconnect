@@ -8,13 +8,11 @@ QString PortalConfigResponse::xmlPrelogonUserAuthCookie = "portal-prelogonuserau
 QString PortalConfigResponse::xmlGateways = "gateways";
 
 PortalConfigResponse::PortalConfigResponse()
-    : _gateways(new QList<GPGateway>)
 {
 }
 
 PortalConfigResponse::~PortalConfigResponse()
 {
-    delete _gateways;
 }
 
 PortalConfigResponse PortalConfigResponse::parse(const QByteArray& xml)
@@ -33,7 +31,7 @@ PortalConfigResponse PortalConfigResponse::parse(const QByteArray& xml)
         } else if (name == xmlPrelogonUserAuthCookie) {
             response.setPrelogonUserAuthCookie(xmlReader.readElementText());
         } else if (name == xmlGateways) {
-            parseGateways(xmlReader, response.allGateways());
+            response.setAllGateways(parseGateways(xmlReader));
         }
     }
 
@@ -55,20 +53,23 @@ QString PortalConfigResponse::password() const
     return _password;
 }
 
-void PortalConfigResponse::parseGateways(QXmlStreamReader &xmlReader, QList<GPGateway> *gateways)
+QList<GPGateway> PortalConfigResponse::parseGateways(QXmlStreamReader &xmlReader)
 {
+    QList<GPGateway> gateways;
+
     while (xmlReader.name() != xmlGateways || !xmlReader.isEndElement()) {
         xmlReader.readNext();
         // Parse the gateways -> external -> list -> entry
         if (xmlReader.name() == "entry" && xmlReader.isStartElement()) {
-            GPGateway gateway;
+            GPGateway g;
             QString address = xmlReader.attributes().value("name").toString();
-            gateway.setAddress(address);
-            gateway.setPriorityRules(parsePriorityRules(xmlReader));
-            gateway.setName(parseGatewayName(xmlReader));
-            gateways->append(gateway);
+            g.setAddress(address);
+            g.setPriorityRules(parsePriorityRules(xmlReader));
+            g.setName(parseGatewayName(xmlReader));
+            gateways.append(g);
         }
     }
+    return gateways;
 }
 
 QMap<QString, int> PortalConfigResponse::parsePriorityRules(QXmlStreamReader &xmlReader)
@@ -112,9 +113,14 @@ QString PortalConfigResponse::prelogonUserAuthCookie() const
     return _prelogonAuthCookie;
 }
 
-QList<GPGateway>* PortalConfigResponse::allGateways()
+QList<GPGateway> PortalConfigResponse::allGateways()
 {
     return _gateways;
+}
+
+void PortalConfigResponse::setAllGateways(QList<GPGateway> gateways)
+{
+    _gateways = gateways;
 }
 
 void PortalConfigResponse::setRawResponse(const QByteArray &response)

@@ -15,10 +15,11 @@ public:
     explicit SAMLLoginWindow(QWidget *parent = nullptr);
     ~SAMLLoginWindow();
 
-    void login(QString url, QString html = "");
+    void login(const QString samlMethod, const QString samlRequest, const QString preloingUrl);
 
 signals:
     void success(QMap<QString, QString> samlResult);
+    void fail(const QString msg);
 
 private slots:
     void onResponseReceived(QJsonObject params);

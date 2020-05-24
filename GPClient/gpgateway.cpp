@@ -1,5 +1,9 @@
 #include "gpgateway.h"
 
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
+
 GPGateway::GPGateway()
 {
 }
@@ -35,4 +39,59 @@ int GPGateway::priorityOf(QString ruleName) const
         return _priorityRules.value(ruleName);
     }
     return 0;
+}
+
+QJsonObject GPGateway::toJsonObject() const
+{
+    QJsonObject obj;
+    obj.insert("name", name());
+    obj.insert("address", address());
+
+    return obj;
+}
+
+QString GPGateway::toString() const
+{
+    QJsonDocument jsonDoc{ toJsonObject() };
+    return QString::fromUtf8(jsonDoc.toJson());
+}
+
+QString GPGateway::serialize(QList<GPGateway> &gateways)
+{
+    QJsonArray arr;
+
+    for (auto g : gateways) {
+        arr.append(g.toJsonObject());
+    }
+
+    QJsonDocument jsonDoc{ arr };
+    return QString::fromUtf8(jsonDoc.toJson());
+}
+
+QList<GPGateway> GPGateway::fromJson(const QString &jsonString)
+{
+    QList<GPGateway> gateways;
+
+    if (jsonString.isEmpty()) {
+        return gateways;
+    }
+
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonString.toUtf8());
+
+    for (auto item : jsonDoc.array()) {
+        GPGateway g = GPGateway::fromJsonObject(item.toObject());
+        gateways.append(g);
+    }
+
+    return gateways;
+}
+
+GPGateway GPGateway::fromJsonObject(const QJsonObject &jsonObj)
+{
+    GPGateway g;
+
+    g.setName(jsonObj.value("name").toString());
+    g.setAddress(jsonObj.value("address").toString());
+
+    return g;
 }

@@ -113,22 +113,25 @@ void PortalAuthenticator::samlAuth()
 {
     PLOGI << "Trying to perform SAML login with saml-method " << preloginResponse.samlMethod();
 
-    SAMLLoginWindow *loginWindow = samlLogin(preloginResponse.samlMethod(), preloginResponse.samlRequest(), preloginUrl);
-
-    if (!loginWindow) {
-        openMessageBox("SAML Login failed for portal");
-        return;
-    }
+    SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
 
     connect(loginWindow, &SAMLLoginWindow::success, this, &PortalAuthenticator::onSAMLLoginSuccess);
+    connect(loginWindow, &SAMLLoginWindow::fail, this, &PortalAuthenticator::onSAMLLoginFail);
     connect(loginWindow, &SAMLLoginWindow::rejected, this, &PortalAuthenticator::onLoginWindowRejected);
+
+    loginWindow->login(preloginResponse.samlMethod(), preloginResponse.samlRequest(), preloginUrl);
 }
 
-void PortalAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> &samlResult)
+void PortalAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> samlResult)
 {
     PLOGI << "SAML login succeeded, got the prelogin cookie " << samlResult.value("preloginCookie");
 
     fetchConfig(samlResult.value("username"), "", samlResult.value("preloginCookie"));
+}
+
+void PortalAuthenticator::onSAMLLoginFail(const QString msg)
+{
+    emitFail(msg);
 }
 
 void PortalAuthenticator::fetchConfig(QString username, QString password, QString preloginCookie)
@@ -146,7 +149,6 @@ void PortalAuthenticator::fetchConfig(QString username, QString password, QStrin
     PLOGI << "Fetching the portal config from " << configUrl << " for user: " << username;
 
     QNetworkReply *reply = createRequest(configUrl, params.toUtf8());
-
     connect(reply, &QNetworkReply::finished, this, &PortalAuthenticator::onFetchConfigFinished);
 }
 
@@ -185,7 +187,7 @@ void PortalAuthenticator::onFetchConfigFinished()
         normalLoginWindow->close();
     }
 
-    emit success(response, filterPreferredGateway(response.allGateways(), preloginResponse.region()));
+    emit success(response, filterPreferredGateway(response.allGateways(), preloginResponse.region()), response.allGateways());
 }
 
 void PortalAuthenticator::emitFail(const QString& msg)

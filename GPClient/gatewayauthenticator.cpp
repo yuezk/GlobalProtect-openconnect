@@ -140,18 +140,16 @@ void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QSt
 {
     PLOGI << "Trying to perform SAML login with saml-method " << samlMethod;
 
-    SAMLLoginWindow *loginWindow = samlLogin(samlMethod, samlRequest, preloginUrl);
+    SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
 
-    if (!loginWindow) {
-        openMessageBox("SAML Login failed for gateway");
-        return;
-    }
-
-    connect(loginWindow, &SAMLLoginWindow::success, this, &GatewayAuthenticator::onSAMLLoginFinished);
+    connect(loginWindow, &SAMLLoginWindow::success, this, &GatewayAuthenticator::onSAMLLoginSuccess);
+    connect(loginWindow, &SAMLLoginWindow::fail, this, &GatewayAuthenticator::onSAMLLoginFail);
     connect(loginWindow, &SAMLLoginWindow::rejected, this, &GatewayAuthenticator::onLoginWindowRejected);
+
+    loginWindow->login(samlMethod, samlRequest, preloginUrl);
 }
 
-void GatewayAuthenticator::onSAMLLoginFinished(const QMap<QString, QString> &samlResult)
+void GatewayAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> &samlResult)
 {
     PLOGI << "SAML login succeeded, got the prelogin cookie " << samlResult.value("preloginCookie");
 
@@ -160,4 +158,9 @@ void GatewayAuthenticator::onSAMLLoginFinished(const QMap<QString, QString> &sam
     params.setPreloginCookie(samlResult.value("preloginCookie"));
 
     login(params);
+}
+
+void GatewayAuthenticator::onSAMLLoginFail(const QString msg)
+{
+    emit fail(msg);
 }

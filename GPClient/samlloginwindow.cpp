@@ -3,16 +3,17 @@
 #include <QVBoxLayout>
 #include <plog/Log.h>
 #include <QWebEngineProfile>
+#include <QWebEngineView>
 
 SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
     : QDialog(parent)
+    , webView(new EnhancedWebView(this))
 {
     setWindowTitle("GlobalProtect SAML Login");
     setModal(true);
     resize(700, 550);
 
     QVBoxLayout *verticalLayout = new QVBoxLayout(this);
-    webView = new EnhancedWebView(this);
     webView->setUrl(QUrl("about:blank"));
     // webView->page()->profile()->setPersistentCookiesPolicy(QWebEngineProfile::NoPersistentCookies);
     verticalLayout->addWidget(webView);
@@ -33,12 +34,15 @@ void SAMLLoginWindow::closeEvent(QCloseEvent *event)
     reject();
 }
 
-void SAMLLoginWindow::login(QString url, QString html)
+void SAMLLoginWindow::login(const QString samlMethod, const QString samlRequest, const QString preloingUrl)
 {
-    if (html.isEmpty()) {
-        webView->load(QUrl(url));
+    if (samlMethod == "POST") {
+        webView->setHtml(samlRequest, preloingUrl);
+    } else if (samlMethod == "REDIRECT") {
+        webView->load(samlRequest);
     } else {
-        webView->setHtml(html, url);
+        PLOGE << "Unknown saml-auth-method expected POST or REDIRECT, got " << samlMethod;
+        emit fail("Unknown saml-auth-method, got " + samlMethod);
     }
 }
 

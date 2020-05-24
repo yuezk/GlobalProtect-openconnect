@@ -3,6 +3,7 @@
 
 #include <QString>
 #include <QMap>
+#include <QJsonObject>
 
 class GPGateway
 {
@@ -16,6 +17,12 @@ public:
     void setAddress(const QString &address);
     void setPriorityRules(const QMap<QString, int> &priorityRules);
     int priorityOf(QString ruleName) const;
+    QJsonObject toJsonObject() const;
+    QString toString() const;
+
+    static QString serialize(QList<GPGateway> &gateways);
+    static QList<GPGateway> fromJson(const QString &jsonString);
+    static GPGateway fromJsonObject(const QJsonObject &jsonObj);
 
 private:
     QString _name;
