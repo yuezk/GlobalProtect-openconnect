@@ -2,7 +2,7 @@
 Description=GlobalProtect openconnect DBus service
 
 [Service]
-Environment=LC_ALL=en_US
+Environment="LANG=en_US.utf8"
 Type=dbus
 BusName=com.yuezk.qt.GPService
 ExecStart=/usr/bin/gpservice

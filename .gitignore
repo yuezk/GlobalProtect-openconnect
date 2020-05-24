@@ -2,6 +2,10 @@
 gpclient
 gpservice
 
+# Auto generated DBus files
+*_adaptor.cpp
+*_adaptor.h
+
 # C++ objects and libs
 *.slo
 *.lo
