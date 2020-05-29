@@ -124,9 +124,13 @@ void PortalAuthenticator::samlAuth()
 
 void PortalAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> samlResult)
 {
-    PLOGI << "SAML login succeeded, got the prelogin cookie " << samlResult.value("preloginCookie");
+    if (samlResult.contains("preloginCookie")) {
+        PLOGI << "SAML login succeeded, got the prelogin-cookie " << samlResult.value("preloginCookie");
+    } else {
+        PLOGI << "SAML login succeeded, got the portal-userauthcookie " << samlResult.value("userAuthCookie");
+    }
 
-    fetchConfig(samlResult.value("username"), "", samlResult.value("preloginCookie"));
+    fetchConfig(samlResult.value("username"), "", samlResult.value("preloginCookie"), samlResult.value("userAuthCookie"));
 }
 
 void PortalAuthenticator::onSAMLLoginFail(const QString msg)
@@ -134,13 +138,14 @@ void PortalAuthenticator::onSAMLLoginFail(const QString msg)
     emitFail(msg);
 }
 
-void PortalAuthenticator::fetchConfig(QString username, QString password, QString preloginCookie)
+void PortalAuthenticator::fetchConfig(QString username, QString password, QString preloginCookie, QString userAuthCookie)
 {
     LoginParams params;
     params.setServer(portal);
     params.setUser(username);
     params.setPassword(password);
     params.setPreloginCookie(preloginCookie);
+    params.setUserAuthCookie(userAuthCookie);
 
     // Save the username and password for future use.
     this->username = username;

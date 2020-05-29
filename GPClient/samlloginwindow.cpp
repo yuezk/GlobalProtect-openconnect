@@ -59,10 +59,18 @@ void SAMLLoginWindow::onResponseReceived(QJsonObject params)
 
     const QString username = headers.value("saml-username").toString();
     const QString preloginCookie = headers.value("prelogin-cookie").toString();
+    const QString userAuthCookie = headers.value("portal-userauthcookie").toString();
 
-    if (!username.isEmpty() && !preloginCookie.isEmpty()) {
+    if (!username.isEmpty()) {
         samlResult.insert("username", username);
+    }
+
+    if (!preloginCookie.isEmpty()) {
         samlResult.insert("preloginCookie", preloginCookie);
+    }
+
+    if (!userAuthCookie.isEmpty()) {
+        samlResult.insert("userAuthCookie", userAuthCookie);
     }
 }
 
@@ -71,7 +79,8 @@ void SAMLLoginWindow::onLoadFinished()
      LOGI << "Load finished " << this->webView->page()->url().toString();
 
     // Check the SAML result
-    if (!samlResult.value("username").isEmpty() && !samlResult.value("preloginCookie").isEmpty()) {
+    if (samlResult.contains("username")
+            && (samlResult.contains("preloginCookie") || samlResult.contains("userAuthCookie"))) {
         emit success(samlResult);
         accept();
     } else {
