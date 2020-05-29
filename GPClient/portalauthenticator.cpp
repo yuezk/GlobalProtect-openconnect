@@ -14,7 +14,7 @@ using namespace gpclient::helper;
 
 PortalAuthenticator::PortalAuthenticator(const QString& portal) : QObject()
   , portal(portal)
-  , preloginUrl("https://" + portal + "/global-protect/prelogin.esp")
+  , preloginUrl("https://" + portal + "/global-protect/prelogin.esp?tmp=tmp&kerberos-support=yes&ipv6-support=yes&clientVer=4100&clientos=Linux")
   , configUrl("https://" + portal + "/global-protect/getconfig.esp")
 {
 }
