@@ -151,11 +151,16 @@ void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QSt
 
 void GatewayAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> &samlResult)
 {
-    PLOGI << "SAML login succeeded, got the prelogin cookie " << samlResult.value("preloginCookie");
+    if (samlResult.contains("preloginCookie")) {
+        PLOGI << "SAML login succeeded, got the prelogin-cookie " << samlResult.value("preloginCookie");
+    } else {
+        PLOGI << "SAML login succeeded, got the portal-userauthcookie " << samlResult.value("userAuthCookie");
+    }
 
     LoginParams params;
     params.setUser(samlResult.value("username"));
     params.setPreloginCookie(samlResult.value("preloginCookie"));
+    params.setUserAuthCookie(samlResult.value("userAuthCookie"));
 
     login(params);
 }
