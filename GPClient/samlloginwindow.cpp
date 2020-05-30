@@ -61,29 +61,39 @@ void SAMLLoginWindow::onResponseReceived(QJsonObject params)
     const QString preloginCookie = headers.value("prelogin-cookie").toString();
     const QString userAuthCookie = headers.value("portal-userauthcookie").toString();
 
+    LOGI << "Response received from " << response.value("url").toString();
+
     if (!username.isEmpty()) {
+        LOGI << "Got username from SAML response headers " << username;
         samlResult.insert("username", username);
     }
 
     if (!preloginCookie.isEmpty()) {
+        LOGI << "Got prelogin-cookie from SAML response headers " << preloginCookie;
         samlResult.insert("preloginCookie", preloginCookie);
     }
 
     if (!userAuthCookie.isEmpty()) {
+        LOGI << "Got portal-userauthcookie from SAML response headers " << userAuthCookie;
         samlResult.insert("userAuthCookie", userAuthCookie);
+    }
+
+    // Check the SAML result
+    if (samlResult.contains("username")
+            && (samlResult.contains("preloginCookie") || samlResult.contains("userAuthCookie"))) {
+        LOGI << "Got the SAML authentication information successfully. "
+             << "username: " << samlResult.value("username")
+             << ", preloginCookie: " << samlResult.value("preloginCookie")
+             << ", userAuthCookie: " << samlResult.value("userAuthCookie");
+
+        emit success(samlResult);
+        accept();
+    } else {
+        this->show();
     }
 }
 
 void SAMLLoginWindow::onLoadFinished()
 {
      LOGI << "Load finished " << this->webView->page()->url().toString();
-
-    // Check the SAML result
-    if (samlResult.contains("username")
-            && (samlResult.contains("preloginCookie") || samlResult.contains("userAuthCookie"))) {
-        emit success(samlResult);
-        accept();
-    } else {
-        this->show();
-    }
 }
