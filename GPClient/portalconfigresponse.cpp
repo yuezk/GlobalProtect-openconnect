@@ -15,8 +15,10 @@ PortalConfigResponse::~PortalConfigResponse()
 {
 }
 
-PortalConfigResponse PortalConfigResponse::parse(const QByteArray& xml)
+PortalConfigResponse PortalConfigResponse::parse(const QByteArray xml)
 {
+    PLOGI << "Start parsing the portal configuration...";
+
     QXmlStreamReader xmlReader(xml);
     PortalConfigResponse response;
     response.setRawResponse(xml);
@@ -27,18 +29,22 @@ PortalConfigResponse PortalConfigResponse::parse(const QByteArray& xml)
         QString name = xmlReader.name().toString();
 
         if (name == xmlUserAuthCookie) {
+            PLOGI << "Start reading " << name;
             response.setUserAuthCookie(xmlReader.readElementText());
         } else if (name == xmlPrelogonUserAuthCookie) {
+            PLOGI << "Start reading " << name;
             response.setPrelogonUserAuthCookie(xmlReader.readElementText());
         } else if (name == xmlGateways) {
             response.setAllGateways(parseGateways(xmlReader));
         }
     }
 
+    PLOGI << "Finished parsing portal configuration.";
+
     return response;
 }
 
-const QByteArray& PortalConfigResponse::rawResponse() const
+const QByteArray PortalConfigResponse::rawResponse() const
 {
     return _rawResponse;
 }
@@ -55,6 +61,8 @@ QString PortalConfigResponse::password() const
 
 QList<GPGateway> PortalConfigResponse::parseGateways(QXmlStreamReader &xmlReader)
 {
+    PLOGI << "Start parsing the gateways from portal configuration...";
+
     QList<GPGateway> gateways;
 
     while (xmlReader.name() != xmlGateways || !xmlReader.isEndElement()) {
@@ -69,11 +77,16 @@ QList<GPGateway> PortalConfigResponse::parseGateways(QXmlStreamReader &xmlReader
             gateways.append(g);
         }
     }
+
+    PLOGI << "Finished parsing the gateways.";
+
     return gateways;
 }
 
 QMap<QString, int> PortalConfigResponse::parsePriorityRules(QXmlStreamReader &xmlReader)
 {
+    PLOGI << "Start parsing the priority rules...";
+
     QMap<QString, int> priorityRules;
 
     while (xmlReader.name() != "priority-rule" || !xmlReader.isEndElement()) {
@@ -87,20 +100,26 @@ QMap<QString, int> PortalConfigResponse::parsePriorityRules(QXmlStreamReader &xm
             priorityRules.insert(ruleName, ruleValue);
         }
     }
+
+    PLOGI << "Finished parsing the priority rules.";
+
     return priorityRules;
 }
 
 QString PortalConfigResponse::parseGatewayName(QXmlStreamReader &xmlReader)
 {
-   while (xmlReader.name() != "description" || !xmlReader.isEndElement()) {
-       xmlReader.readNext();
-       if (xmlReader.name() == "description" && xmlReader.tokenType() == xmlReader.StartElement) {
-           return xmlReader.readElementText();
-       }
-   }
+    PLOGI << "Start parsing the gateway name...";
 
-   PLOGE << "Error: <description> tag not found";
-   return "";
+    while (xmlReader.name() != "description" || !xmlReader.isEndElement()) {
+        xmlReader.readNext();
+        if (xmlReader.name() == "description" && xmlReader.tokenType() == xmlReader.StartElement) {
+            PLOGI << "Finished parsing the gateway name";
+            return xmlReader.readElementText();
+        }
+    }
+
+    PLOGE << "Error: <description> tag not found";
+    return "";
 }
 
 QString PortalConfigResponse::userAuthCookie() const
@@ -123,27 +142,27 @@ void PortalConfigResponse::setAllGateways(QList<GPGateway> gateways)
     _gateways = gateways;
 }
 
-void PortalConfigResponse::setRawResponse(const QByteArray &response)
+void PortalConfigResponse::setRawResponse(const QByteArray response)
 {
     _rawResponse = response;
 }
 
-void PortalConfigResponse::setUsername(const QString& username)
+void PortalConfigResponse::setUsername(const QString username)
 {
     _username = username;
 }
 
-void PortalConfigResponse::setPassword(const QString& password)
+void PortalConfigResponse::setPassword(const QString password)
 {
     _password = password;
 }
 
-void PortalConfigResponse::setUserAuthCookie(const QString &cookie)
+void PortalConfigResponse::setUserAuthCookie(const QString cookie)
 {
     _userAuthCookie = cookie;
 }
 
-void PortalConfigResponse::setPrelogonUserAuthCookie(const QString &cookie)
+void PortalConfigResponse::setPrelogonUserAuthCookie(const QString cookie)
 {
     _prelogonAuthCookie = cookie;
 }

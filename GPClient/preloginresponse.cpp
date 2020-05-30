@@ -2,6 +2,7 @@
 
 #include <QXmlStreamReader>
 #include <QMap>
+#include <plog/Log.h>
 
 QString PreloginResponse::xmlAuthMessage = "authentication-message";
 QString PreloginResponse::xmlLabelUsername = "username-label";
@@ -22,6 +23,8 @@ PreloginResponse::PreloginResponse()
 
 PreloginResponse PreloginResponse::parse(const QByteArray& xml)
 {
+    PLOGI << "Start parsing the prelogin response...";
+
     QXmlStreamReader xmlReader(xml);
     PreloginResponse response;
     response.setRawResponse(xml);
@@ -81,17 +84,17 @@ bool PreloginResponse::hasNormalAuthFields() const
     return !labelUsername().isEmpty() && !labelPassword().isEmpty();
 }
 
-void PreloginResponse::setRawResponse(const QByteArray &response)
+void PreloginResponse::setRawResponse(const QByteArray response)
 {
     _rawResponse = response;
 }
 
-bool PreloginResponse::has(const QString &name) const
+bool PreloginResponse::has(const QString name) const
 {
     return resultMap.contains(name);
 }
 
-void PreloginResponse::add(const QString &name, const QString &value)
+void PreloginResponse::add(const QString name, const QString value)
 {
     resultMap.insert(name, value);
 }

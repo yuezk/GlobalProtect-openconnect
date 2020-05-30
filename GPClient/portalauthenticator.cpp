@@ -46,6 +46,9 @@ void PortalAuthenticator::onPreloginFinished()
     PLOGI << "Portal prelogin succeeded.";
 
     preloginResponse = PreloginResponse::parse(reply->readAll());
+
+    PLOGI << "Finished parsing the prelogin response. The region field is: " << preloginResponse.region();
+
     if (preloginResponse.hasSamlAuthFields()) {
         // Do SAML authentication
         samlAuth();
@@ -178,14 +181,16 @@ void PortalAuthenticator::onFetchConfigFinished()
     }
 
     PLOGI << "Fetch the portal config succeeded.";
-
     PortalConfigResponse response = PortalConfigResponse::parse(reply->readAll());
+
     // Add the username & password to the response object
     response.setUsername(username);
     response.setPassword(password);
 
     // Close the login window
     if (normalLoginWindow) {
+        PLOGI << "Closing the NormalLoginWindow...";
+
         // Save the credentials for reuse
         settings::save("username", username);
         settings::save("password", password);

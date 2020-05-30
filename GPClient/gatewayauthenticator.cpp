@@ -23,6 +23,8 @@ GatewayAuthenticator::~GatewayAuthenticator()
 
 void GatewayAuthenticator::authenticate()
 {
+    PLOGI << "Start gateway authentication...";
+
     LoginParams params;
     params.setUser(portalConfig.username());
     params.setPassword(portalConfig.password());
@@ -118,6 +120,8 @@ void GatewayAuthenticator::normalAuth(QString labelUsername, QString labelPasswo
 
 void GatewayAuthenticator::onPerformNormalLogin(const QString &username, const QString &password)
 {
+    PLOGI << "Start to perform normal login...";
+
     normalLoginWindow->setProcessing(true);
     LoginParams params;
     params.setUser(username);
