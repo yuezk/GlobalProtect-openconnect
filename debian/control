@@ -1,0 +1,13 @@
+Source: globalprotect-openconnect
+Section: main/net
+Priority: optional
+Maintainer: Kevin Yue
+Build-Depends: debhelper (>=11~), openconnect (>=8.0), libqt5websockets5 (>=5.12), libqt5webengine5 (>=5.12)
+Standards-Version: 4.1.4
+Homepage: https://github.com/yuezk/GlobalProtect-openconnect
+
+Package: globalprotect-openconnect
+Architecture: any
+Multi-Arch: foreign
+Depends: ${misc:Depends}, ${shlibs:Depends}, openconnect (>=8.0), libqt5websockets5 (>=5.12), libqt5webengine5 (>=5.12)
+Description: A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Qt5, supports SAML auth mode, inspired by gp-saml-gui.

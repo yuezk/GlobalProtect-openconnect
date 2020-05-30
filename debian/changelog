@@ -1,0 +1,5 @@
+globalprotect-openconnect (1.2.0-1) UNRELEASED; urgency=low
+
+  * Initial release of debian package
+
+ -- Amit Joshi <>  Fri, 29 May 2020 21:52:59 -0400
