@@ -81,6 +81,11 @@ void SAMLLoginWindow::onResponseReceived(QJsonObject params)
     // Check the SAML result
     if (samlResult.contains("username")
             && (samlResult.contains("preloginCookie") || samlResult.contains("userAuthCookie"))) {
+        LOGI << "Got the SAML authentication information successfully. "
+             << "username: " << samlResult.value("username")
+             << ", preloginCookie: " << samlResult.value("preloginCookie")
+             << ", userAuthCookie: " << samlResult.value("userAuthCookie");
+
         emit success(samlResult);
         accept();
     } else {
