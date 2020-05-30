@@ -33,9 +33,9 @@ private:
     QMap<QString, QString> resultMap;
     QByteArray _rawResponse;
 
-    void setRawResponse(const QByteArray &response);
-    void add(const QString &name, const QString &value);
-    bool has(const QString &name) const;
+    void setRawResponse(const QByteArray response);
+    void add(const QString name, const QString value);
+    bool has(const QString name) const;
 };
 
 #endif // PRELOGINRESPONSE_H
