@@ -6,6 +6,8 @@
 #include <plog/Log.h>
 #include <plog/Appenders/ColorConsoleAppender.h>
 
+static const QString version = "v1.2.2";
+
 int main(int argc, char *argv[])
 {
     const QDir path = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/GlobalProtect-openconnect";
@@ -16,6 +18,8 @@ int main(int argc, char *argv[])
 
     static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
     plog::init(plog::debug, logFile.toUtf8()).addAppender(&consoleAppender);
+
+    PLOGI << "GlobalProtect started, version: " << version;
 
     QString port = QString::fromLocal8Bit(qgetenv(ENV_CDP_PORT));
 
