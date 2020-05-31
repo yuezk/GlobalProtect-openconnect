@@ -243,6 +243,7 @@ void GPClient::portalLogin()
     connect(portalAuth, &PortalAuthenticator::success, this, &GPClient::onPortalSuccess);
     // Prelogin failed on the portal interface, try to treat the portal as a gateway interface
     connect(portalAuth, &PortalAuthenticator::preloginFailed, this, &GPClient::onPortalPreloginFail);
+    connect(portalAuth, &PortalAuthenticator::portalConfigFailed, this, &GPClient::onPortalConfigFail);
     // Portal login failed
     connect(portalAuth, &PortalAuthenticator::fail, this, &GPClient::onPortalFail);
 
@@ -251,21 +252,49 @@ void GPClient::portalLogin()
     portalAuth->authenticate();
 }
 
-void GPClient::onPortalSuccess(const PortalConfigResponse portalConfig, const GPGateway gateway, QList<GPGateway> allGateways)
+void GPClient::onPortalSuccess(const PortalConfigResponse portalConfig, const QString region)
 {
     PLOGI << "Portal authentication succeeded.";
 
-    this->portalConfig = portalConfig;
+    // No gateway found in protal configuration
+    if (portalConfig.allGateways().size() == 0) {
+        PLOGI << "No gateway found in portal configuration, treat the portal address as a gateway.";
+        tryGatewayLogin();
+        return;
+    }
 
-    setAllGateways(allGateways);
+    GPGateway gateway = filterPreferredGateway(portalConfig.allGateways(), region);
+    setAllGateways(portalConfig.allGateways());
     setCurrentGateway(gateway);
+    this->portalConfig = portalConfig;
 
     gatewayLogin();
 }
 
-void GPClient::onPortalPreloginFail()
+void GPClient::onPortalPreloginFail(const QString msg)
 {
-    PLOGI << "Portal prelogin failed, try to preform login on the the gateway interface...";
+    PLOGI << "Portal prelogin failed: " << msg;
+    tryGatewayLogin();
+}
+
+void GPClient::onPortalConfigFail(const QString msg)
+{
+    PLOGI << "Failed to get the portal configuration, " << msg << " Treat the portal address as gateway.";
+    tryGatewayLogin();
+}
+
+void GPClient::onPortalFail(const QString &msg)
+{
+    if (!msg.isEmpty()) {
+        openMessageBox("Portal authentication failed.", msg);
+    }
+
+    updateConnectionStatus(VpnStatus::disconnected);
+}
+
+void GPClient::tryGatewayLogin()
+{
+    PLOGI << "Try to preform login on the the gateway interface...";
 
     // Treat the portal input as the gateway address
     GPGateway g;
@@ -279,15 +308,6 @@ void GPClient::onPortalPreloginFail()
     setCurrentGateway(g);
 
     gatewayLogin();
-}
-
-void GPClient::onPortalFail(const QString &msg)
-{
-    if (!msg.isEmpty()) {
-        openMessageBox("Portal authentication failed.", msg);
-    }
-
-    updateConnectionStatus(VpnStatus::disconnected);
 }
 
 // Login to the gateway

@@ -30,8 +30,9 @@ private slots:
     void onSystemTrayActivated(QSystemTrayIcon::ActivationReason reason);
     void onGatewayChanged(QAction *action);
 
-    void onPortalSuccess(const PortalConfigResponse portalConfig, const GPGateway gateway, QList<GPGateway> allGateways);
-    void onPortalPreloginFail();
+    void onPortalSuccess(const PortalConfigResponse portalConfig, const QString region);
+    void onPortalPreloginFail(const QString msg);
+    void onPortalConfigFail(const QString msg);
     void onPortalFail(const QString &msg);
 
     void onGatewaySuccess(const QString &authCookie);
@@ -72,6 +73,7 @@ private:
 
     void doConnect();
     void portalLogin();
+    void tryGatewayLogin();
     void gatewayLogin();
 
     QString portal() const;

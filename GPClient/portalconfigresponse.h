@@ -20,7 +20,7 @@ public:
     QString password() const;
     QString userAuthCookie() const;
     QString prelogonUserAuthCookie() const;
-    QList<GPGateway> allGateways();
+    QList<GPGateway> allGateways() const;
     void setAllGateways(QList<GPGateway> gateways);
 
     void setUsername(const QString username);

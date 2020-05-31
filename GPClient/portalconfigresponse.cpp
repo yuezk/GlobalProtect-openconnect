@@ -132,7 +132,7 @@ QString PortalConfigResponse::prelogonUserAuthCookie() const
     return _prelogonAuthCookie;
 }
 
-QList<GPGateway> PortalConfigResponse::allGateways()
+QList<GPGateway> PortalConfigResponse::allGateways() const
 {
     return _gateways;
 }
