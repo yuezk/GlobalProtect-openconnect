@@ -57,7 +57,7 @@ void PortalAuthenticator::onPreloginFinished()
         tryAutoLogin();
     } else {
         PLOGE << QString("Unknown prelogin response for %1 got %2").arg(preloginUrl).arg(QString::fromUtf8(preloginResponse.rawResponse()));
-        emitFail("Unknown response for portal prelogin interface.");
+        emit preloginFailed("Unknown response for portal prelogin interface.");
     }
 
     delete reply;
@@ -175,7 +175,7 @@ void PortalAuthenticator::onFetchConfigFinished()
             isAutoLogin = false;
             normalAuth();
         } else {
-            emitFail("Failed to fetch the portal config.");
+            emit portalConfigFailed("Failed to fetch the portal config.");
         }
         return;
     }
@@ -197,7 +197,7 @@ void PortalAuthenticator::onFetchConfigFinished()
         normalLoginWindow->close();
     }
 
-    emit success(response, filterPreferredGateway(response.allGateways(), preloginResponse.region()), response.allGateways());
+    emit success(response, preloginResponse.region());
 }
 
 void PortalAuthenticator::emitFail(const QString& msg)

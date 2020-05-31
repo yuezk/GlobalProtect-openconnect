@@ -18,9 +18,10 @@ public:
     void authenticate();
 
 signals:
-    void success(const PortalConfigResponse, const GPGateway, QList<GPGateway> allGateways);
+    void success(const PortalConfigResponse response, const QString region);
     void fail(const QString& msg);
     void preloginFailed(const QString& msg);
+    void portalConfigFailed(const QString msg);
 
 private slots:
     void onPreloginFinished();
