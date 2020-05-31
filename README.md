@@ -53,5 +53,39 @@ sudo make install
 ```
 Open `GlobalProtect VPN` in the application dashboard.
 
+### Debian package
+
+Relatively manual process for now:
+
+* Clone the source tree
+
+  ```
+  git clone https://github.com/yuezk/GlobalProtect-openconnect.git
+  cd GlobalProtect-openconnect
+  ```
+
+* Install git-archive-all using the pip. Remember to adjust the version numbers etc.
+
+  ```
+  pip install git-archive-all
+  ```
+
+* Next create an upstream source tree using git archive.
+
+  ```
+  git-archive-all --force-submodules --prefix=globalprotect-openconnect-1.3.0/ ../globalprotect-openconnect_1.3.0.orig.tar.gz
+  ```
+
+* Finally extract the source tree and build the debian package.
+
+  ```
+  cd ..
+  tar -xzvf globalprotect-openconnect_1.3.0.orig.tar.gz
+  cd globalprotect-openconnect-1.3.0
+  fakeroot dpkg-buildpackage -uc -us -sa 2>&1 | tee ../build.log
+  ```
+
+  
+
 ## [License](./LICENSE)
 GPLv3
