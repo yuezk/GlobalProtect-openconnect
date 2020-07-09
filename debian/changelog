@@ -1,3 +1,9 @@
+globalprotect-openconnect (1.3.0-1ppa1) bionic; urgency=medium
+
+  * Bump version to 1.3.0
+
+ -- Kevin Yue <k3vinyue@gmail.com>  Thu, 09 Jul 2020 10:13:46 +0800
+
 globalprotect-openconnect (1.2.7-1ppa1) bionic; urgency=medium
 
   * Update dependencies
