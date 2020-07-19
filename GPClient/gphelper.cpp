@@ -48,6 +48,7 @@ GPGateway gpclient::helper::filterPreferredGateway(QList<GPGateway> gateways, co
 QUrlQuery gpclient::helper::parseGatewayResponse(const QByteArray &xml)
 {
     PLOGI << "Start parsing the gateway response...";
+    PLOGI << "The gateway response is: " << xml;
 
     QXmlStreamReader xmlReader{xml};
     QList<QString> args;
