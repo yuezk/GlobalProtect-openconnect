@@ -6,7 +6,7 @@
 #include <plog/Log.h>
 #include <plog/Appenders/ColorConsoleAppender.h>
 
-static const QString version = "v1.2.4";
+static const QString version = "v1.2.5";
 
 int main(int argc, char *argv[])
 {
