@@ -69,7 +69,7 @@ void GPClient::initSystemTrayIcon()
     connect(systemTrayIcon, &QSystemTrayIcon::activated, this, &GPClient::onSystemTrayActivated);
     connect(gatewaySwitchMenu, &QMenu::triggered, this, &GPClient::onGatewayChanged);
 
-    openAction = contextMenu->addAction(QIcon::fromTheme("window-new"), "Open", this, &GPClient::activiate);
+    openAction = contextMenu->addAction(QIcon::fromTheme("window-new"), "Open", this, &GPClient::activate);
     connectAction = contextMenu->addAction(QIcon::fromTheme("preferences-system-network"), "Connect", this, &GPClient::doConnect);
     contextMenu->addMenu(gatewaySwitchMenu);
     contextMenu->addSeparator();
@@ -167,7 +167,7 @@ void GPClient::onSystemTrayActivated(QSystemTrayIcon::ActivationReason reason)
     switch (reason) {
         case QSystemTrayIcon::Trigger:
         case QSystemTrayIcon::DoubleClick:
-            this->activiate();
+            this->activate();
             break;
         default:
             break;
@@ -209,7 +209,7 @@ void GPClient::doConnect()
 
     // Display the main window if portal is empty
     if (portal.isEmpty()) {
-        activiate();
+        activate();
         return;
     }
 
@@ -351,7 +351,7 @@ void GPClient::onGatewayFail(const QString &msg)
     updateConnectionStatus(VpnStatus::disconnected);
 }
 
-void GPClient::activiate()
+void GPClient::activate()
 {
     activateWindow();
     showNormal();

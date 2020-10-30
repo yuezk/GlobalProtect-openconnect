@@ -20,7 +20,7 @@ public:
     GPClient(QWidget *parent = nullptr);
     ~GPClient();
 
-    void activiate();
+    void activate();
 
 private slots:
     void on_connectButton_clicked();
