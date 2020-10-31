@@ -106,7 +106,6 @@ QMap<QString, int> PortalConfigResponse::parsePriorityRules(QXmlStreamReader &xm
             while (xmlReader.name() != "priority"){
                 xmlReader.readNext();
             }
-            //xmlReader.readNextStartElement();
             int ruleValue = xmlReader.readElementText().toUInt();
             priorityRules.insert(ruleName, ruleValue);
         }
