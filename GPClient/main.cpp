@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
     GPClient w;
     w.show();
 
-    QObject::connect(&app, &SingleApplication::instanceStarted, &w, &GPClient::activiate);
+    QObject::connect(&app, &SingleApplication::instanceStarted, &w, &GPClient::activate);
 
     return app.exec();
 }

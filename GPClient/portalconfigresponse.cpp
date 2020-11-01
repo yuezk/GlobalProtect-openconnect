@@ -65,6 +65,14 @@ QList<GPGateway> PortalConfigResponse::parseGateways(QXmlStreamReader &xmlReader
 
     QList<GPGateway> gateways;
 
+    while (xmlReader.name() != "external"){
+        xmlReader.readNext();
+    }
+
+    while (xmlReader.name() != "list"){
+        xmlReader.readNext();
+    }
+
     while (xmlReader.name() != xmlGateways || !xmlReader.isEndElement()) {
         xmlReader.readNext();
         // Parse the gateways -> external -> list -> entry
@@ -89,13 +97,15 @@ QMap<QString, int> PortalConfigResponse::parsePriorityRules(QXmlStreamReader &xm
 
     QMap<QString, int> priorityRules;
 
-    while (xmlReader.name() != "priority-rule" || !xmlReader.isEndElement()) {
+    while ((xmlReader.name() != "priority-rule" || !xmlReader.isEndElement()) && !xmlReader.hasError()) {
         xmlReader.readNext();
 
         if (xmlReader.name() == "entry" && xmlReader.isStartElement()) {
             QString ruleName = xmlReader.attributes().value("name").toString();
             // Read the priority tag
-            xmlReader.readNextStartElement();
+            while (xmlReader.name() != "priority"){
+                xmlReader.readNext();
+            }
             int ruleValue = xmlReader.readElementText().toUInt();
             priorityRules.insert(ruleName, ruleValue);
         }
