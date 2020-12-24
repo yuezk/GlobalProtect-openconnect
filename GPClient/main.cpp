@@ -28,6 +28,8 @@ int main(int argc, char *argv[])
     }
 
     SingleApplication app(argc, argv);
+    app.setQuitOnLastWindowClosed(false);
+
     GPClient w;
     w.show();
 
