@@ -24,7 +24,7 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
    
 2. Install the Qt dependencies
     ```sh
-    sudo apt install qt5-default libqt5websockets5-dev qtwebengine5-dev
+    sudo apt install qt5-default libqt5websockets5-dev qtwebengine5-dev qttools5-dev
     ```
 ### OpenSUSE
 Install the Qt dependencies
