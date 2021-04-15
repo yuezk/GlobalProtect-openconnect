@@ -8,3 +8,4 @@ Exec=/usr/bin/gpclient
 Icon=com.yuezk.qt.GPClient
 Categories=Network;VPN;Utility;Qt;
 Keywords=GlobalProtect;Openconnect;SAML;connection;VPN;
+StartupWMClass=gpclient
