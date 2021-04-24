@@ -42,11 +42,11 @@ jobs:
       - name: Get the sha256sum
         id: get-sha256sum
         run: |
-          echo ::set-output name=SHA::$(curl -L https://github.com/yuezk/GlobalProtect-openconnect/archive/refs/tags/v${{steps.get-version.outputs.VERSION}}.tar.gz | sha256sum)
+          echo ::set-output name=SHA::$(curl -L https://github.com/yuezk/GlobalProtect-openconnect/archive/refs/tags/v${{ steps.get-version.outputs.VERSION }}.tar.gz | sha256sum)
       
       - name: Generate PKGBUILD
         run: |
-          sed "s/{PKG_VERSION}/${{steps.get-version.outputs.VERSION}}/g;s/{SOURCE_SHA}/${{steps.get-sha256sum.outputs.SHA}}/g" PKGBUILD.template > PKGBUILD
+          sed "s/{PKG_VERSION}/${{ steps.get-version.outputs.VERSION }}/g;s/{SOURCE_SHA}/${{ steps.get-sha256sum.outputs.SHA }}/g" PKGBUILD.template > PKGBUILD
       
       - name: Publish AUR package
         uses: KSXGitHub/github-actions-deploy-aur@v2.2.3
@@ -56,3 +56,5 @@ jobs:
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: 'Release v${{ steps.get-version.outputs.VERSION }}'
+          force_push: true
