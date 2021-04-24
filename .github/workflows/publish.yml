@@ -8,22 +8,21 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v2
-        with:
-          version: '5.15.2'
-          modules: 'qtwebengine qtwebsockets'
-      
       # Checkout repository and submodules
       - uses: actions/checkout@v2
         with:
           submodules: recursive
+          
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v2
+        with:
+          version: 5.15.2
+          modules: 'qtwebengine qtwebsockets'
 
       - name: Build
         run: |
           qmake CONFIG+=release
           make
-          
 
   aur-publish:
     needs:
