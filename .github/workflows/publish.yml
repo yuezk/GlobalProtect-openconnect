@@ -15,14 +15,14 @@ jobs:
           modules: 'qtwebengine qtwebsockets'
 
       # Checkout repository and submodules
-#       - uses: actions/checkout@v2
-#         with:
-#           submodules: recursive
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
 
-#       - name: Build
-#         run: |
-#           qmake CONFIG+=release
-#           make
+      - name: Build
+        run: |
+          qmake CONFIG+=release
+          make
 
   aur-publish:
     needs:
