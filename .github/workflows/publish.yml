@@ -50,7 +50,7 @@ jobs:
           sed "s/{PKG_VERSION}/${{ steps.get-version.outputs.VERSION }}/g;s/{SOURCE_SHA}/${{ steps.get-sha256sum.outputs.SHA }}/g" PKGBUILD.template > PKGBUILD
       
       - name: Publish AUR package
-        uses: KSXGitHub/github-actions-deploy-aur@v2
+        uses: KSXGitHub/github-actions-deploy-aur@v2.2.4
         with:
           pkgname: globalprotect-openconnect
           pkgbuild: ./PKGBUILD
