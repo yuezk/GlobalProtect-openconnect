@@ -85,6 +85,18 @@ Relatively manual process for now:
   fakeroot dpkg-buildpackage -uc -us -sa 2>&1 | tee ../build.log
   ```
 
+### NixOS
+  In `configuration.nix`:
+
+  ```
+  services.globalprotect = {
+    enable = true;
+    # if you need a Host Integrity Protection report
+    csdWrapper = "${pkgs.openconnect}/libexec/openconnect/hipreport.sh";
+  };
+  
+  environment.systemPackages = [ globalprotect-openconnect ];
+  ```
   
 
 ## [License](./LICENSE)
