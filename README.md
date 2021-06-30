@@ -32,7 +32,7 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
     For Ubuntu 20, this should work.
     
     ```sh
-    sudo apt install  libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
+    sudo apt install qtbase5-dev libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
     ```
     
     For Ubuntu 21, you need to install the base pieces separately as QT5 is the default.
