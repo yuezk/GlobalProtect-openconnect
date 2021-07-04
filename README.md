@@ -20,12 +20,27 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 ### Ubuntu
 1. Install openconnect v8.x
 
+    ```sh
+    sudo apt install openconnect
+    openconnect --version
+    ```
+
    For Ubuntu 18.04 you might need to [build the latest openconnect from source code](https://gist.github.com/yuezk/ab9a4b87a9fa0182bdb2df41fab5f613).
    
 2. Install the Qt dependencies
+
+    For Ubuntu 20, this should work.
+    
     ```sh
-    sudo apt install qt5-default libqt5websockets5-dev qtwebengine5-dev qttools5-dev
+    sudo apt install qtbase5-dev libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
     ```
+    
+    For Ubuntu 21, you need to install the base pieces separately as QT5 is the default.
+    
+    ```sh
+    sudo apt install qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
+    ```
+    
 ### OpenSUSE
 Install the Qt dependencies
 
@@ -76,13 +91,14 @@ Relatively manual process for now:
   git-archive-all --force-submodules --prefix=globalprotect-openconnect-1.3.0/ ../globalprotect-openconnect_1.3.0.orig.tar.gz
   ```
 
-* Finally extract the source tree and build the debian package.
+* Finally extract the source tree, build the debian package, and install it.
 
   ```
   cd ..
   tar -xzvf globalprotect-openconnect_1.3.0.orig.tar.gz
   cd globalprotect-openconnect-1.3.0
   fakeroot dpkg-buildpackage -uc -us -sa 2>&1 | tee ../build.log
+  sudo dpkg -i globalprotect-openconnect_1.3.0-1ppa1_amd64.deb
   ```
 
 ### NixOS
