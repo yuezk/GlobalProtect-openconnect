@@ -14,6 +14,19 @@ GPClient::GPClient(QWidget *parent)
     , ui(new Ui::GPClient)
 {
     ui->setupUi(this);
+
+    QPushButton *settingButton = new QPushButton(this);
+    settingButton->setIcon(QIcon(":/images/settings_icon.svg"));
+    settingButton->setFixedSize(QSize(28, 28));
+
+    QRect rect = this->geometry();
+    settingButton->setGeometry(
+                rect.width() - settingButton->width() - 15,
+                15,
+                settingButton->geometry().width(),
+                settingButton->geometry().height()
+                );
+
     setWindowTitle("GlobalProtect");
     setFixedSize(width(), height());
     gpclient::helper::moveCenter(this);

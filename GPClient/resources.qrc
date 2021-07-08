@@ -6,5 +6,6 @@
         <file>not_connected.png</file>
         <file>radio_unselected.png</file>
         <file>radio_selected.png</file>
+        <file>settings_icon.svg</file>
     </qresource>
 </RCC>
