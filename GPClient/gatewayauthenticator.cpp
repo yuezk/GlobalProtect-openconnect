@@ -44,8 +44,9 @@ void GatewayAuthenticator::login(const LoginParams &params)
 void GatewayAuthenticator::onLoginFinished()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    QByteArray response;
 
-    if (reply->error()) {
+    if (reply->error() || (response = reply->readAll()).contains("Authentication failure")) {
         PLOGE << QString("Failed to login the gateway at %1, %2").arg(loginUrl).arg(reply->errorString());
 
         if (normalLoginWindow) {
@@ -61,7 +62,7 @@ void GatewayAuthenticator::onLoginFinished()
         normalLoginWindow->close();
     }
 
-    const QUrlQuery params = gpclient::helper::parseGatewayResponse(reply->readAll());
+    const QUrlQuery params = gpclient::helper::parseGatewayResponse(response);
     emit success(params.toString());
 }
 
