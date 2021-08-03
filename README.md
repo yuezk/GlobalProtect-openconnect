@@ -48,6 +48,13 @@ Install the Qt dependencies
 sudo zypper install libqt5-qtbase-devel libqt5-qtwebsockets-devel libqt5-qtwebengine-devel
 ```
 
+### Fedora
+Install the Qt dependencies:
+
+```sh
+sudo dnf install qt5-qtbase-devel qt5-qttools-devel qt5-qtwebengine qt5-qtwebsockets-devel
+```
+
 ## Install
 
 ### Install from AUR (Arch/Manjaro)
