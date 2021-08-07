@@ -52,7 +52,7 @@ sudo zypper install libqt5-qtbase-devel libqt5-qtwebsockets-devel libqt5-qtweben
 Install the Qt dependencies:
 
 ```sh
-sudo dnf install qt5-qtbase-devel qt5-qttools-devel qt5-qtwebengine qt5-qtwebsockets-devel  qt5-qtwebengine-devel.x86_64
+sudo dnf install qt5-qtbase-devel qt5-qttools-devel qt5-qtwebengine qt5-qtwebsockets-devel  qt5-qtwebengine-devel
 ```
 
 ## Install
