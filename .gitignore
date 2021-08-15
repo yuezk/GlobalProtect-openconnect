@@ -6,6 +6,8 @@ gpservice
 *_adaptor.cpp
 *_adaptor.h
 
+gpservice_interface.*
+
 # C++ objects and libs
 *.slo
 *.lo
