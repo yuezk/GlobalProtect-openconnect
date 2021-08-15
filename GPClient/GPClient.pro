@@ -35,7 +35,8 @@ SOURCES += \
     portalconfigresponse.cpp \
     preloginresponse.cpp \
     samlloginwindow.cpp \
-    gpclient.cpp
+    gpclient.cpp \
+    settingsdialog.cpp
 
 HEADERS += \
     cdpcommand.h \
@@ -50,11 +51,13 @@ HEADERS += \
     portalconfigresponse.h \
     preloginresponse.h \
     samlloginwindow.h \
-    gpclient.h
+    gpclient.h \
+    settingsdialog.h
 
 FORMS += \
     gpclient.ui \
-    normalloginwindow.ui
+    normalloginwindow.ui \
+    settingsdialog.ui
 
 DBUS_INTERFACES += ../GPService/gpservice.xml
 

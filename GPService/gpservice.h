@@ -34,7 +34,7 @@ signals:
     void logAvailable(QString log);
 
 public slots:
-    void connect(QString server, QString username, QString passwd);
+    void connect(QString server, QString username, QString passwd, QString extraArgs);
     void disconnect();
     int status();
     void quit();

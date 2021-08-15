@@ -12,6 +12,7 @@
       <arg name="server" type="s" direction="in"/>
       <arg name="username" type="s" direction="in"/>
       <arg name="passwd" type="s" direction="in"/>
+      <arg name="extraArgs" type="s" direction="in"/>
     </method>
     <method name="disconnect">
     </method>
