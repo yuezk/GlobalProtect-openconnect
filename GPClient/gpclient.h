@@ -3,10 +3,12 @@
 
 #include "gpservice_interface.h"
 #include "portalconfigresponse.h"
+#include "settingsdialog.h"
 
 #include <QMainWindow>
 #include <QSystemTrayIcon>
 #include <QMenu>
+#include <QPushButton>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class GPClient; }
@@ -23,6 +25,9 @@ public:
     void activate();
 
 private slots:
+    void onSettingsButtonClicked();
+    void onSettingsAccepted();
+
     void on_connectButton_clicked();
     void on_portalInput_returnPressed();
     void on_portalInput_editingFinished();
@@ -62,9 +67,14 @@ private:
     QAction *clearAction;
     QAction *quitAction;
 
+    SettingsDialog *settingsDialog;
+    QPushButton *settingsButton;
+
     bool isQuickConnect { false };
     bool isSwitchingGateway { false };
     PortalConfigResponse portalConfig;
+
+    void setupSettings();
 
     void initSystemTrayIcon();
     void initVpnStatus();

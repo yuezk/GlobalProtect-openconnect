@@ -49,7 +49,7 @@ void GPService::quit()
     }
 }
 
-void GPService::connect(QString server, QString username, QString passwd)
+void GPService::connect(QString server, QString username, QString passwd, QString extraArgs)
 {
     if (vpnStatus != GPService::VpnNotConnected) {
         log("VPN status is: " + QVariant::fromValue(vpnStatus).toString());
@@ -65,9 +65,12 @@ void GPService::connect(QString server, QString username, QString passwd)
     QStringList args;
     args << QCoreApplication::arguments().mid(1)
      << "--protocol=gp"
+     << QProcess::splitCommand(extraArgs)
      << "-u" << username
      << "-C" << passwd
      << server;
+
+    log("Start process with arugments: " + args.join(" "));
 
     openconnect->start(bin, args);
 }

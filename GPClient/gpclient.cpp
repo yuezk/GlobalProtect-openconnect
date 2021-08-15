@@ -3,6 +3,7 @@
 #include "ui_gpclient.h"
 #include "portalauthenticator.h"
 #include "gatewayauthenticator.h"
+#include "settingsdialog.h"
 
 #include <plog/Log.h>
 #include <QIcon>
@@ -12,11 +13,15 @@ using namespace gpclient::helper;
 GPClient::GPClient(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::GPClient)
+    , settingsDialog(new SettingsDialog(this))
 {
     ui->setupUi(this);
+
     setWindowTitle("GlobalProtect");
     setFixedSize(width(), height());
     gpclient::helper::moveCenter(this);
+
+    setupSettings();
 
     // Restore portal from the previous settings
     ui->portalInput->setText(settings::get("portal", "").toString());
@@ -36,6 +41,37 @@ GPClient::~GPClient()
 {
     delete ui;
     delete vpn;
+    delete settingsDialog;
+    delete settingsButton;
+}
+
+void GPClient::setupSettings()
+{
+    settingsButton = new QPushButton(this);
+    settingsButton->setIcon(QIcon(":/images/settings_icon.svg"));
+    settingsButton->setFixedSize(QSize(28, 28));
+
+    QRect rect = this->geometry();
+    settingsButton->setGeometry(
+                rect.width() - settingsButton->width() - 15,
+                15,
+                settingsButton->geometry().width(),
+                settingsButton->geometry().height()
+                );
+
+    connect(settingsButton, &QPushButton::clicked, this, &GPClient::onSettingsButtonClicked);
+    connect(settingsDialog, &QDialog::accepted, this, &GPClient::onSettingsAccepted);
+}
+
+void GPClient::onSettingsButtonClicked()
+{
+    settingsDialog->setExtraArgs(settings::get("extraArgs", "").toString());
+    settingsDialog->show();
+}
+
+void GPClient::onSettingsAccepted()
+{
+    settings::save("extraArgs", settingsDialog->extraArgs());
 }
 
 void GPClient::on_connectButton_clicked()
@@ -330,7 +366,7 @@ void GPClient::onGatewaySuccess(const QString &authCookie)
     PLOGI << "Gateway login succeeded, got the cookie " << authCookie;
 
     isQuickConnect = false;
-    vpn->connect(currentGateway().address(), portalConfig.username(), authCookie);
+    vpn->connect(currentGateway().address(), portalConfig.username(), authCookie, settings::get("extraArgs", "").toString());
     ui->statusLabel->setText("Connecting...");
     updateConnectionStatus(VpnStatus::pending);
 }
