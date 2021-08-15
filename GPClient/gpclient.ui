@@ -126,7 +126,7 @@
     <item>
      <widget class="QLabel" name="label">
       <property name="text">
-       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;a href=&quot;https://github.com/yuezk/GlobalProtect-openconnect/issues&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#4c6b8a;&quot;&gt;Report a bug&lt;/span&gt;&lt;/a&gt; / &lt;a href=&quot;https://www.buymeacoffee.com/yuezk&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#4c6b8a;&quot;&gt;Buy me a coffee&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;&lt;a href=&quot;https://bit.ly/3g5DHqy&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#4c6b8a;&quot;&gt;Report a bug&lt;/span&gt;&lt;/a&gt; / &lt;a href=&quot;https://bit.ly/3jQYfEi&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#4c6b8a;&quot;&gt;Buy me a coffee&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
       <property name="openExternalLinks">
        <bool>true</bool>
