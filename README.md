@@ -14,10 +14,10 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 
 ## Future plan
 
--[] Improve the release process
--[] Fix bugs
--[] Support for bypassing the `gpclient` parameters
--[] Support the CLI mode
+- [ ] Improve the release process
+- [ ] Process bugs and feature requests
+- [ ] Support for bypassing the `gpclient` parameters
+- [ ] Support the CLI mode
 
 ## Passing the Custom Parameters to `OpenConnect` CLI
 
