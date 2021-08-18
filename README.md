@@ -12,6 +12,13 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 - Supports automatically selecting the preferred gateway from the multiple gateways.
 - Supports switching gateway from the system tray menu manually.
 
+## Future plan
+
+-[] Improve the release process
+-[] Fix bugs
+-[] Support for bypassing the `gpclient` parameters
+-[] Support the CLI mode
+
 ## Passing the Custom Parameters to `OpenConnect` CLI
 
 Custom parameters can be appended to the `OpenConnect` CLI with the following settings.
