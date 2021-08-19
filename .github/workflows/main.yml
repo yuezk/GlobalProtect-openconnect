@@ -9,8 +9,7 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  build_with_qt5:
-    name: Build with Qt 5.12
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -29,23 +28,3 @@ jobs:
         run: |
           qmake CONFIG+=release
           make
-  build_with_qt6:
-      name: Build with Qt 6.x
-      runs-on: ubuntu-latest
-
-      steps:
-        - name: Install Qt
-          uses: jurplel/install-qt-action@v2
-          with:
-            version: '6.0.0'
-            modules: 'qtwebengine qtwebsockets'
-
-        # Checkout repository and submodules
-        - uses: actions/checkout@v2
-          with:
-            submodules: recursive
-
-        - name: Build
-          run: |
-            qmake CONFIG+=release
-            make
