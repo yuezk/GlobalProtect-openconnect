@@ -9,7 +9,7 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  build_5.x:
+  build_with_qt5:
     name: Build with Qt 5.12
     runs-on: ubuntu-latest
 
@@ -29,7 +29,7 @@ jobs:
         run: |
           qmake CONFIG+=release
           make
-  build_6.x:
+  build_with_qt6:
       name: Build with Qt 6.x
       runs-on: ubuntu-latest
 
