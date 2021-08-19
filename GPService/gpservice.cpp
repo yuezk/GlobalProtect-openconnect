@@ -39,6 +39,47 @@ QString GPService::findBinary()
     return nullptr;
 }
 
+/* Port from https://github.com/qt/qtbase/blob/11d1dcc6e263c5059f34b44d531c9ccdf7c0b1d6/src/corelib/io/qprocess.cpp#L2115 */
+QStringList GPService::splitCommand(QStringView command)
+{
+    QStringList args;
+    QString tmp;
+    int quoteCount = 0;
+    bool inQuote = false;
+
+    // handle quoting. tokens can be surrounded by double quotes
+    // "hello world". three consecutive double quotes represent
+    // the quote character itself.
+    for (int i = 0; i < command.size(); ++i) {
+        if (command.at(i) == QLatin1Char('"')) {
+            ++quoteCount;
+            if (quoteCount == 3) {
+                // third consecutive quote
+                quoteCount = 0;
+                tmp += command.at(i);
+            }
+            continue;
+        }
+        if (quoteCount) {
+            if (quoteCount == 1)
+                inQuote = !inQuote;
+            quoteCount = 0;
+        }
+        if (!inQuote && command.at(i).isSpace()) {
+            if (!tmp.isEmpty()) {
+                args += tmp;
+                tmp.clear();
+            }
+        } else {
+            tmp += command.at(i);
+        }
+    }
+    if (!tmp.isEmpty())
+        args += tmp;
+
+    return args;
+}
+
 void GPService::quit()
 {
     if (openconnect->state() == QProcess::NotRunning) {
@@ -65,7 +106,7 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
     QStringList args;
     args << QCoreApplication::arguments().mid(1)
      << "--protocol=gp"
-     << QProcess::splitCommand(extraArgs)
+     << splitCommand(extraArgs)
      << "-u" << username
      << "-C" << passwd
      << server;
