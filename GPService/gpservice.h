@@ -53,6 +53,7 @@ private:
 
     void log(QString msg);
     static QString findBinary();
+    static QStringList splitCommand(QStringView command);
 };
 
 #endif // GLOBALPROTECTSERVICE_H
