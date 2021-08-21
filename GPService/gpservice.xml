@@ -8,6 +8,9 @@
     <signal name="logAvailable">
       <arg name="log" type="s" />
     </signal>
+    <signal name="error">
+      <arg name="errorMessage" type="s" />
+    </signal>
     <method name="connect">
       <arg name="server" type="s" direction="in"/>
       <arg name="username" type="s" direction="in"/>

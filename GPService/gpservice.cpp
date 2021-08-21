@@ -99,7 +99,8 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
 
     QString bin = findBinary();
     if (bin == nullptr) {
-        log("Could not found openconnect binary, make sure openconnect is installed, exiting.");
+        log("Could not find openconnect binary, make sure openconnect is installed, exiting.");
+        emit error("The OpenConect CLI was not found, make sure it has been installed!");
         return;
     }
 

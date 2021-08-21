@@ -31,6 +31,7 @@ GPClient::GPClient(QWidget *parent)
     vpn = new com::yuezk::qt::GPService("com.yuezk.qt.GPService", "/", QDBusConnection::systemBus(), this);
     connect(vpn, &com::yuezk::qt::GPService::connected, this, &GPClient::onVPNConnected);
     connect(vpn, &com::yuezk::qt::GPService::disconnected, this, &GPClient::onVPNDisconnected);
+    connect(vpn, &com::yuezk::qt::GPService::error, this, &GPClient::onVPNError);
     connect(vpn, &com::yuezk::qt::GPService::logAvailable, this, &GPClient::onVPNLogAvailable);
 
     // Initiallize the context menu of system tray.
@@ -475,6 +476,12 @@ void GPClient::onVPNDisconnected()
         gatewayLogin();
         isSwitchingGateway = false;
     }
+}
+
+void GPClient::onVPNError(QString errorMessage)
+{
+    updateConnectionStatus(VpnStatus::disconnected);
+    openMessageBox("Failed to connect", errorMessage);
 }
 
 void GPClient::onVPNLogAvailable(QString log)
