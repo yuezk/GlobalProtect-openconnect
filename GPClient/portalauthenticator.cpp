@@ -12,11 +12,14 @@
 
 using namespace gpclient::helper;
 
-PortalAuthenticator::PortalAuthenticator(const QString& portal) : QObject()
+PortalAuthenticator::PortalAuthenticator(const QString& portal, const QString& clientos) : QObject()
   , portal(portal)
-  , preloginUrl("https://" + portal + "/global-protect/prelogin.esp?tmp=tmp&kerberos-support=yes&ipv6-support=yes&clientVer=4100&clientos=Linux")
+  , preloginUrl("https://" + portal + "/global-protect/prelogin.esp?tmp=tmp&kerberos-support=yes&ipv6-support=yes&clientVer=4100")
   , configUrl("https://" + portal + "/global-protect/getconfig.esp")
 {
+    if (!clientos.isEmpty()) {
+        preloginUrl = preloginUrl + "&clientos=" + clientos;
+    }
 }
 
 PortalAuthenticator::~PortalAuthenticator()

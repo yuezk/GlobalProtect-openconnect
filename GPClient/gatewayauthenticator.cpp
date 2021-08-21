@@ -8,13 +8,16 @@
 
 using namespace gpclient::helper;
 
-GatewayAuthenticator::GatewayAuthenticator(const QString& gateway, const PortalConfigResponse& portalConfig)
+GatewayAuthenticator::GatewayAuthenticator(const QString& gateway, const GatewayAuthenticatorParams& params)
     : QObject()
     , gateway(gateway)
-    , preloginUrl("https://" + gateway + "/ssl-vpn/prelogin.esp?tmp=tmp&kerberos-support=yes&ipv6-support=yes&clientVer=4100&clientos=Linux")
+    , params(params)
+    , preloginUrl("https://" + gateway + "/ssl-vpn/prelogin.esp?tmp=tmp&kerberos-support=yes&ipv6-support=yes&clientVer=4100")
     , loginUrl("https://" + gateway + "/ssl-vpn/login.esp")
-    , portalConfig(portalConfig)
 {
+    if (!params.clientos().isEmpty()) {
+        preloginUrl = preloginUrl + "&clientos=" + params.clientos();
+    }
 }
 
 GatewayAuthenticator::~GatewayAuthenticator()
@@ -26,12 +29,16 @@ void GatewayAuthenticator::authenticate()
 {
     PLOGI << "Start gateway authentication...";
 
-    LoginParams params;
-    params.setUser(portalConfig.username());
-    params.setPassword(portalConfig.password());
-    params.setUserAuthCookie(portalConfig.userAuthCookie());
+    LoginParams loginParams;
+    loginParams.setUser(params.username());
+    loginParams.setPassword(params.password());
+    loginParams.setUserAuthCookie(params.userAuthCookie());
 
-    login(params);
+    if (!params.clientos().isEmpty()) {
+        loginParams.setClientos(params.clientos());
+    }
+
+    login(loginParams);
 }
 
 void GatewayAuthenticator::login(const LoginParams &params)

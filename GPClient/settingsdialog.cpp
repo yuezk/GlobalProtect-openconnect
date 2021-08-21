@@ -6,8 +6,6 @@ SettingsDialog::SettingsDialog(QWidget *parent) :
     ui(new Ui::SettingsDialog)
 {
     ui->setupUi(this);
-
-    ui->extraArgsInput->setPlaceholderText("e.g. --name=value");
 }
 
 SettingsDialog::~SettingsDialog()
@@ -15,12 +13,22 @@ SettingsDialog::~SettingsDialog()
     delete ui;
 }
 
-void SettingsDialog::setExtraArgs(QString args)
+void SettingsDialog::setExtraArgs(QString extraArgs)
 {
-    ui->extraArgsInput->setPlainText(args);
+    ui->extraArgsInput->setPlainText(extraArgs);
 }
 
 QString SettingsDialog::extraArgs()
 {
     return ui->extraArgsInput->toPlainText().trimmed();
+}
+
+void SettingsDialog::setClientos(QString clientos)
+{
+    ui->clientosInput->setText(clientos);
+}
+
+QString SettingsDialog::clientos()
+{
+    return ui->clientosInput->text();
 }

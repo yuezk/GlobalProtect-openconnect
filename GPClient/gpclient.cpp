@@ -4,6 +4,7 @@
 #include "portalauthenticator.h"
 #include "gatewayauthenticator.h"
 #include "settingsdialog.h"
+#include "gatewayauthenticatorparams.h"
 
 #include <plog/Log.h>
 #include <QIcon>
@@ -66,12 +67,14 @@ void GPClient::setupSettings()
 void GPClient::onSettingsButtonClicked()
 {
     settingsDialog->setExtraArgs(settings::get("extraArgs", "").toString());
+    settingsDialog->setClientos(settings::get("clientos", "").toString());
     settingsDialog->show();
 }
 
 void GPClient::onSettingsAccepted()
 {
     settings::save("extraArgs", settingsDialog->extraArgs());
+    settings::save("clientos", settingsDialog->clientos());
 }
 
 void GPClient::on_connectButton_clicked()
@@ -274,7 +277,7 @@ void GPClient::doConnect()
 // Login to the portal interface to get the portal config and preferred gateway
 void GPClient::portalLogin()
 {
-    PortalAuthenticator *portalAuth = new PortalAuthenticator(portal());
+    PortalAuthenticator *portalAuth = new PortalAuthenticator(portal(), settings::get("clientos", "").toString());
 
     connect(portalAuth, &PortalAuthenticator::success, this, &GPClient::onPortalSuccess);
     // Prelogin failed on the portal interface, try to treat the portal as a gateway interface
@@ -351,7 +354,10 @@ void GPClient::gatewayLogin()
 {
     PLOGI << "Performing gateway login...";
 
-    GatewayAuthenticator *gatewayAuth = new GatewayAuthenticator(currentGateway().address(), portalConfig);
+    GatewayAuthenticatorParams params = GatewayAuthenticatorParams::fromPortalConfigResponse(portalConfig);
+    params.setClientos(settings::get("clientos", "").toString());
+
+    GatewayAuthenticator *gatewayAuth = new GatewayAuthenticator(currentGateway().address(), params);
 
     connect(gatewayAuth, &GatewayAuthenticator::success, this, &GPClient::onGatewaySuccess);
     connect(gatewayAuth, &GatewayAuthenticator::fail, this, &GPClient::onGatewayFail);

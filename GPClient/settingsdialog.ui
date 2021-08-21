@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>470</width>
-    <height>183</height>
+    <width>488</width>
+    <height>177</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -23,18 +23,36 @@
    <iconset resource="resources.qrc">
     <normaloff>:/images/connected.png</normaloff>:/images/connected.png</iconset>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
+  <layout class="QFormLayout" name="formLayout_3">
+   <item row="0" column="0">
     <widget class="QLabel" name="label">
      <property name="text">
       <string>Custom Parameters:</string>
      </property>
     </widget>
    </item>
-   <item>
-    <widget class="QPlainTextEdit" name="extraArgsInput"/>
+   <item row="0" column="1">
+    <widget class="QPlainTextEdit" name="extraArgsInput">
+     <property name="placeholderText">
+      <string extracomment="Tokens with spaces can be surrounded by double quotes">e.g. --name=value --script=&quot;vpn-slice xxx&quot;</string>
+     </property>
+    </widget>
    </item>
-   <item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="label_2">
+     <property name="text">
+      <string>Value of &quot;clientos&quot;:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QLineEdit" name="clientosInput">
+     <property name="placeholderText">
+      <string>e.g., Windows</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
     <widget class="QDialogButtonBox" name="buttonBox">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>

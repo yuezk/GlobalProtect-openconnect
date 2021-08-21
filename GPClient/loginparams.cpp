@@ -15,7 +15,6 @@ LoginParams::LoginParams()
     params.addQueryItem("direct", "yes");
     params.addQueryItem("clientVer", "4100");
     params.addQueryItem("os-version", QUrl::toPercentEncoding(QSysInfo::prettyProductName()));
-    params.addQueryItem("clientos", "Linux");
     params.addQueryItem("portal-userauthcookie", "");
     params.addQueryItem("portal-prelogonuserauthcookie", "");
     params.addQueryItem("prelogin-cookie", "");
@@ -54,6 +53,11 @@ void LoginParams::setPrelogonAuthCookie(const QString cookie)
 void LoginParams::setPreloginCookie(const QString cookie)
 {
     updateQueryItem("prelogin-cookie", cookie);
+}
+
+void LoginParams::setClientos(const QString clientos)
+{
+    updateQueryItem("clientos", clientos);
 }
 
 QByteArray LoginParams::toUtf8() const

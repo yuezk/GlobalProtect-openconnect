@@ -26,6 +26,7 @@ SOURCES += \
     cdpcommandmanager.cpp \
     enhancedwebview.cpp \
     gatewayauthenticator.cpp \
+    gatewayauthenticatorparams.cpp \
     gpgateway.cpp \
     gphelper.cpp \
     loginparams.cpp \
@@ -43,6 +44,7 @@ HEADERS += \
     cdpcommandmanager.h \
     enhancedwebview.h \
     gatewayauthenticator.h \
+    gatewayauthenticatorparams.h \
     gpgateway.h \
     gphelper.h \
     loginparams.h \
