@@ -10,6 +10,7 @@ using namespace gpclient::helper;
 
 GatewayAuthenticator::GatewayAuthenticator(const QString& gateway, const PortalConfigResponse& portalConfig)
     : QObject()
+    , gateway(gateway)
     , preloginUrl("https://" + gateway + "/ssl-vpn/prelogin.esp?tmp=tmp&kerberos-support=yes&ipv6-support=yes&clientVer=4100&clientos=Linux")
     , loginUrl("https://" + gateway + "/ssl-vpn/login.esp")
     , portalConfig(portalConfig)
