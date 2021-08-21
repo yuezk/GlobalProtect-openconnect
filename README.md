@@ -20,7 +20,7 @@ Custom parameters can be appended to the `OpenConnect` CLI with the following se
 
 
 <p align="center">
- <img src="https://user-images.githubusercontent.com/3297602/129464304-94eb8a2b-1c4a-47e1-b931-4422fff6eb81.png" />
+  <img src="https://user-images.githubusercontent.com/3297602/130319209-744be02b-d657-4f49-a76d-d2c81b5c46d5.png" />
 <p>
   
 ## Prerequisites
