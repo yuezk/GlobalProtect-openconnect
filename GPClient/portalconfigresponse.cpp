@@ -46,17 +46,17 @@ PortalConfigResponse PortalConfigResponse::parse(const QByteArray xml)
 
 const QByteArray PortalConfigResponse::rawResponse() const
 {
-    return _rawResponse;
+    return m_rawResponse;
 }
 
-QString PortalConfigResponse::username() const
+const QString &PortalConfigResponse::username() const
 {
-    return _username;
+    return m_username;
 }
 
 QString PortalConfigResponse::password() const
 {
-    return _password;
+    return m_password;
 }
 
 QList<GPGateway> PortalConfigResponse::parseGateways(QXmlStreamReader &xmlReader)
@@ -134,45 +134,45 @@ QString PortalConfigResponse::parseGatewayName(QXmlStreamReader &xmlReader)
 
 QString PortalConfigResponse::userAuthCookie() const
 {
-    return _userAuthCookie;
+    return m_userAuthCookie;
 }
 
 QString PortalConfigResponse::prelogonUserAuthCookie() const
 {
-    return _prelogonAuthCookie;
+    return m_prelogonAuthCookie;
 }
 
 QList<GPGateway> PortalConfigResponse::allGateways() const
 {
-    return _gateways;
+    return m_gateways;
 }
 
 void PortalConfigResponse::setAllGateways(QList<GPGateway> gateways)
 {
-    _gateways = gateways;
+    m_gateways = gateways;
 }
 
 void PortalConfigResponse::setRawResponse(const QByteArray response)
 {
-    _rawResponse = response;
+    m_rawResponse = response;
 }
 
 void PortalConfigResponse::setUsername(const QString username)
 {
-    _username = username;
+    m_username = username;
 }
 
 void PortalConfigResponse::setPassword(const QString password)
 {
-    _password = password;
+    m_password = password;
 }
 
 void PortalConfigResponse::setUserAuthCookie(const QString cookie)
 {
-    _userAuthCookie = cookie;
+    m_userAuthCookie = cookie;
 }
 
 void PortalConfigResponse::setPrelogonUserAuthCookie(const QString cookie)
 {
-    _prelogonAuthCookie = cookie;
+    m_prelogonAuthCookie = cookie;
 }

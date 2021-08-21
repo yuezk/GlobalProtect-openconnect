@@ -1,16 +1,16 @@
 #ifndef GATEWAYAUTHENTICATOR_H
 #define GATEWAYAUTHENTICATOR_H
 
-#include "portalconfigresponse.h"
 #include "normalloginwindow.h"
 #include "loginparams.h"
+#include "gatewayauthenticatorparams.h"
 #include <QObject>
 
 class GatewayAuthenticator : public QObject
 {
     Q_OBJECT
 public:
-    explicit GatewayAuthenticator(const QString& gateway, const PortalConfigResponse& portalConfig);
+    explicit GatewayAuthenticator(const QString& gateway, const GatewayAuthenticatorParams& params);
     ~GatewayAuthenticator();
 
     void authenticate();
@@ -30,10 +30,9 @@ private slots:
 
 private:
     QString gateway;
+    const GatewayAuthenticatorParams& params;
     QString preloginUrl;
     QString loginUrl;
-
-    const PortalConfigResponse& portalConfig;
 
     NormalLoginWindow *normalLoginWindow{ nullptr };
 

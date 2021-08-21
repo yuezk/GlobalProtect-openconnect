@@ -12,7 +12,7 @@ class PortalAuthenticator : public QObject
 {
     Q_OBJECT
 public:
-    explicit PortalAuthenticator(const QString& portal);
+    explicit PortalAuthenticator(const QString& portal, const QString& clientos);
     ~PortalAuthenticator();
 
     void authenticate();

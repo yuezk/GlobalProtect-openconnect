@@ -16,7 +16,7 @@ public:
     static PortalConfigResponse parse(const QByteArray xml);
 
     const QByteArray rawResponse() const;
-    QString username() const;
+    const QString &username() const;
     QString password() const;
     QString userAuthCookie() const;
     QString prelogonUserAuthCookie() const;
@@ -31,13 +31,13 @@ private:
     static QString xmlPrelogonUserAuthCookie;
     static QString xmlGateways;
 
-    QByteArray _rawResponse;
-    QString _username;
-    QString _password;
-    QString _userAuthCookie;
-    QString _prelogonAuthCookie;
+    QByteArray m_rawResponse;
+    QString m_username;
+    QString m_password;
+    QString m_userAuthCookie;
+    QString m_prelogonAuthCookie;
 
-    QList<GPGateway> _gateways;
+    QList<GPGateway> m_gateways;
 
     void setRawResponse(const QByteArray response);
     void setUserAuthCookie(const QString cookie);
