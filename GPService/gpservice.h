@@ -31,6 +31,7 @@ public:
 signals:
     void connected();
     void disconnected();
+    void error(QString errorMessage);
     void logAvailable(QString log);
 
 public slots:
