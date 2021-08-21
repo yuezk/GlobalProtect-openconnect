@@ -15,6 +15,10 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 ## Passing the Custom Parameters to `OpenConnect` CLI
 
 Custom parameters can be appended to the `OpenConnect` CLI with the following settings.
+
+> Tokens with spaces can be surrounded by double quotes; three consecutive double quotes represent the quote character itself.
+
+
 <p align="center">
  <img src="https://user-images.githubusercontent.com/3297602/129464304-94eb8a2b-1c4a-47e1-b931-4422fff6eb81.png" />
 <p>
