@@ -25,14 +25,13 @@ jobs:
         id: vars
         run: |
           TAG=$(git tag --sort=-v:refname --list "v[0-9]*" | head -n 1 | cut -c 2-)
-          echo ::set-output name=VERSION::"${TAG}+SNAPSHOT$(date -u +"%Y%m%d%H%M%S")-1ppa1"
+          echo ::set-output name=VERSION::"${TAG}+SNAPSHOT$(date -u +"%Y%m%d%H%M%S")"
+          echo ::set-output name=TAG::${TAG}   
 
-      - name: Patch changelog (snapshot)
-        uses: pi-top/git-debian-changelog-bump-action@master
-        with:
-          release: false
-          author_name: ${{ env.CHANGELOG_AUTHOR_NAME }}
-          author_email: ${{ env.CHANGELOG_AUTHOR_EMAIL }}          
+      - name: Update debian/changelog
+        run: |
+          sudo apt install devscripts
+          git log --format="%s" v${{ steps.vars.outputs.TAG }}.. | xargs -L1 dch -v ${{ steps.vars.outputs.VERSION }}-1ppa1
 
       - name: "Archive all"
         run: |
