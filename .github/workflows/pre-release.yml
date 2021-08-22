@@ -3,7 +3,7 @@ name: Pre Release
 on:
   workflow_run:
     workflows: ["Build"]
-    branches: [main]
+    branches: [master]
     types: [completed]
 
 jobs:
