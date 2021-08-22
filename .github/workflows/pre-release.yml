@@ -10,6 +10,9 @@ jobs:
   pre-release:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    env:
+      CHANGELOG_AUTHOR_NAME: "Kevin Yue"
+      CHANGELOG_AUTHOR_EMAIL: "yuezk001@gmail.com"
 
     steps:
       # Checkout repository and submodules
@@ -22,6 +25,13 @@ jobs:
         run: |
           echo ::set-output name=VERSION::$(git tag --sort=-v:refname --list "v[0-9]*" | head -n 1 | cut -c 2-)
           echo ::set-output name=SHA::$(echo ${GITHUB_SHA} | cut -c1-8)
+
+      - name: Patch changelog (snapshot)
+        uses: pi-top/git-debian-changelog-bump-action@master
+        with:
+          release: false
+          author_name: ${{ env.CHANGELOG_AUTHOR_NAME }}
+          author_email: ${{ env.CHANGELOG_AUTHOR_EMAIL }}          
 
       - name: "Archive all"
         run: |
