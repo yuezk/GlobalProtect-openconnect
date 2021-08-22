@@ -52,12 +52,10 @@ jobs:
           cd globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}
           fakeroot dpkg-buildpackage -uc -us -sa
 
-      - uses: "marvinpinto/action-automatic-releases@latest"
+      - uses: "softprops/action-gh-release@v1"
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          # automatic_release_tag: "latest"
           prerelease: true
-          title: "globalprotect-openconnect_${{ steps.vars.outputs.VERSION }}"
+          name: "globalprotect-openconnect_${{ steps.vars.outputs.VERSION }}"
           files: |
             *.tar.gz
             build-debian/*.deb
