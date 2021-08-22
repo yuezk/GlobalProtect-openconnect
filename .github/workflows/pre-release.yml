@@ -19,12 +19,13 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Initial variables
         id: vars
         run: |
-          echo ::set-output name=VERSION::$(git tag --sort=-v:refname --list "v[0-9]*" | head -n 1 | cut -c 2-)
-          echo ::set-output name=SHA::$(echo ${GITHUB_SHA} | cut -c1-8)
+          TAG=$(git tag --sort=-v:refname --list "v[0-9]*" | head -n 1 | cut -c 2-)
+          echo ::set-output name=VERSION::"${TAG}+SNAPSHOT$(date -u +"%Y%m%d%H%M%S")-1ppa1"
 
       - name: Patch changelog (snapshot)
         uses: pi-top/git-debian-changelog-bump-action@master
@@ -39,8 +40,8 @@ jobs:
           pip install git-archive-all
           git-archive-all \
             --force-submodules \
-            --prefix=globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}+r${{ steps.vars.outputs.SHA}}/ \
-            ./globalprotect-openconnect_${{ steps.vars.outputs.VERSION }}+r${{ steps.vars.outputs.SHA }}.orig.tar.gz
+            --prefix=globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}/ \
+            ./globalprotect-openconnect_${{ steps.vars.outputs.VERSION }}.orig.tar.gz
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
