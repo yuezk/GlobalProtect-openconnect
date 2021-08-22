@@ -11,7 +11,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v2
         with:
-          version: 5.15.2
+          version: 5.12.11
           modules: 'qtwebengine qtwebsockets'
 
       # Checkout repository and submodules
