@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     env:
-      CHANGELOG_AUTHOR_NAME: "Kevin Yue"
-      CHANGELOG_AUTHOR_EMAIL: "yuezk001@gmail.com"
+      DEBFULLNAME: "Kevin Yue"
+      DEBEMAIL: "yuezk001@gmail.com"
 
     steps:
       # Checkout repository and submodules
@@ -31,6 +31,7 @@ jobs:
       - name: Update debian/changelog
         run: |
           sudo apt install devscripts
+          git log --format="%s" v${{ steps.vars.outputs.TAG }}..
           git log --format="%s" v${{ steps.vars.outputs.TAG }}.. | xargs -L1 dch -v ${{ steps.vars.outputs.VERSION }}-1ppa1
 
       - name: "Archive all"
@@ -42,6 +43,15 @@ jobs:
             --prefix=globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}/ \
             ./globalprotect-openconnect_${{ steps.vars.outputs.VERSION }}.orig.tar.gz
 
+      - name: "Packaging"
+        run: |
+          sudo apt install qtbase5-dev libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
+          mkdir build-debian && cd build-debian
+          cp ../*.tar.gz .
+          tar xf *.tar.gz
+          cd globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}
+          fakeroot dpkg-buildpackage -uc -us -sa 2>&1 | tee ../build.log
+
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -50,3 +60,4 @@ jobs:
           title: "Development Build"
           files: |
             *.tar.gz
+            build-debian/*.deb
