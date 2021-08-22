@@ -31,7 +31,6 @@ jobs:
       - name: Update debian/changelog
         run: |
           sudo apt install devscripts
-          git log --format="%s" v${{ steps.vars.outputs.TAG }}..
           git log --format="%s" v${{ steps.vars.outputs.TAG }}.. | xargs -L1 dch -v ${{ steps.vars.outputs.VERSION }}-1ppa1
 
       - name: "Archive all"
@@ -43,19 +42,15 @@ jobs:
             --prefix=globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}/ \
             ./globalprotect-openconnect_${{ steps.vars.outputs.VERSION }}.orig.tar.gz
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v2
-        with:
-          version: '5.12.11'
-          modules: 'qtwebengine qtwebsockets'
-
       - name: "Packaging"
         run: |
+          sudo apt update
+          sudo apt install qtbase5-dev libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
           mkdir build-debian && cd build-debian
           cp ../*.tar.gz .
           tar xf *.tar.gz
           cd globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}
-          fakeroot dpkg-buildpackage -uc -us -sa 2>&1 | tee ../build.log
+          fakeroot dpkg-buildpackage -uc -us -sa
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
