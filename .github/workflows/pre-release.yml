@@ -52,12 +52,12 @@ jobs:
           cd globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}
           fakeroot dpkg-buildpackage -uc -us -sa
 
-      - uses: "ncipollo/release-action@v1"
+      - uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}        
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
           prerelease: true
-          tag: latest
-          allowUpdates: true
-          replacesArtifacts: true
-          name: "globalprotect-openconnect_${{ steps.vars.outputs.VERSION }}"
-          artifacts: "*.tar.gz,build-debian/*.deb"
+          title: "globalprotect-openconnect_${{ steps.vars.outputs.VERSION }}"
+          files: |
+            *.tar.gz
+            build-debian/*.deb
