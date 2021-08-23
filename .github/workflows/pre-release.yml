@@ -21,7 +21,7 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Initial variables
+      - name: Init variables
         id: vars
         run: |
           TAG=$(git tag --sort=-v:refname --list "v[0-9]*" | head -n 1 | cut -c 2-)
@@ -58,5 +58,6 @@ jobs:
           prerelease: true
           tag: latest
           allowUpdates: true
+          replacesArtifacts: true
           name: "globalprotect-openconnect_${{ steps.vars.outputs.VERSION }}"
           artifacts: "*.tar.gz,build-debian/*.deb"
