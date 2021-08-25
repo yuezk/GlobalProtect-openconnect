@@ -30,6 +30,15 @@ Custom parameters can be appended to the `OpenConnect` CLI with the following se
   <img src="https://user-images.githubusercontent.com/3297602/130319209-744be02b-d657-4f49-a76d-d2c81b5c46d5.png" />
 <p>
   
+## Display the system tray icon on Gnome 40
+
+Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension and you will see the system try icon (Restart the system after the installation).
+
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/3297602/130830314-6ac967c5-66e9-46e1-a394-692a2f3df2e5.png" />
+<p>
+
+  
 ## Prerequisites
 
 - Openconnect v8.x
@@ -70,7 +79,7 @@ sudo zypper install libqt5-qtbase-devel libqt5-qtwebsockets-devel libqt5-qtweben
 Install the Qt dependencies:
 
 ```sh
-sudo dnf install qt5-qtbase-devel qt5-qttools-devel qt5-qtwebengine qt5-qtwebsockets-devel qt5-qtwebengine-devel
+sudo dnf install qt5-qtbase-devel qt5-qtwebengine-devel qt5-qtwebsockets-devel
 ```
 
 ## Install
