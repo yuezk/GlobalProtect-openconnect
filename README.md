@@ -35,10 +35,9 @@ Custom parameters can be appended to the `OpenConnect` CLI with the following se
 Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension and you will see the system try icon (Restart the system after the installation).
 
 <p align="center">
-  <img src="https://user-images.githubusercontent.com/3297602/130830314-6ac967c5-66e9-46e1-a394-692a2f3df2e5.png" />
+  <img src="https://user-images.githubusercontent.com/3297602/130831022-b93492fd-46dd-4a8e-94a4-13b5747120b7.png" />
 <p>
-
-  
+ 
 ## Prerequisites
 
 - Openconnect v8.x
