@@ -2,6 +2,11 @@
 gpclient
 gpservice
 
+*.rpm
+*.gz
+.DS_Store
+build-debian
+
 # Auto generated DBus files
 *_adaptor.cpp
 *_adaptor.h
