@@ -50,7 +50,7 @@ GPClient::~GPClient()
 void GPClient::setupSettings()
 {
     settingsButton = new QPushButton(this);
-    settingsButton->setIcon(QIcon(":/images/settings_icon.svg"));
+    settingsButton->setIcon(QIcon(":/images/settings_icon.png"));
     settingsButton->setFixedSize(QSize(28, 28));
 
     QRect rect = this->geometry();
@@ -68,7 +68,7 @@ void GPClient::setupSettings()
 void GPClient::onSettingsButtonClicked()
 {
     settingsDialog->setExtraArgs(settings::get("extraArgs", "").toString());
-    settingsDialog->setClientos(settings::get("clientos", "").toString());
+    settingsDialog->setClientos(settings::get("clientos", "Linux").toString());
     settingsDialog->show();
 }
 
@@ -278,7 +278,7 @@ void GPClient::doConnect()
 // Login to the portal interface to get the portal config and preferred gateway
 void GPClient::portalLogin()
 {
-    PortalAuthenticator *portalAuth = new PortalAuthenticator(portal(), settings::get("clientos", "").toString());
+    PortalAuthenticator *portalAuth = new PortalAuthenticator(portal(), settings::get("clientos", "Linux").toString());
 
     connect(portalAuth, &PortalAuthenticator::success, this, &GPClient::onPortalSuccess);
     // Prelogin failed on the portal interface, try to treat the portal as a gateway interface
@@ -356,7 +356,7 @@ void GPClient::gatewayLogin()
     PLOGI << "Performing gateway login...";
 
     GatewayAuthenticatorParams params = GatewayAuthenticatorParams::fromPortalConfigResponse(portalConfig);
-    params.setClientos(settings::get("clientos", "").toString());
+    params.setClientos(settings::get("clientos", "Linux").toString());
 
     GatewayAuthenticator *gatewayAuth = new GatewayAuthenticator(currentGateway().address(), params);
 
