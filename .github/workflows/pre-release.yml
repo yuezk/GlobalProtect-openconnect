@@ -1,10 +1,7 @@
 name: Pre Release
 
 on:
-  workflow_run:
-    workflows: ["Build"]
-    branches: [master]
-    types: [completed]
+  workflow_dispatch:
 
 jobs:
   pre-release:
