@@ -50,7 +50,7 @@ GPClient::~GPClient()
 void GPClient::setupSettings()
 {
     settingsButton = new QPushButton(this);
-    settingsButton->setIcon(QIcon(":/images/settings_icon.svg"));
+    settingsButton->setIcon(QIcon(":/images/settings_icon.png"));
     settingsButton->setFixedSize(QSize(28, 28));
 
     QRect rect = this->geometry();
