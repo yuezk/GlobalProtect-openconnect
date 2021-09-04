@@ -15,7 +15,12 @@ LoginParams::LoginParams(const QString clientos)
     params.addQueryItem("direct", "yes");
     params.addQueryItem("clientVer", "4100");
     params.addQueryItem("os-version", QUrl::toPercentEncoding(QSysInfo::prettyProductName()));
-    params.addQueryItem("clientos", clientos);
+
+    // add the clientos parameter if not empty
+    if (!clientos.isEmpty()) {
+        params.addQueryItem("clientos", clientos);
+    }
+
     params.addQueryItem("portal-userauthcookie", "");
     params.addQueryItem("portal-prelogonuserauthcookie", "");
     params.addQueryItem("prelogin-cookie", "");
