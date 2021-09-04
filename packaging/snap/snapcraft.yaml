@@ -1,0 +1,13 @@
+name: globalprotect-openconnect
+base: core18
+version: 'test'
+summary: A GlobalProtect VPN client powered by OpenConnect
+description: |
+  A GlobalProtect VPN client (GUI) for Linux based on OpenConnect and built with Qt5, supports SAML auth mode.
+
+grade: devel
+confinement: devmode # use 'strict' once you have the right plugs and slots
+
+parts:
+  application:
+    
