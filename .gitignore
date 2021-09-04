@@ -4,8 +4,10 @@ gpservice
 
 *.rpm
 *.gz
+*.snap
 .DS_Store
 build-debian
+packaging/snap/local
 
 # Auto generated DBus files
 *_adaptor.cpp

@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QProcess>
+#include <QStringView>
 
 static const QString binaryPaths[] {
     "/usr/local/bin/openconnect",

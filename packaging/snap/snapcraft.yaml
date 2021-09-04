@@ -8,6 +8,17 @@ description: |
 grade: devel
 confinement: devmode # use 'strict' once you have the right plugs and slots
 
+package-repositories:
+  - type: apt
+    ppa: beineri/opt-qt-5.12.9-bionic
+
 parts:
   application:
-    
+    plugin: qmake
+    source: snap/local/globalprotect-openconnect.tar.gz
+    build-packages:
+      - qtbase5-dev
+      - qttools5-dev
+      - libqt5websockets5-dev
+      - qtwebengine5-dev
+
