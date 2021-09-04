@@ -14,6 +14,7 @@ using namespace gpclient::helper;
 
 PortalAuthenticator::PortalAuthenticator(const QString& portal, const QString& clientos) : QObject()
   , portal(portal)
+  , clientos(clientos)
   , preloginUrl("https://" + portal + "/global-protect/prelogin.esp?tmp=tmp&kerberos-support=yes&ipv6-support=yes&clientVer=4100")
   , configUrl("https://" + portal + "/global-protect/getconfig.esp")
 {
@@ -146,12 +147,12 @@ void PortalAuthenticator::onSAMLLoginFail(const QString msg)
 
 void PortalAuthenticator::fetchConfig(QString username, QString password, QString preloginCookie, QString userAuthCookie)
 {
-    LoginParams params;
-    params.setServer(portal);
-    params.setUser(username);
-    params.setPassword(password);
-    params.setPreloginCookie(preloginCookie);
-    params.setUserAuthCookie(userAuthCookie);
+    LoginParams loginParams { clientos };
+    loginParams.setServer(portal);
+    loginParams.setUser(username);
+    loginParams.setPassword(password);
+    loginParams.setPreloginCookie(preloginCookie);
+    loginParams.setUserAuthCookie(userAuthCookie);
 
     // Save the username and password for future use.
     this->username = username;
@@ -159,7 +160,7 @@ void PortalAuthenticator::fetchConfig(QString username, QString password, QStrin
 
     PLOGI << "Fetching the portal config from " << configUrl << " for user: " << username;
 
-    QNetworkReply *reply = createRequest(configUrl, params.toUtf8());
+    QNetworkReply *reply = createRequest(configUrl, loginParams.toUtf8());
     connect(reply, &QNetworkReply::finished, this, &PortalAuthenticator::onFetchConfigFinished);
 }
 

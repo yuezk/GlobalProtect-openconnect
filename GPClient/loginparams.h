@@ -6,7 +6,7 @@
 class LoginParams
 {
 public:
-    LoginParams();
+    LoginParams(const QString clientos);
     ~LoginParams();
 
     void setUser(const QString user);
@@ -15,7 +15,6 @@ public:
     void setUserAuthCookie(const QString cookie);
     void setPrelogonAuthCookie(const QString cookie);
     void setPreloginCookie(const QString cookie);
-    void setClientos(const QString clientos);
 
     QByteArray toUtf8() const;
 

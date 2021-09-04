@@ -34,6 +34,7 @@ private slots:
 
 private:
     QString portal;
+    QString clientos;
     QString preloginUrl;
     QString configUrl;
     QString username;

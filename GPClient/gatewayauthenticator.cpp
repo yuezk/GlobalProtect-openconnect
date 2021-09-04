@@ -8,7 +8,7 @@
 
 using namespace gpclient::helper;
 
-GatewayAuthenticator::GatewayAuthenticator(const QString& gateway, const GatewayAuthenticatorParams& params)
+GatewayAuthenticator::GatewayAuthenticator(const QString& gateway, const GatewayAuthenticatorParams params)
     : QObject()
     , gateway(gateway)
     , params(params)
@@ -29,23 +29,19 @@ void GatewayAuthenticator::authenticate()
 {
     PLOGI << "Start gateway authentication...";
 
-    LoginParams loginParams;
+    LoginParams loginParams { params.clientos() };
     loginParams.setUser(params.username());
     loginParams.setPassword(params.password());
     loginParams.setUserAuthCookie(params.userAuthCookie());
 
-    if (!params.clientos().isEmpty()) {
-        loginParams.setClientos(params.clientos());
-    }
-
     login(loginParams);
 }
 
-void GatewayAuthenticator::login(const LoginParams &params)
+void GatewayAuthenticator::login(const LoginParams &loginParams)
 {
-    PLOGI << "Trying to login the gateway at " << loginUrl << " with " << params.toUtf8();
+    PLOGI << "Trying to login the gateway at " << loginUrl << " with " << loginParams.toUtf8();
 
-    QNetworkReply *reply = createRequest(loginUrl, params.toUtf8());
+    QNetworkReply *reply = createRequest(loginUrl, loginParams.toUtf8());
     connect(reply, &QNetworkReply::finished, this, &GatewayAuthenticator::onLoginFinished);
 }
 
@@ -132,10 +128,11 @@ void GatewayAuthenticator::onPerformNormalLogin(const QString &username, const Q
     PLOGI << "Start to perform normal login...";
 
     normalLoginWindow->setProcessing(true);
-    LoginParams params;
-    params.setUser(username);
-    params.setPassword(password);
-    login(params);
+    LoginParams loginParams { params.clientos() };
+    loginParams.setUser(username);
+    loginParams.setPassword(password);
+    
+    login(loginParams);
 }
 
 void GatewayAuthenticator::onLoginWindowRejected()
@@ -170,12 +167,12 @@ void GatewayAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> &saml
         PLOGI << "SAML login succeeded, got the portal-userauthcookie " << samlResult.value("userAuthCookie");
     }
 
-    LoginParams params;
-    params.setUser(samlResult.value("username"));
-    params.setPreloginCookie(samlResult.value("preloginCookie"));
-    params.setUserAuthCookie(samlResult.value("userAuthCookie"));
+    LoginParams loginParams { params.clientos() };
+    loginParams.setUser(samlResult.value("username"));
+    loginParams.setPreloginCookie(samlResult.value("preloginCookie"));
+    loginParams.setUserAuthCookie(samlResult.value("userAuthCookie"));
 
-    login(params);
+    login(loginParams);
 }
 
 void GatewayAuthenticator::onSAMLLoginFail(const QString msg)
