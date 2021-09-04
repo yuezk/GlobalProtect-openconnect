@@ -2,7 +2,7 @@
 
 #include <QUrlQuery>
 
-LoginParams::LoginParams()
+LoginParams::LoginParams(const QString clientos)
 {
     params.addQueryItem("prot", QUrl::toPercentEncoding("https:"));
     params.addQueryItem("server", "");
@@ -15,6 +15,7 @@ LoginParams::LoginParams()
     params.addQueryItem("direct", "yes");
     params.addQueryItem("clientVer", "4100");
     params.addQueryItem("os-version", QUrl::toPercentEncoding(QSysInfo::prettyProductName()));
+    params.addQueryItem("clientos", clientos);
     params.addQueryItem("portal-userauthcookie", "");
     params.addQueryItem("portal-prelogonuserauthcookie", "");
     params.addQueryItem("prelogin-cookie", "");
@@ -53,11 +54,6 @@ void LoginParams::setPrelogonAuthCookie(const QString cookie)
 void LoginParams::setPreloginCookie(const QString cookie)
 {
     updateQueryItem("prelogin-cookie", cookie);
-}
-
-void LoginParams::setClientos(const QString clientos)
-{
-    updateQueryItem("clientos", clientos);
 }
 
 QByteArray LoginParams::toUtf8() const

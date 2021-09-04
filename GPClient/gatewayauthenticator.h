@@ -10,7 +10,7 @@ class GatewayAuthenticator : public QObject
 {
     Q_OBJECT
 public:
-    explicit GatewayAuthenticator(const QString& gateway, const GatewayAuthenticatorParams& params);
+    explicit GatewayAuthenticator(const QString& gateway, const GatewayAuthenticatorParams params);
     ~GatewayAuthenticator();
 
     void authenticate();
@@ -30,13 +30,13 @@ private slots:
 
 private:
     QString gateway;
-    const GatewayAuthenticatorParams& params;
+    const GatewayAuthenticatorParams params;
     QString preloginUrl;
     QString loginUrl;
 
     NormalLoginWindow *normalLoginWindow{ nullptr };
 
-    void login(const LoginParams& params);
+    void login(const LoginParams& loginParams);
     void doAuth();
     void normalAuth(QString labelUsername, QString labelPassword, QString authMessage);
     void samlAuth(QString samlMethod, QString samlRequest, QString preloginUrl = "");
