@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>com.yuezk.qt.gpclient</id>
+
+    <name>globalprotect-openconnect</name>
+    <summary>A GlobalProtect VPN client powered by OpenConnect</summary>
+
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>AGPL-3.0-or-later</project_license>
+
+    <description>
+        <p>A GlobalProtect VPN client (GUI) for Linux based on OpenConnect and built with Qt5, supports the SAML auth mode.</p>
+    </description>
+
+    <categories>
+        <category>Network</category>
+    </categories>
+
+    <update_contact>k3vinyue_AT_gmail.com</update_contact>
+    <developer_name>Kevin Yue</developer_name>
+
+    <url type="homepage">https://github.com/yuezk/GlobalProtect-openconnect</url>
+    <url type="bugtracker">https://github.com/yuezk/GlobalProtect-openconnect/issues</url>
+    <url type="help">https://github.com/yuezk/GlobalProtect-openconnect/issues</url>
+
+    <keywords>
+        <keyword>globalprotect</keyword>
+        <keyword>openconnect</keyword>
+        <keyword>vpn</keyword>
+        <keyword>saml</keyword>
+    </keywords>
+
+    <launchable type="desktop-id">com.yuezk.qt.gpclient.desktop</launchable>
+    <screenshots>
+        <screenshot type="default">
+            <image>https://raw.githubusercontent.com/yuezk/GlobalProtect-openconnect/master/screenshot.png</image>
+        </screenshot>
+    </screenshots>
+    <provides>
+        <binary>/usr/bin/gpclient</binary>
+        <dbus type="system">com.yuezk.qt.GPService</dbus>
+    </provides>
+</component>

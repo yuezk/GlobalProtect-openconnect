@@ -92,17 +92,24 @@ void GPService::quit()
 
 void GPService::connect(QString server, QString username, QString passwd, QString extraArgs)
 {
+    log("VPN status is: " + QVariant::fromValue(vpnStatus).toString());
+
     if (vpnStatus != GPService::VpnNotConnected) {
         log("VPN status is: " + QVariant::fromValue(vpnStatus).toString());
         return;
     }
 
-    QString bin = findBinary();
-    if (bin == nullptr) {
-        log("Could not find openconnect binary, make sure openconnect is installed, exiting.");
-        emit error("The OpenConect CLI was not found, make sure it has been installed!");
-        return;
-    }
+    log("Before findBinary");
+
+//    QString bin = findBinary();
+
+//    log("After findBinary");
+
+//    if (bin == nullptr) {
+//        log("Could not find openconnect binary, make sure openconnect is installed, exiting.");
+//        emit error("The OpenConect CLI was not found, make sure it has been installed!");
+//        return;
+//    }
 
     QStringList args;
     args << QCoreApplication::arguments().mid(1)
@@ -114,7 +121,7 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
 
     log("Start process with arugments: " + args.join(" "));
 
-    openconnect->start(bin, args);
+    openconnect->start("openconnect", args);
 }
 
 void GPService::disconnect()

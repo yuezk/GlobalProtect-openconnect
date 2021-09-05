@@ -20,6 +20,7 @@ int main(int argc, char *argv[])
     plog::init(plog::debug, logFile.toUtf8()).addAppender(&consoleAppender);
 
     PLOGI << "GlobalProtect started, version: " << version;
+    PLOGI << "PATH: " << qgetenv("PATH");
 
     QString port = QString::fromLocal8Bit(qgetenv(ENV_CDP_PORT));
 

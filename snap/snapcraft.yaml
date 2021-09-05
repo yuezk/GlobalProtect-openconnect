@@ -11,32 +11,56 @@ confinement: devmode # use 'strict' once you have the right plugs and slots
 package-repositories:
   - type: apt
     ppa: beineri/opt-qt-5.12.10-bionic
+  - type: apt
+    ppa: dominik-stadler/dsta-bionic-ppa
+
+slots:
+  gpservice-slot:
+    interface: dbus
+    bus: system
+    name: com.yuezk.qt.GPService
+
+plugs:
+  gpservice-plug:
+    interface: dbus
+    bus: system
+    name: com.yuezk.qt.GPService
 
 apps:
+  gpservice:
+    daemon: simple
+    command: usr/bin/gpservice
+    environment:
+      LANG: en_US.utf8
+    plugs:
+      - network
+    # slots: 
+    #   - gpservice-slot
+
   gpclient:
     common-id: com.yuezk.qt.gpclient.desktop
-    command: desktop-launch gpclient
+    command: usr/bin/gpclient
     desktop: usr/share/applications/com.yuezk.qt.gpclient.desktop
     environment:
-      QT_DEBUG_PLUGINS: 1
+      QT_PLUGIN_PATH: $SNAP/opt/qt512/plugins
     plugs:
       - desktop
       - desktop-legacy
-      - opengl
       - wayland
+      - unity7
       - x11
       - network
-    # extensions:
-    #   - kde-neon
+      - gpservice-plug
 
 parts:
   application:
     plugin: nil
-    source: snap/local/globalprotect-openconnect.tar.gz
+    source: .
 
     build-packages:
       - g++
       - make
+      - libgl1-mesa-dev
       - qt512base
       - qt512websockets
       - qt512webengine
@@ -45,22 +69,6 @@ parts:
       - qt512base
       - qt512websockets
       - qt512webengine
-
-    # build-packages:
-    #   - g++
-    #   - make
-    #   - qt5-qmake
-    #   - qtwebengine5-dev
-    #   - libqt5websockets5-dev
-    
-    # build-snaps:
-    #   - kde-frameworks-5-qt-5-14-core18-sdk
-    
-    # stage-packages:
-    #   - libqt5widgets5
-    #   - libqt5webengine5
-    #   - libqt5webenginewidgets5
-    #   - libqt5websockets5
 
     override-build: |
       QT_BASE_DIR=/opt/qt512
