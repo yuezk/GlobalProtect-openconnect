@@ -12,6 +12,23 @@ package-repositories:
   - type: apt
     ppa: beineri/opt-qt-5.12.10-bionic
 
+apps:
+  gpclient:
+    common-id: com.yuezk.qt.gpclient.desktop
+    command: desktop-launch gpclient
+    desktop: usr/share/applications/com.yuezk.qt.gpclient.desktop
+    environment:
+      QT_DEBUG_PLUGINS: 1
+    plugs:
+      - desktop
+      - desktop-legacy
+      - opengl
+      - wayland
+      - x11
+      - network
+    # extensions:
+    #   - kde-neon
+
 parts:
   application:
     plugin: nil
@@ -20,15 +37,30 @@ parts:
     build-packages:
       - g++
       - make
-      - libgl1-mesa-dev
       - qt512base
       - qt512websockets
       - qt512webengine
-    
+
     stage-packages:
       - qt512base
       - qt512websockets
       - qt512webengine
+
+    # build-packages:
+    #   - g++
+    #   - make
+    #   - qt5-qmake
+    #   - qtwebengine5-dev
+    #   - libqt5websockets5-dev
+    
+    # build-snaps:
+    #   - kde-frameworks-5-qt-5-14-core18-sdk
+    
+    # stage-packages:
+    #   - libqt5widgets5
+    #   - libqt5webengine5
+    #   - libqt5webenginewidgets5
+    #   - libqt5websockets5
 
     override-build: |
       QT_BASE_DIR=/opt/qt512
