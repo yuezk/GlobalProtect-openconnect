@@ -40,7 +40,7 @@ QString GPService::findBinary()
 }
 
 /* Port from https://github.com/qt/qtbase/blob/11d1dcc6e263c5059f34b44d531c9ccdf7c0b1d6/src/corelib/io/qprocess.cpp#L2115 */
-QStringList GPService::splitCommand(QStringView command)
+QStringList GPService::splitCommand(QString command)
 {
     QStringList args;
     QString tmp;
@@ -114,6 +114,7 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
     QStringList args;
     args << QCoreApplication::arguments().mid(1)
      << "--protocol=gp"
+     << "-s" << qgetenv("VPNC_SCRIPT")
      << splitCommand(extraArgs)
      << "-u" << username
      << "-C" << passwd
