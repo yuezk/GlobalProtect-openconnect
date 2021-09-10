@@ -51,9 +51,15 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
     openconnect --version
     ```
 
-   For Ubuntu 18.04 you might need to [build the latest openconnect from source code](https://gist.github.com/yuezk/ab9a4b87a9fa0182bdb2df41fab5f613).
+    For Ubuntu 18.04, using this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA.
+
+    ```sh
+    sudo add-apt-repository ppa:dwmw2/openconnect
+    sudo apt-get update
+    sudo apt install openconnect
+    ```
    
-2. Install the Qt dependencies
+1. Install the Qt dependencies
 
     For Ubuntu 20, this should work.
     
