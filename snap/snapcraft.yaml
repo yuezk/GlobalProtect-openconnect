@@ -8,7 +8,15 @@ description: |
 grade: devel
 confinement: devmode # use 'strict' once you have the right plugs and slots
 
+package-repositories:
+  - type: apt
+    ppa: dwmw2/openconnect
+
 layout:
+  /usr/share/vpnc-scripts:
+    bind: $SNAP/usr/share/vpnc-scripts
+  /usr/local/sbin:
+    bind: $SNAP/usr/local/sbin
   /usr/share/qt5:
     bind: $SNAP/usr/share/qt5
 
@@ -26,11 +34,12 @@ plugs:
 
 apps:
   gpservice:
-    daemon: simple
+    # daemon: simple
     command: usr/bin/gpservice
+    extensions:
+      - kde-neon
     environment:
       LANG: en_US.utf8
-      VPNC_SCRIPT: $SNAP/usr/share/vpnc-scripts/vpnc-script
     plugs:
       - network
     slots: 
@@ -39,12 +48,9 @@ apps:
   gpclient:
     common-id: com.yuezk.qt.gpclient
     command: usr/bin/gpclient
+    desktop: usr/share/applications/com.yuezk.qt.gpclient.desktop
     extensions:
       - kde-neon
-    desktop: usr/share/applications/com.yuezk.qt.gpclient.desktop
-    environment:
-      # QT_PLUGIN_PATH: $SNAP/opt/qt512/plugins
-      QT_PLUGIN_PATH: $SNAP/usr/lib/x86_64-linux-gnu/qt5/plugins
     plugs:
       - desktop
       - desktop-legacy
@@ -55,162 +61,25 @@ apps:
       - gpservice-plug
 
 parts:
-  gmplib:
-    plugin: autotools
-    source: https://gmplib.org/download/gmp/gmp-6.2.1.tar.xz
-
-  nettle:
-    plugin: autotools
-    source: https://ftp.gnu.org/gnu/nettle/nettle-3.7.3.tar.gz
-    configflags:
-      - --disable-openssl
-      - --disable-documentation
-    after:
-      - gmplib
-
-  tpm2-tss:
-    plugin: autotools
-    source: https://github.com/tpm2-software/tpm2-tss.git
-    source-depth: 1
-    source-tag: 3.1.0
-    build-packages:
-      - autoconf-archive
-      - libcmocka-dev
-      - build-essential
-      - pkg-config
-      - libtool
-      - automake
-      - libssl-dev
-      - autoconf
-      - libjson-c-dev
-      - libini-config-dev
-      - libcurl4-openssl-dev
-      - acl
-    stage-packages:
-      - libasn1-8-heimdal
-      - libcurl4
-      - libgssapi3-heimdal
-      - libhcrypto4-heimdal
-      - libheimbase1-heimdal
-      - libheimntlm0-heimdal
-      - libhx509-5-heimdal
-      - libkrb5-26-heimdal
-      - libldap-2.4-2
-      - libnghttp2-14
-      - libpsl5
-      - libroken18-heimdal
-      - librtmp1
-      - libsasl2-2
-      - libwind0-heimdal
-    configflags:
-      - --disable-doxygen-doc
-
-  gnutls:
-    plugin: autotools
-    source: http://mirrors.dotsrc.org/gcrypt/gnutls/v3.7/gnutls-3.7.2.tar.xz
-    build-packages:
-      - wget
-      - build-essential
-      - autoconf
-      - libtool
-      - gettext
-      - autopoint
-      - automake
-      - autogen
-      - libp11-kit-dev
-      - libtspi-dev
-      - libunistring-dev
-      - guile-2.2-dev
-      - libtasn1-6-dev
-      - libidn2-0-dev
-      - gperf
-      - libunbound-dev
-      - bison
-    stage-packages:
-      - guile-2.2-libs
-      - libgc1c2
-      - libltdl7
-      - libopts25
-      - libunbound2
-    configflags:
-      - --disable-doc
-      - --disable-full-test-suite
-    after:
-      - gmplib
-      - nettle
-  
-  libpskc:
-    plugin: autotools
-    source: https://download.savannah.nongnu.org/releases/oath-toolkit/oath-toolkit-2.6.7.tar.gz
-    source-subdir: libpskc
-    build-packages:
-      - build-essential
-      - autoconf
-      - automake
-      - libtool
-      - bison
-      - gengetopt
-      - libxmlsec1-dev
-      - libxml2-utils
-
-  openconnect:
-    plugin: autotools
-    source: https://github.com/openconnect/openconnect.git
-    source-depth: 1
-    source-tag: v8.10
-    build-packages:
-      - build-essential
-      - gettext
-      - autoconf
-      - automake
-      - libtool
-      - libxml2-dev
-      - zlib1g-dev
-      - pkg-config
-      - libp11-kit-dev
-      - libproxy-dev
-      - trousers
-      - libtasn1-6-dev
-      - libstoken-dev
-      - libpcsclite-dev
-      - vpnc-scripts
-    stage-packages:
-      - vpnc-scripts
-      - libp11-kit0
-      - libproxy1v5
-      - libstoken1
-      - libpcsclite1
-      - libxml2
-      - zlib1g
-    after:
-      - gnutls
-      - tpm2-tss
-      - libpskc
-  
   application:
-    plugin: qmake
-    build-attributes:
-      - keep-execstack
+    plugin: nil
     source: .
-    build-packages:
-      - qt5-default
-      - qtwebengine5-dev
-      - libqt5websockets5-dev
+    build-snaps:
+      - kde-frameworks-5-core18-sdk
+    stage-snaps:
+      - kde-frameworks-5-core18
     stage-packages:
-      - libqt5printsupport5
-      - libqt5gui5
-      - libqt5network5
-      - libqt5svg5
-      - libqt5webengine5
-      - libqt5websockets5
-      - libqt5quickwidgets5
-      - libqt5webenginewidgets5
-      - libqt5dbus5
-      - libatm1
-      - libtspi1
-      - libxmlsec1
-      - libxmlsec1-openssl
-    options:
-      - CONFIG+=release
+      - openconnect
+    override-build: |
+      KF5_DIR=/snap/kde-frameworks-5-core18-sdk/current
 
+      export QTDIR=$KF5_DIR/usr/lib/qt5
+      export PATH=$QTDIR/bin:$KF5_DIR/usr/bin:$PATH
+      export LD_LIBRARY_PATH=$KF5_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET:$QTDIR/lib:$LD_LIBRARY_PATH
+      export PKG_CONFIG_PATH=$QTDIR/lib/pkgconfig:$PKG_CONFIG_PATH
+      export QMAKESPEC=$KF5_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/qt5/mkspecs/linux-g++
+      # export QT_SELECT=qt5
 
+      qmake CONFIG+=release # -qtconf $KF5_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/qt5/qt.conf
+      make -j$(nproc)
+      make INSTALL_ROOT=$SNAPCRAFT_PART_INSTALL install

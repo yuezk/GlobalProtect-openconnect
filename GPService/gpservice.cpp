@@ -5,6 +5,7 @@
 #include <QtDBus>
 #include <QDateTime>
 #include <QVariant>
+#include <QProcessEnvironment>
 
 GPService::GPService(QObject *parent)
     : QObject(parent)
@@ -99,22 +100,16 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
         return;
     }
 
-    log("Before findBinary");
-
-//    QString bin = findBinary();
-
-//    log("After findBinary");
-
-//    if (bin == nullptr) {
-//        log("Could not find openconnect binary, make sure openconnect is installed, exiting.");
-//        emit error("The OpenConect CLI was not found, make sure it has been installed!");
-//        return;
-//    }
+    QString bin = findBinary();
+    if (bin == nullptr) {
+        log("Could not find openconnect binary, make sure openconnect is installed, exiting.");
+        emit error("The OpenConect CLI was not found, make sure it has been installed!");
+        return;
+    }
 
     QStringList args;
     args << QCoreApplication::arguments().mid(1)
      << "--protocol=gp"
-     << "-s" << qgetenv("VPNC_SCRIPT")
      << splitCommand(extraArgs)
      << "-u" << username
      << "-C" << passwd
@@ -122,7 +117,9 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
 
     log("Start process with arugments: " + args.join(" "));
 
-    openconnect->start("openconnect", args);
+    log("ENV for OC: " + openconnect->environment().join("\n"));
+    log("ENV for gpservice: " + QProcessEnvironment::systemEnvironment().toStringList().join("\n"));
+    openconnect->start(bin, args);
 }
 
 void GPService::disconnect()

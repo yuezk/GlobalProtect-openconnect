@@ -3,6 +3,7 @@
 #include "enhancedwebview.h"
 
 #include <QStandardPaths>
+#include <QProcessEnvironment>
 #include <plog/Log.h>
 #include <plog/Appenders/ColorConsoleAppender.h>
 
@@ -27,6 +28,8 @@ int main(int argc, char *argv[])
     if (port == "") {
         qputenv(ENV_CDP_PORT, "12315");
     }
+
+    PLOGI << "ENV: " << QProcessEnvironment::systemEnvironment().toStringList().join("\n");
 
     SingleApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);

@@ -1,6 +1,6 @@
 TARGET = gpservice
 
-QT += dbus
+#QT += dbus
 QT -= gui
 
 CONFIG += c++11 console
@@ -21,32 +21,32 @@ DEFINES += QT_DEPRECATED_WARNINGS
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 HEADERS += \
-    gpservice.h \
+#    gpservice.h \
     sigwatch.h
 
 SOURCES += \
-        gpservice.cpp \
+#        gpservice.cpp \
         main.cpp \
         sigwatch.cpp
 
-DBUS_ADAPTORS += gpservice.xml
+#DBUS_ADAPTORS += gpservice.xml
 
 # Default rules for deployment.
 target.path = /usr/bin
 INSTALLS += target
 
-DISTFILES += \
-    dbus/com.yuezk.qt.GPService.conf \
-    dbus/com.yuezk.qt.GPService.service \
-    systemd/gpservice.service
+#DISTFILES += \
+#    dbus/com.yuezk.qt.GPService.conf \
+#    dbus/com.yuezk.qt.GPService.service \
+#    systemd/gpservice.service
 
-dbus_config.path = /usr/share/dbus-1/system.d/
-dbus_config.files = dbus/com.yuezk.qt.GPService.conf
+#dbus_config.path = /usr/share/dbus-1/system.d/
+#dbus_config.files = dbus/com.yuezk.qt.GPService.conf
 
-dbus_service.path = /usr/share/dbus-1/system-services/
-dbus_service.files = dbus/com.yuezk.qt.GPService.service
+#dbus_service.path = /usr/share/dbus-1/system-services/
+#dbus_service.files = dbus/com.yuezk.qt.GPService.service
 
-systemd_service.path = /etc/systemd/system/
-systemd_service.files = systemd/gpservice.service
+#systemd_service.path = /etc/systemd/system/
+#systemd_service.files = systemd/gpservice.service
 
-INSTALLS += dbus_config dbus_service systemd_service
+#INSTALLS += dbus_config dbus_service systemd_service
