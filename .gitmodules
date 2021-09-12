@@ -1,7 +1,7 @@
 [submodule "singleapplication"]
-	path = SingleApplication
+	path = 3rdparty/SingleApplication
 	url = https://github.com/itay-grudev/SingleApplication.git
 
 [submodule "plog"]
-	path = plog
+	path = 3rdparty/plog
 	url = https://github.com/SergiusTheBest/plog.git
