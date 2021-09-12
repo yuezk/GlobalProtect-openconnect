@@ -6,6 +6,7 @@ gpservice
 *.gz
 .DS_Store
 build-debian
+build
 
 # Auto generated DBus files
 *_adaptor.cpp

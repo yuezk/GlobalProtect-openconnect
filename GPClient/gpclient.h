@@ -1,7 +1,7 @@
 #ifndef GPCLIENT_H
 #define GPCLIENT_H
 
-#include "gpservice_interface.h"
+#include "gpserviceinterface.h"
 #include "portalconfigresponse.h"
 #include "settingsdialog.h"
 

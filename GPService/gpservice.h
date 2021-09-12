@@ -21,6 +21,8 @@ public:
     explicit GPService(QObject *parent = nullptr);
     ~GPService();
 
+    void quit();
+
     enum VpnStatus {
         VpnNotConnected,
         VpnConnecting,
@@ -38,7 +40,6 @@ public slots:
     void connect(QString server, QString username, QString passwd, QString extraArgs);
     void disconnect();
     int status();
-    void quit();
 
 private slots:
     void onProcessStarted();

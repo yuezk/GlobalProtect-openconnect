@@ -1,5 +1,5 @@
 [submodule "singleapplication"]
-	path = singleapplication
+	path = SingleApplication
 	url = https://github.com/itay-grudev/SingleApplication.git
 
 [submodule "plog"]

@@ -1,5 +1,5 @@
 #include "gpservice.h"
-#include "gpservice_adaptor.h"
+#include "gpserviceadaptor.h"
 
 #include <QFileInfo>
 #include <QtDBus>
