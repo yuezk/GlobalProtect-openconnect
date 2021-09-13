@@ -1,0 +1,15 @@
+include(cmake/CPM.cmake)
+
+function(add_3rdparty)
+    cmake_parse_arguments(add_3rdparty_args "" "NAME" "" ${ARGN})
+    set(NAME ${add_3rdparty_args_NAME})
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/${NAME}/CMakeLists.txt")
+        message(STATUS "Found third party locally for ${NAME}")
+
+        add_subdirectory("${CMAKE_SOURCE_DIR}/3rdparty/${NAME}")
+        return()
+    endif()
+    message(STATUS "Using CPM to download ${NAME}") 
+    CPMAddPackage(${ARGN})
+endfunction()
