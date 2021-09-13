@@ -24,10 +24,11 @@ function(add_3rdparty NAME)
         return()
     endif()
 
-    message(STATUS "Using CPM to download ${NAME}") 
+    message(STATUS "Using ExternalProject to download ${NAME}") 
     ExternalProject_Add(
         ${NAME}-${PROJECT_NAME}
         PREFIX ${CMAKE_CURRENT_BINARY_DIR}/${NAME}
+        INSTALL_COMMAND ""
         "${ARGN}"
     )
 endfunction()
