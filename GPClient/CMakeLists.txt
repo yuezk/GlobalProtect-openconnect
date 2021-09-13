@@ -40,6 +40,6 @@ target_link_libraries(gpclient
     Qt5::DBus
 )
 
-install(TARGETS gpclient DESTINATION bin)
-install(FILES com.yuezk.qt.gpclient.desktop DESTINATION share/applications)
-install(FILES com.yuezk.qt.GPClient.svg DESTINATION share/pixmaps)
+install(TARGETS gpclient DESTINATION "/usr/bin")
+install(FILES com.yuezk.qt.gpclient.desktop DESTINATION "/usr/share/applications")
+install(FILES com.yuezk.qt.GPClient.svg DESTINATION "/usr/share/pixmaps")
