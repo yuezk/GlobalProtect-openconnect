@@ -21,6 +21,3 @@ find_package(Qt5 REQUIRED COMPONENTS
 
 add_subdirectory(GPService)
 add_subdirectory(GPClient)
-
-include(InstallRequiredSystemLibraries)
-include(CPack)
