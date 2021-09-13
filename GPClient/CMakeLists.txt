@@ -1,4 +1,4 @@
-project(gpclient)
+project(GPClient)
 
 set(gpclient_GENERATED_SOURCES)
 
@@ -21,6 +21,10 @@ add_executable(gpclient
     samlloginwindow.cpp
     gpclient.cpp
     settingsdialog.cpp
+    gpclient.ui
+    normalloginwindow.ui
+    settingsdialog.ui
+    resources.qrc
     ${gpclient_GENERATED_SOURCES}
 )
 
@@ -35,3 +39,7 @@ target_link_libraries(gpclient
     Qt5::WebEngineWidgets
     Qt5::DBus
 )
+
+install(TARGETS gpclient DESTINATION bin)
+install(FILES com.yuezk.qt.gpclient.desktop DESTINATION share/applications)
+install(FILES com.yuezk.qt.GPClient.svg DESTINATION share/pixmaps)

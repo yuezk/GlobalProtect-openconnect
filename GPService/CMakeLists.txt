@@ -1,4 +1,4 @@
-project(gpservice)
+project(GPService)
 
 set(gpservice_GENERATED_SOURCES)
 
@@ -27,3 +27,8 @@ target_link_libraries(gpservice
     Qt5::Core
     Qt5::DBus
 )
+
+install(TARGETS gpservice DESTINATION )
+install(FILES "dbus/com.yuezk.qt.GPService.conf" DESTINATION "share/dbus-1/system.d" )
+install(FILES "dbus/com.yuezk.qt.GPService.service" DESTINATION "share/dbus-1/system-services")
+install(FILES "systemd/gpservice.service" DESTINATION "etc/systemd/system")

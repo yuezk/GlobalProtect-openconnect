@@ -36,3 +36,6 @@ add_3rdparty(
 
 add_subdirectory(GPService)
 add_subdirectory(GPClient)
+
+include(InstallRequiredSystemLibraries)
+include(CPack)
