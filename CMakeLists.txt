@@ -26,12 +26,14 @@ add_3rdparty(
     NAME SingleApplication
     GITHUB_REPOSITORY itay-grudev/SingleApplication
     VERSION 3.3.0
+    EXCLUDE_FROM_ALL
 )
 
 add_3rdparty(
     NAME plog
     GITHUB_REPOSITORY SergiusTheBest/plog
     GIT_TAG 1.1.5
+    EXCLUDE_FROM_ALL
 )
 
 add_subdirectory(GPService)
