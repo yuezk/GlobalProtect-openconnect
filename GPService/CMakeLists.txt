@@ -26,12 +26,10 @@ add_3rdparty(
     SingleApplication
     GIT_REPOSITORY https://github.com/itay-grudev/SingleApplication.git
     GIT_TAG v3.3.0
-    EXCLUDE_FROM_ALL
     CMAKE_ARGS -DQAPPLICATION_CLASS=QCoreApplication
 )
 
-ExternalProject_Get_Property(SingleApplication-${PROJECT_NAME} SOURCE_DIR)
-ExternalProject_Get_Property(SingleApplication-${PROJECT_NAME} BINARY_DIR)
+ExternalProject_Get_Property(SingleApplication-${PROJECT_NAME} SOURCE_DIR BINARY_DIR)
 
 set(SingleApplication_INCLUDE_DIR ${SOURCE_DIR})
 set(SingleApplication_LIBRARY ${BINARY_DIR}/libSingleApplication.a)
@@ -51,7 +49,7 @@ target_link_libraries(gpservice
     Qt5::DBus
 )
 
-target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)
+# target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)
 
 install(TARGETS gpservice DESTINATION "/usr/bin")
 install(FILES "dbus/com.yuezk.qt.GPService.conf" DESTINATION "/usr/share/dbus-1/system.d" )

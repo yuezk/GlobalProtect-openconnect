@@ -2,7 +2,7 @@ include(ExternalProject)
 
 function(add_3rdparty NAME)
     set(oneValueArgs GIT_REPOSITORY GIT_TAG)
-    cmake_parse_arguments(add_3rdparty_args "${oneValueArgs}" "" ${ARGN})
+    cmake_parse_arguments(add_3rdparty_args "" "${oneValueArgs}" "" ${ARGN})
 
     if(EXISTS "${CMAKE_SOURCE_DIR}/3rdparty/${NAME}/CMakeLists.txt")
         message(STATUS "Found third party locally for ${NAME}")
