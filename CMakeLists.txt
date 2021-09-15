@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.7.0)
+cmake_minimum_required(VERSION 3.21.2)
 
 project(GlobalProtect-openconnect VERSION 1.3.3 LANGUAGES CXX)
 

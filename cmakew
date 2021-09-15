@@ -1,0 +1,103 @@
+#!/bin/bash
+
+cmake_version="3.21.2"
+
+arr_cmake_v=(${cmake_version//./ })
+cmake_version_major=(${arr_cmake_v[0]})
+cmake_version_minor=(${arr_cmake_v[1]})
+cmake_version_patch=(${arr_cmake_v[2]})
+
+# OS specific support (must be 'true' or 'false').
+cygwin=false
+msys=false
+darwin=false
+nonstop=false
+
+case "`uname`" in
+    CYGWIN* )
+        cygwin=true
+        ;;
+    Darwin* )
+        darwin=true
+        ;;
+    MINGW* )
+        msys=true
+        ;;
+    NONSTOP* )
+        nonstop=true
+        ;;
+esac
+
+# by default we should be in the correct project dir, but when run from Finder on Mac, the cwd is wrong
+if [ "$(uname)" = "Darwin" ] && [ "$HOME" = "$PWD" ]; then
+    cd "$(dirname "$0")"
+fi
+
+cmake_base="./.cmake"
+cmake_bin="${cmake_base}/cmake-$cmake_version/bin/cmake"
+
+# download cmake if neccessary
+if [ ! -f "$cmake_bin" ]; then
+    download_link=""
+
+    if [ "$darwin" = true ]; then 
+        download_link="https://cmake.org/files/v$cmake_version_major.$cmake_version_minor/cmake-$cmake_version-Darwin-x86_64.tar.gz"        
+    else
+        download_link="https://github.com/Kitware/CMake/releases/download/v${cmake_version}/cmake-${cmake_version}-linux-x86_64.tar.gz"
+    fi 
+    echo $download_link
+
+    curl "$download_link" -Lo "/tmp/cmake-$cmake_version.tar.gz"  
+    mkdir -p "${cmake_base}/cmake-$cmake_version"      
+    tar -xzf "/tmp/cmake-$cmake_version.tar.gz" -C "${cmake_base}/cmake-$cmake_version" --strip-components=1
+    rm "/tmp/cmake-$cmake_version.tar.gz" 
+fi 
+
+# We build the pattern for arguments to be converted via cygpath
+if [ "$cygwin" = true ]; then
+    ROOTDIRSRAW=`find -L / -maxdepth 1 -mindepth 1 -type d 2>/dev/null`
+    SEP=""
+
+    for dir in $ROOTDIRSRAW ; do
+        ROOTDIRS="$ROOTDIRS$SEP$dir"
+        SEP="|"
+    done
+
+    OURCYGPATTERN="(^($ROOTDIRS))"
+
+    # Add a user-defined pattern to the cygpath arguments
+    if [ "$GRADLE_CYGPATTERN" != "" ] ; then
+        OURCYGPATTERN="$OURCYGPATTERN|($GRADLE_CYGPATTERN)"
+    fi
+
+    # Now convert the arguments - kludge to limit ourselves to /bin/sh
+    i=0
+    for arg in "$@" ; do
+        CHECK=`echo "$arg"|egrep -c "$OURCYGPATTERN" -`
+        CHECK2=`echo "$arg"|egrep -c "^-"`                                 ### Determine if an option
+
+        if [ $CHECK -ne 0 ] && [ $CHECK2 -eq 0 ] ; then                    ### Added a condition
+            eval `echo args$i`=`cygpath --path --ignore --mixed "$arg"`
+        else
+            eval `echo args$i`="\"$arg\""
+        fi
+
+        i=$((i+1))
+    done
+
+    case $i in
+        (0) set -- ;;
+        (1) set -- "$args0" ;;
+        (2) set -- "$args0" "$args1" ;;
+        (3) set -- "$args0" "$args1" "$args2" ;;
+        (4) set -- "$args0" "$args1" "$args2" "$args3" ;;
+        (5) set -- "$args0" "$args1" "$args2" "$args3" "$args4" ;;
+        (6) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" ;;
+        (7) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" ;;
+        (8) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" "$args7" ;;
+        (9) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" "$args7" "$args8" ;;
+    esac
+fi
+
+# run cmake
+exec "$cmake_bin" "$@"

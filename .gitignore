@@ -8,6 +8,8 @@ gpservice
 build-debian
 build
 
+.cmake
+
 # Auto generated DBus files
 *_adaptor.cpp
 *_adaptor.h
