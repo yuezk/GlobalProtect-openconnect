@@ -47,7 +47,7 @@ if [ ! -f "$cmake_bin" ]; then
     fi 
     echo $download_link
 
-    curl "$download_link" -Lo "/tmp/cmake-$cmake_version.tar.gz"  
+    wget -nv --show-progress "$download_link" -O "/tmp/cmake-$cmake_version.tar.gz"  
     mkdir -p "${cmake_base}/cmake-$cmake_version"      
     tar -xzf "/tmp/cmake-$cmake_version.tar.gz" -C "${cmake_base}/cmake-$cmake_version" --strip-components=1
     rm "/tmp/cmake-$cmake_version.tar.gz" 
