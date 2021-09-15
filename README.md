@@ -54,9 +54,7 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
     For Ubuntu 18.04, using this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA.
 
     ```sh
-    sudo add-apt-repository ppa:dwmw2/openconnect
-    sudo apt-get update
-    sudo apt install openconnect
+    sudo add-apt-repository ppa:dwmw2/openconnect && sudo apt-get update && sudo apt install -y openconnect
     ```
    
 1. Install the Qt dependencies
@@ -64,7 +62,7 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
     For Ubuntu 20, this should work.
     
     ```sh
-    sudo apt install qtbase5-dev libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
+    sudo apt install -y build-essential qtbase5-dev libqt5websockets5-dev qtwebengine5-dev
     ```
     
     For Ubuntu 21, you need to install the base pieces separately as QT5 is the default.
