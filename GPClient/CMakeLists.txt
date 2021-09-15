@@ -70,7 +70,7 @@ target_link_libraries(gpclient
     Qt5::DBus
 )
 
-# target_compile_definitions(gpclient PUBLIC QAPPLICATION_CLASS=QApplication)
+target_compile_definitions(gpclient PUBLIC QAPPLICATION_CLASS=QApplication)
 
 install(TARGETS gpclient DESTINATION "/usr/bin")
 install(FILES com.yuezk.qt.gpclient.desktop DESTINATION "/usr/share/applications")

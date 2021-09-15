@@ -49,7 +49,7 @@ target_link_libraries(gpservice
     Qt5::DBus
 )
 
-# target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)
+target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)
 
 install(TARGETS gpservice DESTINATION "/usr/bin")
 install(FILES "dbus/com.yuezk.qt.GPService.conf" DESTINATION "/usr/share/dbus-1/system.d" )
