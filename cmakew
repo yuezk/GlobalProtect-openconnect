@@ -45,7 +45,6 @@ if [ ! -f "$cmake_bin" ]; then
     else
         download_link="https://github.com/Kitware/CMake/releases/download/v${cmake_version}/cmake-${cmake_version}-linux-x86_64.tar.gz"
     fi 
-    echo $download_link
 
     wget -nv --show-progress "$download_link" -O "/tmp/cmake-$cmake_version.tar.gz"  
     mkdir -p "${cmake_base}/cmake-$cmake_version"      
