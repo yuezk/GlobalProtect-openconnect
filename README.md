@@ -59,19 +59,10 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
    
 1. Install the Qt dependencies
 
-    For Ubuntu 20, this should work.
-    
     ```sh
     sudo apt install -y build-essential qtbase5-dev libqt5websockets5-dev qtwebengine5-dev
     ```
-    
-    For Ubuntu 21, you need to install the base pieces separately as QT5 is the default.
-    
-    ```sh
-    sudo apt install qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
-    ```
-    
-### OpenSUSE
+### openSUSE
 Install the Qt dependencies
 
 ```sh
