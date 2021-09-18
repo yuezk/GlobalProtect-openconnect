@@ -87,12 +87,8 @@ Install [globalprotect-openconnect](https://aur.archlinux.org/packages/globalpro
 ```sh
 git clone https://github.com/yuezk/GlobalProtect-openconnect.git
 cd GlobalProtect-openconnect
-git submodule update --init
 
-# qmake or qmake-qt5
-qmake CONFIG+=release
-make
-sudo make install
+./scripts/install.sh
 ```
 Open `GlobalProtect VPN` in the application dashboard.
 
