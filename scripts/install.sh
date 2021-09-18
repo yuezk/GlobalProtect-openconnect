@@ -4,4 +4,6 @@
 ./cmakew --build build
 sudo ./cmakew --install build
 
-echo "Done. You can open it from the application dashboard."
+echo ""
+echo "Done. You can launch the GlobalProtect VPN client from the application dashboard."
+echo ""
