@@ -133,6 +133,8 @@ bool GPService::isValidVersion(QString &bin) {
     QRegularExpressionMatch match = re.match(output);
 
     if (match.hasMatch()) {
+        log("Output of `openconnect --version`: " + output);
+
         QString fullVersion = match.captured(0);
         QString majorVersion = match.captured(1);
 
