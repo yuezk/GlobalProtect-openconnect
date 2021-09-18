@@ -43,54 +43,60 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
 - Openconnect v8.x
 - Qt5, qt5-webengine, qt5-websockets
 
-### Ubuntu
-1. Install openconnect v8.x
+## Build & Install
 
-    ```sh
-    sudo apt install openconnect
-    openconnect --version
-    ```
-
-    For Ubuntu 18.04, using this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA.
-
-    ```sh
-    sudo add-apt-repository ppa:dwmw2/openconnect && sudo apt-get update && sudo apt install -y openconnect
-    ```
-   
-1. Install the Qt dependencies
-
-    ```sh
-    sudo apt install -y build-essential qtbase5-dev libqt5websockets5-dev qtwebengine5-dev
-    ```
-### openSUSE
-Install the Qt dependencies
-
-```sh
-sudo zypper install libqt5-qtbase-devel libqt5-qtwebsockets-devel libqt5-qtwebengine-devel
-```
-
-### Fedora
-Install the Qt dependencies:
-
-```sh
-sudo dnf install qt5-qtbase-devel qt5-qtwebengine-devel qt5-qtwebsockets-devel
-```
-
-## Install
-
-### Install from AUR (Arch/Manjaro)
-
-Install [globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/).
-
-### Build from source code
+Clone this repo with:
 
 ```sh
 git clone https://github.com/yuezk/GlobalProtect-openconnect.git
 cd GlobalProtect-openconnect
+```
 
+### Arch/Manjaro
+Install from the [globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/) AUR.
+### Ubuntu
+For **Ubuntu 18.04**, add this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA to install the latest openconnect.
+
+```sh
+sudo add-apt-repository ppa:dwmw2/openconnect
+sudo apt update
+```
+...then build and install with:
+
+```sh
+./scripts/install-ubuntu.sh
+```
+### openSUSE
+
+Build and install with:
+
+```sh
+./scripts/install-opensuse.sh
+```
+
+### Fedora
+
+Build and install with:
+
+```sh
+./scripts/install-fedora.sh
+```
+
+### Other Linux
+
+Install the Qt5 dependencies and OpenConnect:
+
+- QtCore
+- QtWebEngine
+- QtWebSockets
+- QtDBus
+- openconnect v8.x
+
+...then build and install with:
+
+```sh
 ./scripts/install.sh
 ```
-Open `GlobalProtect VPN` in the application dashboard.
 
 ### Debian package
 
