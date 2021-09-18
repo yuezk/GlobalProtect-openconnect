@@ -6,4 +6,4 @@ sudo dnf install -y \
     qt5-qtwebsockets-devel \
     openconnect
 
-./install.sh
+./scripts/install.sh

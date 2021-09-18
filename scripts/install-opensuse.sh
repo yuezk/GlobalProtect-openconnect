@@ -6,4 +6,4 @@ sudo zypper install -y \
     libqt5-qtwebengine-devel \
     openconnect
 
-./install.sh
+./scripts/install.sh

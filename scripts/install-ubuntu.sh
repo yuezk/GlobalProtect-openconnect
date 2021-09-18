@@ -8,4 +8,4 @@ sudo apt install -y \
     qtwebengine5-dev \
     openconnect
 
-./install.sh
+./scripts/install.sh
