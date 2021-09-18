@@ -127,7 +127,7 @@ bool GPService::isValidVersion(QString &bin) {
     QProcess p;
     p.start(bin, QStringList("--version"));
     p.waitForFinished();
-    QString output = p.readAll();
+    QString output = p.readAllStandardError() + p.readAllStandardOutput();
 
     QRegularExpression re("v(\\d+).*?(\\s|\\n)");
     QRegularExpressionMatch match = re.match(output);
