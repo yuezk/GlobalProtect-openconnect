@@ -1,10 +1,12 @@
 #include "gpservice.h"
 #include "gpserviceadaptor.h"
 
-#include <QFileInfo>
-#include <QtDBus>
-#include <QDateTime>
-#include <QVariant>
+#include <QtCore/QFileInfo>
+#include <QtDBus/QtDBus>
+#include <QtCore/QDateTime>
+#include <QtCore/QVariant>
+#include <QtCore/QRegularExpression>
+#include <QtCore/QRegularExpressionMatch>
 
 GPService::GPService(QObject *parent)
     : QObject(parent)
@@ -104,17 +106,45 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
         return;
     }
 
+    if (!isValidVersion(bin)) {
+        return;
+    }
+
     QStringList args;
     args << QCoreApplication::arguments().mid(1)
-     << "--protocol=gp"
-     << splitCommand(extraArgs)
-     << "-u" << username
-     << "-C" << passwd
-     << server;
+         << "--protocol=gp"
+         << splitCommand(extraArgs)
+         << "-u" << username
+         << "-C" << passwd
+         << server;
 
     log("Start process with arugments: " + args.join(" "));
 
     openconnect->start(bin, args);
+}
+
+bool GPService::isValidVersion(QString &bin) {
+    QProcess p;
+    p.start(bin, QStringList("--version"));
+    p.waitForFinished();
+    QString output = p.readAllStandardOutput();
+
+    QRegularExpression re("v(\\d+).*?\\n");
+    QRegularExpressionMatch match = re.match(output);
+
+    if (match.hasMatch()) {
+        QString fullVersion = match.captured(0);
+        QString majorVersion = match.captured(1);
+
+        if (majorVersion.toInt() < 8) {
+            emit error("The OpenConnect version must greater than v8.0.0, but got " + fullVersion);
+            return false;
+        }
+    } else {
+        log("Failed to parse the OpenConnect version from " + output);
+    }
+
+    return true;
 }
 
 void GPService::disconnect()

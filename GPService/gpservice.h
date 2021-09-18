@@ -1,8 +1,8 @@
 #ifndef GLOBALPROTECTSERVICE_H
 #define GLOBALPROTECTSERVICE_H
 
-#include <QObject>
-#include <QProcess>
+#include <QtCore/QObject>
+#include <QtCore/QProcess>
 
 static const QString binaryPaths[] {
     "/usr/local/bin/openconnect",
@@ -54,6 +54,7 @@ private:
     int vpnStatus = GPService::VpnNotConnected;
 
     void log(QString msg);
+    bool isValidVersion(QString &bin);
     static QString findBinary();
     static QStringList splitCommand(QString command);
 };
