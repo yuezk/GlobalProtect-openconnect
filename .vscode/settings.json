@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "qregularexpression": "cpp",
+        "qfileinfo": "cpp",
+        "qregularexpressionmatch": "cpp",
+        "qdatetime": "cpp",
+        "qprocess": "cpp",
+        "qobject": "cpp"
+    }
+}
