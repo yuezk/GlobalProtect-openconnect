@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
 ./cmakew -B build
-./cmakew --build build
+MAKEFLAGS=-j$(nproc) ./cmakew --build build
 sudo ./cmakew --install build
 
 sudo systemctl daemon-reload
