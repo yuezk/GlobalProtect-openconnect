@@ -7,7 +7,9 @@ gpservice
 *.snap
 .DS_Store
 build-debian
-packaging/snap/local
+build
+
+.cmake
 
 # Auto generated DBus files
 *_adaptor.cpp

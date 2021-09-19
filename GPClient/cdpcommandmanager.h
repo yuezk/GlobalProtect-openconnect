@@ -1,11 +1,12 @@
 #ifndef CDPCOMMANDMANAGER_H
 #define CDPCOMMANDMANAGER_H
 
+#include <QtCore/QObject>
+#include <QtCore/QHash>
+#include <QtWebSockets/QtWebSockets>
+#include <QtNetwork/QNetworkAccessManager>
+
 #include "cdpcommand.h"
-#include <QObject>
-#include <QHash>
-#include <QtWebSockets>
-#include <QNetworkAccessManager>
 
 class CDPCommandManager : public QObject
 {

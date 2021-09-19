@@ -1,6 +1,7 @@
-#include "cdpcommandmanager.h"
-#include <QVariantMap>
+#include <QtCore/QVariantMap>
 #include <plog/Log.h>
+
+#include "cdpcommandmanager.h"
 
 CDPCommandManager::CDPCommandManager(QObject *parent)
     : QObject(parent)

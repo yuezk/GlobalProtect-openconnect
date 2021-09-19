@@ -1,7 +1,7 @@
-#include "portalconfigresponse.h"
-
-#include <QXmlStreamReader>
+#include <QtCore/QXmlStreamReader>
 #include <plog/Log.h>
+
+#include "portalconfigresponse.h"
 
 QString PortalConfigResponse::xmlUserAuthCookie = "portal-userauthcookie";
 QString PortalConfigResponse::xmlPrelogonUserAuthCookie = "portal-prelogonuserauthcookie";

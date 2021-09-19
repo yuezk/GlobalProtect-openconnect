@@ -1,14 +1,14 @@
 #ifndef GPCLIENT_H
 #define GPCLIENT_H
 
-#include "gpservice_interface.h"
+#include <QtWidgets/QMainWindow>
+#include <QtWidgets/QSystemTrayIcon>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QPushButton>
+
+#include "gpserviceinterface.h"
 #include "portalconfigresponse.h"
 #include "settingsdialog.h"
-
-#include <QMainWindow>
-#include <QSystemTrayIcon>
-#include <QMenu>
-#include <QPushButton>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class GPClient; }

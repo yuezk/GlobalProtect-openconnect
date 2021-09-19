@@ -1,10 +1,11 @@
 #ifndef GATEWAYAUTHENTICATOR_H
 #define GATEWAYAUTHENTICATOR_H
 
+#include <QtCore/QObject>
+
 #include "normalloginwindow.h"
 #include "loginparams.h"
 #include "gatewayauthenticatorparams.h"
-#include <QObject>
 
 class GatewayAuthenticator : public QObject
 {

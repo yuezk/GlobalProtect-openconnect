@@ -1,13 +1,14 @@
-#include "gphelper.h"
-#include <QNetworkRequest>
-#include <QXmlStreamReader>
-#include <QMessageBox>
-#include <QDesktopWidget>
-#include <QApplication>
-#include <QWidget>
-#include <QSslConfiguration>
-#include <QSslSocket>
+#include <QtCore/QXmlStreamReader>
+#include <QtWidgets/QMessageBox>
+#include <QtWidgets/QDesktopWidget>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QWidget>
+#include <QtNetwork/QNetworkRequest>
+#include <QtNetwork/QSslConfiguration>
+#include <QtNetwork/QSslSocket>
 #include <plog/Log.h>
+
+#include "gphelper.h"
 
 QNetworkAccessManager* gpclient::helper::networkManager = new QNetworkAccessManager;
 

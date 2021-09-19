@@ -1,7 +1,8 @@
 #ifndef GATEWAYAUTHENTICATORPARAMS_H
 #define GATEWAYAUTHENTICATORPARAMS_H
 
-#include <QString>
+#include <QtCore/QString>
+
 #include "portalconfigresponse.h"
 
 class GatewayAuthenticatorParams

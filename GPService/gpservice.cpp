@@ -1,11 +1,13 @@
-#include "gpservice.h"
-#include "gpservice_adaptor.h"
+#include <QtCore/QFileInfo>
+#include <QtCore/QDateTime>
+#include <QtCore/QVariant>
+#include <QtCore/QRegularExpression>
+#include <QtCore/QRegularExpressionMatch>
+#include <QtDBus/QtDBus>
+#include <QtCore/QProcessEnvironment>
 
-#include <QFileInfo>
-#include <QtDBus>
-#include <QDateTime>
-#include <QVariant>
-#include <QProcessEnvironment>
+#include "gpservice.h"
+#include "gpserviceadaptor.h"
 
 GPService::GPService(QObject *parent)
     : QObject(parent)
@@ -107,19 +109,49 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
         return;
     }
 
+    if (!isValidVersion(bin)) {
+        return;
+    }
+
     QStringList args;
     args << QCoreApplication::arguments().mid(1)
-     << "--protocol=gp"
-     << splitCommand(extraArgs)
-     << "-u" << username
-     << "-C" << passwd
-     << server;
+         << "--protocol=gp"
+         << splitCommand(extraArgs)
+         << "-u" << username
+         << "-C" << passwd
+         << server;
 
     log("Start process with arugments: " + args.join(" "));
 
     log("ENV for OC: " + openconnect->environment().join("\n"));
     log("ENV for gpservice: " + QProcessEnvironment::systemEnvironment().toStringList().join("\n"));
     openconnect->start(bin, args);
+}
+
+bool GPService::isValidVersion(QString &bin) {
+    QProcess p;
+    p.start(bin, QStringList("--version"));
+    p.waitForFinished();
+    QString output = p.readAllStandardError() + p.readAllStandardOutput();
+
+    QRegularExpression re("v(\\d+).*?(\\s|\\n)");
+    QRegularExpressionMatch match = re.match(output);
+
+    if (match.hasMatch()) {
+        log("Output of `openconnect --version`: " + output);
+
+        QString fullVersion = match.captured(0);
+        QString majorVersion = match.captured(1);
+
+        if (majorVersion.toInt() < 8) {
+            emit error("The OpenConnect version must greater than v8.0.0, but got " + fullVersion);
+            return false;
+        }
+    } else {
+        log("Failed to parse the OpenConnect version from " + output);
+    }
+
+    return true;
 }
 
 void GPService::disconnect()

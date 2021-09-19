@@ -1,8 +1,8 @@
-#include "preloginresponse.h"
-
-#include <QXmlStreamReader>
-#include <QMap>
+#include <QtCore/QXmlStreamReader>
+#include <QtCore/QMap>
 #include <plog/Log.h>
+
+#include "preloginresponse.h"
 
 QString PreloginResponse::xmlAuthMessage = "authentication-message";
 QString PreloginResponse::xmlLabelUsername = "username-label";

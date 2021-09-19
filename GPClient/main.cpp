@@ -1,13 +1,14 @@
-#include "singleapplication.h"
-#include "gpclient.h"
-#include "enhancedwebview.h"
-
-#include <QStandardPaths>
-#include <QProcessEnvironment>
+#include <QtCore/QObject>
+#include <QtCore/QString>
+#include <QtCore/QDir>
+#include <QtCore/QStandardPaths>
 #include <plog/Log.h>
 #include <plog/Appenders/ColorConsoleAppender.h>
 
-static const QString version = "v1.3.3";
+#include "singleapplication.h"
+#include "gpclient.h"
+#include "enhancedwebview.h"
+#include "version.h"
 
 int main(int argc, char *argv[])
 {
@@ -20,7 +21,7 @@ int main(int argc, char *argv[])
     static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
     plog::init(plog::debug, logFile.toUtf8()).addAppender(&consoleAppender);
 
-    PLOGI << "GlobalProtect started, version: " << version;
+    PLOGI << "GlobalProtect started, version: " << VERSION;
     PLOGI << "PATH: " << qgetenv("PATH");
 
     QString port = QString::fromLocal8Bit(qgetenv(ENV_CDP_PORT));
