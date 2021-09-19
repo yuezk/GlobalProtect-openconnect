@@ -53,8 +53,11 @@ cd GlobalProtect-openconnect
 ```
 
 ### Arch/Manjaro
+
 Install from the [globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/) AUR.
-### Ubuntu
+
+### Ubuntu/Mint
+
 For **Ubuntu 18.04**, add this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA first to install the latest openconnect.
 
 ```sh
