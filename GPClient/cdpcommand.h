@@ -1,7 +1,7 @@
 #ifndef CDPCOMMAND_H
 #define CDPCOMMAND_H
 
-#include <QObject>
+#include <QtCore/QObject>
 
 class CDPCommand : public QObject
 {

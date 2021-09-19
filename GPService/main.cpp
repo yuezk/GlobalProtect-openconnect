@@ -1,4 +1,5 @@
-#include <QtDBus>
+#include <QtDBus/QtDBus>
+
 #include "gpservice.h"
 #include "singleapplication.h"
 #include "sigwatch.h"

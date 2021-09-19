@@ -1,8 +1,8 @@
-#include "cdpcommand.h"
+#include <QtCore/QVariantMap>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 
-#include <QVariantMap>
-#include <QJsonDocument>
-#include <QJsonObject>
+#include "cdpcommand.h"
 
 CDPCommand::CDPCommand(QObject *parent) : QObject(parent)
 {

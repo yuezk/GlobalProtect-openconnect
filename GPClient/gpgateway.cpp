@@ -1,8 +1,8 @@
-#include "gpgateway.h"
+#include <QtCore/QJsonObject>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonArray>
 
-#include <QJsonObject>
-#include <QJsonDocument>
-#include <QJsonArray>
+#include "gpgateway.h"
 
 GPGateway::GPGateway()
 {

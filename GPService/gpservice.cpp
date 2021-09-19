@@ -1,12 +1,12 @@
-#include "gpservice.h"
-#include "gpserviceadaptor.h"
-
 #include <QtCore/QFileInfo>
-#include <QtDBus/QtDBus>
 #include <QtCore/QDateTime>
 #include <QtCore/QVariant>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QRegularExpressionMatch>
+#include <QtDBus/QtDBus>
+
+#include "gpservice.h"
+#include "gpserviceadaptor.h"
 
 GPService::GPService(QObject *parent)
     : QObject(parent)

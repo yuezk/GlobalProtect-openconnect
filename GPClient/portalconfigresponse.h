@@ -1,11 +1,11 @@
 #ifndef PORTALCONFIGRESPONSE_H
 #define PORTALCONFIGRESPONSE_H
 
-#include "gpgateway.h"
+#include <QtCore/QString>
+#include <QtCore/QList>
+#include <QtCore/QXmlStreamReader>
 
-#include <QString>
-#include <QList>
-#include <QXmlStreamReader>
+#include "gpgateway.h"
 
 class PortalConfigResponse
 {

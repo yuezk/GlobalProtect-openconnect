@@ -5,6 +5,19 @@
         "qregularexpressionmatch": "cpp",
         "qdatetime": "cpp",
         "qprocess": "cpp",
-        "qobject": "cpp"
+        "qobject": "cpp",
+        "qstandardpaths": "cpp",
+        "qmainwindow": "cpp",
+        "qsystemtrayicon": "cpp",
+        "qpushbutton": "cpp",
+        "qmenu": "cpp",
+        "qjsondocument": "cpp",
+        "qnetworkaccessmanager": "cpp",
+        "qwebengineview": "cpp",
+        "qprocessenvironment": "cpp",
+        "qnetworkreply": "cpp",
+        "qicon": "cpp",
+        "qsslsocket": "cpp",
+        "qapplication": "cpp"
     }
 }

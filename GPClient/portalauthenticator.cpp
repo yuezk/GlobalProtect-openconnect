@@ -1,3 +1,6 @@
+#include <QtNetwork/QNetworkReply>
+#include <plog/Log.h>
+
 #include "portalauthenticator.h"
 #include "gphelper.h"
 #include "normalloginwindow.h"
@@ -6,9 +9,6 @@
 #include "preloginresponse.h"
 #include "portalconfigresponse.h"
 #include "gpgateway.h"
-
-#include <plog/Log.h>
-#include <QNetworkReply>
 
 using namespace gpclient::helper;
 

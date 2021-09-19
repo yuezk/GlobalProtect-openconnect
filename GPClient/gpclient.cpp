@@ -1,3 +1,6 @@
+#include <QtGui/QIcon>
+#include <plog/Log.h>
+
 #include "gpclient.h"
 #include "gphelper.h"
 #include "ui_gpclient.h"
@@ -5,9 +8,6 @@
 #include "gatewayauthenticator.h"
 #include "settingsdialog.h"
 #include "gatewayauthenticatorparams.h"
-
-#include <plog/Log.h>
-#include <QIcon>
 
 using namespace gpclient::helper;
 

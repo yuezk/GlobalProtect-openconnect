@@ -1,7 +1,7 @@
+#include <QtGui/QCloseEvent>
+
 #include "normalloginwindow.h"
 #include "ui_normalloginwindow.h"
-
-#include <QCloseEvent>
 
 NormalLoginWindow::NormalLoginWindow(QWidget *parent) :
     QDialog(parent),
