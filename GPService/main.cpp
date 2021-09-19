@@ -1,6 +1,4 @@
-#include <iostream>
 #include <QtDBus/QtDBus>
-#include <QtCore/QProcessEnvironment>
 
 #include "gpservice.h"
 #include "singleapplication.h"
@@ -18,9 +16,6 @@ int main(int argc, char *argv[])
     }
 
     GPService service;
-
-    QString env = "ENV: "  + QProcessEnvironment::systemEnvironment().toStringList().join("\n");
-    std::cout << env.toStdString();
 
     UnixSignalWatcher sigwatch;
     sigwatch.watchForSignal(SIGINT);

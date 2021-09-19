@@ -34,7 +34,13 @@ add_3rdparty(
     SingleApplication
     GIT_REPOSITORY https://github.com/itay-grudev/SingleApplication.git
     GIT_TAG v3.3.0
-    CMAKE_ARGS -DQAPPLICATION_CLASS=QApplication
+    CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}
+        -DCMAKE_PREFIX_PATH=$ENV{CMAKE_PREFIX_PATH}
+        -DCMAKE_INCLUDE_PATH=$ENV{CMAKE_INCLUDE_PATH}
+        -DCMAKE_LIBRARY_PATH=$ENV{CMAKE_LIBRARY_PATH}
+        -DQAPPLICATION_CLASS=QApplication
 )
 
 add_3rdparty(

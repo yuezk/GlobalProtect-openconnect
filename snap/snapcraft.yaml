@@ -16,9 +16,7 @@ layout:
   /usr/share/vpnc-scripts:
     bind: $SNAP/usr/share/vpnc-scripts
   /usr/local/sbin:
-    bind: $SNAP/usr/local/sbin
-  /usr/share/qt5:
-    bind: $SNAP/usr/share/qt5
+    bind: $SNAP/usr/sbin
 
 slots:
   gpservice-slot:
@@ -34,10 +32,10 @@ plugs:
 
 apps:
   gpservice:
-    # daemon: simple
+    daemon: simple
     command: usr/bin/gpservice
-    extensions:
-      - kde-neon
+    command-chain:
+      - snap/command-chain/desktop-launch
     environment:
       LANG: en_US.utf8
     plugs:
@@ -62,24 +60,14 @@ apps:
 
 parts:
   application:
-    plugin: nil
+    plugin: cmake
     source: .
+    build-packages:
+      - libglu1-mesa-dev
     build-snaps:
       - kde-frameworks-5-core18-sdk
-    stage-snaps:
-      - kde-frameworks-5-core18
     stage-packages:
       - openconnect
-    override-build: |
-      KF5_DIR=/snap/kde-frameworks-5-core18-sdk/current
-
-      export QTDIR=$KF5_DIR/usr/lib/qt5
-      export PATH=$QTDIR/bin:$KF5_DIR/usr/bin:$PATH
-      export LD_LIBRARY_PATH=$KF5_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET:$QTDIR/lib:$LD_LIBRARY_PATH
-      export PKG_CONFIG_PATH=$QTDIR/lib/pkgconfig:$PKG_CONFIG_PATH
-      export QMAKESPEC=$KF5_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/qt5/mkspecs/linux-g++
-      # export QT_SELECT=qt5
-
-      qmake CONFIG+=release # -qtconf $KF5_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/qt5/qt.conf
-      make -j$(nproc)
-      make INSTALL_ROOT=$SNAPCRAFT_PART_INSTALL install
+      - libatm1
+    configflags:
+      - -DCMAKE_BUILD_TYPE=Release
