@@ -1,8 +1,8 @@
+#include <QtCore/QProcessEnvironment>
+#include <QtWebEngineWidgets/QWebEngineView>
+
 #include "enhancedwebview.h"
 #include "cdpcommandmanager.h"
-
-#include <QtWebEngineWidgets/QWebEngineView>
-#include <QProcessEnvironment>
 
 EnhancedWebView::EnhancedWebView(QWidget *parent)
     : QWebEngineView(parent)

@@ -1,12 +1,13 @@
 #ifndef PORTALAUTHENTICATOR_H
 #define PORTALAUTHENTICATOR_H
 
+#include <QtCore/QObject>
+
 #include "portalconfigresponse.h"
 #include "normalloginwindow.h"
 #include "samlloginwindow.h"
 #include "preloginresponse.h"
 
-#include <QObject>
 
 class PortalAuthenticator : public QObject
 {

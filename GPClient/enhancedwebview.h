@@ -1,8 +1,9 @@
 #ifndef ENHANCEDWEBVIEW_H
 #define ENHANCEDWEBVIEW_H
 
-#include "cdpcommandmanager.h"
 #include <QtWebEngineWidgets/QWebEngineView>
+
+#include "cdpcommandmanager.h"
 
 #define ENV_CDP_PORT "QTWEBENGINE_REMOTE_DEBUGGING"
 

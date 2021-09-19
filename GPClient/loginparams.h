@@ -1,7 +1,7 @@
 #ifndef LOGINPARAMS_H
 #define LOGINPARAMS_H
 
-#include <QUrlQuery>
+#include <QtCore/QUrlQuery>
 
 class LoginParams
 {

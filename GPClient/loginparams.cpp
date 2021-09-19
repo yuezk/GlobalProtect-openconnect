@@ -1,6 +1,6 @@
-#include "loginparams.h"
+#include <QtCore/QUrlQuery>
 
-#include <QUrlQuery>
+#include "loginparams.h"
 
 LoginParams::LoginParams(const QString clientos)
 {

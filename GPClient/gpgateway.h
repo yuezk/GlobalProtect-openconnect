@@ -1,9 +1,9 @@
 #ifndef GPGATEWAY_H
 #define GPGATEWAY_H
 
-#include <QString>
-#include <QMap>
-#include <QJsonObject>
+#include <QtCore/QString>
+#include <QtCore/QMap>
+#include <QtCore/QJsonObject>
 
 class GPGateway
 {

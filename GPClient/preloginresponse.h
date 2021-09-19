@@ -1,8 +1,8 @@
 #ifndef PRELOGINRESPONSE_H
 #define PRELOGINRESPONSE_H
 
-#include <QString>
-#include <QMap>
+#include <QtCore/QString>
+#include <QtCore/QMap>
 
 class PreloginResponse
 {

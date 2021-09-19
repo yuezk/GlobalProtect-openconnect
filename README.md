@@ -2,7 +2,7 @@
 A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Qt5, supports SAML auth mode, inspired by [gp-saml-gui](https://github.com/dlenski/gp-saml-gui).
 
 <p align="center">
-  <img src="screenshot.png">
+  <img src="https://user-images.githubusercontent.com/3297602/133869036-5c02b0d9-c2d9-4f87-8c81-e44f68cfd6ac.png">
 </p>
 
 ## Features
@@ -43,69 +43,60 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
 - Openconnect v8.x
 - Qt5, qt5-webengine, qt5-websockets
 
-### Ubuntu
-1. Install openconnect v8.x
+## Build & Install
 
-    ```sh
-    sudo apt install openconnect
-    openconnect --version
-    ```
-
-    For Ubuntu 18.04, using this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA.
-
-    ```sh
-    sudo add-apt-repository ppa:dwmw2/openconnect
-    sudo apt-get update
-    sudo apt install openconnect
-    ```
-   
-1. Install the Qt dependencies
-
-    For Ubuntu 20, this should work.
-    
-    ```sh
-    sudo apt install qtbase5-dev libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
-    ```
-    
-    For Ubuntu 21, you need to install the base pieces separately as QT5 is the default.
-    
-    ```sh
-    sudo apt install qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libqt5websockets5-dev qtwebengine5-dev qttools5-dev debhelper
-    ```
-    
-### OpenSUSE
-Install the Qt dependencies
-
-```sh
-sudo zypper install libqt5-qtbase-devel libqt5-qtwebsockets-devel libqt5-qtwebengine-devel
-```
-
-### Fedora
-Install the Qt dependencies:
-
-```sh
-sudo dnf install qt5-qtbase-devel qt5-qtwebengine-devel qt5-qtwebsockets-devel
-```
-
-## Install
-
-### Install from AUR (Arch/Manjaro)
-
-Install [globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/).
-
-### Build from source code
+Clone this repo with:
 
 ```sh
 git clone https://github.com/yuezk/GlobalProtect-openconnect.git
 cd GlobalProtect-openconnect
-git submodule update --init
-
-# qmake or qmake-qt5
-qmake CONFIG+=release
-make
-sudo make install
 ```
-Open `GlobalProtect VPN` in the application dashboard.
+
+### Arch/Manjaro
+Install from the [globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/) AUR.
+### Ubuntu
+For **Ubuntu 18.04**, add this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA first to install the latest openconnect.
+
+```sh
+sudo add-apt-repository ppa:dwmw2/openconnect
+sudo apt update
+```
+...then build and install with:
+
+```sh
+./scripts/install-ubuntu.sh
+```
+### openSUSE
+
+Build and install with:
+
+```sh
+./scripts/install-opensuse.sh
+```
+
+### Fedora
+
+Build and install with:
+
+```sh
+./scripts/install-fedora.sh
+```
+
+### Other Linux
+
+Install the Qt5 dependencies and OpenConnect:
+
+- QtCore
+- QtWebEngine
+- QtWebSockets
+- QtDBus
+- openconnect v8.x
+
+...then build and install with:
+
+```sh
+./scripts/install.sh
+```
 
 ### Debian package
 

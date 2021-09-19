@@ -1,15 +1,15 @@
 ﻿#ifndef GPHELPER_H
 #define GPHELPER_H
 
+#include <QtCore/QObject>
+#include <QtCore/QUrlQuery>
+#include <QtCore/QSettings>
+#include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QNetworkRequest>
+#include <QtNetwork/QNetworkReply>
+
 #include "samlloginwindow.h"
 #include "gpgateway.h"
-
-#include <QObject>
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
-#include <QUrlQuery>
-#include <QSettings>
 
 
 const QString UA = "PAN GlobalProtect";

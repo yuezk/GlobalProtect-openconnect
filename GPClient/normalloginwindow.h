@@ -1,7 +1,7 @@
 #ifndef PORTALAUTHWINDOW_H
 #define PORTALAUTHWINDOW_H
 
-#include <QDialog>
+#include <QtWidgets/QDialog>
 
 namespace Ui {
 class NormalLoginWindow;

@@ -1,11 +1,11 @@
 #ifndef SAMLLOGINWINDOW_H
 #define SAMLLOGINWINDOW_H
 
-#include "enhancedwebview.h"
+#include <QtCore/QMap>
+#include <QtGui/QCloseEvent>
+#include <QtWidgets/QDialog>
 
-#include <QDialog>
-#include <QMap>
-#include <QCloseEvent>
+#include "enhancedwebview.h"
 
 class SAMLLoginWindow : public QDialog
 {

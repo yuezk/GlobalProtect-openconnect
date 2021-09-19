@@ -1,9 +1,9 @@
-#include "samlloginwindow.h"
-
-#include <QVBoxLayout>
+#include <QtWidgets/QVBoxLayout>
+#include <QtWebEngineWidgets/QWebEngineProfile>
+#include <QtWebEngineWidgets/QWebEngineView>
 #include <plog/Log.h>
-#include <QWebEngineProfile>
-#include <QWebEngineView>
+
+#include "samlloginwindow.h"
 
 SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
     : QDialog(parent)
