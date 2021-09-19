@@ -1,18 +1,22 @@
 name: Build
 
 on:
-  paths-ignore:
-    - LICENSE
-    - "*.md"
-    - .vscode
   push:
     branches:
       - master
       - dev
+    paths-ignore:
+      - LICENSE
+      - "*.md"
+      - .vscode
   pull_request:
     branches:
       - master
       - dev
+    paths-ignore:
+      - LICENSE
+      - "*.md"
+      - .vscode
   workflow_dispatch:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
