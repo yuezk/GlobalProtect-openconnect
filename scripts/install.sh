@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-./cmakew -B build
+./cmakew -B build -DCMAKE_BUILD_TYPE=Release
 MAKEFLAGS=-j$(nproc) ./cmakew --build build
 sudo ./cmakew --install build
 
