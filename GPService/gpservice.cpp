@@ -94,8 +94,6 @@ void GPService::quit()
 
 void GPService::connect(QString server, QString username, QString passwd, QString extraArgs)
 {
-    log("VPN status is: " + QVariant::fromValue(vpnStatus).toString());
-
     if (vpnStatus != GPService::VpnNotConnected) {
         log("VPN status is: " + QVariant::fromValue(vpnStatus).toString());
         return;
