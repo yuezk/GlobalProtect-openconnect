@@ -4,7 +4,6 @@
 #include <QtCore/QRegularExpression>
 #include <QtCore/QRegularExpressionMatch>
 #include <QtDBus/QtDBus>
-#include <QtCore/QProcessEnvironment>
 
 #include "gpservice.h"
 #include "gpserviceadaptor.h"
@@ -123,8 +122,6 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
 
     log("Start process with arugments: " + args.join(" "));
 
-    log("ENV for OC: " + openconnect->environment().join("\n"));
-    log("ENV for gpservice: " + QProcessEnvironment::systemEnvironment().toStringList().join("\n"));
     openconnect->start(bin, args);
 }
 

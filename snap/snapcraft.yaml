@@ -13,10 +13,12 @@ package-repositories:
     ppa: dwmw2/openconnect
 
 layout:
-  /usr/share/vpnc-scripts:
-    bind: $SNAP/usr/share/vpnc-scripts
   /usr/local/sbin:
     bind: $SNAP/usr/sbin
+  /usr/share/vpnc-scripts:
+    bind: $SNAP/usr/share/vpnc-scripts
+  /usr/share/locale:
+    bind: $SNAP/usr/share/locale
 
 slots:
   gpservice-slot:
@@ -37,7 +39,8 @@ apps:
     command-chain:
       - snap/command-chain/desktop-launch
     environment:
-      LANG: en_US.utf8
+      LC_ALL: en_US.UTF-8
+      LANG: en_US.UTF-8
     plugs:
       - network
     slots: 

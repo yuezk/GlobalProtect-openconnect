@@ -22,5 +22,7 @@ find_package(Qt5 REQUIRED COMPONENTS
     DBus
 )
 
+add_subdirectory(3rdparty/qt-unix-signals)
 add_subdirectory(GPService)
 add_subdirectory(GPClient)
+add_dependencies(gpclient gpservice)

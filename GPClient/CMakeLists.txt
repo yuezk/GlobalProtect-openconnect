@@ -4,7 +4,11 @@ project(GPClient)
 
 set(gpclient_GENERATED_SOURCES)
 
-qt5_add_dbus_interface(gpclient_GENERATED_SOURCES ${CMAKE_BINARY_DIR}/com.yuezk.qt.GPService.xml gpserviceinterface)
+qt5_add_dbus_interface(
+    gpclient_GENERATED_SOURCES
+    ${CMAKE_BINARY_DIR}/com.yuezk.qt.GPService.xml
+    gpserviceinterface
+)
 
 add_executable(gpclient
     cdpcommand.cpp
@@ -75,6 +79,7 @@ target_link_libraries(gpclient
     Qt5::WebEngine
     Qt5::WebEngineWidgets
     Qt5::DBus
+    QtSignals
 )
 
 target_compile_definitions(gpclient PUBLIC QAPPLICATION_CLASS=QApplication)

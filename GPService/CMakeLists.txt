@@ -5,7 +5,10 @@ project(GPService)
 set(gpservice_GENERATED_SOURCES)
 
 # generate the dbus xml definition
-qt5_generate_dbus_interface(gpservice.h ${CMAKE_BINARY_DIR}/com.yuezk.qt.GPService.xml)
+qt5_generate_dbus_interface(
+    gpservice.h
+    ${CMAKE_BINARY_DIR}/com.yuezk.qt.GPService.xml
+)
 
 # generate dbus adaptor
 qt5_add_dbus_adaptor(
@@ -18,7 +21,6 @@ qt5_add_dbus_adaptor(
 add_executable(gpservice
     gpservice.cpp
     main.cpp
-    sigwatch.cpp
     ${gpservice_GENERATED_SOURCES}
 )
 
@@ -53,6 +55,7 @@ target_link_libraries(gpservice
     Qt5::Core
     Qt5::Network
     Qt5::DBus
+    QtSignals
 )
 
 target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)
