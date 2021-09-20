@@ -33,7 +33,7 @@
     <launchable type="desktop-id">com.yuezk.qt.gpclient.desktop</launchable>
     <screenshots>
         <screenshot type="default">
-            <image>https://raw.githubusercontent.com/yuezk/GlobalProtect-openconnect/master/screenshot.png</image>
+            <image>https://user-images.githubusercontent.com/3297602/133869036-5c02b0d9-c2d9-4f87-8c81-e44f68cfd6ac.png</image>
         </screenshot>
     </screenshots>
     <provides>
