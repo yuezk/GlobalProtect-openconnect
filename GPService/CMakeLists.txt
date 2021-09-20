@@ -5,7 +5,10 @@ project(GPService)
 set(gpservice_GENERATED_SOURCES)
 
 # generate the dbus xml definition
-qt5_generate_dbus_interface(gpservice.h ${CMAKE_BINARY_DIR}/com.yuezk.qt.GPService.xml)
+qt5_generate_dbus_interface(
+    gpservice.h
+    ${CMAKE_BINARY_DIR}/com.yuezk.qt.GPService.xml
+)
 
 # generate dbus adaptor
 qt5_add_dbus_adaptor(
@@ -18,7 +21,6 @@ qt5_add_dbus_adaptor(
 add_executable(gpservice
     gpservice.cpp
     main.cpp
-    sigwatch.cpp
     ${gpservice_GENERATED_SOURCES}
 )
 
@@ -26,7 +28,13 @@ add_3rdparty(
     SingleApplication
     GIT_REPOSITORY https://github.com/itay-grudev/SingleApplication.git
     GIT_TAG v3.3.0
-    CMAKE_ARGS -DQAPPLICATION_CLASS=QCoreApplication
+    CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}
+        -DCMAKE_PREFIX_PATH=$ENV{CMAKE_PREFIX_PATH}
+        -DCMAKE_INCLUDE_PATH=$ENV{CMAKE_INCLUDE_PATH}
+        -DCMAKE_LIBRARY_PATH=$ENV{CMAKE_LIBRARY_PATH}
+        -DQAPPLICATION_CLASS=QCoreApplication
 )
 
 ExternalProject_Get_Property(SingleApplication-${PROJECT_NAME} SOURCE_DIR BINARY_DIR)
@@ -47,6 +55,7 @@ target_link_libraries(gpservice
     Qt5::Core
     Qt5::Network
     Qt5::DBus
+    QtSignals
 )
 
 target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)

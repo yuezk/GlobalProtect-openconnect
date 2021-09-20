@@ -23,6 +23,7 @@ public:
     ~GPClient();
 
     void activate();
+    void quit();
 
 private slots:
     void onSettingsButtonClicked();
@@ -97,6 +98,5 @@ private:
     void setCurrentGateway(const GPGateway gateway);
 
     void clearSettings();
-    void quit();
 };
 #endif // GPCLIENT_H

@@ -139,7 +139,7 @@ bool GPService::isValidVersion(QString &bin) {
         QString majorVersion = match.captured(1);
 
         if (majorVersion.toInt() < 8) {
-            emit error("The OpenConnect version must greater than v8.0.0, but got " + fullVersion);
+            emit error("The OpenConnect version must greater than v8.0.0, got " + fullVersion);
             return false;
         }
     } else {

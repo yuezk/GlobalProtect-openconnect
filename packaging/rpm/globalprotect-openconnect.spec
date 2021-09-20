@@ -1,7 +1,7 @@
 Name:           globalprotect-openconnect
 Version:        1.3.0+SNAPSHOT20210829120923
 Release:        1
-Summary:        A GlobalProtect VPN client
+Summary:        A GlobalProtect VPN client powered by OpenConnect
 
 License:        GPLv3
 URL:            https://github.com/yuezk/GlobalProtect-openconnect
