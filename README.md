@@ -58,13 +58,16 @@ Install from the [globalprotect-openconnect](https://aur.archlinux.org/packages/
 
 ### Ubuntu/Mint
 
-For **Ubuntu 18.04**, add this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA first to install the latest openconnect.
-
-```sh
-sudo add-apt-repository ppa:dwmw2/openconnect
-sudo apt update
-```
-...then build and install with:
+> **⚠️ REQURIED for Ubuntu 18.04 ⚠️**
+> 
+> Add this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA first to install the latest openconnect.
+> 
+> ```sh
+> sudo add-apt-repository ppa:dwmw2/openconnect
+> sudo apt update
+> ```
+  
+Build and install with:
 
 ```sh
 ./scripts/install-ubuntu.sh
