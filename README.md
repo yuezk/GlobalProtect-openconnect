@@ -149,7 +149,10 @@ Relatively manual process for now:
   
   environment.systemPackages = [ globalprotect-openconnect ];
   ```
-  
+
+## Troubleshooting
+
+The application logs can be found at: `~/.cache/GlobalProtect-openconnect/gpclient.log`
 
 ## [License](./LICENSE)
 GPLv3
