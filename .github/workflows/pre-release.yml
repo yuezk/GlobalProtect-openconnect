@@ -38,7 +38,6 @@ jobs:
             --force-submodules \
             --prefix=globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}/ \
             ./globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}.full.tar.gz
-
       - name: "Debian Packaging"
         run: |
           sudo apt update
@@ -48,7 +47,6 @@ jobs:
           tar xf *.tar.gz
           cd globalprotect-openconnect-${{ steps.vars.outputs.VERSION }}
           fakeroot dpkg-buildpackage -uc -us -sa
-
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"

@@ -1,0 +1,352 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+    paths-ignore:
+      - LICENSE
+      - "*.md"
+      - .vscode
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, ubuntu-20.04]
+    
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      # Checkout repository and submodules
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Build
+        run: |
+          ./scripts/install-ubuntu.sh
+
+  snapshot-archive-all:
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install git-archive-all
+      
+      - name: Archive all
+        run: |
+          ./scripts/snapshot-archive-all.sh
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: snapshot-source-code
+          path: ./artifacts/*
+
+  snapshot-ppa:
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+    needs: snapshot-archive-all
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: snapshot-source-code
+          path: artifacts
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v4
+        with:
+          gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
+      
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install debmake debhelper cmake \
+            libqt5websockets5-dev qtbase5-dev qtwebengine5-dev
+
+      - name: Build deb package for 18.04
+        run: |
+          cd $GITHUB_WORKSPACE/artifacts
+          mkdir build-18.04
+          cp *.tar.gz build-18.04 && cd build-18.04
+          tar xf *.tar.gz
+          cd globalprotect-openconnect-*/
+
+          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
+          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 18.04
+
+      - name: Build deb package for 20.04
+        run: | 
+          cd $GITHUB_WORKSPACE/artifacts
+          mkdir build-20.04
+          cp *.tar.gz build-20.04 && cd build-20.04
+          tar xf *.tar.gz
+          cd globalprotect-openconnect-*/
+
+          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
+          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 20.04
+
+      - name: Build deb package for 21.04
+        run: | 
+          cd $GITHUB_WORKSPACE/artifacts
+          mkdir build-21.04
+          cp *.tar.gz build-21.04 && cd build-21.04
+          tar xf *.tar.gz
+          cd globalprotect-openconnect-*/
+
+          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
+          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 21.04
+
+      - name: Build deb package for 21.10
+        run: | 
+          cd $GITHUB_WORKSPACE/artifacts
+          mkdir build-21.10
+          cp *.tar.gz build-21.10 && cd build-21.10
+          tar xf *.tar.gz
+          cd globalprotect-openconnect-*/
+
+          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
+          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 21.10
+
+  snapshot-aur:
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+    needs: snapshot-archive-all
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: snapshot-source-code
+          path: artifacts
+
+      - name: Publish AUR package
+        env:
+          VERSION: $(cat ./artifacts/VERSION)
+        uses: yuezk/github-actions-deploy-aur@update-pkgver
+        with:
+          pkgname: globalprotect-openconnect-git
+          pkgbuild: ./artifacts/aur/PKGBUILD
+          assets: ./artifacts/aur/*.tar.gz
+          update_pkgver: true
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: 'Snapshot release: git#${{ github.sha }}'
+
+  snapshot-obs:
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+    needs: snapshot-archive-all
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: snapshot-source-code
+          path: artifacts
+
+      - uses: yuezk/publish-obs-package@main
+        with:
+          project: home:yuezk
+          package: globalprotect-openconnect-snapshot
+          username: yuezk
+          password: ${{ secrets.OBS_PASSWORD }}
+          files: ./artifacts/obs/*
+
+  snapshot-snap:
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+    needs: snapshot-archive-all
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: snapshot-source-code
+          path: artifacts
+      
+      - name: Extract source code
+        run: |
+          mkdir snap-source
+          tar xvf ./artifacts/globalprotect-openconnect-*tar.gz \
+            --directory snap-source \
+            --strip 1
+          
+      - uses: snapcore/action-build@v1
+        id: build
+        with:
+          path: ./snap-source
+
+      - uses: snapcore/action-publish@v1
+        with:
+          store_login: ${{ secrets.SNAPSTORE_LOGIN }}
+          snap: ${{ steps.build.outputs.snap }}
+          release: edge
+
+  release-archive-all:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install git-archive-all
+      
+      - name: Archive all
+        run: |
+          ./scripts/release-archive-all.sh
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: release-source-code
+          path: ./artifacts/*
+
+  release-ppa:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release-archive-all
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: release-source-code
+          path: artifacts
+
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v4
+        with:
+          gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
+      
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install debmake debhelper cmake \
+            libqt5websockets5-dev qtbase5-dev qtwebengine5-dev
+
+      - name: Build deb package for 18.04
+        run: |
+          cd $GITHUB_WORKSPACE/artifacts
+          mkdir build-18.04
+          cp *.tar.gz build-18.04 && cd build-18.04
+          tar xf *.tar.gz
+          cd globalprotect-openconnect-*/
+
+          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
+          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 18.04 --stable
+
+      - name: Build deb package for 20.04
+        run: | 
+          cd $GITHUB_WORKSPACE/artifacts
+          mkdir build-20.04
+          cp *.tar.gz build-20.04 && cd build-20.04
+          tar xf *.tar.gz
+          cd globalprotect-openconnect-*/
+
+          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
+          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 20.04 --stable
+
+      - name: Build deb package for 21.04
+        run: | 
+          cd $GITHUB_WORKSPACE/artifacts
+          mkdir build-21.04
+          cp *.tar.gz build-21.04 && cd build-21.04
+          tar xf *.tar.gz
+          cd globalprotect-openconnect-*/
+
+          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
+          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 21.04 --stable
+
+      - name: Build deb package for 21.10
+        run: | 
+          cd $GITHUB_WORKSPACE/artifacts
+          mkdir build-21.10
+          cp *.tar.gz build-21.10 && cd build-21.10
+          tar xf *.tar.gz
+          cd globalprotect-openconnect-*/
+
+          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
+          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 21.10 --stable
+  
+  release-aur:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release-archive-all
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: release-source-code
+          path: artifacts
+
+      - name: Publish AUR package
+        env:
+          VERSION: $(cat ./artifacts/VERSION)
+        uses: yuezk/github-actions-deploy-aur@update-pkgver
+        with:
+          pkgname: globalprotect-openconnect
+          pkgbuild: ./artifacts/aur/PKGBUILD
+          assets: ./artifacts/aur/*.tar.gz
+          update_pkgver: true
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: 'Release ${{ github.ref }}'
+  
+  release-obs:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release-archive-all
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: release-source-code
+          path: artifacts
+
+      - uses: yuezk/publish-obs-package@main
+        with:
+          project: home:yuezk
+          package: globalprotect-openconnect
+          username: yuezk
+          password: ${{ secrets.OBS_PASSWORD }}
+          files: ./artifacts/obs/*
+  
+  release-github:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - release-ppa
+      - release-aur
+      - release-obs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: release-source-code
+          path: artifacts
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./artifacts/*.tar.gz

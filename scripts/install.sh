@@ -1,9 +1,10 @@
 #!/bin/bash -e
 
-./cmakew -B build -DCMAKE_BUILD_TYPE=Release
-MAKEFLAGS=-j$(nproc) ./cmakew --build build
+./scripts/build.sh
+
 sudo ./cmakew --install build
 
+sudo systemctl enable gpservice.service
 sudo systemctl daemon-reload
 sudo systemctl restart gpservice.service
 

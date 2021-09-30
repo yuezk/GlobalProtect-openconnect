@@ -9,7 +9,7 @@ SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
     : QDialog(parent)
     , webView(new EnhancedWebView(this))
 {
-    setWindowTitle("GlobalProtect SAML Login");
+    setWindowTitle("GlobalProtect Login");
     setModal(true);
     resize(700, 550);
 

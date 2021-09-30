@@ -1,15 +1,8 @@
 name: globalprotect-openconnect
 base: core18
-version: 'test'
-grade: devel
-confinement: devmode # use 'strict' once you have the right plugs and slots
+confinement: strict
 compression: lzo
 
-contact: k3vinyue@gmail.com
-donation: https://www.buymeacoffee.com/yuezk
-issues: https://github.com/yuezk/GlobalProtect-openconnect/issues
-source-code: https://github.com/yuezk/GlobalProtect-openconnect
-website: https://github.com/yuezk/GlobalProtect-openconnect
 license: GPL-3.0
 
 adopt-info: application
@@ -40,6 +33,7 @@ plugs:
 
 apps:
   gpservice:
+    common-id: com.yuezk.qt.gpservice
     daemon: simple
     command: usr/bin/gpservice
     command-chain:
@@ -69,6 +63,19 @@ apps:
 
 parts:
   application:
+    override-pull: |
+      snapcraftctl pull
+
+      VERSION=$(cat VERSION VERSION_SUFFIX)
+      GRADE="stable"
+
+      if echo "$VERSION" | grep -q "snapshot"
+      then
+          GRADE="devel"
+      fi
+
+      snapcraftctl set-version "$VERSION"
+      snapcraftctl set-grade "$GRADE"
     parse-info:
       - usr/share/metainfo/com.yuezk.qt.gpclient.metainfo.xml
     plugin: cmake
@@ -81,4 +88,5 @@ parts:
       - openconnect
       - libatm1
     configflags:
+      - -DCMAKE_INSTALL_PREFIX=/usr
       - -DCMAKE_BUILD_TYPE=Release
