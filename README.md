@@ -5,8 +5,8 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
   <img src="https://user-images.githubusercontent.com/3297602/133869036-5c02b0d9-c2d9-4f87-8c81-e44f68cfd6ac.png">
 </p>
 
-<a href="https://ko-fi.com/M4M75PYKZ" target="_blank"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="ko-fi"></a>
-<a href="https://www.buymeacoffee.com/yuezk" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 30px !important;width: 109px !important;" ></a>
+<a href="https://ko-fi.com/M4M75PYKZ" target="_blank"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="ko-fi" style="height: 35px !important;width: auto !important;"></a>
+<a href="https://www.buymeacoffee.com/yuezk" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 35px !important;width: auto !important;" ></a>
 
 ## Features
 
