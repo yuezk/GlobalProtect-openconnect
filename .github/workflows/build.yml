@@ -51,6 +51,8 @@ jobs:
       - name: Archive all
         run: |
           ./scripts/snapshot-archive-all.sh
+          echo "${{ secrets.PPA_GPG_PRIVATE_KEY }}" > ./artifacts/private.gpg
+          echo "${{ secrets.PPA_GPG_PASSPHRASE }}" > ./artifacts/passphrase.txt
 
       - uses: actions/upload-artifact@v2
         with:
