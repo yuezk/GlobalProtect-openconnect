@@ -15,38 +15,19 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 - Supports automatically selecting the preferred gateway from the multiple gateways.
 - Supports switching gateway from the system tray menu manually.
 
-## Future plan
 
-- [ ] Improve the release process
-- [ ] Process bugs and feature requests
-- [ ] Support for bypassing the `gpclient` parameters
-- [ ] Support the CLI mode
+## Install
 
-## Passing the Custom Parameters to `OpenConnect` CLI
+|OS|Stable version | Development version|
+|---|--------------|--------------------|
+|Linux Mint, Ubuntu 18.04 or later|[ppa:yuezk/globalprotect-openconnect](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect)|[ppa:yuezk/globalprotect-openconnect-snapshot](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect-snapshot)|
+|Arch, Manjaro|[AUR: globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/)|[AUR: globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)|
+|openSUSE|[OBS: globalprotect-openconnect](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect)|[OBS: globalprotect-openconnect-snapshot](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect-snapshot)|
+|Fedora|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|
 
-Custom parameters can be appended to the `OpenConnect` CLI with the following settings.
-
-> Tokens with spaces can be surrounded by double quotes; three consecutive double quotes represent the quote character itself.
-
-
-<p align="center">
-  <img src="https://user-images.githubusercontent.com/3297602/130319209-744be02b-d657-4f49-a76d-d2c81b5c46d5.png" />
-<p>
+Add the repository in the above table and install it with your favorite package manager tool.
   
-## Display the system tray icon on Gnome 40
-
-Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension and you will see the system try icon (Restart the system after the installation).
-
-<p align="center">
-  <img src="https://user-images.githubusercontent.com/3297602/130831022-b93492fd-46dd-4a8e-94a4-13b5747120b7.png" />
-<p>
- 
-## Prerequisites
-
-- Openconnect v8.x
-- Qt5, qt5-webengine, qt5-websockets
-
-## Build & Install
+## Build & Install from source code
 
 Clone this repo with:
 
@@ -107,38 +88,6 @@ Install the Qt5 dependencies and OpenConnect:
 ./scripts/install.sh
 ```
 
-### Debian package
-
-Relatively manual process for now:
-
-* Clone the source tree
-
-  ```
-  git clone https://github.com/yuezk/GlobalProtect-openconnect.git
-  cd GlobalProtect-openconnect
-  ```
-
-* Install git-archive-all using the pip. Remember to adjust the version numbers etc.
-
-  ```
-  pip install git-archive-all
-  ```
-
-* Next create an upstream source tree using git archive.
-
-  ```
-  git-archive-all --force-submodules --prefix=globalprotect-openconnect-1.3.0/ ../globalprotect-openconnect_1.3.0.orig.tar.gz
-  ```
-
-* Finally extract the source tree, build the debian package, and install it.
-
-  ```
-  cd ..
-  tar -xzvf globalprotect-openconnect_1.3.0.orig.tar.gz
-  cd globalprotect-openconnect-1.3.0
-  fakeroot dpkg-buildpackage -uc -us -sa 2>&1 | tee ../build.log
-  sudo dpkg -i globalprotect-openconnect_1.3.0-1ppa1_amd64.deb
-  ```
 
 ### NixOS
   In `configuration.nix`:
@@ -153,6 +102,35 @@ Relatively manual process for now:
   environment.systemPackages = [ globalprotect-openconnect ];
   ```
 
+## Passing the Custom Parameters to `OpenConnect` CLI
+
+Custom parameters can be appended to the `OpenConnect` CLI with the following settings.
+
+> Tokens with spaces can be surrounded by double quotes; three consecutive double quotes represent the quote character itself.
+
+
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/3297602/130319209-744be02b-d657-4f49-a76d-d2c81b5c46d5.png" />
+<p>
+  
+## Display the system tray icon on Gnome 40
+
+Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension and you will see the system try icon (Restart the system after the installation).
+
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/3297602/130831022-b93492fd-46dd-4a8e-94a4-13b5747120b7.png" />
+<p>
+
+  
+
+## Future plan
+
+- [x] Improve the release process
+- [ ] Process bugs and feature requests
+- [ ] Support for bypassing the `gpclient` parameters
+- [ ] Support the CLI mode
+  
+  
 ## Troubleshooting
 
 The application logs can be found at: `~/.cache/GlobalProtect-openconnect/gpclient.log`
