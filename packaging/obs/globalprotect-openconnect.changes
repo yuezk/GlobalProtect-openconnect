@@ -1,4 +1,20 @@
 -------------------------------------------------------------------
+Sun Oct 24 04:13:24 UTC 2021 - k3vinyue@gmail.com - 1.3.4
+
+- Update to 1.3.4
+  * Updated VERSION, Bumped 1.3.3 –> 1.3.4
+  * update packaging (#100)
+  * shorten the sponsor links
+  * Update README.md
+  * add sponsor links
+  * Adding application logs location in the README (#95)
+  * improve the doc
+  * Add snap packaging (#93)
+  * update doc
+  * Migrate to cmake and refine the code structure (#92)
+  * QStringView -> QString
+
+-------------------------------------------------------------------
 Thu Jul  9 02:13:46 UTC 2020 - k3vinyue@gmail.com - 1.3.0
 
 - Update to 1.3.0

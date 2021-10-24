@@ -1,3 +1,19 @@
+globalprotect-openconnect (1.3.4-1) unstable; urgency=medium
+
+  * Updated VERSION, Bumped 1.3.3 –> 1.3.4
+  * update packaging (#100)
+  * shorten the sponsor links
+  * Update README.md
+  * add sponsor links
+  * Adding application logs location in the README (#95)
+  * improve the doc
+  * Add snap packaging (#93)
+  * update doc
+  * Migrate to cmake and refine the code structure (#92)
+  * QStringView -> QString
+
+ -- Kevin Yue <k3vinyue@gmail.com>  Sun, 24 Oct 2021 12:13:24 +0800
+
 globalprotect-openconnect (1.3.0-1) unstable; urgency=medium
 
   * Bump version to 1.3.0
