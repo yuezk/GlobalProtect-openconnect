@@ -22,10 +22,55 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 |---|--------------|--------------------|
 |Linux Mint, Ubuntu 18.04 or later|[ppa:yuezk/globalprotect-openconnect](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect)|[ppa:yuezk/globalprotect-openconnect-snapshot](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect-snapshot)|
 |Arch, Manjaro|[AUR: globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/)|[AUR: globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)|
-|openSUSE|[OBS: globalprotect-openconnect](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect)|[OBS: globalprotect-openconnect-snapshot](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect-snapshot)|
 |Fedora|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|
+|openSUSE, CentOS 8|[OBS: globalprotect-openconnect](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect)|[OBS: globalprotect-openconnect-snapshot](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect-snapshot)|
 
 Add the repository in the above table and install it with your favorite package manager tool.
+
+### Linux Mint, Ubuntu 18.04 or later
+
+```sh
+sudo add-apt-repository ppa:yuezk/globalprotect-openconnect
+sudo apt-get update
+sudo apt install globalprotect-openconnect
+```
+
+> For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
+
+### Arch, Manjaro
+
+```sh
+yay -S globalprotect-openconnect
+```
+
+### Fedora
+
+```sh
+sudo dnf copr enable yuezk/globalprotect-openconnect
+sudo dnf install globalprotect-openconnect
+```
+
+### openSUSE
+
+- openSUSE Tumbleweed
+  ```sh
+  sudo zypper ar https://download.opensuse.org/repositories/home:/yuezk/openSUSE_Tumbleweed/home:yuezk.repo
+  sudo zypper ref
+  sudo zypper install globalprotect-openconnect
+  ```
+
+- openSUSE Leap
+
+  ```sh
+  sudo zypper ar https://download.opensuse.org/repositories/home:/yuezk/openSUSE_Leap_15.2/home:yuezk.repo
+  sudo zypper ref
+  sudo zypper install globalprotect-openconnect
+  ```
+### CentOS 8
+
+1. Add the repository: `https://download.opensuse.org/repositories/home:/yuezk/CentOS_8/home:yuezk.repo`
+1. Install `globalprotect-openconnect`
+
   
 ## Build & Install from source code
 
