@@ -4,6 +4,9 @@ project(GPService)
 
 set(gpservice_GENERATED_SOURCES)
 
+configure_file(dbus/com.yuezk.qt.GPService.service.in dbus/com.yuezk.qt.GPService.service)
+configure_file(systemd/gpservice.service.in systemd/gpservice.service)
+
 # generate the dbus xml definition
 qt5_generate_dbus_interface(
     gpservice.h
@@ -30,10 +33,9 @@ add_3rdparty(
     GIT_TAG v3.3.0
     CMAKE_ARGS
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
         -DCMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}
         -DCMAKE_PREFIX_PATH=$ENV{CMAKE_PREFIX_PATH}
-        -DCMAKE_INCLUDE_PATH=$ENV{CMAKE_INCLUDE_PATH}
-        -DCMAKE_LIBRARY_PATH=$ENV{CMAKE_LIBRARY_PATH}
         -DQAPPLICATION_CLASS=QCoreApplication
 )
 
@@ -60,7 +62,13 @@ target_link_libraries(gpservice
 
 target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)
 
-install(TARGETS gpservice DESTINATION "/usr/bin")
-install(FILES "dbus/com.yuezk.qt.GPService.conf" DESTINATION "/usr/share/dbus-1/system.d" )
-install(FILES "dbus/com.yuezk.qt.GPService.service" DESTINATION "/usr/share/dbus-1/system-services")
-install(FILES "systemd/gpservice.service" DESTINATION "/etc/systemd/system")
+install(TARGETS gpservice DESTINATION bin)
+install(FILES "dbus/com.yuezk.qt.GPService.conf" DESTINATION share/dbus-1/system.d )
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/dbus/com.yuezk.qt.GPService.service" DESTINATION share/dbus-1/system-services)
+
+if("$ENV{DEBIAN_PACKAGE}")
+    # Install the systemd unit files to /lib/systemd/system for debian package
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/systemd/gpservice.service" DESTINATION /lib/systemd/system)
+else()
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/systemd/gpservice.service" DESTINATION lib/systemd/system)
+endif()

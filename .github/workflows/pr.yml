@@ -1,18 +1,10 @@
-name: Build
+name: PR Build
 
 on:
-  push:
-    branches:
-      - master
-      - dev
-    paths-ignore:
-      - LICENSE
-      - "*.md"
-      - .vscode
   pull_request:
     branches:
       - master
-      - dev
+      - develop
     paths-ignore:
       - LICENSE
       - "*.md"
@@ -22,7 +14,11 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   build:
-    runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, ubuntu-20.04]
+    
+    runs-on: ${{ matrix.os }}
 
     steps:
       # Checkout repository and submodules
@@ -30,6 +26,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Build & Install
+      - name: Build
         run: |
           ./scripts/install-ubuntu.sh

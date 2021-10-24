@@ -1,0 +1,26 @@
+app-id: com.yuezk.qt.gpclient
+base: io.qt.qtwebengine.BaseApp
+base-version: '5.15'
+runtime: org.kde.Platform
+runtime-version: '5.15'
+sdk: org.kde.Sdk
+command: gpclient
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --filesystem=host
+  - --device=dri
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.*
+  - --system-own-name=com.yuezk.qt.GPService
+modules:
+  - name: gpclient
+    buildsystem: cmake
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_CXX_FLAGS_RELEASE=-s
+    sources:
+      - type: archive
+        path: globalprotect-openconnect.tar.gz

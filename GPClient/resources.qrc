@@ -1,6 +1,6 @@
 <RCC>
     <qresource prefix="/images">
-        <file alias="logo.svg">com.yuezk.qt.GPClient.svg</file>
+        <file alias="logo.svg">com.yuezk.qt.gpclient.svg</file>
         <file>connected.png</file>
         <file>pending.png</file>
         <file>not_connected.png</file>

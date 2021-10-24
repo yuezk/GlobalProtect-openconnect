@@ -1,4 +1,7 @@
 {
+    "files.watcherExclude": {
+        "**/artifacts/**": true,
+    },
     "files.associations": {
         "qregularexpression": "cpp",
         "qfileinfo": "cpp",

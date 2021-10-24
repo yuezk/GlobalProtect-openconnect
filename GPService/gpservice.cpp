@@ -115,12 +115,13 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
          << "--protocol=gp"
          << splitCommand(extraArgs)
          << "-u" << username
-         << "-C" << passwd
+         << "--cookie-on-stdin"
          << server;
 
     log("Start process with arugments: " + args.join(" "));
 
     openconnect->start(bin, args);
+    openconnect->write((passwd + "\n").toUtf8());
 }
 
 bool GPService::isValidVersion(QString &bin) {

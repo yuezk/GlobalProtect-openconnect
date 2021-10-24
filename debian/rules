@@ -5,11 +5,9 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
 export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 
+export DEBIAN_PACKAGE=1
+
 %:
-	dh $@  
-
-override_dh_auto_install:
-	dh_auto_install -- prefix=/usr
-
-#override_dh_install:
-#	dh_install --list-missing -X.pyc -X.pyo
+	dh $@
+override_dh_installsystemd:
+	dh_installsystemd gpservice.service

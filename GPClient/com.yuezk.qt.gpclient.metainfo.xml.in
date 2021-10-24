@@ -37,7 +37,7 @@
         </screenshot>
     </screenshots>
     <provides>
-        <binary>/usr/bin/gpclient</binary>
+        <binary>@CMAKE_INSTALL_PREFIX@/bin/gpclient</binary>
         <dbus type="system">com.yuezk.qt.GPService</dbus>
     </provides>
 </component>

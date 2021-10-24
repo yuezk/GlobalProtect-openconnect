@@ -1,13 +1,11 @@
 # Binaries
-gpclient
-gpservice
-
 *.rpm
 *.gz
 *.snap
 .DS_Store
 build-debian
 build
+artifacts
 
 .cmake
 
