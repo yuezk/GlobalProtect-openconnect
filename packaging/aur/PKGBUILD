@@ -28,6 +28,6 @@ build() {
 }
 
 package() {
-    cd $srcdir/$pkgdir-*/
+    cd $srcdir/$pkgname-*/
     make DESTDIR="$pkgdir/" install -C build
 }
