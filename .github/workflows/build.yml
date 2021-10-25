@@ -71,8 +71,7 @@ jobs:
       - name: Extract source code
         run: |
           cd $GITHUB_WORKSPACE/artifacts
-          mkdir deb-build
-          cp *.tar.gz deb-build && cd deb-build
+          mkdir deb-build && cp *.tar.gz deb-build && cd deb-build
           tar xf *.tar.gz
 
       - name: Publish PPA
@@ -82,7 +81,6 @@ jobs:
           gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
           gpg_passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
           pkgdir: '${{ github.workspace }}/artifacts/deb-build/globalprotect-openconnect*/'
-          series: 'bionic focal hirsute impish'
       
   snapshot-aur:
     if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
