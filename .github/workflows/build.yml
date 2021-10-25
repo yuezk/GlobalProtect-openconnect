@@ -82,7 +82,6 @@ jobs:
           gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
           gpg_passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
           pkgdir: '${{ github.workspace }}/artifacts/deb-build/globalprotect-openconnect*/'
-          is_native: false
           series: 'bionic focal hirsute impish'
       
   snapshot-aur:
