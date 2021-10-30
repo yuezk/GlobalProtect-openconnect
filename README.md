@@ -5,8 +5,10 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
   <img src="https://user-images.githubusercontent.com/3297602/133869036-5c02b0d9-c2d9-4f87-8c81-e44f68cfd6ac.png">
 </p>
 
-<a href="https://ko-fi.com/M4M75PYKZ" target="_blank"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="ko-fi" style="height: 35px !important;width: auto !important;"></a>
-<a href="https://www.buymeacoffee.com/yuezk" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 35px !important;width: auto !important;" ></a>
+<a href="https://paypal.me/zongkun" target="_blank"><img src="https://cdn.jsdelivr.net/gh/everdrone/coolbadge@5ea5937cabca5ecbfc45d6b30592bd81f219bc8d/badges/Paypal/Coffee/Blue/Small.png" alt="Buy me a coffee via Paypal" style="height: 32px; width: 268px;" ></a>
+<a href="https://ko-fi.com/M4M75PYKZ" target="_blank"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" style="height: 32px; width: 238px;"></a>
+<a href="https://www.buymeacoffee.com/yuezk" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 32px; width: 114px;" ></a>
+
 
 ## Features
 
