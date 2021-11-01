@@ -39,7 +39,13 @@ sudo apt install globalprotect-openconnect
 
 > For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
 
-### Arch, Manjaro
+### Arch Linux
+
+```sh
+sudo pacman -S globalprotect-openconnect
+```
+
+### Manjaro
 
 ```sh
 yay -S globalprotect-openconnect
@@ -82,10 +88,6 @@ Clone this repo with:
 git clone https://github.com/yuezk/GlobalProtect-openconnect.git
 cd GlobalProtect-openconnect
 ```
-
-### Arch/Manjaro
-
-Install from the [globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/) AUR.
 
 ### Ubuntu/Mint
 
