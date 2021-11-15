@@ -1,14 +1,17 @@
 #include <QtNetwork/QNetworkReply>
+#include <QtCore/QRegularExpression>
+#include <QtCore/QRegularExpressionMatch>
 #include <plog/Log.h>
 
 #include "gatewayauthenticator.h"
 #include "gphelper.h"
 #include "loginparams.h"
 #include "preloginresponse.h"
+#include "challengedialog.h"
 
 using namespace gpclient::helper;
 
-GatewayAuthenticator::GatewayAuthenticator(const QString& gateway, const GatewayAuthenticatorParams params)
+GatewayAuthenticator::GatewayAuthenticator(const QString& gateway, GatewayAuthenticatorParams params)
     : QObject()
     , gateway(gateway)
     , params(params)
@@ -33,6 +36,7 @@ void GatewayAuthenticator::authenticate()
     loginParams.setUser(params.username());
     loginParams.setPassword(params.password());
     loginParams.setUserAuthCookie(params.userAuthCookie());
+    loginParams.setInputStr(params.inputStr());
 
     login(loginParams);
 }
@@ -48,10 +52,10 @@ void GatewayAuthenticator::login(const LoginParams &loginParams)
 void GatewayAuthenticator::onLoginFinished()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    QByteArray response;
+    QByteArray response = reply->readAll();
 
-    if (reply->error() || (response = reply->readAll()).contains("Authentication failure")) {
-        PLOGE << QString("Failed to login the gateway at %1, %2").arg(loginUrl).arg(reply->errorString());
+    if (reply->error() || response.contains("Authentication failure")) {
+        PLOGE << QString("Failed to login the gateway at %1, %2").arg(loginUrl, reply->errorString());
 
         if (normalLoginWindow) {
             normalLoginWindow->setProcessing(false);
@@ -59,6 +63,12 @@ void GatewayAuthenticator::onLoginFinished()
         } else {
             doAuth();
         }
+        return;
+    }
+
+    // 2FA
+    if (response.contains("Challenge")) {
+        showChallenge(response);
         return;
     }
 
@@ -83,7 +93,7 @@ void GatewayAuthenticator::onPreloginFinished()
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
 
     if (reply->error()) {
-        PLOGE << QString("Failed to prelogin the gateway at %1, %2").arg(preloginUrl).arg(reply->errorString());
+        PLOGE << QString("Failed to prelogin the gateway at %1, %2").arg(preloginUrl, reply->errorString());
 
         emit fail("Error occurred on the gateway prelogin interface.");
         return;
@@ -98,7 +108,7 @@ void GatewayAuthenticator::onPreloginFinished()
     } else if (response.hasNormalAuthFields()) {
         normalAuth(response.labelUsername(), response.labelPassword(), response.authMessage());
     } else {
-        PLOGE << QString("Unknown prelogin response for %1, got %2").arg(preloginUrl).arg(QString::fromUtf8(response.rawResponse()));
+        PLOGE << QString("Unknown prelogin response for %1, got %2").arg(preloginUrl, QString::fromUtf8(response.rawResponse()));
         emit fail("Unknown response for gateway prelogin interface.");
     }
 
@@ -107,7 +117,7 @@ void GatewayAuthenticator::onPreloginFinished()
 
 void GatewayAuthenticator::normalAuth(QString labelUsername, QString labelPassword, QString authMessage)
 {
-    PLOGI << QString("Trying to perform the normal login with %1 / %2 credentials").arg(labelUsername).arg(labelPassword);
+    PLOGI << QString("Trying to perform the normal login with %1 / %2 credentials").arg(labelUsername, labelPassword);
 
     normalLoginWindow = new NormalLoginWindow;
     normalLoginWindow->setPortalAddress(gateway);
@@ -178,4 +188,38 @@ void GatewayAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> &saml
 void GatewayAuthenticator::onSAMLLoginFail(const QString msg)
 {
     emit fail(msg);
+}
+
+void GatewayAuthenticator::showChallenge(const QString &responseText)
+{
+    QRegularExpression re("\"(.*?)\";");
+    QRegularExpressionMatchIterator i = re.globalMatch(responseText);
+
+    i.next(); // Skip the status value
+    QString message = i.next().captured(1);
+    QString inputStr = i.next().captured(1);
+    // update the inputSrc field
+    params.setInputStr(inputStr);
+
+    challengeDialog = new ChallengeDialog;
+    challengeDialog->setMessage(message);
+
+    connect(challengeDialog, &ChallengeDialog::accepted, this, [this] {
+        params.setPassword(challengeDialog->getChallenge());
+        authenticate();
+    });
+
+    connect(challengeDialog, &ChallengeDialog::rejected, this, [this] {
+        if (normalLoginWindow) {
+            normalLoginWindow->close();
+        }
+        emit fail();
+    });
+
+    connect(challengeDialog, &ChallengeDialog::finished, this, [this] {
+        delete challengeDialog;
+        challengeDialog = nullptr;
+    });
+
+    challengeDialog->show();
 }

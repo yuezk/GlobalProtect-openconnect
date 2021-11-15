@@ -55,3 +55,13 @@ void GatewayAuthenticatorParams::setClientos(const QString &newClientos)
     m_clientos = newClientos;
 }
 
+const QString &GatewayAuthenticatorParams::inputStr() const
+{
+    return m_inputStr;
+}
+
+void GatewayAuthenticatorParams::setInputStr(const QString &inputStr)
+{
+    m_inputStr = inputStr;
+}
+

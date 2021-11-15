@@ -41,7 +41,7 @@ void PortalAuthenticator::onPreloginFinished()
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
 
     if (reply->error()) {
-        PLOGE << QString("Error occurred while accessing %1, %2").arg(preloginUrl).arg(reply->errorString());
+        PLOGE << QString("Error occurred while accessing %1, %2").arg(preloginUrl, reply->errorString());
         emit preloginFailed("Error occurred on the portal prelogin interface.");
         delete reply;
         return;

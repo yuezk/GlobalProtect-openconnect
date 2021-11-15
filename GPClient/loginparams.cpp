@@ -6,7 +6,7 @@ LoginParams::LoginParams(const QString clientos)
 {
     params.addQueryItem("prot", QUrl::toPercentEncoding("https:"));
     params.addQueryItem("server", "");
-    params.addQueryItem("inputSrc", "");
+    params.addQueryItem("inputStr", "");
     params.addQueryItem("jnlpReady", "jnlpReady");
     params.addQueryItem("user", "");
     params.addQueryItem("passwd", "");
@@ -59,6 +59,11 @@ void LoginParams::setPrelogonAuthCookie(const QString cookie)
 void LoginParams::setPreloginCookie(const QString cookie)
 {
     updateQueryItem("prelogin-cookie", cookie);
+}
+
+void LoginParams::setInputStr(const QString inputStr)
+{
+    updateQueryItem("inputStr", inputStr);
 }
 
 QByteArray LoginParams::toUtf8() const

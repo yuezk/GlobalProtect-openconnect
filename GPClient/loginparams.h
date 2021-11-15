@@ -15,6 +15,7 @@ public:
     void setUserAuthCookie(const QString cookie);
     void setPrelogonAuthCookie(const QString cookie);
     void setPreloginCookie(const QString cookie);
+    void setInputStr(const QString inputStr);
 
     QByteArray toUtf8() const;
 
