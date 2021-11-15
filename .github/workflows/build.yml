@@ -67,64 +67,21 @@ jobs:
         with:
           name: snapshot-source-code
           path: artifacts
-
-      - name: Import GPG key
-        id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v4
-        with:
-          gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
       
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install debmake debhelper cmake \
-            libqt5websockets5-dev qtbase5-dev qtwebengine5-dev
-
-      - name: Build deb package for 18.04
+      - name: Extract source code
         run: |
           cd $GITHUB_WORKSPACE/artifacts
-          mkdir build-18.04
-          cp *.tar.gz build-18.04 && cd build-18.04
+          mkdir deb-build && cp *.tar.gz deb-build && cd deb-build
           tar xf *.tar.gz
-          cd globalprotect-openconnect-*/
 
-          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
-          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 18.04
-
-      - name: Build deb package for 20.04
-        run: | 
-          cd $GITHUB_WORKSPACE/artifacts
-          mkdir build-20.04
-          cp *.tar.gz build-20.04 && cd build-20.04
-          tar xf *.tar.gz
-          cd globalprotect-openconnect-*/
-
-          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
-          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 20.04
-
-      - name: Build deb package for 21.04
-        run: | 
-          cd $GITHUB_WORKSPACE/artifacts
-          mkdir build-21.04
-          cp *.tar.gz build-21.04 && cd build-21.04
-          tar xf *.tar.gz
-          cd globalprotect-openconnect-*/
-
-          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
-          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 21.04
-
-      - name: Build deb package for 21.10
-        run: | 
-          cd $GITHUB_WORKSPACE/artifacts
-          mkdir build-21.10
-          cp *.tar.gz build-21.10 && cd build-21.10
-          tar xf *.tar.gz
-          cd globalprotect-openconnect-*/
-
-          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
-          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 21.10
-
+      - name: Publish PPA
+        uses: yuezk/publish-ppa-package@develop
+        with:
+          repository: 'ppa:yuezk/globalprotect-openconnect-snapshot'
+          gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+          gpg_passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
+          pkgdir: '${{ github.workspace }}/artifacts/deb-build/globalprotect-openconnect*/'
+      
   snapshot-aur:
     if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
     needs: snapshot-archive-all
@@ -234,62 +191,19 @@ jobs:
           name: release-source-code
           path: artifacts
 
-      - name: Import GPG key
-        id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v4
+      - name: Extract source code
+        run: |
+          cd $GITHUB_WORKSPACE/artifacts
+          mkdir deb-build && cp *.tar.gz deb-build && cd deb-build
+          tar xf *.tar.gz
+
+      - name: Publish PPA
+        uses: yuezk/publish-ppa-package@develop
         with:
+          repository: 'ppa:yuezk/globalprotect-openconnect'
           gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
-      
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install debmake debhelper cmake \
-            libqt5websockets5-dev qtbase5-dev qtwebengine5-dev
-
-      - name: Build deb package for 18.04
-        run: |
-          cd $GITHUB_WORKSPACE/artifacts
-          mkdir build-18.04
-          cp *.tar.gz build-18.04 && cd build-18.04
-          tar xf *.tar.gz
-          cd globalprotect-openconnect-*/
-
-          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
-          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 18.04 --stable
-
-      - name: Build deb package for 20.04
-        run: | 
-          cd $GITHUB_WORKSPACE/artifacts
-          mkdir build-20.04
-          cp *.tar.gz build-20.04 && cd build-20.04
-          tar xf *.tar.gz
-          cd globalprotect-openconnect-*/
-
-          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
-          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 20.04 --stable
-
-      - name: Build deb package for 21.04
-        run: | 
-          cd $GITHUB_WORKSPACE/artifacts
-          mkdir build-21.04
-          cp *.tar.gz build-21.04 && cd build-21.04
-          tar xf *.tar.gz
-          cd globalprotect-openconnect-*/
-
-          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
-          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 21.04 --stable
-
-      - name: Build deb package for 21.10
-        run: | 
-          cd $GITHUB_WORKSPACE/artifacts
-          mkdir build-21.10
-          cp *.tar.gz build-21.10 && cd build-21.10
-          tar xf *.tar.gz
-          cd globalprotect-openconnect-*/
-
-          PPA_GPG_PASSPHRASE=${{ secrets.PPA_GPG_PASSPHRASE }} \
-          PPA_GPG_KEYID=${{ steps.import_gpg.outputs.keyid }} ./scripts/ppa-publish.sh 21.10 --stable
+          gpg_passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
+          pkgdir: '${{ github.workspace }}/artifacts/deb-build/globalprotect-openconnect*/'
   
   release-aur:
     if: startsWith(github.ref, 'refs/tags/v')
