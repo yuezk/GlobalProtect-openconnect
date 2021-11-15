@@ -36,4 +36,3 @@ void ChallengeDialog::on_challengeInput_textChanged(const QString &value)
         okBtn->setEnabled(true);
     }
 }
-

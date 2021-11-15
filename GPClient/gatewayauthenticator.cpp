@@ -68,6 +68,7 @@ void GatewayAuthenticator::onLoginFinished()
 
     // 2FA
     if (response.contains("Challenge")) {
+        PLOGI << "The server need input the challenge...";
         showChallenge(response);
         return;
     }
@@ -206,6 +207,7 @@ void GatewayAuthenticator::showChallenge(const QString &responseText)
 
     connect(challengeDialog, &ChallengeDialog::accepted, this, [this] {
         params.setPassword(challengeDialog->getChallenge());
+        PLOGI << "Challenge submitted, try to re-authenticate...";
         authenticate();
     });
 
