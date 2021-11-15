@@ -139,11 +139,10 @@ void GatewayAuthenticator::onPerformNormalLogin(const QString &username, const Q
     PLOGI << "Start to perform normal login...";
 
     normalLoginWindow->setProcessing(true);
-    LoginParams loginParams { params.clientos() };
-    loginParams.setUser(username);
-    loginParams.setPassword(password);
+    params.setUsername(username);
+    params.setPassword(password);
     
-    login(loginParams);
+    authenticate();
 }
 
 void GatewayAuthenticator::onLoginWindowRejected()
