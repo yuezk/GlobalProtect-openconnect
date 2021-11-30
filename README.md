@@ -153,7 +153,7 @@ Install the Qt5 dependencies and OpenConnect:
 
 ## Run
 
-Once the software is installed, you can run `gpcclient` to start the UI,
+Once the software is installed, you can run `gpclient` to start the UI,
 
 ## Passing the Custom Parameters to `OpenConnect` CLI
 
