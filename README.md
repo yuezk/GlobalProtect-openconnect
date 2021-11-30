@@ -151,12 +151,15 @@ Install the Qt5 dependencies and OpenConnect:
   environment.systemPackages = [ globalprotect-openconnect ];
   ```
 
+## Run
+
+Once the software is installed, you can run `gpcclient` to start the UI,
+
 ## Passing the Custom Parameters to `OpenConnect` CLI
 
 Custom parameters can be appended to the `OpenConnect` CLI with the following settings.
 
 > Tokens with spaces can be surrounded by double quotes; three consecutive double quotes represent the quote character itself.
-
 
 <p align="center">
   <img src="https://user-images.githubusercontent.com/3297602/130319209-744be02b-d657-4f49-a76d-d2c81b5c46d5.png" />
