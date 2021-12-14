@@ -16,83 +16,13 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 
 - It now saves your credentials (not very secure, be aware of that)
 
-
-## Install
-
-|OS|Stable version | Development version|
-|---|--------------|--------------------|
-|Linux Mint, Ubuntu 18.04 or later|[ppa:yuezk/globalprotect-openconnect](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect)|[ppa:yuezk/globalprotect-openconnect-snapshot](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect-snapshot)|
-|Arch, Manjaro|[globalprotect-openconnect](https://archlinux.org/packages/community/x86_64/globalprotect-openconnect/)|[AUR: globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)|
-|Fedora|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|
-|openSUSE, CentOS 8|[OBS: globalprotect-openconnect](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect)|[OBS: globalprotect-openconnect-snapshot](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect-snapshot)|
-
-Add the repository in the above table and install it with your favorite package manager tool.
-
-[![Arch package](https://repology.org/badge/version-for-repo/arch/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![AUR package](https://repology.org/badge/version-for-repo/aur/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![Manjaro Stable package](https://repology.org/badge/version-for-repo/manjaro_stable/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![Manjaro Testing package](https://repology.org/badge/version-for-repo/manjaro_testing/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![Manjaro Unstable package](https://repology.org/badge/version-for-repo/manjaro_unstable/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![Parabola package](https://repology.org/badge/version-for-repo/parabola/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-
-### Linux Mint, Ubuntu 18.04 or later
-
-```sh
-sudo add-apt-repository ppa:yuezk/globalprotect-openconnect
-sudo apt-get update
-sudo apt install globalprotect-openconnect
-```
-
-> For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
-
-### Arch Linux / Manjaro
-
-```sh
-sudo pacman -S globalprotect-openconnect
-```
-
-### AUR snapshot version
-
-```sh
-yay -S globalprotect-openconnect-git
-```
-
-### Fedora
-
-```sh
-sudo dnf copr enable yuezk/globalprotect-openconnect
-sudo dnf install globalprotect-openconnect
-```
-
-### openSUSE
-
-- openSUSE Tumbleweed
-  ```sh
-  sudo zypper ar https://download.opensuse.org/repositories/home:/yuezk/openSUSE_Tumbleweed/home:yuezk.repo
-  sudo zypper ref
-  sudo zypper install globalprotect-openconnect
-  ```
-
-- openSUSE Leap
-
-  ```sh
-  sudo zypper ar https://download.opensuse.org/repositories/home:/yuezk/openSUSE_Leap_15.2/home:yuezk.repo
-  sudo zypper ref
-  sudo zypper install globalprotect-openconnect
-  ```
-### CentOS 8
-
-1. Add the repository: `https://download.opensuse.org/repositories/home:/yuezk/CentOS_8/home:yuezk.repo`
-1. Install `globalprotect-openconnect`
-
   
 ## Build & Install from source code
 
 Clone this repo with:
 
 ```sh
-git clone https://github.com/yuezk/GlobalProtect-openconnect.git
+git clone https://github.com/CarloRamponi/GlobalProtect-openconnect.git
 cd GlobalProtect-openconnect
 ```
 
@@ -179,15 +109,6 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
 <p align="center">
   <img src="https://user-images.githubusercontent.com/3297602/130831022-b93492fd-46dd-4a8e-94a4-13b5747120b7.png" />
 <p>
-
-  
-
-## Future plan
-
-- [x] Improve the release process
-- [ ] Process bugs and feature requests
-- [ ] Support for bypassing the `gpclient` parameters
-- [ ] Support the CLI mode
   
   
 ## Troubleshooting
