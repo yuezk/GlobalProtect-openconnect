@@ -2,7 +2,7 @@
 
 #include "normalloginwindow.h"
 #include "ui_normalloginwindow.h"
-#include "gpheader.h"
+#include "gphelper.h"
 
 using namespace gpclient::helper;
 
