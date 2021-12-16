@@ -11,9 +11,10 @@
 
 using namespace gpclient::helper;
 
-GPClient::GPClient(QWidget *parent)
+GPClient::GPClient(QWidget *parent, IVpn *vpn)
     : QMainWindow(parent)
     , ui(new Ui::GPClient)
+    , vpn(vpn)
     , settingsDialog(new SettingsDialog(this))
 {
     ui->setupUi(this);
@@ -25,14 +26,14 @@ GPClient::GPClient(QWidget *parent)
     setupSettings();
 
     // Restore portal from the previous settings
-    ui->portalInput->setText(settings::get("portal", "").toString());
+    this->portal(settings::get("portal", "").toString());
 
     // DBus service setup
-    vpn = new com::yuezk::qt::GPService("com.yuezk.qt.GPService", "/", QDBusConnection::systemBus(), this);
-    connect(vpn, &com::yuezk::qt::GPService::connected, this, &GPClient::onVPNConnected);
-    connect(vpn, &com::yuezk::qt::GPService::disconnected, this, &GPClient::onVPNDisconnected);
-    connect(vpn, &com::yuezk::qt::GPService::error, this, &GPClient::onVPNError);
-    connect(vpn, &com::yuezk::qt::GPService::logAvailable, this, &GPClient::onVPNLogAvailable);
+    QObject *ov = dynamic_cast<QObject*>(vpn);
+    connect(ov, SIGNAL(connected()), this, SLOT(onVPNConnected()));
+    connect(ov, SIGNAL(disconnected()), this, SLOT(onVPNDisconnected()));
+    connect(ov, SIGNAL(error(const &QString)), this, SLOT(onVPNError(const QString&)));
+    connect(ov, SIGNAL(logAvailable(const &QString)), this, SLOT(onVPNLogAvailable(const QString&)));
 
     // Initiallize the context menu of system tray.
     initSystemTrayIcon();
@@ -373,7 +374,11 @@ void GPClient::onGatewaySuccess(const QString &authCookie)
     PLOGI << "Gateway login succeeded, got the cookie " << authCookie;
 
     isQuickConnect = false;
-    vpn->connect(currentGateway().address(), portalConfig.username(), authCookie, settings::get("extraArgs", "").toString());
+    QList<QString> gatewayAddresses;
+    for (GPGateway &gw : allGateways()) {
+      gatewayAddresses.push_back(gw.address());
+    }
+    vpn->connect(currentGateway().address(), gatewayAddresses, portalConfig.username(), authCookie, settings::get("extraArgs", "").toString());
     ui->statusLabel->setText("Connecting...");
     updateConnectionStatus(VpnStatus::pending);
 }
@@ -408,6 +413,11 @@ QString GPClient::portal() const
         return QUrl(input).authority();
     }
     return input;
+}
+
+void GPClient::portal(QString p)
+{
+    ui->portalInput->setText(p);
 }
 
 bool GPClient::connected() const
