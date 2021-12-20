@@ -195,9 +195,6 @@ void PortalAuthenticator::onFetchConfigFinished()
     if (normalLoginWindow) {
         PLOGI << "Closing the NormalLoginWindow...";
 
-        // Save the credentials for reuse
-        settings::save("username", username);
-        settings::save("password", password);
         normalLoginWindow->close();
     }
 

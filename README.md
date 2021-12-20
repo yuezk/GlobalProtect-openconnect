@@ -23,11 +23,19 @@ A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Q
 |OS|Stable version | Development version|
 |---|--------------|--------------------|
 |Linux Mint, Ubuntu 18.04 or later|[ppa:yuezk/globalprotect-openconnect](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect)|[ppa:yuezk/globalprotect-openconnect-snapshot](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect-snapshot)|
-|Arch, Manjaro|[AUR: globalprotect-openconnect](https://aur.archlinux.org/packages/globalprotect-openconnect/)|[AUR: globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)|
+|Arch, Manjaro|[globalprotect-openconnect](https://archlinux.org/packages/community/x86_64/globalprotect-openconnect/)|[AUR: globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)|
 |Fedora|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|
 |openSUSE, CentOS 8|[OBS: globalprotect-openconnect](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect)|[OBS: globalprotect-openconnect-snapshot](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect-snapshot)|
 
 Add the repository in the above table and install it with your favorite package manager tool.
+
+[![Arch package](https://repology.org/badge/version-for-repo/arch/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
+[![AUR package](https://repology.org/badge/version-for-repo/aur/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
+[![Manjaro Stable package](https://repology.org/badge/version-for-repo/manjaro_stable/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
+[![Manjaro Testing package](https://repology.org/badge/version-for-repo/manjaro_testing/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
+[![Manjaro Unstable package](https://repology.org/badge/version-for-repo/manjaro_unstable/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
+[![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
+[![Parabola package](https://repology.org/badge/version-for-repo/parabola/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
 
 ### Linux Mint, Ubuntu 18.04 or later
 
@@ -39,16 +47,16 @@ sudo apt install globalprotect-openconnect
 
 > For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
 
-### Arch Linux
+### Arch Linux / Manjaro
 
 ```sh
 sudo pacman -S globalprotect-openconnect
 ```
 
-### Manjaro
+### AUR snapshot version
 
 ```sh
-yay -S globalprotect-openconnect
+yay -S globalprotect-openconnect-git
 ```
 
 ### Fedora
@@ -151,12 +159,15 @@ Install the Qt5 dependencies and OpenConnect:
   environment.systemPackages = [ globalprotect-openconnect ];
   ```
 
+## Run
+
+Once the software is installed, you can run `gpclient` to start the UI.
+
 ## Passing the Custom Parameters to `OpenConnect` CLI
 
 Custom parameters can be appended to the `OpenConnect` CLI with the following settings.
 
 > Tokens with spaces can be surrounded by double quotes; three consecutive double quotes represent the quote character itself.
-
 
 <p align="center">
   <img src="https://user-images.githubusercontent.com/3297602/130319209-744be02b-d657-4f49-a76d-d2c81b5c46d5.png" />
