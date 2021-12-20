@@ -33,6 +33,9 @@ add_executable(gpclient
     gpclient.ui
     normalloginwindow.ui
     settingsdialog.ui
+    challengedialog.h
+    challengedialog.cpp
+    challengedialog.ui
     vpn_dbus.cpp
     vpn_json.cpp
     resources.qrc

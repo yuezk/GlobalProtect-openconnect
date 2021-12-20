@@ -24,11 +24,15 @@ public:
     const QString &clientos() const;
     void setClientos(const QString &newClientos);
 
+    const QString &inputStr() const;
+    void setInputStr(const QString &inputStr);
+
 private:
     QString m_username;
     QString m_password;
     QString m_userAuthCookie;
     QString m_clientos;
+    QString m_inputStr;
 };
 
 #endif // GATEWAYAUTHENTICATORPARAMS_H
