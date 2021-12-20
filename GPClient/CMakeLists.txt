@@ -33,14 +33,11 @@ add_executable(gpclient
     gpclient.ui
     normalloginwindow.ui
     settingsdialog.ui
-<<<<<<< HEAD
     challengedialog.h
     challengedialog.cpp
     challengedialog.ui
-=======
     vpn_dbus.cpp
     vpn_json.cpp
->>>>>>> master
     resources.qrc
     ${gpclient_GENERATED_SOURCES}
 )
