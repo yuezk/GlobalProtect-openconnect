@@ -304,7 +304,7 @@ do-versionfile() {
   [ -f VERSION ] && ACTION_MSG="Updated" || ACTION_MSG="Created"
 
   GIT_MSG+="${ACTION_MSG} VERSION, "
-  echo $V_USR_INPUT > VERSION # Create file
+  echo $V_USR_INPUT | tr -d "\n" > VERSION # Create file
   echo -e "\n${I_OK} ${S_NOTICE}${ACTION_MSG} [${S_NORM}VERSION${S_NOTICE}] file"
 
   # Stage file for commit
