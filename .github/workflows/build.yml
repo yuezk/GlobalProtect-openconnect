@@ -220,7 +220,7 @@ jobs:
           VERSION: $(cat ./artifacts/VERSION)
         uses: yuezk/github-actions-deploy-aur@update-pkgver
         with:
-          pkgname: globalprotect-openconnect
+          pkgname: globalprotect-openconnect-git
           pkgbuild: ./artifacts/aur/PKGBUILD
           assets: ./artifacts/aur/*.tar.gz
           update_pkgver: true
