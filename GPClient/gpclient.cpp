@@ -32,8 +32,8 @@ GPClient::GPClient(QWidget *parent, IVpn *vpn)
     QObject *ov = dynamic_cast<QObject*>(vpn);
     connect(ov, SIGNAL(connected()), this, SLOT(onVPNConnected()));
     connect(ov, SIGNAL(disconnected()), this, SLOT(onVPNDisconnected()));
-    connect(ov, SIGNAL(error(const &QString)), this, SLOT(onVPNError(const QString&)));
-    connect(ov, SIGNAL(logAvailable(const &QString)), this, SLOT(onVPNLogAvailable(const QString&)));
+    connect(ov, SIGNAL(error(QString)), this, SLOT(onVPNError(QString)));
+    connect(ov, SIGNAL(logAvailable(QString)), this, SLOT(onVPNLogAvailable(QString)));
 
     // Initiallize the context menu of system tray.
     initSystemTrayIcon();
