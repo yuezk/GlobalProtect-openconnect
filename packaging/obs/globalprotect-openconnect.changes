@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Thu Mar  3 13:58:59 UTC 2022 - k3vinyue@gmail.com - 1.4.1
+
+- Update to 1.4.1
+  * Updated VERSION, Bumped 1.4.0 –> 1.4.1
+  * print the gpservice logs
+  * update AUR packaging
+
+-------------------------------------------------------------------
 Wed Mar  2 13:34:19 UTC 2022 - k3vinyue@gmail.com - 1.4.0
 
 - Update to 1.4.0
