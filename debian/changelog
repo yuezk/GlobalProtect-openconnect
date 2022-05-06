@@ -1,3 +1,10 @@
+globalprotect-openconnect (1.4.2-1) unstable; urgency=medium
+
+  * Updated VERSION, Bumped 1.4.1 –> 1.4.2
+  * Clear SSL_OP_LEGACY_SERVER_CONNECT (#146)
+
+ -- Kevin Yue <k3vinyue@gmail.com>  Fri, 06 May 2022 22:18:19 +0800
+
 globalprotect-openconnect (1.4.1-1) unstable; urgency=medium
 
   * Updated VERSION, Bumped 1.4.0 –> 1.4.1

@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Fri May  6 14:18:19 UTC 2022 - k3vinyue@gmail.com - 1.4.2
+
+- Update to 1.4.2
+  * Updated VERSION, Bumped 1.4.1 –> 1.4.2
+  * Clear SSL_OP_LEGACY_SERVER_CONNECT (#146)
+
+-------------------------------------------------------------------
 Thu Mar  3 13:58:59 UTC 2022 - k3vinyue@gmail.com - 1.4.1
 
 - Update to 1.4.1
