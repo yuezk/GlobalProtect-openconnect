@@ -19,6 +19,7 @@ QNetworkReply* gpclient::helper::createRequest(QString url, QByteArray params)
     // Skip the ssl verifying
     QSslConfiguration conf = request.sslConfiguration();
     conf.setPeerVerifyMode(QSslSocket::VerifyNone);
+    conf.setSslOption(QSsl::SslOptionDisableLegacyRenegotiation, false);
     request.setSslConfiguration(conf);
 
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
