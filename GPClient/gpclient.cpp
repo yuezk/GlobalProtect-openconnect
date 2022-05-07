@@ -68,14 +68,12 @@ void GPClient::setupSettings()
 
 void GPClient::onSettingsButtonClicked()
 {
-    settingsDialog->setExtraArgs(settings::get("extraArgs", "").toString());
     settingsDialog->setClientos(settings::get("clientos", "Linux").toString());
     settingsDialog->show();
 }
 
 void GPClient::onSettingsAccepted()
 {
-    settings::save("extraArgs", settingsDialog->extraArgs());
     settings::save("clientos", settingsDialog->clientos());
 }
 
