@@ -37,7 +37,7 @@ signals:
     void logAvailable(QString log);
 
 public slots:
-    void connect(QString server, QString username, QString passwd, QString extraArgs);
+    void connect(QString server, QString username, QString passwd);
     void disconnect();
     int status();
 
@@ -56,7 +56,8 @@ private:
     void log(QString msg);
     bool isValidVersion(QString &bin);
     static QString findBinary();
-    static QStringList splitCommand(QString command);
+    static QString extraOpenconnectArgs(const QString &gateway);
+    static QStringList splitCommand(const QString &command);
 };
 
 #endif // GLOBALPROTECTSERVICE_H

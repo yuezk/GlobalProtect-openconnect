@@ -22,6 +22,7 @@ qt5_add_dbus_adaptor(
 )
 
 add_executable(gpservice
+    gpservice.h
     gpservice.cpp
     main.cpp
     ${gpservice_GENERATED_SOURCES}
@@ -58,6 +59,7 @@ target_link_libraries(gpservice
     Qt5::Network
     Qt5::DBus
     QtSignals
+    inih
 )
 
 target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)
@@ -65,6 +67,7 @@ target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)
 install(TARGETS gpservice DESTINATION bin)
 install(FILES "dbus/com.yuezk.qt.GPService.conf" DESTINATION share/dbus-1/system.d )
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/dbus/com.yuezk.qt.GPService.service" DESTINATION share/dbus-1/system-services)
+install(FILES "gp.conf" DESTINATION /etc/gpservice)
 
 if("$ENV{DEBIAN_PACKAGE}")
     # Install the systemd unit files to /lib/systemd/system for debian package
