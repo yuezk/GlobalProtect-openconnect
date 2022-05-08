@@ -37,7 +37,7 @@
       <bool>true</bool>
      </property>
      <property name="placeholderText">
-      <string>Moved to &quot;/etc/gpservice/gp.conf&quot;</string>
+      <string>The configuration has been moved to &quot;/etc/gpservice/gp.conf&quot;</string>
      </property>
     </widget>
    </item>
