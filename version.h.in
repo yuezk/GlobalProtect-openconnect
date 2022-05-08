@@ -1,1 +1,1 @@
-#define VERSION "@GlobalProtect-openconnect_VERSION@"
+#define VERSION "@version@"
