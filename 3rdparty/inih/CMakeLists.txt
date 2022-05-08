@@ -8,3 +8,4 @@ add_library(inih STATIC
     cpp/INIReader.h
     cpp/INIReader.cpp
 )
+target_include_directories(inih INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
