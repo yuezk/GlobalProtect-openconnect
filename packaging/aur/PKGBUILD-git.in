@@ -17,7 +17,8 @@ sha256sums=('SKIP')
 
 pkgver() {
     cd GlobalProtect-openconnect
-    git describe --tags --match "v$(cat VERSION)" | sed -r -e 's/-/+snapshot/' -e 's/^v//' > VERSION
+    VERSION="v$(cat VERSION)"
+    git describe --tags --match "${VERSION}" | sed -re 's/^v([^-]+)-([^-]+)-(.+)/\1+\2snapshot.\3/' > VERSION
     cat VERSION
 }
 
