@@ -18,8 +18,7 @@ cp -r ./packaging/obs ./artifacts
 cp ./artifacts/*.tar.gz ./artifacts/obs/globalprotect-openconnect.tar.gz
 
 # Prepare the AUR package
-cp ./packaging/aur/PKGBUILD-git ./artifacts/aur/PKGBUILD
-cp ./artifacts/*.tar.gz ./artifacts/aur/globalprotect-openconnect.tar.gz
+cp ./packaging/aur/PKGBUILD ./artifacts/aur/PKGBUILD
 
 # Prepare the flatpak package
 cp ./packaging/flatpak/com.yuezk.qt.gpclient.yml ./artifacts/flatpak

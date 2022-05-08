@@ -32,8 +32,14 @@ function update_rpm_changelog() {
 	EOF
 }
 
+function generate_pkgbuild() {
+	local COMMIT_ID="$(git rev-parse HEAD)"
+	sed -e "s/{COMMIT}/${COMMIT_ID}/" packaging/aur/PKGBUILD-git.in > packaging/aur/PKGBUILD
+}
+
 # Update rpm version
 sed -i"" -re "s/(Version:\s+).+/\1${NEW_VERSION}/" packaging/obs/globalprotect-openconnect.spec
 
 update_rpm_changelog
 update_debian_changelog
+generate_pkgbuild
