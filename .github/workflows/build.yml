@@ -124,7 +124,8 @@ jobs:
           files: ./artifacts/obs/*
 
   snapshot-snap:
-    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+    # if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+    if: ${{ false }}
     needs: snapshot-archive-all
     runs-on: ubuntu-latest
 
