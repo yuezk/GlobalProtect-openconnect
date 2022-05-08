@@ -97,7 +97,7 @@ jobs:
         with:
           pkgname: globalprotect-openconnect-git
           pkgbuild: ./artifacts/aur/PKGBUILD
-          assets: ./artifacts/aur/*.tar.gz
+          assets: ./artifacts/aur/gp.install
           update_pkgver: true
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
@@ -218,7 +218,7 @@ jobs:
         with:
           pkgname: globalprotect-openconnect-git
           pkgbuild: ./artifacts/aur/PKGBUILD
-          assets: ./artifacts/aur/*.tar.gz
+          assets: ./artifacts/aur/gp.install
           update_pkgver: true
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}

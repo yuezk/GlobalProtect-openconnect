@@ -7,6 +7,10 @@ pkgdesc="A GlobalProtect VPN client (GUI) for Linux based on Openconnect and bui
 arch=(x86_64 aarch64)
 url="https://github.com/yuezk/GlobalProtect-openconnect"
 license=('GPL3')
+backup=(
+    etc/gpservice/gp.conf
+)
+install=gp.install
 depends=('openconnect>=8.0.0' qt5-base qt5-webengine qt5-websockets)
 makedepends=(git cmake)
 conflicts=('globalprotect-openconnect')
