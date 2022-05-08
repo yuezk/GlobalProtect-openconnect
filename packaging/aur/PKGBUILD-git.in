@@ -1,7 +1,9 @@
 # Maintainer: Keinv Yue <yuezk001@gmail.com>
 
+_pkgver="{VERSION}"
+_commit="{COMMIT}"
 pkgname=globalprotect-openconnect-git
-pkgver=0
+pkgver=${_pkgver}
 pkgrel=1
 pkgdesc="A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Qt5, supports SAML auth mode. (development version)"
 arch=(x86_64 aarch64)
@@ -14,16 +16,14 @@ install=gp.install
 depends=('openconnect>=8.0.0' qt5-base qt5-webengine qt5-websockets)
 makedepends=(git cmake)
 conflicts=('globalprotect-openconnect')
-provides=('globalprotect-openconnect', 'gpclient' 'gpservice')
+provides=('globalprotect-openconnect' 'gpclient' 'gpservice')
 
-source=(git+https://github.com/yuezk/GlobalProtect-openconnect#commit={COMMIT})
+source=(git+https://github.com/yuezk/GlobalProtect-openconnect#commit=${_commit})
 sha256sums=('SKIP')
 
-pkgver() {
+prepare() {
     cd GlobalProtect-openconnect
-    VERSION="v$(cat VERSION)"
-    git describe --tags --match "${VERSION}" | sed -re 's/^v([^-]+)-([^-]+)-(.+)/\1+\2snapshot.\3/' > VERSION
-    cat VERSION
+    echo "${_pkgver}" > VERSION
 }
 
 build() {
