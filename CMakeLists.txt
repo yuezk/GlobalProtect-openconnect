@@ -9,7 +9,6 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 file(STRINGS "VERSION" ver)
-file(STRINGS "VERSION_SUFFIX" VERSION_SUFFIX)
 project(GlobalProtect-openconnect VERSION ${ver} LANGUAGES CXX)
 
 # Set the CMAKE_INSTALL_PREFIX to /usr if not specified

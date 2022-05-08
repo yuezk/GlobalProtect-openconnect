@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-VERSION=$(cat VERSION VERSION_SUFFIX)
+VERSION="$(cat VERSION)"
 
 rm -rf ./artifacts && mkdir -p ./artifacts/{obs,aur,flatpak}
 

@@ -93,8 +93,6 @@ jobs:
           path: artifacts
 
       - name: Publish AUR package
-        env:
-          VERSION: $(cat ./artifacts/VERSION)
         uses: yuezk/github-actions-deploy-aur@update-pkgver
         with:
           pkgname: globalprotect-openconnect-git
@@ -216,8 +214,6 @@ jobs:
           path: artifacts
 
       - name: Publish AUR package
-        env:
-          VERSION: $(cat ./artifacts/VERSION)
         uses: yuezk/github-actions-deploy-aur@update-pkgver
         with:
           pkgname: globalprotect-openconnect-git
