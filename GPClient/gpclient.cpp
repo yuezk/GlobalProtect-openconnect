@@ -68,14 +68,12 @@ void GPClient::setupSettings()
 
 void GPClient::onSettingsButtonClicked()
 {
-    settingsDialog->setExtraArgs(settings::get("extraArgs", "").toString());
     settingsDialog->setClientos(settings::get("clientos", "Linux").toString());
     settingsDialog->show();
 }
 
 void GPClient::onSettingsAccepted()
 {
-    settings::save("extraArgs", settingsDialog->extraArgs());
     settings::save("clientos", settingsDialog->clientos());
 }
 
@@ -378,7 +376,7 @@ void GPClient::onGatewaySuccess(const QString &authCookie)
     for (GPGateway &gw : allGateways()) {
       gatewayAddresses.push_back(gw.address());
     }
-    vpn->connect(currentGateway().address(), gatewayAddresses, portalConfig.username(), authCookie, settings::get("extraArgs", "").toString());
+    vpn->connect(currentGateway().address(), gatewayAddresses, portalConfig.username(), authCookie);
     ui->statusLabel->setText("Connecting...");
     updateConnectionStatus(VpnStatus::pending);
 }

@@ -20,7 +20,7 @@ public:
     QObject::connect(inner, &com::yuezk::qt::GPService::logAvailable, this, &VpnDbus::logAvailable);
   }
 
-  void connect(const QString &preferredServer, const QList<QString> &servers, const QString &username, const QString &passwd, const QString &extraArgs);
+  void connect(const QString &preferredServer, const QList<QString> &servers, const QString &username, const QString &passwd);
   void disconnect();
   int status();
 

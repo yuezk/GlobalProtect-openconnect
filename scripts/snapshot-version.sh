@@ -1,3 +1,4 @@
 #!/bin/bash -e
 
-git describe --tags --match "v$(cat VERSION)" | sed -r -e 's/v([^-]+)-/+snapshot/' -e 's/-/./' > VERSION_SUFFIX
+VERSION="v$(cat VERSION)"
+git describe --tags --match "${VERSION}" | sed -re 's/^v([^-]+)-([^-]+)-(.+)/\1+\2snapshot.\3/' > VERSION

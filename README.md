@@ -87,7 +87,7 @@ sudo dnf install globalprotect-openconnect
 1. Add the repository: `https://download.opensuse.org/repositories/home:/yuezk/CentOS_8/home:yuezk.repo`
 1. Install `globalprotect-openconnect`
 
-  
+
 ## Build & Install from source code
 
 Clone this repo with:
@@ -100,14 +100,14 @@ cd GlobalProtect-openconnect
 ### Ubuntu/Mint
 
 > **⚠️ REQUIRED for Ubuntu 18.04 ⚠️**
-> 
+>
 > Add this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA first to install the latest openconnect.
-> 
+>
 > ```sh
 > sudo add-apt-repository ppa:dwmw2/openconnect
 > sudo apt update
 > ```
-  
+
 Build and install with:
 
 ```sh
@@ -155,7 +155,7 @@ Install the Qt5 dependencies and OpenConnect:
     # if you need a Host Integrity Protection report
     csdWrapper = "${pkgs.openconnect}/libexec/openconnect/hipreport.sh";
   };
-  
+
   environment.systemPackages = [ globalprotect-openconnect ];
   ```
 
@@ -165,14 +165,8 @@ Once the software is installed, you can run `gpclient` to start the UI.
 
 ## Passing the Custom Parameters to `OpenConnect` CLI
 
-Custom parameters can be appended to the `OpenConnect` CLI with the following settings.
+See [Configuration](https://github.com/yuezk/GlobalProtect-openconnect/wiki/Configuration)
 
-> Tokens with spaces can be surrounded by double quotes; three consecutive double quotes represent the quote character itself.
-
-<p align="center">
-  <img src="https://user-images.githubusercontent.com/3297602/130319209-744be02b-d657-4f49-a76d-d2c81b5c46d5.png" />
-<p>
-  
 ## Display the system tray icon on Gnome 40
 
 Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension and you will see the system try icon (Restart the system after the installation).
@@ -181,7 +175,7 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
   <img src="https://user-images.githubusercontent.com/3297602/130831022-b93492fd-46dd-4a8e-94a4-13b5747120b7.png" />
 <p>
 
-  
+
 
 ## Future plan
 
@@ -189,11 +183,11 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
 - [ ] Process bugs and feature requests
 - [ ] Support for bypassing the `gpclient` parameters
 - [ ] Support the CLI mode
-  
-  
+
+
 ## Troubleshooting
 
-The application logs can be found at: `~/.cache/GlobalProtect-openconnect/gpclient.log`
+Run `gpclient` in the Terminal and collect the logs.
 
 ## [License](./LICENSE)
 GPLv3

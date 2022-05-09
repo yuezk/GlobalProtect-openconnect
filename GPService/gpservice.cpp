@@ -5,6 +5,7 @@
 #include <QtCore/QRegularExpressionMatch>
 #include <QtDBus/QtDBus>
 
+#include "INIReader.h"
 #include "gpservice.h"
 #include "gpserviceadaptor.h"
 
@@ -41,8 +42,22 @@ QString GPService::findBinary()
     return nullptr;
 }
 
+QString GPService::extraOpenconnectArgs(const QString &gateway)
+{
+    INIReader reader("/etc/gpservice/gp.conf");
+
+    if (reader.ParseError() < 0) {
+        return "";
+    }
+
+    std::string defaultArgs = reader.Get("*", "openconnect-args", "");
+    std::string extraArgs = reader.Get(gateway.toStdString(), "openconnect-args", defaultArgs);
+
+    return QString::fromStdString(extraArgs);
+}
+
 /* Port from https://github.com/qt/qtbase/blob/11d1dcc6e263c5059f34b44d531c9ccdf7c0b1d6/src/corelib/io/qprocess.cpp#L2115 */
-QStringList GPService::splitCommand(QString command)
+QStringList GPService::splitCommand(const QString &command)
 {
     QStringList args;
     QString tmp;
@@ -92,7 +107,7 @@ void GPService::quit()
     }
 }
 
-void GPService::connect(QString server, QString username, QString passwd, QString extraArgs)
+void GPService::connect(QString server, QString username, QString passwd)
 {
     if (vpnStatus != GPService::VpnNotConnected) {
         log("VPN status is: " + QVariant::fromValue(vpnStatus).toString());
@@ -109,6 +124,9 @@ void GPService::connect(QString server, QString username, QString passwd, QStrin
     if (!isValidVersion(bin)) {
         return;
     }
+
+    const QString extraArgs = extraOpenconnectArgs(server);
+    log(QString("Got extra OpenConnect args for server: %1, %2").arg(server, extraArgs.isEmpty() ? "<empty>" : extraArgs));
 
     QStringList args;
     args << QCoreApplication::arguments().mid(1)

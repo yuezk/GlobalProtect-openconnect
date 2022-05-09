@@ -1,0 +1,8 @@
+post_install() {
+    systemctl enable gpservice.service
+    systemctl restart gpservice.service
+}
+
+post_upgrade() {
+    post_install
+}

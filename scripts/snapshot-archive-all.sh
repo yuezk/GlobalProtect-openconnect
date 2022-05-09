@@ -12,6 +12,3 @@ mv ./artifacts/obs/globalprotect-openconnect-rpmlintrc ./artifacts/obs/globalpro
 sed -i"" -re "s/(Name:\s+).+/\1globalprotect-openconnect-snapshot/" \
     -re "s/(Conflicts:\s+).+/\1globalprotect-openconnect/" \
     ./artifacts/obs/globalprotect-openconnect-snapshot.spec
-
-# Update the AUR package
-cp ./packaging/aur/PKGBUILD-git ./artifacts/aur/PKGBUILD

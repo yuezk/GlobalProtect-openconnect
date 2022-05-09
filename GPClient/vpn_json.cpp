@@ -4,7 +4,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
-void VpnJson::connect(const QString &preferredServer, const QList<QString> &servers, const QString &username, const QString &passwd, const QString &extraArgs) {
+void VpnJson::connect(const QString &preferredServer, const QList<QString> &servers, const QString &username, const QString &passwd) {
     QJsonArray sl;
     for (const QString &srv : servers) {
       sl.push_back(QJsonValue(srv));

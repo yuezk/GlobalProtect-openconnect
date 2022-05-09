@@ -10,7 +10,7 @@ class VpnJson : public QObject, public IVpn
 public:
   VpnJson(QObject *parent) : QObject(parent) {}
 
-  void connect(const QString &preferredServer, const QList<QString> &servers, const QString &username, const QString &passwd, const QString &extraArgs);
+  void connect(const QString &preferredServer, const QList<QString> &servers, const QString &username, const QString &passwd);
   void disconnect();
   int status();
 

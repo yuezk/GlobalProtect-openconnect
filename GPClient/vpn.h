@@ -8,7 +8,7 @@ class IVpn
 public:
     virtual ~IVpn() = default;
 
-    virtual void connect(const QString &preferredServer, const QList<QString> &servers, const QString &username, const QString &passwd, const QString &extraArgs) = 0;
+    virtual void connect(const QString &preferredServer, const QList<QString> &servers, const QString &username, const QString &passwd) = 0;
     virtual void disconnect() = 0;
     virtual int status() = 0;
 
