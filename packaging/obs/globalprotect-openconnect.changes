@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Mon May  9 14:20:54 UTC 2022 - k3vinyue@gmail.com - 1.4.3
+
+- Update to 1.4.3
+  * Updated VERSION, Bumped 1.4.2 –> 1.4.3
+  * refine AUR packaging
+  * Prepare release 1.4.3 (#149)
+
+-------------------------------------------------------------------
 Fri May  6 14:18:19 UTC 2022 - k3vinyue@gmail.com - 1.4.2
 
 - Update to 1.4.2

@@ -1,3 +1,11 @@
+globalprotect-openconnect (1.4.3-1) unstable; urgency=medium
+
+  * Updated VERSION, Bumped 1.4.2 –> 1.4.3
+  * refine AUR packaging
+  * Prepare release 1.4.3 (#149)
+
+ -- Kevin Yue <k3vinyue@gmail.com>  Mon, 09 May 2022 22:20:54 +0800
+
 globalprotect-openconnect (1.4.2-1) unstable; urgency=medium
 
   * Updated VERSION, Bumped 1.4.1 –> 1.4.2
