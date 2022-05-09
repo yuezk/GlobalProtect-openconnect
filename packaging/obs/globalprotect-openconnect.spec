@@ -54,7 +54,7 @@ A GlobalProtect VPN client (GUI) for Linux based on OpenConnect and built with Q
 %if 0%{?suse_version}
     %service_del_postun gpservice.service
 %else
-    %systemd_postun gpservice.service
+    %systemd_postun_with_restart gpservice.service
 %endif
 
 
