@@ -73,7 +73,7 @@ A GlobalProtect VPN client (GUI) for Linux based on OpenConnect and built with Q
 %install
 
 %if 0%{?fedora_version} && 0%{?fedora_version} <= 32
-    %make_install 
+    %make_install
 %else
     %cmake_install
 %endif
@@ -88,7 +88,7 @@ A GlobalProtect VPN client (GUI) for Linux based on OpenConnect and built with Q
 %{_datadir}/dbus-1/system.d/com.yuezk.qt.GPService.conf
 %{_datadir}/icons/hicolor/scalable/apps/com.yuezk.qt.gpclient.svg
 %{_datadir}/metainfo/com.yuezk.qt.gpclient.metainfo.xml
-%{_sysconfdir}/gpservice/gp.conf
+%config %{_sysconfdir}/gpservice/gp.conf
 
 %dir %{_sysconfdir}/gpservice
 %dir %{_datadir}/icons/hicolor
