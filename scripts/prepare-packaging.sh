@@ -35,7 +35,7 @@ function update_rpm_changelog() {
 function generate_pkgbuild() {
 	local commit_id="$(git rev-parse HEAD)"
 	local version="$(cat VERSION)"
-	sed -e "s/{COMMIT}/${commit_id}/" -e "s/{VERSION}/${version}/" packaging/aur/PKGBUILD-git.in > packaging/aur/PKGBUILD
+	sed -i"" -e "s/{COMMIT}/${commit_id}/" -e "s/{VERSION}/${version}/" packaging/aur/PKGBUILD
 }
 
 # Update rpm version
