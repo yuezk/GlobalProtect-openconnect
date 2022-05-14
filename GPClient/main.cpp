@@ -15,6 +15,8 @@
 #include "sigwatch.h"
 #include "version.h"
 
+#define QT_AUTO_SCREEN_SCALE_FACTOR "QT_AUTO_SCREEN_SCALE_FACTOR"
+
 int main(int argc, char *argv[])
 {
     plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender(plog::streamStdErr);
@@ -23,9 +25,14 @@ int main(int argc, char *argv[])
     PLOGI << "GlobalProtect started, version: " << VERSION;
 
     QString port = QString::fromLocal8Bit(qgetenv(ENV_CDP_PORT));
+    QString hidpiSupport = QString::fromLocal8Bit(qgetenv(QT_AUTO_SCREEN_SCALE_FACTOR));
 
-    if (port == "") {
+    if (port.isEmpty()) {
         qputenv(ENV_CDP_PORT, "12315");
+    }
+
+    if (hidpiSupport.isEmpty()) {
+        qputenv(QT_AUTO_SCREEN_SCALE_FACTOR, "true");
     }
 
     SingleApplication app(argc, argv);
