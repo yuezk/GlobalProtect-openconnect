@@ -1,4 +1,14 @@
 -------------------------------------------------------------------
+Sat May 14 11:21:14 UTC 2022 - k3vinyue@gmail.com - 1.4.4
+
+- Update to 1.4.4
+  * Updated VERSION, Bumped 1.4.3 –> 1.4.4
+  * fix: support the HighDPI displays
+  * [misc] update the build script
+  * [ci] Enable build job for master branch
+  * [ci] Add ubuntu 22.04
+
+-------------------------------------------------------------------
 Mon May  9 14:20:54 UTC 2022 - k3vinyue@gmail.com - 1.4.3
 
 - Update to 1.4.3

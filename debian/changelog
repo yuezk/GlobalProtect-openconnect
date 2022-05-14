@@ -1,3 +1,13 @@
+globalprotect-openconnect (1.4.4-1) unstable; urgency=medium
+
+  * Updated VERSION, Bumped 1.4.3 –> 1.4.4
+  * fix: support the HighDPI displays
+  * [misc] update the build script
+  * [ci] Enable build job for master branch
+  * [ci] Add ubuntu 22.04
+
+ -- Kevin Yue <k3vinyue@gmail.com>  Sat, 14 May 2022 19:21:14 +0800
+
 globalprotect-openconnect (1.4.3-1) unstable; urgency=medium
 
   * Updated VERSION, Bumped 1.4.2 –> 1.4.3
