@@ -136,7 +136,7 @@ void GPService::connect(QString server, QString username, QString passwd)
          << "--cookie-on-stdin"
          << server;
 
-    log("Start process with arugments: " + args.join(" "));
+    log("Start process with arugments: " + args.join(", "));
 
     openconnect->start(bin, args);
     openconnect->write((passwd + "\n").toUtf8());

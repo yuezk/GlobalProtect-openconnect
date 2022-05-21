@@ -1,6 +1,5 @@
 #include <QtCore/QObject>
 #include <QtCore/QString>
-#include <QtCore/QDir>
 #include <QtCore/QStandardPaths>
 #include <plog/Log.h>
 #include <plog/Init.h>

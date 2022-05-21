@@ -35,7 +35,7 @@ GPClient::GPClient(QWidget *parent, IVpn *vpn)
     connect(ov, SIGNAL(error(QString)), this, SLOT(onVPNError(QString)));
     connect(ov, SIGNAL(logAvailable(QString)), this, SLOT(onVPNLogAvailable(QString)));
 
-    // Initiallize the context menu of system tray.
+    // Initialize the context menu of system tray.
     initSystemTrayIcon();
     initVpnStatus();
 }

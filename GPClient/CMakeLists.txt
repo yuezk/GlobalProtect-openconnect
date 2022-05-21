@@ -92,7 +92,7 @@ target_link_libraries(gpclient
     QtSignals
 )
 
-if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 8.0)
+if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 8.0 AND CMAKE_BUILD_TYPE STREQUAL Release)
     target_compile_options(gpclient PUBLIC "-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.")
 endif()
 
