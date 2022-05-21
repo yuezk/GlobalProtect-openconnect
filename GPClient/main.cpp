@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
     }
 
     if (hidpiSupport.isEmpty()) {
-        qputenv(QT_AUTO_SCREEN_SCALE_FACTOR, "true");
+        qputenv(QT_AUTO_SCREEN_SCALE_FACTOR, "1");
     }
 
     SingleApplication app(argc, argv);
