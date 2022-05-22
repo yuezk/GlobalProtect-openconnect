@@ -15,6 +15,7 @@ SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
 
     QVBoxLayout *verticalLayout = new QVBoxLayout(this);
     webView->setUrl(QUrl("about:blank"));
+    webView->setAttribute(Qt::WA_DeleteOnClose);
     // webView->page()->profile()->setPersistentCookiesPolicy(QWebEngineProfile::NoPersistentCookies);
     verticalLayout->addWidget(webView);
 

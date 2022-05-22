@@ -162,9 +162,18 @@ void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QSt
 
     SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
 
-    connect(loginWindow, &SAMLLoginWindow::success, this, &GatewayAuthenticator::onSAMLLoginSuccess);
-    connect(loginWindow, &SAMLLoginWindow::fail, this, &GatewayAuthenticator::onSAMLLoginFail);
-    connect(loginWindow, &SAMLLoginWindow::rejected, this, &GatewayAuthenticator::onLoginWindowRejected);
+    connect(loginWindow, &SAMLLoginWindow::success, [this, loginWindow](const QMap<QString, QString> &samlResult) {
+        this->onSAMLLoginSuccess(samlResult);
+        loginWindow->deleteLater();
+    });
+    connect(loginWindow, &SAMLLoginWindow::fail, [this, loginWindow](const QString &error) {
+        this->onSAMLLoginFail(error);
+        loginWindow->deleteLater();
+    });
+    connect(loginWindow, &SAMLLoginWindow::rejected, [this, loginWindow]() {
+        this->onLoginWindowRejected();
+        loginWindow->deleteLater();
+    });
 
     loginWindow->login(samlMethod, samlRequest, preloginUrl);
 }

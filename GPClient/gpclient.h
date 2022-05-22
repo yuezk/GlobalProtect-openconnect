@@ -9,6 +9,7 @@
 #include "portalconfigresponse.h"
 #include "settingsdialog.h"
 #include "vpn.h"
+#include "gatewayauthenticator.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class GPClient; }
@@ -79,6 +80,8 @@ private:
 
     SettingsDialog *settingsDialog;
     QPushButton *settingsButton;
+
+    GatewayAuthenticator *gatewayAuthenticator;
 
     bool isQuickConnect { false };
     bool isSwitchingGateway { false };

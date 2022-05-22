@@ -279,12 +279,24 @@ void GPClient::portalLogin()
 {
     PortalAuthenticator *portalAuth = new PortalAuthenticator(portal(), settings::get("clientos", "Linux").toString());
 
-    connect(portalAuth, &PortalAuthenticator::success, this, &GPClient::onPortalSuccess);
+    connect(portalAuth, &PortalAuthenticator::success, [this, portalAuth](const PortalConfigResponse response, const QString region) {
+        this->onPortalSuccess(response, region);
+        portalAuth->deleteLater();
+    });
     // Prelogin failed on the portal interface, try to treat the portal as a gateway interface
-    connect(portalAuth, &PortalAuthenticator::preloginFailed, this, &GPClient::onPortalPreloginFail);
-    connect(portalAuth, &PortalAuthenticator::portalConfigFailed, this, &GPClient::onPortalConfigFail);
+    connect(portalAuth, &PortalAuthenticator::preloginFailed, [this, portalAuth](const QString msg) {
+        this->onPortalPreloginFail(msg);
+        portalAuth->deleteLater();
+    });
+    connect(portalAuth, &PortalAuthenticator::portalConfigFailed, [this, portalAuth](const QString msg) {
+        this->onPortalConfigFail(msg);
+        portalAuth->deleteLater();
+    });
     // Portal login failed
-    connect(portalAuth, &PortalAuthenticator::fail, this, &GPClient::onPortalFail);
+    connect(portalAuth, &PortalAuthenticator::fail, [this, portalAuth](const QString &msg) {
+        this->onPortalFail(msg);
+        portalAuth->deleteLater();
+    });
 
     ui->statusLabel->setText("Authenticating...");
     updateConnectionStatus(VpnStatus::pending);
@@ -359,8 +371,14 @@ void GPClient::gatewayLogin()
 
     GatewayAuthenticator *gatewayAuth = new GatewayAuthenticator(currentGateway().address(), params);
 
-    connect(gatewayAuth, &GatewayAuthenticator::success, this, &GPClient::onGatewaySuccess);
-    connect(gatewayAuth, &GatewayAuthenticator::fail, this, &GPClient::onGatewayFail);
+    connect(gatewayAuth, &GatewayAuthenticator::success, [this, gatewayAuth](const QString &authToken) {
+        this->onGatewaySuccess(authToken);
+        gatewayAuth->deleteLater();
+    });
+    connect(gatewayAuth, &GatewayAuthenticator::fail, [this, gatewayAuth](const QString &msg) {
+        this->onGatewayFail(msg);
+        gatewayAuth->deleteLater();
+    });
 
     ui->statusLabel->setText("Authenticating...");
     updateConnectionStatus(VpnStatus::pending);
