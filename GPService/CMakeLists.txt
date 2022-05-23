@@ -4,6 +4,12 @@ project(GPService)
 
 set(gpservice_GENERATED_SOURCES)
 
+execute_process(COMMAND logname OUTPUT_VARIABLE CMAKE_LOGNAME)
+string(STRIP "${CMAKE_LOGNAME}" CMAKE_LOGNAME)
+
+message(STATUS "CMAKE_LOGNAME: ${CMAKE_LOGNAME}")
+
+configure_file(dbus/com.yuezk.qt.GPService.conf.in dbus/com.yuezk.qt.GPService.conf)
 configure_file(dbus/com.yuezk.qt.GPService.service.in dbus/com.yuezk.qt.GPService.service)
 configure_file(systemd/gpservice.service.in systemd/gpservice.service)
 
@@ -65,7 +71,7 @@ target_link_libraries(gpservice
 target_compile_definitions(gpservice PUBLIC QAPPLICATION_CLASS=QCoreApplication)
 
 install(TARGETS gpservice DESTINATION bin)
-install(FILES "dbus/com.yuezk.qt.GPService.conf" DESTINATION share/dbus-1/system.d )
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/dbus/com.yuezk.qt.GPService.conf" DESTINATION share/dbus-1/system.d )
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/dbus/com.yuezk.qt.GPService.service" DESTINATION share/dbus-1/system-services)
 install(FILES "gp.conf" DESTINATION /etc/gpservice)
 
