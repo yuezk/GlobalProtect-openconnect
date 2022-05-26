@@ -42,7 +42,7 @@ Add the repository in the above table and install it with your favorite package 
 ```sh
 sudo add-apt-repository ppa:yuezk/globalprotect-openconnect
 sudo apt-get update
-sudo apt install globalprotect-openconnect
+sudo apt-get install globalprotect-openconnect
 ```
 
 > For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
@@ -105,7 +105,7 @@ cd GlobalProtect-openconnect
 >
 > ```sh
 > sudo add-apt-repository ppa:dwmw2/openconnect
-> sudo apt update
+> sudo apt-get update
 > ```
 
 Build and install with:

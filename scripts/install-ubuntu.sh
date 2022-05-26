@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
-sudo apt update
-sudo apt install -y \
+sudo apt-get update
+sudo apt-get install -y \
     build-essential \
     qtbase5-dev \
     libqt5websockets5-dev \
