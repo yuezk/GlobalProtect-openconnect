@@ -12,6 +12,6 @@ sudo apt-get install -y \
 mkdir -p build
 
 cp ./artifacts/*.tar.gz build/ && cd build
-tar -xzf *.tar.gz && cd globalprotect-openconnect-*
+tar -xzf *.tar.gz && cd globalprotect-openconnect-*/
 
 dpkg-buildpackage -us -uc
