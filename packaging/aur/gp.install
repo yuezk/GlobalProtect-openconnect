@@ -1,4 +1,7 @@
 post_install() {
+    # Update the the dbus user to logname
+    sed -i "/LOGNAME/N;s/user=\".*\"/user=\"$(logname)\"/" /usr/share/dbus-1/system.d/com.yuezk.qt.GPService.conf
+
     systemctl enable gpservice.service
     systemctl restart gpservice.service
 }
