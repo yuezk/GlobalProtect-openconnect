@@ -33,7 +33,7 @@ A GlobalProtect VPN client (GUI) for Linux based on OpenConnect and built with Q
 
 %post
 
-sed -i "/LOGNAME/N;s/user=\".*\"/user=\"$(logname)\"/" /usr/share/dbus-1/system.d/com.yuezk.qt.GPService.conf
+sed -i "/LOGNAME/,+1s/user=\".*\"/user=\"$(logname)\"/" /usr/share/dbus-1/system.d/com.yuezk.qt.GPService.conf
 
 %if 0%{?suse_version}
     %service_add_post gpservice.service
