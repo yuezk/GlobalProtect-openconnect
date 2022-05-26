@@ -19,7 +19,6 @@ public:
     const QString &username() const;
     QString password() const;
     QString userAuthCookie() const;
-    QString prelogonUserAuthCookie() const;
     QList<GPGateway> allGateways() const;
     void setAllGateways(QList<GPGateway> gateways);
 
@@ -44,8 +43,9 @@ private:
     void setPrelogonUserAuthCookie(const QString cookie);
 
     static QList<GPGateway> parseGateways(QXmlStreamReader &xmlReader);
-    static QMap<QString, int> parsePriorityRules(QXmlStreamReader &xmlReader);
-    static QString parseGatewayName(QXmlStreamReader &xmlReader);
+    static void parseGateway(QXmlStreamReader &reader, GPGateway &gateway);
+    static void parsePriorityRule(QXmlStreamReader &reader, GPGateway &gateway);
+
 };
 
 #endif // PORTALCONFIGRESPONSE_H
