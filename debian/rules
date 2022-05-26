@@ -7,13 +7,12 @@ export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 
 export DEBIAN_PACKAGE=1
 
+dbus_conf = /usr/share/dbus-1/system.d/com.yuezk.qt.GPService.conf
+
 %:
 	dh $@
 override_dh_installsystemd:
 	# Update the the dbus user to logname
-	dbus_conf="/usr/share/dbus-1/system.d/com.yuezk.qt.GPService.conf"
-	if [ -f "${dbus_conf}" ]; then
-		sed -i "/LOGNAME/,+1s/user=\".*\"/user=\"$(logname)\"/" "${dbus_conf}"
-	fi
+	if [ -f $(dbus_conf) ] ; then sed -i "/LOGNAME/,+1s/user=\".*\"/user=\"`logname`\"/" $(dbus_conf) ; fi
 
 	dh_installsystemd gpservice.service
