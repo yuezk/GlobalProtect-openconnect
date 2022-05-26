@@ -11,5 +11,6 @@ export DEBIAN_PACKAGE=1
 	dh $@
 override_dh_installsystemd:
 	# Update the the dbus user to logname
-	sed -i "/LOGNAME/,+1s/user=\".*\"/user=\"$(logname)\"/" /usr/share/dbus-1/system.d/com.yuezk.qt.GPService.conf
+	echo "DPKG_ROOT: ${DPKG_ROOT}"
+	sed -i "/LOGNAME/,+1s/user=\".*\"/user=\"$(logname)\"/" "${DPKG_ROOT}/usr/share/dbus-1/system.d/com.yuezk.qt.GPService.conf"
 	dh_installsystemd gpservice.service
