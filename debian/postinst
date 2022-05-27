@@ -3,7 +3,7 @@
 set -e
 
 # Update the the dbus user to logname
-dbus_conf = /usr/share/dbus-1/system.d/com.yuezk.qt.GPService.conf
+dbus_conf=/usr/share/dbus-1/system.d/com.yuezk.qt.GPService.conf
 if [ -f $dbus_conf ]; then
     sed -i "/LOGNAME/,+1s/user=\".*\"/user=\"$(logname)\"/" $dbus_conf
 fi
