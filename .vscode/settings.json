@@ -22,8 +22,5 @@
         "qicon": "cpp",
         "qsslsocket": "cpp",
         "qapplication": "cpp"
-    },
-    "yaml.schemas": {
-        "https://json.schemastore.org/github-workflow.json": "file:///home/kevin/Documents/repos/GlobalProtect-openconnect/.github/workflows/build.yml"
     }
 }
