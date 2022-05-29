@@ -1,5 +1,5 @@
 Name:           globalprotect-openconnect
-Version:        1.4.4
+Version:        1.4.5
 Release:        1
 Summary:        A GlobalProtect VPN client powered by OpenConnect
 Group:          Productivity/Networking/PPP

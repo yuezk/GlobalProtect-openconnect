@@ -1,4 +1,26 @@
 -------------------------------------------------------------------
+Sun May 29 13:15:40 UTC 2022 - k3vinyue@gmail.com - 1.4.5
+
+- Update to 1.4.5
+  * Updated VERSION, Bumped 1.4.4 –> 1.4.5
+  * chore: refine vscode settings
+  * fix: rollback dbus configuration
+  * feat: add option to start minimized
+  * packaging: fix postinst for debian
+  * packaging: add postinst for debian
+  * test: test debian packaging
+  * ci: fix the foder path
+  * chore: apt -> apt-get
+  * ci: verify debian package
+  * Revert "Revert "fix: improve the dbus security""
+  * fix: improve the portal config parsing
+  * Revert "fix: improve the dbus security"
+  * fix: improve the dbus security
+  * fix: free resources in slots
+  * chore: refine cmake files
+  * fix: support high DPI screen
+
+-------------------------------------------------------------------
 Sat May 14 11:21:14 UTC 2022 - k3vinyue@gmail.com - 1.4.4
 
 - Update to 1.4.4
