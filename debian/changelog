@@ -1,3 +1,11 @@
+globalprotect-openconnect (1.4.6-1) unstable; urgency=medium
+
+  * Updated VERSION, Bumped 1.4.5 –> 1.4.6
+  * feat: display address in gateway menu item
+  * fix: fix bug of parsing the portal respponse
+
+ -- Kevin Yue <k3vinyue@gmail.com>  Wed, 01 Jun 2022 23:55:50 +0800
+
 globalprotect-openconnect (1.4.5-1) unstable; urgency=medium
 
   * Updated VERSION, Bumped 1.4.4 –> 1.4.5

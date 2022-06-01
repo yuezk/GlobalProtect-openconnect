@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Wed Jun  1 15:55:50 UTC 2022 - k3vinyue@gmail.com - 1.4.6
+
+- Update to 1.4.6
+  * Updated VERSION, Bumped 1.4.5 –> 1.4.6
+  * feat: display address in gateway menu item
+  * fix: fix bug of parsing the portal respponse
+
+-------------------------------------------------------------------
 Sun May 29 13:15:40 UTC 2022 - k3vinyue@gmail.com - 1.4.5
 
 - Update to 1.4.5
