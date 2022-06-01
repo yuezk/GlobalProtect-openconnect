@@ -176,15 +176,6 @@ Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gn
 <p>
 
 
-
-## Future plan
-
-- [x] Improve the release process
-- [ ] Process bugs and feature requests
-- [ ] Support for bypassing the `gpclient` parameters
-- [ ] Support the CLI mode
-
-
 ## Troubleshooting
 
 Run `gpclient` in the Terminal and collect the logs.
