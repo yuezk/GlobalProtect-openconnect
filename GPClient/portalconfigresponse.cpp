@@ -93,15 +93,17 @@ void PortalConfigResponse::parseGateway(QXmlStreamReader &reader, GPGateway &gat
 
     auto finished = false;
     while (!finished) {
-        if (reader.name() == "entry") {
+        if (reader.name() == "entry" && reader.isStartElement()) {
             auto address = reader.attributes().value("name").toString();
             gateway.setAddress(address);
-        } else if (reader.name() == "description") { // gateway name
+        } else if (reader.name() == "description" && reader.isStartElement()) { // gateway name
             gateway.setName(reader.readElementText());
-        } else if (reader.name() == "priority-rule") { // priority rules
+        } else if (reader.name() == "priority-rule" && reader.isStartElement()) { // priority rules
             parsePriorityRule(reader, gateway);
         }
-        finished = !reader.readNextStartElement();
+
+        auto result = reader.readNext();
+        finished = result == QXmlStreamReader::Invalid || (reader.name() == "entry" && reader.isEndElement());
     }
 }
 
@@ -113,16 +115,19 @@ void PortalConfigResponse::parsePriorityRule(QXmlStreamReader &reader, GPGateway
 
     while (!finished) {
         // Parse the priority-rule -> entry
-        if (reader.name() == "entry") {
+        if (reader.name() == "entry" && reader.isStartElement()) {
             auto ruleName = reader.attributes().value("name").toString();
             // move to the priority value
-            while (reader.name() != "priority") {
-                reader.readNextStartElement();
+            while (reader.readNextStartElement()) {
+                if (reader.name() == "priority") {
+                    auto priority = reader.readElementText().toInt();
+                    priorityRules.insert(ruleName, priority);
+                    break;
+                }
             }
-            auto priority = reader.readElementText().toInt();
-            priorityRules.insert(ruleName, priority);
         }
-        finished = !reader.readNextStartElement();
+        auto result = reader.readNext();
+        finished = result == QXmlStreamReader::Invalid || (reader.name() == "priority-rule" && reader.isEndElement());
     }
 
     gateway.setPriorityRules(priorityRules);
