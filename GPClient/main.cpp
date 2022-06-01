@@ -23,8 +23,8 @@ int main(int argc, char *argv[])
 
     PLOGI << "GlobalProtect started, version: " << VERSION;
 
-    QString port = QString::fromLocal8Bit(qgetenv(ENV_CDP_PORT));
-    QString hidpiSupport = QString::fromLocal8Bit(qgetenv(QT_AUTO_SCREEN_SCALE_FACTOR));
+    auto port = QString::fromLocal8Bit(qgetenv(ENV_CDP_PORT));
+    auto hidpiSupport = QString::fromLocal8Bit(qgetenv(QT_AUTO_SCREEN_SCALE_FACTOR));
 
     if (port.isEmpty()) {
         qputenv(ENV_CDP_PORT, "12315");
@@ -49,9 +49,9 @@ int main(int argc, char *argv[])
     });
     parser.process(app);
 
-    const QStringList positional = parser.positionalArguments();
+    const auto positional = parser.positionalArguments();
 
-    IVpn *vpn = parser.isSet("json") // yes it leaks, but this is cleared on exit anyway
+    auto *vpn = parser.isSet("json") // yes it leaks, but this is cleared on exit anyway
       ? static_cast<IVpn*>(new VpnJson(nullptr)) // Print to stdout and exit
       : static_cast<IVpn*>(new VpnDbus(nullptr)); // Contact GPService daemon via dbus
     GPClient w(nullptr, vpn);
