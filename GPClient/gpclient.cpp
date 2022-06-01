@@ -153,7 +153,7 @@ void GPClient::populateGatewayMenu()
         if (g.name() == currentGatewayName) {
             iconImage = ":/images/radio_selected.png";
         }
-        gatewaySwitchMenu->addAction(QIcon(iconImage), g.name())->setData(i);
+        gatewaySwitchMenu->addAction(QIcon(iconImage), QString("%1 (%2)").arg(g.name(), g.address()))->setData(i);
     }
 }
 
