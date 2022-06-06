@@ -122,9 +122,18 @@ void PortalAuthenticator::samlAuth()
 
     SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
 
-    connect(loginWindow, &SAMLLoginWindow::success, this, &PortalAuthenticator::onSAMLLoginSuccess);
-    connect(loginWindow, &SAMLLoginWindow::fail, this, &PortalAuthenticator::onSAMLLoginFail);
-    connect(loginWindow, &SAMLLoginWindow::rejected, this, &PortalAuthenticator::onLoginWindowRejected);
+    connect(loginWindow, &SAMLLoginWindow::success, [this, loginWindow](const QMap<QString, QString> samlResult) {
+        onSAMLLoginSuccess(samlResult);
+        loginWindow->deleteLater();
+    });
+    connect(loginWindow, &SAMLLoginWindow::fail, [this, loginWindow](const QString msg) {
+        onSAMLLoginFail(msg);
+        loginWindow->deleteLater();
+    });
+    connect(loginWindow, &SAMLLoginWindow::rejected, [this, loginWindow]() {
+        onLoginWindowRejected();
+        loginWindow->deleteLater();
+    });
 
     loginWindow->login(preloginResponse.samlMethod(), preloginResponse.samlRequest(), preloginUrl);
 }

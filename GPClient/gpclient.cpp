@@ -307,7 +307,7 @@ void GPClient::onPortalSuccess(const PortalConfigResponse portalConfig, const QS
 {
     PLOGI << "Portal authentication succeeded.";
 
-    // No gateway found in protal configuration
+    // No gateway found in portal configuration
     if (portalConfig.allGateways().size() == 0) {
         PLOGI << "No gateway found in portal configuration, treat the portal address as a gateway.";
         tryGatewayLogin();

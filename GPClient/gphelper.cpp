@@ -33,7 +33,7 @@ QNetworkReply* gpclient::helper::createRequest(QString url, QByteArray params)
 
 GPGateway gpclient::helper::filterPreferredGateway(QList<GPGateway> gateways, const QString ruleName)
 {
-    PLOGI << gateways.size() << " gateway(s) avaiable, filter the gateways with rule: " << ruleName;
+    PLOGI << gateways.size() << " gateway(s) available, filter the gateways with rule: " << ruleName;
 
     GPGateway gateway = gateways.first();
 
