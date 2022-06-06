@@ -22,7 +22,6 @@ SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
     webView->initialize();
     connect(webView, &EnhancedWebView::responseReceived, this, &SAMLLoginWindow::onResponseReceived);
     connect(webView, &EnhancedWebView::loadFinished, this, &SAMLLoginWindow::onLoadFinished);
-    connect(this, SIGNAL(getHTML(QString)), this, SLOT(handleHTML(QString)));
 }
 
 SAMLLoginWindow::~SAMLLoginWindow()
@@ -59,11 +58,11 @@ void SAMLLoginWindow::onResponseReceived(QJsonObject params)
     QJsonObject response = params.value("response").toObject();
     QJsonObject headers = response.value("headers").toObject();
 
+    LOGI << "Trying to receive from " << response.value("url").toString();
+
     const QString username = headers.value("saml-username").toString();
     const QString preloginCookie = headers.value("prelogin-cookie").toString();
     const QString userAuthCookie = headers.value("portal-userauthcookie").toString();
-
-    LOGI << "Response received from " << response.value("url").toString();
 
     this->checkSamlResult(username, preloginCookie, userAuthCookie);
 }
@@ -96,36 +95,38 @@ void SAMLLoginWindow::checkSamlResult(QString username, QString preloginCookie, 
         emit success(samlResult);
         accept();
     } else {
-        this->show();
+        show();
     }
 }
 
 void SAMLLoginWindow::onLoadFinished()
 {
-     LOGI << "Load finished " << this->webView->page()->url().toString();
-     webView->page()->toHtml([this](const QString& result) mutable {emit getHTML(result);});
+     LOGI << "Load finished " << webView->page()->url().toString();
+     webView->page()->toHtml([this] (const QString &html) { this->handleHtml(html); });
 }
 
-void SAMLLoginWindow::handleHTML(QString sHTML)
+void SAMLLoginWindow::handleHtml(const QString &html)
 {
     // try to check the html body and extract from there
     const QRegularExpression regex("<saml-auth-status>(.*)</saml-auth-status>");
-    const QRegularExpressionMatch match = regex.match(sHTML);
+    const QRegularExpressionMatch match = regex.match(html);
     const QString samlAuthStatusOnBody = match.captured(1);
 
     if (samlAuthStatusOnBody == "1") {
         const QRegularExpression preloginCookieRegex("<prelogin-cookie>(.*)</prelogin-cookie>");
-        const QRegularExpressionMatch preloginCookieMatch = preloginCookieRegex.match(sHTML);
+        const QRegularExpressionMatch preloginCookieMatch = preloginCookieRegex.match(html);
         const QString preloginCookie = preloginCookieMatch.captured(1);
 
         const QRegularExpression usernameRegex("<saml-username>(.*)</saml-username>");
-        const QRegularExpressionMatch usernameMatch = usernameRegex.match(sHTML);
+        const QRegularExpressionMatch usernameMatch = usernameRegex.match(html);
         const QString username = usernameMatch.captured(1);
 
         const QRegularExpression userAuthCookieRegex("<portal-userauthcookie>(.*)</portal-userauthcookie>");
-        const QRegularExpressionMatch userAuthCookieMatch = userAuthCookieRegex.match(sHTML);
+        const QRegularExpressionMatch userAuthCookieMatch = userAuthCookieRegex.match(html);
         const QString userAuthCookie = userAuthCookieMatch.captured(1);
 
-        this->checkSamlResult(username, preloginCookie, userAuthCookie);
+        checkSamlResult(username, preloginCookie, userAuthCookie);
+    } else {
+        show();
     }
 }

@@ -20,10 +20,6 @@ public:
 signals:
     void success(QMap<QString, QString> samlResult);
     void fail(const QString msg);
-    void getHTML(QString sHTML);
-
-protected slots:
-    void handleHTML(QString sHTML);
 
 private slots:
     void onResponseReceived(QJsonObject params);
@@ -35,6 +31,7 @@ private:
     QMap<QString, QString> samlResult;
 
     void closeEvent(QCloseEvent *event);
+    void handleHtml(const QString &html);
 };
 
 #endif // SAMLLOGINWINDOW_H
