@@ -20,10 +20,15 @@ public:
 signals:
     void success(QMap<QString, QString> samlResult);
     void fail(const QString msg);
+    void getHTML(QString sHTML);
+
+protected slots:
+    void handleHTML(QString sHTML);
 
 private slots:
     void onResponseReceived(QJsonObject params);
     void onLoadFinished();
+    void checkSamlResult(QString username, QString preloginCookie, QString userAuthCookie);
 
 private:
     EnhancedWebView *webView;
