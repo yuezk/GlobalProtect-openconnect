@@ -1,3 +1,14 @@
+globalprotect-openconnect (1.4.7-1) unstable; urgency=medium
+
+  * Updated VERSION, Bumped 1.4.6 –> 1.4.7
+  * fix: release resources when properly
+  * fix: add support for parsing tokens from HTML
+  * handle html comment for saml result with okta 2fa (#156)
+  * chore: use auto to declare variable
+  * chore: simplify readme
+
+ -- Kevin Yue <k3vinyue@gmail.com>  Tue, 07 Jun 2022 21:46:04 +0800
+
 globalprotect-openconnect (1.4.6-1) unstable; urgency=medium
 
   * Updated VERSION, Bumped 1.4.5 –> 1.4.6
