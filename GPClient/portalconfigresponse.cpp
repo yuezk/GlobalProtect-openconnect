@@ -17,7 +17,7 @@ PortalConfigResponse::~PortalConfigResponse()
 
 PortalConfigResponse PortalConfigResponse::parse(const QByteArray xml)
 {
-    PLOGI << "Start parsing the portal configuration...";
+    LOGI << "Start parsing the portal configuration...";
 
     QXmlStreamReader xmlReader(xml);
     PortalConfigResponse response;
@@ -29,17 +29,17 @@ PortalConfigResponse PortalConfigResponse::parse(const QByteArray xml)
         QString name = xmlReader.name().toString();
 
         if (name == xmlUserAuthCookie) {
-            PLOGI << "Start reading " << name;
+            LOGI << "Start reading " << name;
             response.setUserAuthCookie(xmlReader.readElementText());
         } else if (name == xmlPrelogonUserAuthCookie) {
-            PLOGI << "Start reading " << name;
+            LOGI << "Start reading " << name;
             response.setPrelogonUserAuthCookie(xmlReader.readElementText());
         } else if (name == xmlGateways) {
             response.setAllGateways(parseGateways(xmlReader));
         }
     }
 
-    PLOGI << "Finished parsing portal configuration.";
+    LOGI << "Finished parsing portal configuration.";
 
     return response;
 }
@@ -61,7 +61,7 @@ QString PortalConfigResponse::password() const
 
 QList<GPGateway> PortalConfigResponse::parseGateways(QXmlStreamReader &xmlReader)
 {
-    PLOGI << "Start parsing the gateways from portal configuration...";
+    LOGI << "Start parsing the gateways from portal configuration...";
 
     QList<GPGateway> gateways;
 
@@ -83,13 +83,13 @@ QList<GPGateway> PortalConfigResponse::parseGateways(QXmlStreamReader &xmlReader
         }
     }
 
-    PLOGI << "Finished parsing the gateways.";
+    LOGI << "Finished parsing the gateways.";
 
     return gateways;
 }
 
 void PortalConfigResponse::parseGateway(QXmlStreamReader &reader, GPGateway &gateway) {
-    PLOGI << "Start parsing gateway...";
+    LOGI << "Start parsing gateway...";
 
     auto finished = false;
     while (!finished) {
@@ -108,7 +108,7 @@ void PortalConfigResponse::parseGateway(QXmlStreamReader &reader, GPGateway &gat
 }
 
 void PortalConfigResponse::parsePriorityRule(QXmlStreamReader &reader, GPGateway &gateway) {
-    PLOGI << "Start parsing priority rule...";
+    LOGI << "Start parsing priority rule...";
 
     QMap<QString, int> priorityRules;
     auto finished = false;

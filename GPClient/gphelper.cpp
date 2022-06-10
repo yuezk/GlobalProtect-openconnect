@@ -33,13 +33,13 @@ QNetworkReply* gpclient::helper::createRequest(QString url, QByteArray params)
 
 GPGateway gpclient::helper::filterPreferredGateway(QList<GPGateway> gateways, const QString ruleName)
 {
-    PLOGI << gateways.size() << " gateway(s) available, filter the gateways with rule: " << ruleName;
+    LOGI << gateways.size() << " gateway(s) available, filter the gateways with rule: " << ruleName;
 
     GPGateway gateway = gateways.first();
 
     for (GPGateway g : gateways) {
         if (g.priorityOf(ruleName) > gateway.priorityOf(ruleName)) {
-            PLOGI << "Find a preferred gateway: " << g.name();
+            LOGI << "Find a preferred gateway: " << g.name();
             gateway = g;
         }
     }
@@ -49,8 +49,8 @@ GPGateway gpclient::helper::filterPreferredGateway(QList<GPGateway> gateways, co
 
 QUrlQuery gpclient::helper::parseGatewayResponse(const QByteArray &xml)
 {
-    PLOGI << "Start parsing the gateway response...";
-    PLOGI << "The gateway response is: " << xml;
+    LOGI << "Start parsing the gateway response...";
+    LOGI << "The gateway response is: " << xml;
 
     QXmlStreamReader xmlReader{xml};
     QList<QString> args;

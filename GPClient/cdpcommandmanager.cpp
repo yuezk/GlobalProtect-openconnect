@@ -29,7 +29,7 @@ void CDPCommandManager::initialize(QString endpoint)
         reply, &QNetworkReply::finished,
         [reply, this]() {
             if (reply->error()) {
-                PLOGE << "CDP request error";
+                LOGE << "CDP request error";
                 return;
             }
 
@@ -78,10 +78,10 @@ void CDPCommandManager::onTextMessageReceived(QString message)
 
 void CDPCommandManager::onSocketDisconnected()
 {
-    PLOGI << "WebSocket disconnected";
+    LOGI << "WebSocket disconnected";
 }
 
 void CDPCommandManager::onSocketError(QAbstractSocket::SocketError error)
 {
-    PLOGE << "WebSocket error" << error;
+    LOGE << "WebSocket error" << error;
 }

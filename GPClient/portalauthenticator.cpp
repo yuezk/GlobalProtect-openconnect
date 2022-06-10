@@ -30,7 +30,7 @@ PortalAuthenticator::~PortalAuthenticator()
 
 void PortalAuthenticator::authenticate()
 {
-    PLOGI << "Preform portal prelogin at " << preloginUrl;
+    LOGI << "Preform portal prelogin at " << preloginUrl;
 
     QNetworkReply *reply = createRequest(preloginUrl);
     connect(reply, &QNetworkReply::finished, this, &PortalAuthenticator::onPreloginFinished);
@@ -41,17 +41,17 @@ void PortalAuthenticator::onPreloginFinished()
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
 
     if (reply->error()) {
-        PLOGE << QString("Error occurred while accessing %1, %2").arg(preloginUrl, reply->errorString());
+        LOGE << QString("Error occurred while accessing %1, %2").arg(preloginUrl, reply->errorString());
         emit preloginFailed("Error occurred on the portal prelogin interface.");
         delete reply;
         return;
     }
 
-    PLOGI << "Portal prelogin succeeded.";
+    LOGI << "Portal prelogin succeeded.";
 
     preloginResponse = PreloginResponse::parse(reply->readAll());
 
-    PLOGI << "Finished parsing the prelogin response. The region field is: " << preloginResponse.region();
+    LOGI << "Finished parsing the prelogin response. The region field is: " << preloginResponse.region();
 
     if (preloginResponse.hasSamlAuthFields()) {
         // Do SAML authentication
@@ -60,7 +60,7 @@ void PortalAuthenticator::onPreloginFinished()
         // Do normal username/password authentication
         tryAutoLogin();
     } else {
-        PLOGE << QString("Unknown prelogin response for %1 got %2").arg(preloginUrl).arg(QString::fromUtf8(preloginResponse.rawResponse()));
+        LOGE << QString("Unknown prelogin response for %1 got %2").arg(preloginUrl).arg(QString::fromUtf8(preloginResponse.rawResponse()));
         emit preloginFailed("Unknown response for portal prelogin interface.");
     }
 
@@ -73,7 +73,7 @@ void PortalAuthenticator::tryAutoLogin()
     const QString password = settings::get("password").toString();
 
     if (!username.isEmpty() && !password.isEmpty()) {
-        PLOGI << "Trying auto login using the saved credentials";
+        LOGI << "Trying auto login using the saved credentials";
         isAutoLogin = true;
         fetchConfig(settings::get("username").toString(), settings::get("password").toString());
     } else {
@@ -83,7 +83,7 @@ void PortalAuthenticator::tryAutoLogin()
 
 void PortalAuthenticator::normalAuth()
 {
-    PLOGI << "Trying to launch the normal login window...";
+    LOGI << "Trying to launch the normal login window...";
 
     normalLoginWindow = new NormalLoginWindow;
     normalLoginWindow->setPortalAddress(portal);
@@ -118,7 +118,7 @@ void PortalAuthenticator::onLoginWindowFinished()
 
 void PortalAuthenticator::samlAuth()
 {
-    PLOGI << "Trying to perform SAML login with saml-method " << preloginResponse.samlMethod();
+    LOGI << "Trying to perform SAML login with saml-method " << preloginResponse.samlMethod();
 
     SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
 
@@ -141,9 +141,9 @@ void PortalAuthenticator::samlAuth()
 void PortalAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> samlResult)
 {
     if (samlResult.contains("preloginCookie")) {
-        PLOGI << "SAML login succeeded, got the prelogin-cookie " << samlResult.value("preloginCookie");
+        LOGI << "SAML login succeeded, got the prelogin-cookie " << samlResult.value("preloginCookie");
     } else {
-        PLOGI << "SAML login succeeded, got the portal-userauthcookie " << samlResult.value("userAuthCookie");
+        LOGI << "SAML login succeeded, got the portal-userauthcookie " << samlResult.value("userAuthCookie");
     }
 
     fetchConfig(samlResult.value("username"), "", samlResult.value("preloginCookie"), samlResult.value("userAuthCookie"));
@@ -167,7 +167,7 @@ void PortalAuthenticator::fetchConfig(QString username, QString password, QStrin
     this->username = username;
     this->password = password;
 
-    PLOGI << "Fetching the portal config from " << configUrl << " for user: " << username;
+    LOGI << "Fetching the portal config from " << configUrl << " for user: " << username;
 
     QNetworkReply *reply = createRequest(configUrl, loginParams.toUtf8());
     connect(reply, &QNetworkReply::finished, this, &PortalAuthenticator::onFetchConfigFinished);
@@ -178,7 +178,7 @@ void PortalAuthenticator::onFetchConfigFinished()
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
 
     if (reply->error()) {
-        PLOGE << QString("Failed to fetch the portal config from %1, %2").arg(configUrl).arg(reply->errorString());
+        LOGE << QString("Failed to fetch the portal config from %1, %2").arg(configUrl).arg(reply->errorString());
 
         // Login failed, enable the fields of the normal login window
         if (normalLoginWindow) {
@@ -193,7 +193,7 @@ void PortalAuthenticator::onFetchConfigFinished()
         return;
     }
 
-    PLOGI << "Fetch the portal config succeeded.";
+    LOGI << "Fetch the portal config succeeded.";
     PortalConfigResponse response = PortalConfigResponse::parse(reply->readAll());
 
     // Add the username & password to the response object
@@ -202,7 +202,7 @@ void PortalAuthenticator::onFetchConfigFinished()
 
     // Close the login window
     if (normalLoginWindow) {
-        PLOGI << "Closing the NormalLoginWindow...";
+        LOGI << "Closing the NormalLoginWindow...";
 
         normalLoginWindow->close();
     }

@@ -42,7 +42,7 @@ void SAMLLoginWindow::login(const QString samlMethod, const QString samlRequest,
     } else if (samlMethod == "REDIRECT") {
         webView->load(samlRequest);
     } else {
-        PLOGE << "Unknown saml-auth-method expected POST or REDIRECT, got " << samlMethod;
+        LOGE << "Unknown saml-auth-method expected POST or REDIRECT, got " << samlMethod;
         emit fail("Unknown saml-auth-method, got " + samlMethod);
     }
 }

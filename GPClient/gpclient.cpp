@@ -136,7 +136,7 @@ void GPClient::initVpnStatus() {
 
 void GPClient::populateGatewayMenu()
 {
-    PLOGI << "Populating the Switch Gateway menu...";
+    LOGI << "Populating the Switch Gateway menu...";
 
     const QList<GPGateway> gateways = allGateways();
     gatewaySwitchMenu->clear();
@@ -241,7 +241,7 @@ void GPClient::onGatewayChanged(QAction *action)
 
 void GPClient::doConnect()
 {
-    PLOGI << "Start connecting...";
+    LOGI << "Start connecting...";
 
     const QString btnText = ui->connectButton->text();
     const QString portal = this->portal();
@@ -257,16 +257,16 @@ void GPClient::doConnect()
 
         // Login to the previously saved gateway
         if (!currentGateway().name().isEmpty()) {
-            PLOGI << "Start gateway login using the previously saved gateway...";
+            LOGI << "Start gateway login using the previously saved gateway...";
             isQuickConnect = true;
             gatewayLogin();
         } else {
             // Perform the portal login
-            PLOGI << "Start portal login...";
+            LOGI << "Start portal login...";
             portalLogin();
         }
     } else {
-        PLOGI << "Start disconnecting the VPN...";
+        LOGI << "Start disconnecting the VPN...";
 
         ui->statusLabel->setText("Disconnecting...");
         updateConnectionStatus(VpnStatus::pending);
@@ -305,11 +305,11 @@ void GPClient::portalLogin()
 
 void GPClient::onPortalSuccess(const PortalConfigResponse portalConfig, const QString region)
 {
-    PLOGI << "Portal authentication succeeded.";
+    LOGI << "Portal authentication succeeded.";
 
     // No gateway found in portal configuration
     if (portalConfig.allGateways().size() == 0) {
-        PLOGI << "No gateway found in portal configuration, treat the portal address as a gateway.";
+        LOGI << "No gateway found in portal configuration, treat the portal address as a gateway.";
         tryGatewayLogin();
         return;
     }
@@ -324,13 +324,13 @@ void GPClient::onPortalSuccess(const PortalConfigResponse portalConfig, const QS
 
 void GPClient::onPortalPreloginFail(const QString msg)
 {
-    PLOGI << "Portal prelogin failed: " << msg;
+    LOGI << "Portal prelogin failed: " << msg;
     tryGatewayLogin();
 }
 
 void GPClient::onPortalConfigFail(const QString msg)
 {
-    PLOGI << "Failed to get the portal configuration, " << msg << " Treat the portal address as gateway.";
+    LOGI << "Failed to get the portal configuration, " << msg << " Treat the portal address as gateway.";
     tryGatewayLogin();
 }
 
@@ -345,7 +345,7 @@ void GPClient::onPortalFail(const QString &msg)
 
 void GPClient::tryGatewayLogin()
 {
-    PLOGI << "Try to preform login on the the gateway interface...";
+    LOGI << "Try to preform login on the the gateway interface...";
 
     // Treat the portal input as the gateway address
     GPGateway g;
@@ -364,7 +364,7 @@ void GPClient::tryGatewayLogin()
 // Login to the gateway
 void GPClient::gatewayLogin()
 {
-    PLOGI << "Performing gateway login...";
+    LOGI << "Performing gateway login...";
 
     GatewayAuthenticatorParams params = GatewayAuthenticatorParams::fromPortalConfigResponse(portalConfig);
     params.setClientos(settings::get("clientos", "Linux").toString());
@@ -387,7 +387,7 @@ void GPClient::gatewayLogin()
 
 void GPClient::onGatewaySuccess(const QString &authCookie)
 {
-    PLOGI << "Gateway login succeeded, got the cookie " << authCookie;
+    LOGI << "Gateway login succeeded, got the cookie " << authCookie;
 
     isQuickConnect = false;
     QList<QString> gatewayAddresses;
@@ -450,7 +450,7 @@ QList<GPGateway> GPClient::allGateways() const
 
 void GPClient::setAllGateways(QList<GPGateway> gateways)
 {
-    PLOGI << "Updating all the gateways...";
+    LOGI << "Updating all the gateways...";
 
     settings::save(portal() + "_gateways", GPGateway::serialize(gateways));
     populateGatewayMenu();
@@ -470,7 +470,7 @@ GPGateway GPClient::currentGateway() const
 
 void GPClient::setCurrentGateway(const GPGateway gateway)
 {
-    PLOGI << "Updating the current gateway to " << gateway.name();
+    LOGI << "Updating the current gateway to " << gateway.name();
 
     settings::save(portal() + "_selectedGateway", gateway.name());
     populateGatewayMenu();
@@ -512,5 +512,5 @@ void GPClient::onVPNError(QString errorMessage)
 
 void GPClient::onVPNLogAvailable(QString log)
 {
-    PLOGI << log;
+    LOGI << log;
 }

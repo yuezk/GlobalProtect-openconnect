@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
     plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender(plog::streamStdErr);
     plog::init(plog::debug, &consoleAppender);
 
-    PLOGI << "GlobalProtect started, version: " << VERSION;
+    LOGI << "GlobalProtect started, version: " << VERSION;
 
     auto port = QString::fromLocal8Bit(qgetenv(ENV_CDP_PORT));
     auto hidpiSupport = QString::fromLocal8Bit(qgetenv(QT_AUTO_SCREEN_SCALE_FACTOR));

@@ -30,7 +30,7 @@ GatewayAuthenticator::~GatewayAuthenticator()
 
 void GatewayAuthenticator::authenticate()
 {
-    PLOGI << "Start gateway authentication...";
+    LOGI << "Start gateway authentication...";
 
     LoginParams loginParams { params.clientos() };
     loginParams.setUser(params.username());
@@ -43,7 +43,7 @@ void GatewayAuthenticator::authenticate()
 
 void GatewayAuthenticator::login(const LoginParams &loginParams)
 {
-    PLOGI << "Trying to login the gateway at " << loginUrl << " with " << loginParams.toUtf8();
+    LOGI << "Trying to login the gateway at " << loginUrl << " with " << loginParams.toUtf8();
 
     QNetworkReply *reply = createRequest(loginUrl, loginParams.toUtf8());
     connect(reply, &QNetworkReply::finished, this, &GatewayAuthenticator::onLoginFinished);
@@ -55,7 +55,7 @@ void GatewayAuthenticator::onLoginFinished()
     QByteArray response = reply->readAll();
 
     if (reply->error() || response.contains("Authentication failure")) {
-        PLOGE << QString("Failed to login the gateway at %1, %2").arg(loginUrl, reply->errorString());
+        LOGE << QString("Failed to login the gateway at %1, %2").arg(loginUrl, reply->errorString());
 
         if (normalLoginWindow) {
             normalLoginWindow->setProcessing(false);
@@ -68,7 +68,7 @@ void GatewayAuthenticator::onLoginFinished()
 
     // 2FA
     if (response.contains("Challenge")) {
-        PLOGI << "The server need input the challenge...";
+        LOGI << "The server need input the challenge...";
         showChallenge(response);
         return;
     }
@@ -83,7 +83,7 @@ void GatewayAuthenticator::onLoginFinished()
 
 void GatewayAuthenticator::doAuth()
 {
-    PLOGI << "Perform the gateway prelogin at " << preloginUrl;
+    LOGI << "Perform the gateway prelogin at " << preloginUrl;
 
     QNetworkReply *reply = createRequest(preloginUrl);
     connect(reply, &QNetworkReply::finished, this, &GatewayAuthenticator::onPreloginFinished);
@@ -94,13 +94,13 @@ void GatewayAuthenticator::onPreloginFinished()
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
 
     if (reply->error()) {
-        PLOGE << QString("Failed to prelogin the gateway at %1, %2").arg(preloginUrl, reply->errorString());
+        LOGE << QString("Failed to prelogin the gateway at %1, %2").arg(preloginUrl, reply->errorString());
 
         emit fail("Error occurred on the gateway prelogin interface.");
         return;
     }
 
-    PLOGI << "Gateway prelogin succeeded.";
+    LOGI << "Gateway prelogin succeeded.";
 
     PreloginResponse response = PreloginResponse::parse(reply->readAll());
 
@@ -109,7 +109,7 @@ void GatewayAuthenticator::onPreloginFinished()
     } else if (response.hasNormalAuthFields()) {
         normalAuth(response.labelUsername(), response.labelPassword(), response.authMessage());
     } else {
-        PLOGE << QString("Unknown prelogin response for %1, got %2").arg(preloginUrl, QString::fromUtf8(response.rawResponse()));
+        LOGE << QString("Unknown prelogin response for %1, got %2").arg(preloginUrl, QString::fromUtf8(response.rawResponse()));
         emit fail("Unknown response for gateway prelogin interface.");
     }
 
@@ -118,7 +118,7 @@ void GatewayAuthenticator::onPreloginFinished()
 
 void GatewayAuthenticator::normalAuth(QString labelUsername, QString labelPassword, QString authMessage)
 {
-    PLOGI << QString("Trying to perform the normal login with %1 / %2 credentials").arg(labelUsername, labelPassword);
+    LOGI << QString("Trying to perform the normal login with %1 / %2 credentials").arg(labelUsername, labelPassword);
 
     normalLoginWindow = new NormalLoginWindow;
     normalLoginWindow->setPortalAddress(gateway);
@@ -136,7 +136,7 @@ void GatewayAuthenticator::normalAuth(QString labelUsername, QString labelPasswo
 
 void GatewayAuthenticator::onPerformNormalLogin(const QString &username, const QString &password)
 {
-    PLOGI << "Start to perform normal login...";
+    LOGI << "Start to perform normal login...";
 
     normalLoginWindow->setProcessing(true);
     params.setUsername(username);
@@ -158,7 +158,7 @@ void GatewayAuthenticator::onLoginWindowFinished()
 
 void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QString preloginUrl)
 {
-    PLOGI << "Trying to perform SAML login with saml-method " << samlMethod;
+    LOGI << "Trying to perform SAML login with saml-method " << samlMethod;
 
     SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
 
@@ -181,9 +181,9 @@ void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QSt
 void GatewayAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> &samlResult)
 {
     if (samlResult.contains("preloginCookie")) {
-        PLOGI << "SAML login succeeded, got the prelogin-cookie " << samlResult.value("preloginCookie");
+        LOGI << "SAML login succeeded, got the prelogin-cookie " << samlResult.value("preloginCookie");
     } else {
-        PLOGI << "SAML login succeeded, got the portal-userauthcookie " << samlResult.value("userAuthCookie");
+        LOGI << "SAML login succeeded, got the portal-userauthcookie " << samlResult.value("userAuthCookie");
     }
 
     LoginParams loginParams { params.clientos() };
@@ -215,7 +215,7 @@ void GatewayAuthenticator::showChallenge(const QString &responseText)
 
     connect(challengeDialog, &ChallengeDialog::accepted, this, [this] {
         params.setPassword(challengeDialog->getChallenge());
-        PLOGI << "Challenge submitted, try to re-authenticate...";
+        LOGI << "Challenge submitted, try to re-authenticate...";
         authenticate();
     });
 

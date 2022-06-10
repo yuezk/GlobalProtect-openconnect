@@ -23,7 +23,7 @@ PreloginResponse::PreloginResponse()
 
 PreloginResponse PreloginResponse::parse(const QByteArray& xml)
 {
-    PLOGI << "Start parsing the prelogin response...";
+    LOGI << "Start parsing the prelogin response...";
 
     QXmlStreamReader xmlReader(xml);
     PreloginResponse response;
