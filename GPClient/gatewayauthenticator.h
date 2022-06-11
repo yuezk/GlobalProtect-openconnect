@@ -28,7 +28,7 @@ private slots:
     void onLoginWindowRejected();
     void onLoginWindowFinished();
     void onSAMLLoginSuccess(const QMap<QString, QString> &samlResult);
-    void onSAMLLoginFail(const QString msg);
+    void onSAMLLoginFail(const QString &code, const QString &msg);
 
 private:
     QString gateway;

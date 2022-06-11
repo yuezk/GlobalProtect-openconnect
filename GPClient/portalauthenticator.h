@@ -30,10 +30,12 @@ private slots:
     void onLoginWindowRejected();
     void onLoginWindowFinished();
     void onSAMLLoginSuccess(const QMap<QString, QString> samlResult);
-    void onSAMLLoginFail(const QString msg);
+    void onSAMLLoginFail(const QString &code, const QString &msg);
     void onFetchConfigFinished();
 
 private:
+    static const auto MAX_ATTEMPTS{ 5 };
+
     QString portal;
     QString clientos;
     QString preloginUrl;
@@ -41,9 +43,10 @@ private:
     QString username;
     QString password;
 
+    int attempts{ 0 };
     PreloginResponse preloginResponse;
 
-    bool isAutoLogin { false };
+    bool isAutoLogin{ false };
 
     NormalLoginWindow *normalLoginWindow{ nullptr };
 

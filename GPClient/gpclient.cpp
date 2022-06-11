@@ -221,7 +221,7 @@ void GPClient::onGatewayChanged(QAction *action)
         return;
     }
 
-    const GPGateway g = allGateways().at(index);
+    const auto g = allGateways().at(index);
 
     // If the selected gateway is the same as the current gateway
     if (g.name() == currentGateway().name()) {
@@ -243,8 +243,8 @@ void GPClient::doConnect()
 {
     LOGI << "Start connecting...";
 
-    const QString btnText = ui->connectButton->text();
-    const QString portal = this->portal();
+    const auto btnText = ui->connectButton->text();
+    const auto portal = this->portal();
 
     // Display the main window if portal is empty
     if (portal.isEmpty()) {
@@ -277,7 +277,7 @@ void GPClient::doConnect()
 // Login to the portal interface to get the portal config and preferred gateway
 void GPClient::portalLogin()
 {
-    PortalAuthenticator *portalAuth = new PortalAuthenticator(portal(), settings::get("clientos", "Linux").toString());
+    auto *portalAuth = new PortalAuthenticator(portal(), settings::get("clientos", "Linux").toString());
 
     connect(portalAuth, &PortalAuthenticator::success, [this, portalAuth](const PortalConfigResponse response, const QString region) {
         this->onPortalSuccess(response, region);
@@ -324,7 +324,7 @@ void GPClient::onPortalSuccess(const PortalConfigResponse portalConfig, const QS
 
 void GPClient::onPortalPreloginFail(const QString msg)
 {
-    LOGI << "Portal prelogin failed: " << msg;
+    LOGI << "Portal prelogin failed, treat the portal address as a gateway." << msg;
     tryGatewayLogin();
 }
 
@@ -404,6 +404,7 @@ void GPClient::onGatewayFail(const QString &msg)
     // If the quick connect on gateway failed, perform the portal login
     if (isQuickConnect && !msg.isEmpty()) {
         isQuickConnect = false;
+        LOGI << "Quick connection failed, trying to portal login...";
         portalLogin();
         return;
     }

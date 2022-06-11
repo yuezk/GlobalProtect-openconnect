@@ -19,7 +19,7 @@ public:
 
 signals:
     void success(QMap<QString, QString> samlResult);
-    void fail(const QString msg);
+    void fail(const QString code, const QString msg);
 
 private slots:
     void onResponseReceived(QJsonObject params);
@@ -27,11 +27,16 @@ private slots:
     void checkSamlResult(QString username, QString preloginCookie, QString userAuthCookie);
 
 private:
+    static const auto MAX_WAIT_TIME { 10 * 1000 };
+
+    bool failed { false };
     EnhancedWebView *webView;
     QMap<QString, QString> samlResult;
 
     void closeEvent(QCloseEvent *event);
     void handleHtml(const QString &html);
+
+    static QString parseTag(const QString &tag, const QString &html);
 };
 
 #endif // SAMLLOGINWINDOW_H

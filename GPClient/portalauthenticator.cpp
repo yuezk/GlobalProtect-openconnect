@@ -30,7 +30,9 @@ PortalAuthenticator::~PortalAuthenticator()
 
 void PortalAuthenticator::authenticate()
 {
-    LOGI << "Preform portal prelogin at " << preloginUrl;
+    attempts++;
+
+    LOGI << QString("(%1/%2) attempts").arg(attempts).arg(MAX_ATTEMPTS) << ", preform portal prelogin at " << preloginUrl;
 
     QNetworkReply *reply = createRequest(preloginUrl);
     connect(reply, &QNetworkReply::finished, this, &PortalAuthenticator::onPreloginFinished);
@@ -38,7 +40,7 @@ void PortalAuthenticator::authenticate()
 
 void PortalAuthenticator::onPreloginFinished()
 {
-    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    auto *reply = qobject_cast<QNetworkReply*>(sender());
 
     if (reply->error()) {
         LOGE << QString("Error occurred while accessing %1, %2").arg(preloginUrl, reply->errorString());
@@ -123,15 +125,15 @@ void PortalAuthenticator::samlAuth()
     SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
 
     connect(loginWindow, &SAMLLoginWindow::success, [this, loginWindow](const QMap<QString, QString> samlResult) {
-        onSAMLLoginSuccess(samlResult);
+        this->onSAMLLoginSuccess(samlResult);
         loginWindow->deleteLater();
     });
-    connect(loginWindow, &SAMLLoginWindow::fail, [this, loginWindow](const QString msg) {
-        onSAMLLoginFail(msg);
+    connect(loginWindow, &SAMLLoginWindow::fail, [this, loginWindow](const QString &code, const QString msg) {
+        this->onSAMLLoginFail(code, msg);
         loginWindow->deleteLater();
     });
     connect(loginWindow, &SAMLLoginWindow::rejected, [this, loginWindow]() {
-        onLoginWindowRejected();
+        this->onLoginWindowRejected();
         loginWindow->deleteLater();
     });
 
@@ -141,17 +143,22 @@ void PortalAuthenticator::samlAuth()
 void PortalAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> samlResult)
 {
     if (samlResult.contains("preloginCookie")) {
-        LOGI << "SAML login succeeded, got the prelogin-cookie " << samlResult.value("preloginCookie");
+        LOGI << "SAML login succeeded, got the prelogin-cookie";
     } else {
-        LOGI << "SAML login succeeded, got the portal-userauthcookie " << samlResult.value("userAuthCookie");
+        LOGI << "SAML login succeeded, got the portal-userauthcookie";
     }
 
     fetchConfig(samlResult.value("username"), "", samlResult.value("preloginCookie"), samlResult.value("userAuthCookie"));
 }
 
-void PortalAuthenticator::onSAMLLoginFail(const QString msg)
+void PortalAuthenticator::onSAMLLoginFail(const QString &code, const QString &msg)
 {
-    emitFail(msg);
+    if (code == "ERR002" && attempts < MAX_ATTEMPTS) {
+        LOGI << "Failed to authenticate, trying to re-authenticate...";
+        authenticate();
+    } else {
+        emitFail(msg);
+    }
 }
 
 void PortalAuthenticator::fetchConfig(QString username, QString password, QString preloginCookie, QString userAuthCookie)
@@ -167,9 +174,9 @@ void PortalAuthenticator::fetchConfig(QString username, QString password, QStrin
     this->username = username;
     this->password = password;
 
-    LOGI << "Fetching the portal config from " << configUrl << " for user: " << username;
+    LOGI << "Fetching the portal config from " << configUrl;
 
-    QNetworkReply *reply = createRequest(configUrl, loginParams.toUtf8());
+    auto *reply = createRequest(configUrl, loginParams.toUtf8());
     connect(reply, &QNetworkReply::finished, this, &PortalAuthenticator::onFetchConfigFinished);
 }
 

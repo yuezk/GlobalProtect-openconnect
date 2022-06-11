@@ -166,8 +166,8 @@ void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QSt
         this->onSAMLLoginSuccess(samlResult);
         loginWindow->deleteLater();
     });
-    connect(loginWindow, &SAMLLoginWindow::fail, [this, loginWindow](const QString &error) {
-        this->onSAMLLoginFail(error);
+    connect(loginWindow, &SAMLLoginWindow::fail, [this, loginWindow](const QString &code, const QString &error) {
+        this->onSAMLLoginFail(code, error);
         loginWindow->deleteLater();
     });
     connect(loginWindow, &SAMLLoginWindow::rejected, [this, loginWindow]() {
@@ -194,7 +194,7 @@ void GatewayAuthenticator::onSAMLLoginSuccess(const QMap<QString, QString> &saml
     login(loginParams);
 }
 
-void GatewayAuthenticator::onSAMLLoginFail(const QString msg)
+void GatewayAuthenticator::onSAMLLoginFail(const QString &code, const QString &msg)
 {
     emit fail(msg);
 }
