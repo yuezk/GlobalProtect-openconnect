@@ -3,7 +3,7 @@
 
 #include <QtCore/QObject>
 
-#include "normalloginwindow.h"
+#include "standardloginwindow.h"
 #include "challengedialog.h"
 #include "loginparams.h"
 #include "gatewayauthenticatorparams.h"
@@ -17,13 +17,13 @@ public:
     void authenticate();
 
 signals:
-    void success(const QString& authCookie);
-    void fail(const QString& msg = "");
+    void success(const QString &authCookie);
+    void fail(const QString &msg = "");
 
 private slots:
     void onLoginFinished();
     void onPreloginFinished();
-    void onPerformNormalLogin(const QString &username, const QString &password);
+    void onPerformStandardLogin(const QString &username, const QString &password);
     void onLoginWindowRejected();
     void onLoginWindowFinished();
     void onSAMLLoginSuccess(const QMap<QString, QString> &samlResult);
@@ -35,8 +35,8 @@ private:
     QString preloginUrl;
     QString loginUrl;
 
-    NormalLoginWindow *normalLoginWindow{ nullptr };
-    ChallengeDialog *challengeDialog{ nullptr };
+    StandardLoginWindow *standardLoginWindow { nullptr };
+    ChallengeDialog *challengeDialog { nullptr };
 
     void login(const LoginParams& loginParams);
     void doAuth();

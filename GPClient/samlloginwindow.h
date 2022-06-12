@@ -13,9 +13,8 @@ class SAMLLoginWindow : public QDialog
 
 public:
     explicit SAMLLoginWindow(QWidget *parent = nullptr);
-    ~SAMLLoginWindow();
 
-    void login(const QString samlMethod, const QString samlRequest, const QString preloingUrl);
+    void login(const QString samlMethod, const QString samlRequest, const QString preloginUrl);
 
 signals:
     void success(QMap<QString, QString> samlResult);
@@ -30,7 +29,7 @@ private:
     static const auto MAX_WAIT_TIME { 10 * 1000 };
 
     bool failed { false };
-    EnhancedWebView *webView;
+    QWebEngineView *webView { nullptr };
     QMap<QString, QString> samlResult;
 
     void closeEvent(QCloseEvent *event);

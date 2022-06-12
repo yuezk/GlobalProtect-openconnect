@@ -3,7 +3,7 @@
 
 #include "portalauthenticator.h"
 #include "gphelper.h"
-#include "normalloginwindow.h"
+#include "standardloginwindow.h"
 #include "samlloginwindow.h"
 #include "loginparams.h"
 #include "preloginresponse.h"
@@ -25,7 +25,7 @@ PortalAuthenticator::PortalAuthenticator(const QString& portal, const QString& c
 
 PortalAuthenticator::~PortalAuthenticator()
 {
-    delete normalLoginWindow;
+    delete standardLoginWindow;
 }
 
 void PortalAuthenticator::authenticate()
@@ -87,23 +87,19 @@ void PortalAuthenticator::normalAuth()
 {
     LOGI << "Trying to launch the normal login window...";
 
-    normalLoginWindow = new NormalLoginWindow;
-    normalLoginWindow->setPortalAddress(portal);
-    normalLoginWindow->setAuthMessage(preloginResponse.authMessage());
-    normalLoginWindow->setUsernameLabel(preloginResponse.labelUsername());
-    normalLoginWindow->setPasswordLabel(preloginResponse.labelPassword());
+    standardLoginWindow = new StandardLoginWindow {portal, preloginResponse.labelUsername(), preloginResponse.labelPassword(), preloginResponse.authMessage() };
 
     // Do login
-    connect(normalLoginWindow, &NormalLoginWindow::performLogin, this, &PortalAuthenticator::onPerformNormalLogin);
-    connect(normalLoginWindow, &NormalLoginWindow::rejected, this, &PortalAuthenticator::onLoginWindowRejected);
-    connect(normalLoginWindow, &NormalLoginWindow::finished, this, &PortalAuthenticator::onLoginWindowFinished);
+    connect(standardLoginWindow, &StandardLoginWindow::performLogin, this, &PortalAuthenticator::onPerformNormalLogin);
+    connect(standardLoginWindow, &StandardLoginWindow::rejected, this, &PortalAuthenticator::onLoginWindowRejected);
+    connect(standardLoginWindow, &StandardLoginWindow::finished, this, &PortalAuthenticator::onLoginWindowFinished);
 
-    normalLoginWindow->show();
+    standardLoginWindow->show();
 }
 
 void PortalAuthenticator::onPerformNormalLogin(const QString &username, const QString &password)
 {
-    normalLoginWindow->setProcessing(true);
+    standardLoginWindow->setProcessing(true);
     fetchConfig(username, password);
 }
 
@@ -114,15 +110,15 @@ void PortalAuthenticator::onLoginWindowRejected()
 
 void PortalAuthenticator::onLoginWindowFinished()
 {
-    delete normalLoginWindow;
-    normalLoginWindow = nullptr;
+    delete standardLoginWindow;
+    standardLoginWindow = nullptr;
 }
 
 void PortalAuthenticator::samlAuth()
 {
     LOGI << "Trying to perform SAML login with saml-method " << preloginResponse.samlMethod();
 
-    SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
+    auto *loginWindow = new SAMLLoginWindow;
 
     connect(loginWindow, &SAMLLoginWindow::success, [this, loginWindow](const QMap<QString, QString> samlResult) {
         this->onSAMLLoginSuccess(samlResult);
@@ -188,8 +184,8 @@ void PortalAuthenticator::onFetchConfigFinished()
         LOGE << QString("Failed to fetch the portal config from %1, %2").arg(configUrl).arg(reply->errorString());
 
         // Login failed, enable the fields of the normal login window
-        if (normalLoginWindow) {
-            normalLoginWindow->setProcessing(false);
+        if (standardLoginWindow) {
+            standardLoginWindow->setProcessing(false);
             openMessageBox("Portal login failed.", "Please check your credentials and try again.");
         } else if (isAutoLogin) {
             isAutoLogin = false;
@@ -208,10 +204,10 @@ void PortalAuthenticator::onFetchConfigFinished()
     response.setPassword(password);
 
     // Close the login window
-    if (normalLoginWindow) {
-        LOGI << "Closing the NormalLoginWindow...";
+    if (standardLoginWindow) {
+        LOGI << "Closing the StandardLoginWindow...";
 
-        normalLoginWindow->close();
+        standardLoginWindow->close();
     }
 
     emit success(response, preloginResponse.region());

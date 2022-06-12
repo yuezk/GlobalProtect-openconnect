@@ -12,7 +12,6 @@ class EnhancedWebView : public QWebEngineView
     Q_OBJECT
 public:
     explicit EnhancedWebView(QWidget *parent = nullptr);
-    ~EnhancedWebView();
 
     void initialize();
 
@@ -24,7 +23,7 @@ private slots:
     void onEventReceived(QString eventName, QJsonObject params);
 
 private:
-    CDPCommandManager *cdp;
+    CDPCommandManager *cdp { nullptr };
 };
 
 #endif // ENHANCEDWEBVIEW_H

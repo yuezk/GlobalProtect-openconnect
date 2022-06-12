@@ -38,7 +38,7 @@ void GatewayAuthenticator::authenticate()
 
 void GatewayAuthenticator::login(const LoginParams &loginParams)
 {
-    LOGI << QString("Trying to login the gateway at %1, with %2").arg(loginUrl).arg(QString::fromUtf8(loginParams.toUtf8()));
+    LOGI << QString("Trying to login the gateway at %1, with %2").arg(loginUrl).arg(QString(loginParams.toUtf8()));
 
     auto *reply = createRequest(loginUrl, loginParams.toUtf8());
     connect(reply, &QNetworkReply::finished, this, &GatewayAuthenticator::onLoginFinished);
@@ -52,8 +52,8 @@ void GatewayAuthenticator::onLoginFinished()
     if (reply->error() || response.contains("Authentication failure")) {
         LOGE << QString("Failed to login the gateway at %1, %2").arg(loginUrl, reply->errorString());
 
-        if (normalLoginWindow) {
-            normalLoginWindow->setProcessing(false);
+        if (standardLoginWindow) {
+            standardLoginWindow->setProcessing(false);
             openMessageBox("Gateway login failed.", "Please check your credentials and try again.");
         } else {
             doAuth();
@@ -68,8 +68,8 @@ void GatewayAuthenticator::onLoginFinished()
         return;
     }
 
-    if (normalLoginWindow) {
-        normalLoginWindow->close();
+    if (standardLoginWindow) {
+        standardLoginWindow->close();
     }
 
     const auto params = gpclient::helper::parseGatewayResponse(response);
@@ -115,28 +115,24 @@ void GatewayAuthenticator::normalAuth(QString labelUsername, QString labelPasswo
 {
     LOGI << QString("Trying to perform the normal login with %1 / %2 credentials").arg(labelUsername, labelPassword);
 
-    normalLoginWindow = new NormalLoginWindow;
-    normalLoginWindow->setPortalAddress(gateway);
-    normalLoginWindow->setAuthMessage(authMessage);
-    normalLoginWindow->setUsernameLabel(labelUsername);
-    normalLoginWindow->setPasswordLabel(labelPassword);
+    standardLoginWindow = new StandardLoginWindow {gateway, labelUsername, labelPassword, authMessage};
 
     // Do login
-    connect(normalLoginWindow, &NormalLoginWindow::performLogin, this, &GatewayAuthenticator::onPerformNormalLogin);
-    connect(normalLoginWindow, &NormalLoginWindow::rejected, this, &GatewayAuthenticator::onLoginWindowRejected);
-    connect(normalLoginWindow, &NormalLoginWindow::finished, this, &GatewayAuthenticator::onLoginWindowFinished);
+    connect(standardLoginWindow, &StandardLoginWindow::performLogin, this, &GatewayAuthenticator::onPerformStandardLogin);
+    connect(standardLoginWindow, &StandardLoginWindow::rejected, this, &GatewayAuthenticator::onLoginWindowRejected);
+    connect(standardLoginWindow, &StandardLoginWindow::finished, this, &GatewayAuthenticator::onLoginWindowFinished);
 
-    normalLoginWindow->show();
+    standardLoginWindow->show();
 }
 
-void GatewayAuthenticator::onPerformNormalLogin(const QString &username, const QString &password)
+void GatewayAuthenticator::onPerformStandardLogin(const QString &username, const QString &password)
 {
     LOGI << "Start to perform normal login...";
 
-    normalLoginWindow->setProcessing(true);
+    standardLoginWindow->setProcessing(true);
     params.setUsername(username);
     params.setPassword(password);
-    
+
     authenticate();
 }
 
@@ -147,15 +143,15 @@ void GatewayAuthenticator::onLoginWindowRejected()
 
 void GatewayAuthenticator::onLoginWindowFinished()
 {
-    delete normalLoginWindow;
-    normalLoginWindow = nullptr;
+    delete standardLoginWindow;
+    standardLoginWindow = nullptr;
 }
 
 void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QString preloginUrl)
 {
     LOGI << "Trying to perform SAML login with saml-method " << samlMethod;
 
-    SAMLLoginWindow *loginWindow = new SAMLLoginWindow;
+    auto *loginWindow = new SAMLLoginWindow;
 
     connect(loginWindow, &SAMLLoginWindow::success, [this, loginWindow](const QMap<QString, QString> &samlResult) {
         this->onSAMLLoginSuccess(samlResult);
@@ -215,8 +211,8 @@ void GatewayAuthenticator::showChallenge(const QString &responseText)
     });
 
     connect(challengeDialog, &ChallengeDialog::rejected, this, [this] {
-        if (normalLoginWindow) {
-            normalLoginWindow->close();
+        if (standardLoginWindow) {
+            standardLoginWindow->close();
         }
         emit fail();
     });

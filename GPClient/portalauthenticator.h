@@ -4,7 +4,7 @@
 #include <QtCore/QObject>
 
 #include "portalconfigresponse.h"
-#include "normalloginwindow.h"
+#include "standardloginwindow.h"
 #include "samlloginwindow.h"
 #include "preloginresponse.h"
 
@@ -48,7 +48,7 @@ private:
 
     bool isAutoLogin{ false };
 
-    NormalLoginWindow *normalLoginWindow{ nullptr };
+    StandardLoginWindow *standardLoginWindow { nullptr };
 
     void tryAutoLogin();
     void normalAuth();

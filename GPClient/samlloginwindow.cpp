@@ -33,23 +33,18 @@ SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
     });
 }
 
-SAMLLoginWindow::~SAMLLoginWindow()
-{
-    delete webView;
-}
-
 void SAMLLoginWindow::closeEvent(QCloseEvent *event)
 {
     event->accept();
     reject();
 }
 
-void SAMLLoginWindow::login(const QString samlMethod, const QString samlRequest, const QString preloingUrl)
+void SAMLLoginWindow::login(const QString samlMethod, const QString samlRequest, const QString preloginUrl)
 {
     webView->page()->profile()->cookieStore()->deleteSessionCookies();
 
     if (samlMethod == "POST") {
-        webView->setHtml(samlRequest, preloingUrl);
+        webView->setHtml(samlRequest, preloginUrl);
     } else if (samlMethod == "REDIRECT") {
         LOGI << "Redirect to " << samlRequest;
         webView->load(samlRequest);

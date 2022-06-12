@@ -23,7 +23,7 @@ add_executable(gpclient
     gphelper.cpp
     loginparams.cpp
     main.cpp
-    normalloginwindow.cpp
+    standardloginwindow.cpp
     portalauthenticator.cpp
     portalconfigresponse.cpp
     preloginresponse.cpp
@@ -31,7 +31,7 @@ add_executable(gpclient
     gpclient.cpp
     settingsdialog.cpp
     gpclient.ui
-    normalloginwindow.ui
+    standardloginwindow.ui
     settingsdialog.ui
     challengedialog.h
     challengedialog.cpp
