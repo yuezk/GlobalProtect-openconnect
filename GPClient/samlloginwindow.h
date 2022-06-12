@@ -29,7 +29,7 @@ private:
     static const auto MAX_WAIT_TIME { 10 * 1000 };
 
     bool failed { false };
-    QWebEngineView *webView { nullptr };
+    EnhancedWebView *webView { nullptr };
     QMap<QString, QString> samlResult;
 
     void closeEvent(QCloseEvent *event);
