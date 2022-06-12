@@ -7,6 +7,8 @@
 #include <QtNetwork/QSslConfiguration>
 #include <QtNetwork/QSslSocket>
 #include <plog/Log.h>
+#include <QWebEngineProfile>
+#include <QWebEngineCookieStore>
 
 #include "gphelper.h"
 
@@ -127,4 +129,6 @@ void gpclient::helper::settings::clear()
             _settings->remove(key);
         }
     }
+
+    QWebEngineProfile::defaultProfile()->cookieStore()->deleteAllCookies();
 }

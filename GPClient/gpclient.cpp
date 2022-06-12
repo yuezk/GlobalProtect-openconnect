@@ -112,7 +112,7 @@ void GPClient::initSystemTrayIcon()
     connectAction = contextMenu->addAction(QIcon::fromTheme("preferences-system-network"), "Connect", this, &GPClient::doConnect);
     contextMenu->addMenu(gatewaySwitchMenu);
     contextMenu->addSeparator();
-    clearAction = contextMenu->addAction(QIcon::fromTheme("edit-clear"), "Reset Settings", this, &GPClient::clearSettings);
+    clearAction = contextMenu->addAction(QIcon::fromTheme("edit-clear"), "Reset", this, &GPClient::clearSettings);
     quitAction = contextMenu->addAction(QIcon::fromTheme("application-exit"), "Quit", this, &GPClient::quit);
 
     systemTrayIcon->show();
