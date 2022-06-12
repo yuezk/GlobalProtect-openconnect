@@ -1,4 +1,17 @@
 -------------------------------------------------------------------
+Sun Jun 12 12:28:58 UTC 2022 - k3vinyue@gmail.com - 1.4.8
+
+- Update to 1.4.8
+  * Updated VERSION, Bumped 1.4.7 –> 1.4.8
+  * fix: fix compile error
+  * refactor: simplify the code
+  * chore: use auto to declare variables
+  * chore: use c++ 17
+  * fix: clear cookies when click the Reset button
+  * fix: refine the authentication workflow
+  * chore: PLOG -> LOG
+
+-------------------------------------------------------------------
 Tue Jun  7 13:46:04 UTC 2022 - k3vinyue@gmail.com - 1.4.7
 
 - Update to 1.4.7

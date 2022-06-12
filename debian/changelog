@@ -1,3 +1,16 @@
+globalprotect-openconnect (1.4.8-1) unstable; urgency=medium
+
+  * Updated VERSION, Bumped 1.4.7 –> 1.4.8
+  * fix: fix compile error
+  * refactor: simplify the code
+  * chore: use auto to declare variables
+  * chore: use c++ 17
+  * fix: clear cookies when click the Reset button
+  * fix: refine the authentication workflow
+  * chore: PLOG -> LOG
+
+ -- Kevin Yue <k3vinyue@gmail.com>  Sun, 12 Jun 2022 20:28:58 +0800
+
 globalprotect-openconnect (1.4.7-1) unstable; urgency=medium
 
   * Updated VERSION, Bumped 1.4.6 –> 1.4.7
