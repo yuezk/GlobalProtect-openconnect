@@ -23,11 +23,6 @@ GatewayAuthenticator::GatewayAuthenticator(const QString& gateway, GatewayAuthen
     }
 }
 
-GatewayAuthenticator::~GatewayAuthenticator()
-{
-    delete normalLoginWindow;
-}
-
 void GatewayAuthenticator::authenticate()
 {
     LOGI << "Start gateway authentication...";
@@ -43,9 +38,9 @@ void GatewayAuthenticator::authenticate()
 
 void GatewayAuthenticator::login(const LoginParams &loginParams)
 {
-    LOGI << "Trying to login the gateway at " << loginUrl << " with " << loginParams.toUtf8();
+    LOGI << QString("Trying to login the gateway at %1, with %2").arg(loginUrl).arg(QString::fromUtf8(loginParams.toUtf8()));
 
-    QNetworkReply *reply = createRequest(loginUrl, loginParams.toUtf8());
+    auto *reply = createRequest(loginUrl, loginParams.toUtf8());
     connect(reply, &QNetworkReply::finished, this, &GatewayAuthenticator::onLoginFinished);
 }
 
@@ -77,7 +72,7 @@ void GatewayAuthenticator::onLoginFinished()
         normalLoginWindow->close();
     }
 
-    const QUrlQuery params = gpclient::helper::parseGatewayResponse(response);
+    const auto params = gpclient::helper::parseGatewayResponse(response);
     emit success(params.toString());
 }
 
@@ -85,13 +80,13 @@ void GatewayAuthenticator::doAuth()
 {
     LOGI << "Perform the gateway prelogin at " << preloginUrl;
 
-    QNetworkReply *reply = createRequest(preloginUrl);
+    auto *reply = createRequest(preloginUrl);
     connect(reply, &QNetworkReply::finished, this, &GatewayAuthenticator::onPreloginFinished);
 }
 
 void GatewayAuthenticator::onPreloginFinished()
 {
-    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    auto *reply = qobject_cast<QNetworkReply*>(sender());
 
     if (reply->error()) {
         LOGE << QString("Failed to prelogin the gateway at %1, %2").arg(preloginUrl, reply->errorString());
@@ -102,7 +97,7 @@ void GatewayAuthenticator::onPreloginFinished()
 
     LOGI << "Gateway prelogin succeeded.";
 
-    PreloginResponse response = PreloginResponse::parse(reply->readAll());
+    auto response = PreloginResponse::parse(reply->readAll());
 
     if (response.hasSamlAuthFields()) {
         samlAuth(response.samlMethod(), response.samlRequest(), reply->url().toString());

@@ -369,7 +369,8 @@ void GPClient::gatewayLogin()
     GatewayAuthenticatorParams params = GatewayAuthenticatorParams::fromPortalConfigResponse(portalConfig);
     params.setClientos(settings::get("clientos", "Linux").toString());
 
-    GatewayAuthenticator *gatewayAuth = new GatewayAuthenticator(currentGateway().address(), params);
+    GatewayAuthenticator *gatewayAuth;
+    gatewayAuth = new GatewayAuthenticator(currentGateway().address(), params);
 
     connect(gatewayAuth, &GatewayAuthenticator::success, [this, gatewayAuth](const QString &authToken) {
         this->onGatewaySuccess(authToken);

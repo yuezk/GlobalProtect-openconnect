@@ -12,8 +12,7 @@ class GatewayAuthenticator : public QObject
 {
     Q_OBJECT
 public:
-    explicit GatewayAuthenticator(const QString& gateway, GatewayAuthenticatorParams params);
-    ~GatewayAuthenticator();
+    explicit GatewayAuthenticator(const QString &gateway, GatewayAuthenticatorParams params);
 
     void authenticate();
 
