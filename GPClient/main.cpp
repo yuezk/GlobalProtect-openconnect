@@ -46,6 +46,7 @@ int main(int argc, char *argv[])
       {"json", "Write the result of the handshake with the GlobalConnect server to stdout as JSON and terminate. Useful for scripting."},
       {"now", "Do not show the dialog with the connect button; connect immediately instead."},
       {"start-minimized", "Launch the client minimized."},
+      {"reset", "Reset the client's settings."},
     });
     parser.process(app);
 
@@ -55,7 +56,11 @@ int main(int argc, char *argv[])
       ? static_cast<IVpn*>(new VpnJson(nullptr)) // Print to stdout and exit
       : static_cast<IVpn*>(new VpnDbus(nullptr)); // Contact GPService daemon via dbus
     GPClient w(nullptr, vpn);
+
     parser.isSet("start-minimized") ? w.showMinimized() : w.show();
+    if (parser.isSet("reset")) {
+        w.reset();
+    }
 
     if (positional.size() > 0) {
       w.portal(positional.at(0));

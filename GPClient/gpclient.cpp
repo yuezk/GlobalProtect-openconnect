@@ -40,14 +40,6 @@ GPClient::GPClient(QWidget *parent, IVpn *vpn)
     initVpnStatus();
 }
 
-GPClient::~GPClient()
-{
-    delete ui;
-    delete vpn;
-    delete settingsDialog;
-    delete settingsButton;
-}
-
 void GPClient::setupSettings()
 {
     settingsButton = new QPushButton(this);
@@ -112,7 +104,7 @@ void GPClient::initSystemTrayIcon()
     connectAction = contextMenu->addAction(QIcon::fromTheme("preferences-system-network"), "Connect", this, &GPClient::doConnect);
     contextMenu->addMenu(gatewaySwitchMenu);
     contextMenu->addSeparator();
-    clearAction = contextMenu->addAction(QIcon::fromTheme("edit-clear"), "Reset", this, &GPClient::clearSettings);
+    clearAction = contextMenu->addAction(QIcon::fromTheme("edit-clear"), "Reset", this, &GPClient::reset);
     quitAction = contextMenu->addAction(QIcon::fromTheme("application-exit"), "Quit", this, &GPClient::quit);
 
     systemTrayIcon->show();
@@ -478,7 +470,7 @@ void GPClient::setCurrentGateway(const GPGateway gateway)
     populateGatewayMenu();
 }
 
-void GPClient::clearSettings()
+void GPClient::reset()
 {
     settings::clear();
     populateGatewayMenu();

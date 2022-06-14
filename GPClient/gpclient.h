@@ -21,7 +21,6 @@ class GPClient : public QMainWindow
 
 public:
     GPClient(QWidget *parent, IVpn *vpn);
-    ~GPClient();
 
     void activate();
     void quit();
@@ -33,6 +32,7 @@ public:
     void setCurrentGateway(const GPGateway gateway);
 
     void doConnect();
+    void reset();
 
 private slots:
     void onSettingsButtonClicked();
@@ -81,8 +81,6 @@ private:
     SettingsDialog *settingsDialog;
     QPushButton *settingsButton;
 
-    GatewayAuthenticator *gatewayAuthenticator;
-
     bool isQuickConnect { false };
     bool isSwitchingGateway { false };
     PortalConfigResponse portalConfig;
@@ -102,7 +100,5 @@ private:
 
     QList<GPGateway> allGateways() const;
     void setAllGateways(QList<GPGateway> gateways);
-
-    void clearSettings();
 };
 #endif // GPCLIENT_H
