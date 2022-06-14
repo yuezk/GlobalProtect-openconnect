@@ -57,11 +57,6 @@ int main(int argc, char *argv[])
       : static_cast<IVpn*>(new VpnDbus(nullptr)); // Contact GPService daemon via dbus
     GPClient w(nullptr, vpn);
 
-    parser.isSet("start-minimized") ? w.showMinimized() : w.show();
-    if (parser.isSet("reset")) {
-        w.reset();
-    }
-
     if (positional.size() > 0) {
       w.portal(positional.at(0));
     }
@@ -81,11 +76,20 @@ int main(int argc, char *argv[])
     sigwatch.watchForSignal(SIGHUP);
     QObject::connect(&sigwatch, &UnixSignalWatcher::unixSignal, &w, &GPClient::quit);
 
+    if (parser.isSet("json")) {
+        QObject::connect(static_cast<VpnJson*>(vpn), &VpnJson::connected, &w, &GPClient::quit);
+    }
+
+    if (parser.isSet("reset")) {
+        w.reset();
+    }
+
     if (parser.isSet("now")) {
       w.doConnect();
-    }
-    if (parser.isSet("json")) {
-      QObject::connect(static_cast<VpnJson*>(vpn), &VpnJson::connected, &w, &GPClient::quit);
+    } else if (parser.isSet("start-minimized")) {
+      w.showMinimized();
+    } else {
+      w.show();
     }
 
     return app.exec();
