@@ -481,6 +481,7 @@ void GPClient::setCurrentGateway(const GPGateway gateway)
     LOGI << "Updating the current gateway to " << gateway.name();
 
     settings::save(portal() + "_selectedGateway", gateway.name());
+    ui->portalInput->setText(gateway.address());
     populateGatewayMenu();
 }
 
