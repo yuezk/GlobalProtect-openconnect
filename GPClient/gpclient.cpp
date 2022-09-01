@@ -446,8 +446,14 @@ bool GPClient::connected() const
 
 QList<GPGateway> GPClient::allGateways() const
 {
-    const QString gatewaysJson = settings::get(portal() + "_gateways").toString();
-    return GPGateway::fromJson(gatewaysJson);
+
+    QList<GPGateway> gateways;
+
+    for (auto g :settings::get_all("_gateways$") ){
+
+    	gateways.append(GPGateway::fromJson(settings::get(g).toString()));
+    }
+    return gateways;
 }
 
 void GPClient::setAllGateways(QList<GPGateway> gateways)
