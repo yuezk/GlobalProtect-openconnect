@@ -115,6 +115,12 @@ QVariant gpclient::helper::settings::get(const QString &key, const QVariant &def
     return _settings->value(key, defaultValue);
 }
 
+QStringList gpclient::helper::settings::get_all(const QString &key, const QVariant &defaultValue)
+{
+	QRegularExpression re(key);
+	return 	_settings->allKeys().filter(re);
+}
+
 void gpclient::helper::settings::save(const QString &key, const QVariant &value)
 {
     _settings->setValue(key, value);
