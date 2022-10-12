@@ -28,6 +28,7 @@ private:
     Ui::StandardLoginWindow *ui;
 
     void closeEvent(QCloseEvent *event);
+    void autocomplete();
 };
 
 #endif // STANDARDLOGINWINDOW_H

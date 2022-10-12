@@ -2,6 +2,9 @@
 
 #include "standardloginwindow.h"
 #include "ui_standardloginwindow.h"
+#include "gphelper.h"
+
+using namespace gpclient::helper;
 
 StandardLoginWindow::StandardLoginWindow(const QString &portalAddress, const QString &labelUsername,
                                          const QString &labelPassword, const QString &authMessage) :
@@ -13,9 +16,22 @@ StandardLoginWindow::StandardLoginWindow(const QString &portalAddress, const QSt
     ui->password->setPlaceholderText(labelPassword);
     ui->authMessage->setText(authMessage);
 
+    autocomplete();
+
     setWindowTitle("GlobalProtect Login");
     setFixedSize(width(), height());
     setModal(true);
+}
+
+void StandardLoginWindow::autocomplete() {
+    QString username, password;
+    settings::secureGet("username", username);
+    settings::secureGet("password", password);
+
+    if (!username.isEmpty() && !password.isEmpty()) {
+        ui->username->setText(username);
+        ui->password->setText(password);
+    }
 }
 
 void StandardLoginWindow::setProcessing(bool isProcessing) {
@@ -31,6 +47,9 @@ void StandardLoginWindow::on_loginButton_clicked() {
     if (username.isEmpty() || password.isEmpty()) {
         return;
     }
+
+    settings::secureSave("username", username);
+    settings::secureSave("password", password);
 
     emit performLogin(username, password);
 }

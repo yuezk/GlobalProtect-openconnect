@@ -5,3 +5,6 @@
 [submodule "plog"]
 	path = 3rdparty/plog
 	url = https://github.com/SergiusTheBest/plog.git
+[submodule "3rdparty/qtkeychain"]
+	path = 3rdparty/qtkeychain
+	url = git@github.com:frankosterfeld/qtkeychain.git
