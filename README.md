@@ -97,6 +97,14 @@ git clone https://github.com/yuezk/GlobalProtect-openconnect.git
 cd GlobalProtect-openconnect
 ```
 
+### MX Linux
+The following instructions are for **MX-21.2.1_x64 KDE**.
+
+```sh
+sudo apt install qttools5-dev libsecret-1-dev libqt5keychain1
+./scripts/install-debian.sh
+```
+
 ### Ubuntu/Mint
 
 > **⚠️ REQUIRED for Ubuntu 18.04 ⚠️**
