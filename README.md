@@ -146,6 +146,7 @@ Install the Qt5 dependencies and OpenConnect:
 - QtWebSockets
 - QtDBus
 - openconnect v8.x
+- qtkeychain
 
 ...then build and install with:
 
