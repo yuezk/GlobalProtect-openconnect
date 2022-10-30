@@ -87,7 +87,11 @@ set(qtkeychain_INCLUDE_DIR "${SOURCE_DIR}")
 set(qtkeychain_BINARY_DIR "${BINARY_DIR}")
 set(qtkeychain_LIBRARY ${BINARY_DIR}/libqt5keychain.so)
 
-add_dependencies(gpclient SingleApplication-${PROJECT_NAME} plog-${PROJECT_NAME} qtkeychain-${PROJECT_NAME})
+add_dependencies(gpclient
+    SingleApplication-${PROJECT_NAME}
+    plog-${PROJECT_NAME}
+    qtkeychain-${PROJECT_NAME}
+)
 
 target_include_directories(gpclient PRIVATE
     ${CMAKE_BINARY_DIR}
