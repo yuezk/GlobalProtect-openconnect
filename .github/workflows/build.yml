@@ -31,7 +31,8 @@ jobs:
       - name: Build
         run: |
           ./scripts/install-ubuntu.sh
-          gpclient --version
+          # assert no library missing
+          test $(ldd $(which gpclient) | grep 'not found' | wc -l) -eq 0
 
   snapshot-archive-all:
     if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
