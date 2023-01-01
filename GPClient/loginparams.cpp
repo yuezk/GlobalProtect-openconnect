@@ -1,6 +1,9 @@
 #include <QtCore/QUrlQuery>
 
 #include "loginparams.h"
+#include "gphelper.h"
+
+using namespace gpclient::helper;
 
 LoginParams::LoginParams(const QString clientos)
 {
@@ -14,12 +17,17 @@ LoginParams::LoginParams(const QString clientos)
     params.addQueryItem("ok", "Login");
     params.addQueryItem("direct", "yes");
     params.addQueryItem("clientVer", "4100");
-    params.addQueryItem("os-version", QUrl::toPercentEncoding(QSysInfo::prettyProductName()));
 
     // add the clientos parameter if not empty
     if (!clientos.isEmpty()) {
         params.addQueryItem("clientos", clientos);
     }
+
+    auto osVersion = settings::get("os-version", "").toString();
+    if (osVersion.isEmpty()) {
+        osVersion = QSysInfo::prettyProductName();
+    }
+    params.addQueryItem("os-version", QUrl::toPercentEncoding(osVersion));
 
     params.addQueryItem("portal-userauthcookie", "");
     params.addQueryItem("portal-prelogonuserauthcookie", "");

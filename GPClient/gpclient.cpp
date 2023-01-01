@@ -69,12 +69,14 @@ void GPClient::setupSettings()
 void GPClient::onSettingsButtonClicked()
 {
     settingsDialog->setClientos(settings::get("clientos", "Linux").toString());
+    settingsDialog->setOsVersion(settings::get("os-version", QSysInfo::prettyProductName()).toString());
     settingsDialog->show();
 }
 
 void GPClient::onSettingsAccepted()
 {
     settings::save("clientos", settingsDialog->clientos());
+    settings::save("os-version", settingsDialog->osVersion());
 }
 
 void GPClient::on_connectButton_clicked()
