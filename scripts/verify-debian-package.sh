@@ -7,6 +7,7 @@ sudo apt-get install -y \
 	libqt5websockets5-dev \
 	qtwebengine5-dev \
 	cmake \
+	qttools5-dev \
 	debhelper
 
 mkdir -p build
