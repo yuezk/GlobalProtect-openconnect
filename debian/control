@@ -2,7 +2,7 @@ Source: globalprotect-openconnect
 Section: net
 Priority: optional
 Maintainer: Kevin Yue <k3vinyue@gmail.com>
-Build-Depends: cmake (>=3.10), debhelper (>=11~), qtbase5-dev, libqt5websockets5-dev (>=5.9), qtwebengine5-dev (>=5.9)
+Build-Depends: cmake (>=3.10), debhelper (>=11~), qtbase5-dev, qttools5-dev, libqt5websockets5-dev (>=5.9), qtwebengine5-dev (>=5.9)
 Standards-Version: 4.1.4
 Homepage: https://github.com/yuezk/GlobalProtect-openconnect
 
