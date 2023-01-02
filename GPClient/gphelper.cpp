@@ -9,8 +9,11 @@
 #include <plog/Log.h>
 #include <QWebEngineProfile>
 #include <QWebEngineCookieStore>
+#include <keychain.h>
 
 #include "gphelper.h"
+
+using namespace QKeychain;
 
 QNetworkAccessManager* gpclient::helper::networkManager = new QNetworkAccessManager;
 
@@ -115,6 +118,12 @@ QVariant gpclient::helper::settings::get(const QString &key, const QVariant &def
     return _settings->value(key, defaultValue);
 }
 
+QStringList gpclient::helper::settings::get_all(const QString &key, const QVariant &defaultValue)
+{
+	QRegularExpression re(key);
+	return 	_settings->allKeys().filter(re);
+}
+
 void gpclient::helper::settings::save(const QString &key, const QVariant &value)
 {
     _settings->setValue(key, value);
@@ -131,4 +140,39 @@ void gpclient::helper::settings::clear()
     }
 
     QWebEngineProfile::defaultProfile()->cookieStore()->deleteAllCookies();
+}
+
+
+bool gpclient::helper::settings::secureSave(const QString &key, const QString &value) {
+    WritePasswordJob job( QLatin1String("gpclient") );
+    job.setAutoDelete( false );
+    job.setKey( key );
+    job.setTextData( value );
+    QEventLoop loop;
+    job.connect( &job, SIGNAL(finished(QKeychain::Job*)), &loop, SLOT(quit()) );
+    job.start();
+    loop.exec();
+    if ( job.error() ) {
+        return false;
+    }
+
+    return true;
+}
+
+bool gpclient::helper::settings::secureGet(const QString &key, QString &value) {
+    ReadPasswordJob job( QLatin1String("gpclient") );
+    job.setAutoDelete( false );
+    job.setKey( key );
+    QEventLoop loop;
+    job.connect( &job, SIGNAL(finished(QKeychain::Job*)), &loop, SLOT(quit()) );
+    job.start();
+    loop.exec();
+
+    const QString pw = job.textData();
+    if ( job.error() ) {
+        return false;
+    }
+    
+    value = pw;
+    return true;
 }

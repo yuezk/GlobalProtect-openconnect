@@ -21,6 +21,9 @@ public:
     void setClientos(QString clientos);
     QString clientos();
 
+    void setOsVersion(QString osVersion);
+    QString osVersion();
+
 private:
     Ui::SettingsDialog *ui;
 };

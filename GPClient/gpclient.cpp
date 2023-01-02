@@ -61,12 +61,14 @@ void GPClient::setupSettings()
 void GPClient::onSettingsButtonClicked()
 {
     settingsDialog->setClientos(settings::get("clientos", "Linux").toString());
+    settingsDialog->setOsVersion(settings::get("os-version", QSysInfo::prettyProductName()).toString());
     settingsDialog->show();
 }
 
 void GPClient::onSettingsAccepted()
 {
     settings::save("clientos", settingsDialog->clientos());
+    settings::save("os-version", settingsDialog->osVersion());
 }
 
 void GPClient::on_connectButton_clicked()
@@ -438,8 +440,14 @@ bool GPClient::connected() const
 
 QList<GPGateway> GPClient::allGateways() const
 {
-    const QString gatewaysJson = settings::get(portal() + "_gateways").toString();
-    return GPGateway::fromJson(gatewaysJson);
+
+    QList<GPGateway> gateways;
+
+    for (auto g :settings::get_all("_gateways$") ){
+
+    	gateways.append(GPGateway::fromJson(settings::get(g).toString()));
+    }
+    return gateways;
 }
 
 void GPClient::setAllGateways(QList<GPGateway> gateways)
@@ -467,6 +475,7 @@ void GPClient::setCurrentGateway(const GPGateway gateway)
     LOGI << "Updating the current gateway to " << gateway.name();
 
     settings::save(portal() + "_selectedGateway", gateway.name());
+    ui->portalInput->setText(gateway.address());
     populateGatewayMenu();
 }
 

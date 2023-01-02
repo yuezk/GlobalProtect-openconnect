@@ -64,6 +64,17 @@ add_3rdparty(
         -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
 )
 
+add_3rdparty(
+    qtkeychain
+    GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git
+    GIT_TAG master
+    CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
+        -DCMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}
+        -DCMAKE_PREFIX_PATH=$ENV{CMAKE_PREFIX_PATH}
+)
+
 ExternalProject_Get_Property(SingleApplication-${PROJECT_NAME} SOURCE_DIR BINARY_DIR)
 set(SingleApplication_INCLUDE_DIR ${SOURCE_DIR})
 set(SingleApplication_LIBRARY ${BINARY_DIR}/libSingleApplication.a)
@@ -71,7 +82,16 @@ set(SingleApplication_LIBRARY ${BINARY_DIR}/libSingleApplication.a)
 ExternalProject_Get_Property(plog-${PROJECT_NAME} SOURCE_DIR)
 set(plog_INCLUDE_DIR "${SOURCE_DIR}/include")
 
-add_dependencies(gpclient SingleApplication-${PROJECT_NAME} plog-${PROJECT_NAME})
+ExternalProject_Get_Property(qtkeychain-${PROJECT_NAME} SOURCE_DIR BINARY_DIR)
+set(qtkeychain_INCLUDE_DIR "${SOURCE_DIR}")
+set(qtkeychain_BINARY_DIR "${BINARY_DIR}")
+set(qtkeychain_LIBRARY ${BINARY_DIR}/libqt5keychain.so)
+
+add_dependencies(gpclient
+    SingleApplication-${PROJECT_NAME}
+    plog-${PROJECT_NAME}
+    qtkeychain-${PROJECT_NAME}
+)
 
 target_include_directories(gpclient PRIVATE
     ${CMAKE_BINARY_DIR}
@@ -79,10 +99,13 @@ target_include_directories(gpclient PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${SingleApplication_INCLUDE_DIR}
     ${plog_INCLUDE_DIR}
+    ${qtkeychain_INCLUDE_DIR}
+    ${qtkeychain_BINARY_DIR}
 )
 
 target_link_libraries(gpclient
     ${SingleApplication_LIBRARY}
+    ${qtkeychain_LIBRARY}
     Qt5::Widgets
     Qt5::Network
     Qt5::WebSockets

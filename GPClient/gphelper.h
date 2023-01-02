@@ -34,8 +34,12 @@ namespace gpclient {
             static const QStringList reservedKeys {"extraArgs", "clientos"};
 
             QVariant get(const QString &key, const QVariant &defaultValue = QVariant());
+            QStringList get_all(const QString &key, const QVariant &defaultValue = QVariant());
             void save(const QString &key, const QVariant &value);
             void clear();
+
+            bool secureSave(const QString &key, const QString &value);
+            bool secureGet(const QString &key, QString &value);
         }
     }
 }

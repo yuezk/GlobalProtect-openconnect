@@ -32,3 +32,11 @@ QString SettingsDialog::clientos()
 {
     return ui->clientosInput->text();
 }
+
+void SettingsDialog::setOsVersion(QString osVersion) {
+    ui->osVersionInput->setText(osVersion);
+}
+
+QString SettingsDialog::osVersion() {
+    return ui->osVersionInput->text();
+}

@@ -199,7 +199,9 @@ void GPService::onProcessStdout()
     QString output = openconnect->readAllStandardOutput();
 
     log(output);
-    if (output.indexOf("Connected as") >= 0 || output.indexOf("Configured as") >= 0) {
+    if (output.indexOf("Connected as") >= 0 ||
+        output.indexOf("Configured as") >= 0 ||
+        output.indexOf("Configurado como") >= 0) {
         vpnStatus = GPService::VpnConnected;
         emit connected();
     }
