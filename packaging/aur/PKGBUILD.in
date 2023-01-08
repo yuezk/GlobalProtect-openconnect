@@ -13,7 +13,7 @@ backup=(
     etc/gpservice/gp.conf
 )
 install=gp.install
-depends=('openconnect>=8.0.0' qt5-base qt5-webengine qt5-websockets qt5-tools)
+depends=('openconnect>=8.0.0' qt5-base qt5-webengine qt5-websockets qt5-tools qtkeychain-qt5)
 makedepends=(git cmake)
 conflicts=('globalprotect-openconnect')
 provides=('globalprotect-openconnect' 'gpclient' 'gpservice')

@@ -8,6 +8,6 @@ sudo apt-get install -y \
     qtwebengine5-dev \
 	qttools5-dev \
     openconnect \
-	libqt5keychain1
+	qt5keychain-dev
 
 ./scripts/install.sh

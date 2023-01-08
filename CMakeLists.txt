@@ -30,6 +30,8 @@ find_package(Qt5 REQUIRED COMPONENTS
     DBus
 )
 
+find_package(Qt5Keychain REQUIRED)
+
 add_subdirectory(3rdparty/qt-unix-signals)
 add_subdirectory(3rdparty/inih)
 add_subdirectory(GPService)

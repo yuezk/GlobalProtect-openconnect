@@ -8,7 +8,7 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 License:        GPL-3.0
 URL:            https://github.com/yuezk/GlobalProtect-openconnect
 Source0:        %{name}.tar.gz
-BuildRequires:  cmake cmake(Qt5) cmake(Qt5Gui) cmake(Qt5WebEngine) cmake(Qt5WebSockets) cmake(Qt5DBus)
+BuildRequires:  cmake cmake(Qt5) cmake(Qt5Gui) cmake(Qt5WebEngine) cmake(Qt5WebSockets) cmake(Qt5DBus) cmake(Qt5Keychain)
 BuildRequires:  systemd-rpm-macros
 Requires:       openconnect >= 8.0
 Conflicts:      globalprotect-openconnect-snapshot

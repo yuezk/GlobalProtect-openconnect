@@ -2,12 +2,12 @@ Source: globalprotect-openconnect
 Section: net
 Priority: optional
 Maintainer: Kevin Yue <k3vinyue@gmail.com>
-Build-Depends: cmake (>=3.16), pkg-config, debhelper (>=11~), qtbase5-dev, qttools5-dev, libqt5websockets5-dev (>=5.9), qtwebengine5-dev (>=5.9), libsecret-1-dev
+Build-Depends: cmake (>=3.16), pkg-config, debhelper (>=11~), qtbase5-dev, qttools5-dev, libqt5websockets5-dev (>=5.9), qtwebengine5-dev (>=5.9), qt5keychain-dev
 Standards-Version: 4.1.4
 Homepage: https://github.com/yuezk/GlobalProtect-openconnect
 
 Package: globalprotect-openconnect
 Architecture: any
 Multi-Arch: foreign
-Depends: ${misc:Depends}, ${shlibs:Depends}, openconnect (>=8.0), libqt5websockets5 (>=5.9), libqt5webengine5 (>=5.9)
+Depends: ${misc:Depends}, ${shlibs:Depends}, openconnect (>=8.0), libqt5websockets5 (>=5.9), libqt5webengine5 (>=5.9), libqt5keychain1
 Description: A GlobalProtect VPN client (GUI) based on OpenConnect.
