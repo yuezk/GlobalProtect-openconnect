@@ -1,3 +1,34 @@
+globalprotect-openconnect (1.4.9-1) unstable; urgency=medium
+
+  * Updated VERSION, Bumped 1.4.8 –> 1.4.9
+  * fix: update cmake version
+  * fix: correct the package name
+  * fix: use the dev package
+  * fix: use qtkeychain package
+  * fix: add qt5-tools
+  * fix: add libsecret-1-dev
+  * fix: add pkg-config
+  * fix: use cmake 3.16
+  * fix: add missing build dependency
+  * ci: fix CI
+  * Merge branch 'master' into develop
+  * feat: expose os-version to settings
+  * Add two missing dependencies for building on debian (#198)
+  * ci: assert no library missing
+  * fix: update qtkeychain
+  * ci: run gpclient after build
+  * fix: add qtkeychain
+  * chore: update CMake file
+  * Added install instructions for MX Linux. (#190)
+  * Credentials autocompleting (secure version) (#179)
+  * Read all saved Gateways (for selecting in Systray) (#181)
+  * copy install script for debian (#180)
+  * add es and pt support to shange status when connected to vpn (#162)
+  * fix: improve the cli support
+  * feat: add --reset option to gpclient
+
+ -- Kevin Yue <k3vinyue@gmail.com>  Sun, 08 Jan 2023 20:58:32 +0800
+
 globalprotect-openconnect (1.4.8-1) unstable; urgency=medium
 
   * Updated VERSION, Bumped 1.4.7 –> 1.4.8
