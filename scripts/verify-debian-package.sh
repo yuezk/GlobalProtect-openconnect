@@ -6,7 +6,7 @@ sudo apt-get install -y \
 	qtbase5-dev \
 	libqt5websockets5-dev \
 	qtwebengine5-dev \
-	libqt5keychain1 \
+	qt5keychain-dev \
 	cmake \
 	qttools5-dev \
 	debhelper
