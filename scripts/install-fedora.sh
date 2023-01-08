@@ -4,7 +4,7 @@ sudo dnf install -y \
     qt5-qtbase-devel \
     qt5-qtwebengine-devel \
     qt5-qtwebsockets-devel \
-    openconnect \
-	qtkeychain
+    qtkeychain-qt5-devel \
+    openconnect
 
 ./scripts/install.sh

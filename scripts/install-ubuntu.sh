@@ -6,8 +6,8 @@ sudo apt-get install -y \
     qtbase5-dev \
     libqt5websockets5-dev \
     qtwebengine5-dev \
-	qttools5-dev \
-    openconnect \
-	qt5keychain-dev
+    qttools5-dev \
+    qt5keychain-dev \
+    openconnect
 
 ./scripts/install.sh
