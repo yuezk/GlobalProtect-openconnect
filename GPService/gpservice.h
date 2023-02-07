@@ -4,14 +4,13 @@
 #include <QtCore/QObject>
 #include <QtCore/QProcess>
 
-static const QString binaryPaths[] {
-    "/usr/local/bin/openconnect",
-    "/usr/local/sbin/openconnect",
-    "/usr/bin/openconnect",
-    "/usr/sbin/openconnect",
-    "/opt/bin/openconnect",
-    "/opt/sbin/openconnect"
-};
+static QList<QString> binaryPaths = QList<QString>() <<
+    "/usr/local/bin/openconnect" <<
+     "/usr/local/sbin/openconnect" <<
+     "/usr/bin/openconnect" <<
+     "/usr/sbin/openconnect" <<
+     "/opt/bin/openconnect" <<
+     "/opt/sbin/openconnect";
 
 class GPService : public QObject
 {
