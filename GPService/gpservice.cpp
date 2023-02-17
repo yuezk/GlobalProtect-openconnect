@@ -34,9 +34,9 @@ GPService::~GPService()
 
 QString GPService::findBinary()
 {
-    for (int i = 0; i < binaryPaths->length(); i++) {
-        if (QFileInfo::exists(binaryPaths[i])) {
-            return binaryPaths[i];
+    for (auto& binaryPath : binaryPaths) {
+        if (QFileInfo::exists(binaryPath)) {
+            return binaryPath;
         }
     }
     return nullptr;
