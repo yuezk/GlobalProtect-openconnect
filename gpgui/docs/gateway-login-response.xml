@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<jnlp>
+    <application-desc>
+        <argument>(null)</argument>
+        <argument>44d9988f3a3b5a247d359b1d39229add</argument>
+        <argument>1cb389d44ec35e98665211761b65a049ef7ba77e</argument>
+        <argument>GP-Gateway-N</argument>
+        <argument>user</argument>
+        <argument>AD_Authentication</argument>
+        <argument>vsys1</argument>
+        <argument>vpn.example.com</argument>
+        <argument>(null)</argument>
+        <argument></argument>
+        <argument></argument>
+        <argument></argument>
+        <argument>tunnel</argument>
+        <argument>-1</argument>
+        <argument>4100</argument>
+        <argument></argument>
+        <argument>xxxxxxxxxxxxxxxx</argument>
+        <argument>xxxxxxxxxxxxxxxx</argument>
+        <argument></argument>
+        <argument>4</argument>
+        <argument>unknown</argument>
+        <argument></argument>
+    </application-desc>
+</jnlp>

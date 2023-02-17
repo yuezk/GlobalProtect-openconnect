@@ -1,5 +1,0 @@
-[D-BUS Service]
-Name=com.yuezk.qt.GPService
-Exec=@CMAKE_INSTALL_PREFIX@/bin/gpservice
-User=root
-SystemdService=gpservice.service

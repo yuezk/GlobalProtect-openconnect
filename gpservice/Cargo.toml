@@ -1,0 +1,16 @@
+[package]
+name = "gpservice"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+common = { path = "../common" }
+tokio = { version = "1", features = ["full"] }
+# warp = "0.3"
+# aes-gcm = "0.10"
+# procfs = "0.15"
+
+[build-dependencies]
+common = { path = "../common" }

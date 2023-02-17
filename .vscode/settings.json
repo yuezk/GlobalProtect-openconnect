@@ -1,26 +1,25 @@
 {
-    "files.watcherExclude": {
-        "**/artifacts/**": true,
-    },
-    "files.associations": {
-        "qregularexpression": "cpp",
-        "qfileinfo": "cpp",
-        "qregularexpressionmatch": "cpp",
-        "qdatetime": "cpp",
-        "qprocess": "cpp",
-        "qobject": "cpp",
-        "qstandardpaths": "cpp",
-        "qmainwindow": "cpp",
-        "qsystemtrayicon": "cpp",
-        "qpushbutton": "cpp",
-        "qmenu": "cpp",
-        "qjsondocument": "cpp",
-        "qnetworkaccessmanager": "cpp",
-        "qwebengineview": "cpp",
-        "qprocessenvironment": "cpp",
-        "qnetworkreply": "cpp",
-        "qicon": "cpp",
-        "qsslsocket": "cpp",
-        "qapplication": "cpp"
-    }
+  "cSpell.words": [
+    "bindgen",
+    "clientos",
+    "jnlp",
+    "openconnect",
+    "prelogin",
+    "prelogon",
+    "prelogonuserauthcookie",
+    "tauri",
+    "userauthcookie",
+    "vpninfo"
+  ],
+  "files.associations": {
+    "*.css": "css",
+    "errno.h": "c",
+    "stdarg.h": "c",
+    "wrapper.h": "c",
+    "cstdlib": "c",
+    "stdio.h": "c",
+    "openconnect.h": "c",
+    "compare": "c",
+    "stdlib.h": "c"
+  }
 }
