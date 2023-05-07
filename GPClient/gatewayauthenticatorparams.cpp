@@ -64,4 +64,3 @@ void GatewayAuthenticatorParams::setInputStr(const QString &inputStr)
 {
     m_inputStr = inputStr;
 }
-

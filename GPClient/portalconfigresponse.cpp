@@ -172,4 +172,3 @@ void PortalConfigResponse::setPrelogonUserAuthCookie(const QString cookie)
 {
     m_prelogonAuthCookie = cookie;
 }
-

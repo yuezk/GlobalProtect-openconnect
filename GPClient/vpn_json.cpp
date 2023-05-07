@@ -1,5 +1,5 @@
 #include "vpn_json.h"
-#include <QTextStream> 
+#include <QTextStream>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
