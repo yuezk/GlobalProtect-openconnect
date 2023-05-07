@@ -339,7 +339,7 @@ void GPClient::onPortalFail(const QString &msg)
 
 void GPClient::tryGatewayLogin()
 {
-    LOGI << "Try to preform login on the the gateway interface...";
+    LOGI << "Try to perform login on the the gateway interface...";
 
     // Treat the portal input as the gateway address
     GPGateway g;
