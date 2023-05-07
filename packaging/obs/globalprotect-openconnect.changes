@@ -25,7 +25,7 @@ Sun Jan  8 12:58:32 UTC 2023 - k3vinyue@gmail.com - 1.4.9
   * Credentials autocompleting (secure version) (#179)
   * Read all saved Gateways (for selecting in Systray) (#181)
   * copy install script for debian (#180)
-  * add es and pt support to shange status when connected to vpn (#162)
+  * add es and pt support to change status when connected to vpn (#162)
   * fix: improve the cli support
   * feat: add --reset option to gpclient
 
@@ -59,7 +59,7 @@ Wed Jun  1 15:55:50 UTC 2022 - k3vinyue@gmail.com - 1.4.6
 - Update to 1.4.6
   * Updated VERSION, Bumped 1.4.5 –> 1.4.6
   * feat: display address in gateway menu item
-  * fix: fix bug of parsing the portal respponse
+  * fix: fix bug of parsing the portal response
 
 -------------------------------------------------------------------
 Sun May 29 13:15:40 UTC 2022 - k3vinyue@gmail.com - 1.4.5
@@ -72,7 +72,7 @@ Sun May 29 13:15:40 UTC 2022 - k3vinyue@gmail.com - 1.4.5
   * packaging: fix postinst for debian
   * packaging: add postinst for debian
   * test: test debian packaging
-  * ci: fix the foder path
+  * ci: fix the folder path
   * chore: apt -> apt-get
   * ci: verify debian package
   * Revert "Revert "fix: improve the dbus security""
