@@ -57,7 +57,7 @@ globalprotect-openconnect (1.4.6-1) unstable; urgency=medium
 
   * Updated VERSION, Bumped 1.4.5 –> 1.4.6
   * feat: display address in gateway menu item
-  * fix: fix bug of parsing the portal respponse
+  * fix: fix bug of parsing the portal response
 
  -- Kevin Yue <k3vinyue@gmail.com>  Wed, 01 Jun 2022 23:55:50 +0800
 
@@ -70,7 +70,7 @@ globalprotect-openconnect (1.4.5-1) unstable; urgency=medium
   * packaging: fix postinst for debian
   * packaging: add postinst for debian
   * test: test debian packaging
-  * ci: fix the foder path
+  * ci: fix the folder path
   * chore: apt -> apt-get
   * ci: verify debian package
   * Revert "Revert "fix: improve the dbus security""

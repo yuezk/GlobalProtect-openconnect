@@ -172,7 +172,7 @@ bool gpclient::helper::settings::secureGet(const QString &key, QString &value) {
     if ( job.error() ) {
         return false;
     }
-    
+
     value = pw;
     return true;
 }

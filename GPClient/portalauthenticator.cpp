@@ -32,7 +32,7 @@ void PortalAuthenticator::authenticate()
 {
     attempts++;
 
-    LOGI << QString("(%1/%2) attempts").arg(attempts).arg(MAX_ATTEMPTS) << ", preform portal prelogin at " << preloginUrl;
+    LOGI << QString("(%1/%2) attempts").arg(attempts).arg(MAX_ATTEMPTS) << ", perform portal prelogin at " << preloginUrl;
 
     QNetworkReply *reply = createRequest(preloginUrl);
     connect(reply, &QNetworkReply::finished, this, &PortalAuthenticator::onPreloginFinished);

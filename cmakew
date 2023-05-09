@@ -36,7 +36,7 @@ fi
 cmake_base="./.cmake"
 cmake_bin="${cmake_base}/cmake-$cmake_version/bin/cmake"
 
-# download cmake if neccessary
+# download cmake if necessary
 if [ ! -f "$cmake_bin" ]; then
     download_link=""
 
