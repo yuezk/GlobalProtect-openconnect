@@ -9,7 +9,6 @@
 #include "vpn.h"
 
 void *g_user_data;
-on_connected_cb g_on_connected_cb;
 
 static int g_cmd_pipe_fd;
 const char *g_vpnc_script;
@@ -43,18 +42,17 @@ static void print_progress(__attribute__((unused)) void *_vpninfo, int level, co
 static void setup_tun_handler(void *_vpninfo)
 {
     openconnect_setup_tun_device(_vpninfo, g_vpnc_script, NULL);
-
-    if (g_on_connected_cb)
-    {
-        g_on_connected_cb(g_cmd_pipe_fd, g_user_data);
-    }
+    on_vpn_connected(g_cmd_pipe_fd, g_user_data);
 }
 
 /* Initialize VPN connection */
-int start(const Options *options, on_connected_cb cb)
+int start(const Options *options)
 {
     struct openconnect_info *vpninfo;
     struct utsname utsbuf;
+
+    g_user_data = options->user_data;
+    g_vpnc_script = options->script;
 
     vpninfo = openconnect_vpninfo_new("PAN GlobalProtect", validate_peer_cert, NULL, NULL, print_progress, NULL);
 
@@ -95,10 +93,6 @@ int start(const Options *options, on_connected_cb cb)
     }
 
     // Essential step
-    // openconnect_setup_tun_device(vpninfo, options->script, NULL);
-    g_user_data = options->user_data;
-    g_on_connected_cb = cb;
-    g_vpnc_script = options->script;
     openconnect_set_setup_tun_handler(vpninfo, setup_tun_handler);
 
     while (1)

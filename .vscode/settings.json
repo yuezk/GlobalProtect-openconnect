@@ -20,6 +20,7 @@
     "stdio.h": "c",
     "openconnect.h": "c",
     "compare": "c",
-    "stdlib.h": "c"
+    "stdlib.h": "c",
+    "vpn.h": "c"
   }
 }

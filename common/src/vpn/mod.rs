@@ -1,5 +1,3 @@
-mod ffi;
-
 use serde::{Deserialize, Serialize};
 use std::ffi::{c_void, CString};
 use std::sync::Arc;
@@ -7,13 +5,7 @@ use std::thread;
 use tokio::sync::watch;
 use tokio::sync::{mpsc, Mutex};
 
-#[no_mangle]
-extern "C" fn on_connected(value: i32, sender: *mut c_void) {
-    let sender = unsafe { &*(sender as *const mpsc::Sender<i32>) };
-    sender
-        .blocking_send(value)
-        .expect("Failed to send VPN connection code");
-}
+mod ffi;
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -119,7 +111,7 @@ impl Vpn {
 
             // Start the VPN connection, this will block until the connection is closed
             status_holder.blocking_lock().set(VpnStatus::Connecting);
-            let ret = unsafe { ffi::connect(&oc_options, on_connected) };
+            let ret = unsafe { ffi::connect(&oc_options) };
 
             println!("VPN connection closed with code: {}", ret);
             status_holder.blocking_lock().set(VpnStatus::Disconnected);

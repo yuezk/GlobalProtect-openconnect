@@ -1,4 +1,5 @@
 use std::ffi::c_void;
+use tokio::sync::mpsc;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -12,11 +13,24 @@ pub(crate) struct Options {
 #[link(name = "vpn")]
 extern "C" {
     #[link_name = "start"]
-    pub(crate) fn connect(
-        options: *const Options,
-        on_connected: extern "C" fn(i32, *mut c_void),
-    ) -> ::std::os::raw::c_int;
+    pub(crate) fn connect(options: *const Options) -> ::std::os::raw::c_int;
 
     #[link_name = "stop"]
     pub(crate) fn disconnect();
+}
+
+#[no_mangle]
+extern "C" fn on_vpn_connected(value: i32, sender: *mut c_void) {
+    let sender = unsafe { &*(sender as *const mpsc::Sender<i32>) };
+    sender
+        .blocking_send(value)
+        .expect("Failed to send VPN connection code");
+}
+
+// Logger used in the C code.
+#[no_mangle]
+extern "C" fn vpn_log(level: i32, message: *const ::std::os::raw::c_char) {
+    println!("{}: {:?}", level, unsafe {
+        std::ffi::CStr::from_ptr(message)
+    });
 }
