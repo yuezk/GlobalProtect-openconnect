@@ -15,13 +15,25 @@ async fn handle_read(
     read_stream: ReadHalf<UnixStream>,
     server_context: Arc<ServerContext>,
     response_tx: mpsc::Sender<Response>,
+    peer_pid: Option<i32>,
     cancel_token: CancellationToken,
 ) {
     let mut reader: Reader = read_stream.into();
+    let mut authenticated: Option<bool> = None;
 
     loop {
         match reader.read::<Request>().await {
             Ok(request) => {
+                if authenticated.is_none() {
+                    authenticated = Some(authenticate(peer_pid));
+                }
+
+                if !authenticated.unwrap_or(false) {
+                    println!("Client not authenticated");
+                    cancel_token.cancel();
+                    break;
+                }
+
                 println!("Received request: {:?}", request);
                 let command = request.command();
                 let context = server_context.clone().into();
@@ -114,6 +126,7 @@ async fn send_status(status_rx: &watch::Receiver<VpnStatus>, response_tx: &mpsc:
 }
 
 pub(crate) async fn handle_connection(socket: UnixStream, context: Arc<ServerContext>) {
+    let peer_pid = peer_pid(&socket);
     let (read_stream, write_stream) = io::split(socket);
     let (response_tx, response_rx) = mpsc::channel::<Response>(32);
     let cancel_token = CancellationToken::new();
@@ -123,6 +136,7 @@ pub(crate) async fn handle_connection(socket: UnixStream, context: Arc<ServerCon
         read_stream,
         context.clone(),
         response_tx.clone(),
+        peer_pid,
         cancel_token.clone(),
     ));
 
@@ -141,4 +155,20 @@ pub(crate) async fn handle_connection(socket: UnixStream, context: Arc<ServerCon
     let _ = tokio::join!(read_handle, write_handle, status_handle);
 
     println!("Connection closed")
+}
+
+fn peer_pid(socket: &UnixStream) -> Option<i32> {
+    match socket.peer_cred() {
+        Ok(ucred) => ucred.pid(),
+        Err(_) => None,
+    }
+}
+
+fn authenticate(peer_pid: Option<i32>) -> bool {
+    if let Some(pid) = peer_pid {
+        println!("Peer PID: {}", pid);
+        true
+    } else {
+        false
+    }
 }

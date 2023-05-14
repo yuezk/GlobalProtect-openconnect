@@ -1,6 +1,6 @@
 import { Box, TextField } from "@mui/material";
 import Button from "@mui/material/Button";
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
 import "./App.css";
 import ConnectionStatus, { Status } from "./components/ConnectionStatus";
@@ -18,7 +18,7 @@ export default function App() {
   const [status, setStatus] = useState<Status>("disconnected");
   const [processing, setProcessing] = useState(false);
   const [passwordAuthOpen, setPasswordAuthOpen] = useState(false);
-  const [passwordAuthenticating, setPasswordAuthenticating] = useState(false); ``
+  const [passwordAuthenticating, setPasswordAuthenticating] = useState(false);
   const [passwordAuth, setPasswordAuth] = useState<PasswordAuthData>();
   const [notification, setNotification] = useState<NotificationConfig>({
     open: false,
@@ -43,9 +43,9 @@ export default function App() {
   }
 
   function clearOverlays() {
-    closeNotification()
-    setPasswordAuthenticating(false)
-    setPasswordAuthOpen(false)
+    closeNotification();
+    setPasswordAuthenticating(false);
+    setPasswordAuthOpen(false);
   }
 
   function handlePortalChange(e: ChangeEvent<HTMLInputElement>) {
@@ -53,9 +53,10 @@ export default function App() {
     setPortalAddress(value.trim());
   }
 
-  async function handleConnect() {
+  async function handleConnect(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
     setProcessing(true);
-    // setStatus("connecting");
 
     try {
       const response = await portalService.prelogin(portalAddress);
@@ -79,7 +80,7 @@ export default function App() {
 
   function handleCancel() {
     // TODO cancel the request first
-    setProcessing(false)
+    setProcessing(false);
   }
 
   async function handleDisconnect() {
@@ -145,50 +146,56 @@ export default function App() {
   }
   return (
     <Box padding={2} paddingTop={3}>
-      <ConnectionStatus sx={{ mb: 2 }} status={processing ? "processing" : status} />
-
-      <TextField
-        autoFocus
-        label="Portal address"
-        placeholder="Hostname or IP address"
-        fullWidth
-        size="small"
-        value={portalAddress}
-        onChange={handlePortalChange}
-        InputProps={{ readOnly: status !== "disconnected" }}
+      <ConnectionStatus
+        sx={{ mb: 2 }}
+        status={processing ? "processing" : status}
       />
-      <Box sx={{ mt: 1.5 }}>
-        {status === "disconnected" && (
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={handleConnect}
-            sx={{ textTransform: "none" }}
-          >
-            Connect
-          </Button>
-        )}
-        {status === "connecting" && (
-          <Button
-            variant="outlined"
-            fullWidth
-            onClick={handleCancel}
-            sx={{ textTransform: "none" }}
-          >
-            Cancel
-          </Button>
-        )}
-        {status === "connected" && (
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={handleDisconnect}
-            sx={{ textTransform: "none" }}
-          >
-            Disconnect
-          </Button>
-        )}
-      </Box>
+
+      <form onSubmit={handleConnect}>
+        <TextField
+          autoFocus
+          label="Portal address"
+          placeholder="Hostname or IP address"
+          fullWidth
+          size="small"
+          value={portalAddress}
+          onChange={handlePortalChange}
+          InputProps={{ readOnly: status !== "disconnected" }}
+        />
+        <Box sx={{ mt: 1.5 }}>
+          {status === "disconnected" && (
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              sx={{ textTransform: "none" }}
+            >
+              Connect
+            </Button>
+          )}
+          {status === "connecting" && (
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={handleCancel}
+              sx={{ textTransform: "none" }}
+            >
+              Cancel
+            </Button>
+          )}
+          {status === "connected" && (
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleDisconnect}
+              sx={{ textTransform: "none" }}
+            >
+              Disconnect
+            </Button>
+          )}
+        </Box>
+      </form>
+
       <PasswordAuth
         open={passwordAuthOpen}
         authData={passwordAuth}
