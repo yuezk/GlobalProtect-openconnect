@@ -1,6 +1,7 @@
 use crate::{connection::handle_connection, vpn::Vpn};
 use std::{future::Future, os::unix::prelude::PermissionsExt, path::Path, sync::Arc};
-use tokio::{fs, net::UnixListener};
+use tokio::fs;
+use tokio::net::{UnixListener, UnixStream};
 
 #[derive(Debug, Default)]
 pub(crate) struct ServerContext {
@@ -24,6 +25,12 @@ impl Server {
             socket_path,
             context: Default::default(),
         }
+    }
+
+    // Check if an instance of the server is already running.
+    // by trying to connect to the socket.
+    async fn is_running(&self) -> bool {
+        UnixStream::connect(&self.socket_path).await.is_ok()
     }
 
     async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -64,6 +71,11 @@ pub async fn run(
     shutdown: impl Future,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let server = Server::new(socket_path.to_string());
+
+    if server.is_running().await {
+        println!("Server is already running");
+        return Ok(());
+    }
 
     tokio::select! {
         res = server.start() => {

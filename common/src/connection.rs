@@ -81,6 +81,7 @@ async fn handle_status_change(
     response_tx: mpsc::Sender<Response>,
     cancel_token: CancellationToken,
 ) {
+    // Send the initial status
     send_status(&status_rx, &response_tx).await;
     println!("Waiting for status change");
     let start_time = std::time::Instant::now();
@@ -104,7 +105,6 @@ async fn handle_status_change(
 
 async fn send_status(status_rx: &watch::Receiver<VpnStatus>, response_tx: &mpsc::Sender<Response>) {
     let status = *status_rx.borrow();
-    println!("received = {:?}", status);
     if let Err(err) = response_tx
         .send(Response::from(ResponseData::Status(status)))
         .await
