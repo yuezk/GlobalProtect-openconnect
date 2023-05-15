@@ -2,9 +2,9 @@ html {
     height: 100%;
     -webkit-user-select: none;
     user-select: none;
+    cursor: default;
 }
 
 body {
     height: 100%;
-    background: #f6f6f6 !important;
 }
