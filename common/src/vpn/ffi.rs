@@ -12,10 +12,10 @@ pub(crate) struct Options {
 
 #[link(name = "vpn")]
 extern "C" {
-    #[link_name = "start"]
+    #[link_name = "vpn_connect"]
     pub(crate) fn connect(options: *const Options) -> ::std::os::raw::c_int;
 
-    #[link_name = "stop"]
+    #[link_name = "vpn_disconnect"]
     pub(crate) fn disconnect();
 }
 

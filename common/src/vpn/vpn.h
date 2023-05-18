@@ -5,8 +5,8 @@ typedef struct Options {
   void *user_data;
 } Options;
 
-int start(const Options *options);
-void stop();
+int vpn_connect(const Options *options);
+void vpn_disconnect();
 
 extern void on_vpn_connected(int cmd_pipe_fd, void *user_data);
 extern void vpn_log(int level, const char *msg);

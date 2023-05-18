@@ -46,7 +46,7 @@ static void setup_tun_handler(void *_vpninfo)
 }
 
 /* Initialize VPN connection */
-int start(const Options *options)
+int vpn_connect(const Options *options)
 {
     struct openconnect_info *vpninfo;
     struct utsname utsbuf;
@@ -111,7 +111,7 @@ int start(const Options *options)
 }
 
 /* Stop the VPN connection */
-void stop()
+void vpn_disconnect()
 {
     char cmd = OC_CMD_CANCEL;
     if (write(g_cmd_pipe_fd, &cmd, 1) < 0)
