@@ -1,4 +1,5 @@
 use crate::{connection::handle_connection, vpn::Vpn};
+use log::{warn, info};
 use std::{future::Future, os::unix::prelude::PermissionsExt, path::Path, sync::Arc};
 use tokio::fs;
 use tokio::net::{UnixListener, UnixStream};
@@ -39,7 +40,7 @@ impl Server {
         }
 
         let listener = UnixListener::bind(&self.socket_path)?;
-        println!("Listening on socket: {:?}", listener.local_addr()?);
+        info!("Listening on socket: {:?}", listener.local_addr()?);
 
         let metadata = fs::metadata(&self.socket_path).await?;
         let mut permissions = metadata.permissions();
@@ -49,11 +50,11 @@ impl Server {
         loop {
             match listener.accept().await {
                 Ok((socket, _)) => {
-                    println!("Accepted connection: {:?}", socket.peer_addr()?);
+                    info!("Accepted connection: {:?}", socket.peer_addr()?);
                     tokio::spawn(handle_connection(socket, self.context.clone()));
                 }
                 Err(err) => {
-                    println!("Error accepting connection: {:?}", err);
+                    warn!("Error accepting connection: {:?}", err);
                 }
             }
         }
@@ -73,18 +74,15 @@ pub async fn run(
     let server = Server::new(socket_path.to_string());
 
     if server.is_running().await {
-        println!("Server is already running");
-        return Ok(());
+        return Err("Another instance of the server is already running".into());
     }
 
     tokio::select! {
         res = server.start() => {
-            if let Err(err) = res {
-                println!("Error starting server: {:?}", err);
-            }
+            res?
         },
         _ = shutdown => {
-            println!("Shutting down");
+            info!("Shutting down the server...");
             server.stop().await?;
         },
     }

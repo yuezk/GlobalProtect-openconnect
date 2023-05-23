@@ -1,10 +1,9 @@
 #include <stdio.h>
-#include <openconnect.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <time.h>
-#include <sys/utsname.h>
 #include <unistd.h>
+#include <sys/utsname.h>
+#include <openconnect.h>
 
 #include "vpn.h"
 
@@ -16,27 +15,27 @@ const char *g_vpnc_script;
 /* Validate the peer certificate */
 static int validate_peer_cert(__attribute__((unused)) void *_vpninfo, const char *reason)
 {
-    printf("Validating peer cert: %s\n", reason);
+    INFO("Validating peer cert: %s", reason);
     return 0;
 }
 
 /* Print progress messages */
-static void print_progress(__attribute__((unused)) void *_vpninfo, int level, const char *fmt, ...)
+static void print_progress(__attribute__((unused)) void *_vpninfo, int level, const char *format, ...)
 {
-    FILE *outf = level ? stdout : stderr;
     va_list args;
-
-    char ts[64];
-    time_t t = time(NULL);
-    struct tm *tm = localtime(&t);
-
-    strftime(ts, 64, "[%Y-%m-%d %H:%M:%S] ", tm);
-    fprintf(outf, "%s", ts);
-
-    va_start(args, fmt);
-    vfprintf(outf, fmt, args);
+    va_start(args, format);
+    char *message = format_message(format, args);
     va_end(args);
-    fflush(outf);
+
+    if (message == NULL)
+    {
+        ERROR("Failed to format log message");
+    }
+    else
+    {
+        LOG(level, message);
+        free(message);
+    }
 }
 
 static void setup_tun_handler(void *_vpninfo)
@@ -58,7 +57,7 @@ int vpn_connect(const Options *options)
 
     if (!vpninfo)
     {
-        printf("openconnect_vpninfo_new failed\n");
+        ERROR("openconnect_vpninfo_new failed");
         return 1;
     }
 
@@ -71,7 +70,7 @@ int vpn_connect(const Options *options)
     g_cmd_pipe_fd = openconnect_setup_cmd_pipe(vpninfo);
     if (g_cmd_pipe_fd < 0)
     {
-        printf("openconnect_setup_cmd_pipe failed\n");
+        ERROR("openconnect_setup_cmd_pipe failed");
         return 1;
     }
 
@@ -83,7 +82,7 @@ int vpn_connect(const Options *options)
     // Essential step
     if (openconnect_make_cstp_connection(vpninfo) != 0)
     {
-        printf("openconnect_make_cstp_connection failed\n");
+        ERROR("openconnect_make_cstp_connection failed");
         return 1;
     }
 
@@ -98,15 +97,15 @@ int vpn_connect(const Options *options)
     while (1)
     {
         int ret = openconnect_mainloop(vpninfo, 300, 10);
-        printf("openconnect_mainloop returned %d\n", ret);
 
         if (ret)
         {
+            INFO("openconnect_mainloop returned %d, exiting", ret);
             openconnect_vpninfo_free(vpninfo);
             return ret;
         }
 
-        printf("openconnect_mainloop returned\n");
+        INFO("openconnect_mainloop returned 0, reconnecting");
     }
 }
 
@@ -116,6 +115,6 @@ void vpn_disconnect()
     char cmd = OC_CMD_CANCEL;
     if (write(g_cmd_pipe_fd, &cmd, 1) < 0)
     {
-        printf("Stopping VPN failed\n");
+        ERROR("Failed to write to command pipe, VPN connection may not be stopped");
     }
 }

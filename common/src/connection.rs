@@ -5,6 +5,7 @@ use crate::Response;
 use crate::ResponseData;
 use crate::VpnStatus;
 use crate::Writer;
+use log::{debug, info, warn};
 use std::sync::Arc;
 use tokio::io::{self, ReadHalf, WriteHalf};
 use tokio::net::UnixStream;
@@ -29,12 +30,13 @@ async fn handle_read(
                 }
 
                 if !authenticated.unwrap_or(false) {
-                    println!("Client not authenticated");
+                    warn!("Client not authenticated, closing connection");
                     cancel_token.cancel();
                     break;
                 }
 
-                println!("Received request: {:?}", request);
+                debug!("Received client request: {:?}", request);
+
                 let command = request.command();
                 let context = server_context.clone().into();
 
@@ -48,13 +50,13 @@ async fn handle_read(
             }
 
             Err(err) if err.kind() == io::ErrorKind::ConnectionAborted => {
-                println!("Client disconnected");
+                info!("Client disconnected");
                 cancel_token.cancel();
                 break;
             }
 
             Err(err) => {
-                println!("Error receiving command: {:?}", err);
+                warn!("Error receiving request: {:?}", err);
             }
         }
     }
@@ -70,19 +72,17 @@ async fn handle_write(
     loop {
         tokio::select! {
             Some(response) = response_rx.recv() => {
-                println!("Sending response: {:?}", response);
+                debug!("Sending response: {:?}", response);
                 if let Err(err) = writer.write(&response).await {
-                    println!("Error sending response: {:?}", err);
-                } else {
-                    println!("Response sent");
+                    warn!("Error sending response: {:?}", err);
                 }
             }
             _ = cancel_token.cancelled() => {
-                println!("Exiting write loop");
+                info!("Exiting the write loop");
                 break;
             }
             else => {
-                println!("Error receiving response");
+                warn!("Error receiving response from channel");
             }
         }
     }
@@ -95,21 +95,21 @@ async fn handle_status_change(
 ) {
     // Send the initial status
     send_status(&status_rx, &response_tx).await;
-    println!("Waiting for status change");
+    debug!("Waiting for status change");
     let start_time = std::time::Instant::now();
 
     loop {
         tokio::select! {
             _ = status_rx.changed() => {
-                println!("Status changed: {:?}", start_time.elapsed());
+                debug!("Status changed: {:?}", start_time.elapsed());
                 send_status(&status_rx, &response_tx).await;
             }
             _ = cancel_token.cancelled() => {
-                println!("Exiting status loop");
+                info!("Exiting the status loop");
                 break;
             }
             else => {
-                println!("Error receiving status");
+                warn!("Error receiving status from channel");
             }
         }
     }
@@ -121,7 +121,7 @@ async fn send_status(status_rx: &watch::Receiver<VpnStatus>, response_tx: &mpsc:
         .send(Response::from(ResponseData::Status(status)))
         .await
     {
-        println!("Error sending status: {:?}", err);
+        warn!("Error sending status: {:?}", err);
     }
 }
 
@@ -132,6 +132,7 @@ pub(crate) async fn handle_connection(socket: UnixStream, context: Arc<ServerCon
     let cancel_token = CancellationToken::new();
     let status_rx = context.vpn().status_rx().await;
 
+    // Read requests from the client
     let read_handle = tokio::spawn(handle_read(
         read_stream,
         context.clone(),
@@ -140,12 +141,14 @@ pub(crate) async fn handle_connection(socket: UnixStream, context: Arc<ServerCon
         cancel_token.clone(),
     ));
 
+    // Write responses to the client
     let write_handle = tokio::spawn(handle_write(
         write_stream,
         response_rx,
         cancel_token.clone(),
     ));
 
+    // Watch for status changes
     let status_handle = tokio::spawn(handle_status_change(
         status_rx,
         response_tx.clone(),
@@ -154,7 +157,7 @@ pub(crate) async fn handle_connection(socket: UnixStream, context: Arc<ServerCon
 
     let _ = tokio::join!(read_handle, write_handle, status_handle);
 
-    println!("Connection closed")
+    debug!("Client connection closed");
 }
 
 fn peer_pid(socket: &UnixStream) -> Option<i32> {
@@ -164,9 +167,10 @@ fn peer_pid(socket: &UnixStream) -> Option<i32> {
     }
 }
 
+// TODO - Implement authentication
 fn authenticate(peer_pid: Option<i32>) -> bool {
     if let Some(pid) = peer_pid {
-        println!("Peer PID: {}", pid);
+        info!("Peer PID: {}", pid);
         true
     } else {
         false

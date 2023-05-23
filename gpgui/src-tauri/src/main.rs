@@ -4,6 +4,7 @@
 )]
 
 use common::{Client, ServerApiError, VpnStatus};
+use env_logger::Env;
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{Manager, State};
@@ -53,6 +54,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
     tauri::Builder::default()
         .setup(setup)
         .invoke_handler(tauri::generate_handler![

@@ -7,6 +7,7 @@ use crate::RequestPool;
 use crate::Response;
 use crate::SOCKET_PATH;
 use crate::{Request, VpnStatus};
+use log::{info, warn, debug};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::sync::Arc;
@@ -107,16 +108,16 @@ impl Client {
     }
 
     pub async fn run(&self) {
+        info!("Connecting to the background service...");
+
+        // TODO exit the loop properly
         loop {
             match self.connect_to_server().await {
                 Ok(_) => {
-                    println!("Disconnected from server, reconnecting...");
+                    debug!("Disconnected from server, reconnecting...");
                 }
                 Err(err) => {
-                    println!(
-                        "Disconnected from server with error: {:?}, reconnecting...",
-                        err
-                    )
+                    debug!("Error connecting to server, retrying, error: {:?}", err)
                 }
             }
 
@@ -144,9 +145,12 @@ impl Client {
         ));
 
         *self.is_healthy.write().await = true;
-        println!("Connected to server");
+        info!("Connected to the background service");
+
         let _ = tokio::join!(read_handle, write_handle);
         *self.is_healthy.write().await = false;
+
+        // TODO connection was lost, cleanup the request pool and notify the UI
 
         Ok(())
     }
@@ -208,22 +212,25 @@ async fn handle_read(
                         Some(id) => request_pool.complete_request(id, response).await,
                         None => {
                             if let Err(err) = server_event_tx.send(response.into()).await {
-                                println!("Error sending response to output channel: {}", err);
+                                warn!("Error sending response to output channel: {}", err);
                             }
                         }
                     }
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::ConnectionAborted => {
-                println!("Server disconnected");
+                warn!("Disconnected from the background service");
                 if let Err(err) = server_event_tx.send(ServerEvent::ServerDisconnected).await {
-                    println!("Error sending server disconnected event: {}", err);
+                    warn!(
+                        "Error sending server disconnected event to channel: {}",
+                        err
+                    );
                 }
                 cancel_token.cancel();
                 break;
             }
             Err(err) => {
-                println!("Error reading from server: {}", err);
+                warn!("Error reading from server: {}", err);
             }
         }
     }
@@ -240,15 +247,15 @@ async fn handle_write(
         tokio::select! {
             Some(request) = request_rx.recv() => {
                 if let Err(err) = writer.write(&request).await {
-                    println!("Error writing to server: {}", err);
+                    warn!("Error writing to server: {}", err);
                 }
             }
             _ = cancel_token.cancelled() => {
-                println!("The read loop has been cancelled, exiting the write loop");
+                info!("The read loop has been cancelled, exiting the write loop");
                 break;
             }
             else => {
-                println!("Error reading command from channel");
+                warn!("Error reading command from channel");
             }
         }
     }

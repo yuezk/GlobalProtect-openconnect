@@ -1,3 +1,4 @@
+use log::{warn, info, debug};
 use serde::{Deserialize, Serialize};
 use std::ffi::{c_void, CString};
 use std::sync::Arc;
@@ -43,7 +44,7 @@ impl StatusHolder {
     fn set(&mut self, status: VpnStatus) {
         self.status = status;
         if let Err(err) = self.status_tx.send(status) {
-            println!("Failed to send VPN status: {}", err);
+            warn!("Failed to send VPN status: {}", err);
         }
     }
 
@@ -113,17 +114,17 @@ impl Vpn {
             status_holder.blocking_lock().set(VpnStatus::Connecting);
             let ret = unsafe { ffi::connect(&oc_options) };
 
-            println!("VPN connection closed with code: {}", ret);
+            info!("VPN connection closed with code: {}", ret);
             status_holder.blocking_lock().set(VpnStatus::Disconnected);
         });
 
-        println!("Waiting for the VPN connection...");
+        info!("Waiting for the VPN connection...");
 
         if let Some(cmd_pipe_fd) = vpn_rx.recv().await {
-            println!("VPN connection started, code: {}", cmd_pipe_fd);
+            info!("VPN connection started, cmd_pipe_fd: {}", cmd_pipe_fd);
             self.status_holder.lock().await.set(VpnStatus::Connected);
         } else {
-            println!("VPN connection failed to start");
+            warn!("VPN connection failed to start");
         }
 
         Ok(())
@@ -131,17 +132,20 @@ impl Vpn {
 
     pub async fn disconnect(&self) {
         if self.status().await == VpnStatus::Disconnected {
-            println!("VPN already disconnected");
+            info!("VPN already disconnected, skipping disconnect");
             return;
         }
 
+        info!("Disconnecting VPN...");
         unsafe { ffi::disconnect() };
-        // Wait for the VPN to disconnect
-        println!("VPN disconnect waiting for disconnect...");
+
         let mut status_rx = self.status_rx().await;
+        debug!("Waiting for the VPN to disconnect...");
+
 
         while status_rx.changed().await.is_ok() {
             if *status_rx.borrow() == VpnStatus::Disconnected {
+                info!("VPN disconnected");
                 break;
             }
         }
