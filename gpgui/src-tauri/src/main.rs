@@ -8,6 +8,7 @@ use env_logger::Env;
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{Manager, State};
+use tauri_plugin_log::LogTarget;
 
 #[tauri::command]
 async fn vpn_status<'a>(client: State<'a, Arc<Client>>) -> Result<VpnStatus, ServerApiError> {
@@ -54,9 +55,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    // env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                .targets([
+                    LogTarget::LogDir,
+                    LogTarget::Stdout, /*LogTarget::Webview*/
+                ])
+                .build(),
+        )
         .setup(setup)
         .invoke_handler(tauri::generate_handler![
             vpn_status,

@@ -26,12 +26,6 @@ struct StatusHolder {
 
 impl Default for StatusHolder {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl StatusHolder {
-    fn new() -> Self {
         let (status_tx, status_rx) = watch::channel(VpnStatus::Disconnected);
 
         Self {
@@ -40,7 +34,9 @@ impl StatusHolder {
             status_rx,
         }
     }
+}
 
+impl StatusHolder {
     fn set(&mut self, status: VpnStatus) {
         self.status = status;
         if let Err(err) = self.status_tx.send(status) {
