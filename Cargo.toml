@@ -4,6 +4,7 @@ members = [
     "common",
     "gpclient",
     "gpservice",
+    "gpauth",
     "gpgui/src-tauri"
 ]
 

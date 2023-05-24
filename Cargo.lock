@@ -1090,6 +1090,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpauth"
+version = "0.1.0"
+dependencies = [
+ "webkit2gtk",
+ "wry",
+]
+
+[[package]]
 name = "gpclient"
 version = "0.1.0"
 dependencies = [
