@@ -128,7 +128,7 @@ impl Vpn {
 
     pub async fn disconnect(&self) {
         if self.status().await == VpnStatus::Disconnected {
-            info!("VPN already disconnected, skipping disconnect");
+            info!("VPN is not connected, nothing to do");
             return;
         }
 

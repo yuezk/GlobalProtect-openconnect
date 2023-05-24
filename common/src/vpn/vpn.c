@@ -45,7 +45,7 @@ static void setup_tun_handler(void *_vpninfo)
 }
 
 /* Initialize VPN connection */
-int vpn_connect(const Options *options)
+int vpn_connect(const vpn_options *options)
 {
     struct openconnect_info *vpninfo;
     struct utsname utsbuf;

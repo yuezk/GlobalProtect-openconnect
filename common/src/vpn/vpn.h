@@ -3,15 +3,15 @@
 #include <stdarg.h>
 #include <openconnect.h>
 
-typedef struct Options
+typedef struct vpn_options
 {
     const char *server;
     const char *cookie;
     const char *script;
     void *user_data;
-} Options;
+} vpn_options;
 
-int vpn_connect(const Options *options);
+int vpn_connect(const vpn_options *options);
 void vpn_disconnect();
 
 extern void on_vpn_connected(int cmd_pipe_fd, void *user_data);
