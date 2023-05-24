@@ -3,7 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use common::{Client, ServerApiError, VpnStatus};
+use gpcommon::{Client, ServerApiError, VpnStatus};
 use env_logger::Env;
 use serde::Serialize;
 use std::sync::Arc;

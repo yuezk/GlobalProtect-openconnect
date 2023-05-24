@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "common",
+    "gpcommon",
     "gpclient",
     "gpservice",
     "gpauth",

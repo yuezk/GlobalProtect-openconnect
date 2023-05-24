@@ -51,8 +51,8 @@ checksum = "224afbd727c3d6e4b90103ece64b8d1b67fbb1973b1046c2281eed3f3803f800"
 name = "app"
 version = "0.1.0"
 dependencies = [
- "common",
  "env_logger",
+ "gpcommon",
  "log",
  "serde",
  "serde_json",
@@ -355,23 +355,6 @@ checksum = "35ed6e9d84f0b51a7f52daf1c7d71dd136fd7a3f41a8462b8cdb8c78d920fad4"
 dependencies = [
  "bytes",
  "memchr",
-]
-
-[[package]]
-name = "common"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "cc",
- "data-encoding",
- "log",
- "ring",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]
@@ -1101,16 +1084,33 @@ dependencies = [
 name = "gpclient"
 version = "0.1.0"
 dependencies = [
- "common",
+ "gpcommon",
  "tokio",
+]
+
+[[package]]
+name = "gpcommon"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "cc",
+ "data-encoding",
+ "log",
+ "ring",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
 name = "gpservice"
 version = "0.1.0"
 dependencies = [
- "common",
  "env_logger",
+ "gpcommon",
  "log",
  "tokio",
 ]

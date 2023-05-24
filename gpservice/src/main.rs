@@ -1,7 +1,7 @@
 include!(concat!(env!("OUT_DIR"), "/client_hash.rs"));
 
 // use aes_gcm::{aead::OsRng, Aes256Gcm, KeyInit};
-use common::{server, SOCKET_PATH};
+use gpcommon::{server, SOCKET_PATH};
 use env_logger::Env;
 use log::error;
 use tokio::signal;

@@ -1,4 +1,4 @@
-use common::{Client, SOCKET_PATH};
+use gpcommon::{Client, SOCKET_PATH};
 use tokio::{io::AsyncReadExt, net::UnixStream, sync::mpsc};
 
 #[tokio::main]

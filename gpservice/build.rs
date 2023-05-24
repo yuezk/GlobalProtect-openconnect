@@ -1,4 +1,4 @@
-use common::sha256_digest;
+use gpcommon::sha256_digest;
 use std::path::Path;
 use std::{env, fs};
 
