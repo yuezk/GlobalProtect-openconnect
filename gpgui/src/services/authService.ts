@@ -42,11 +42,17 @@ class AuthService {
 
   // binding: "POST" | "REDIRECT"
   async samlLogin(binding: string, request: string) {
-    return invokeCommand("saml_login", { binding, request });
+    return invokeCommand<AuthData>("saml_login", { binding, request });
   }
 
-  emitAuthRequest(authRequest: string) {
-    emit("auth-request", { samlRequest: authRequest });
+  emitAuthRequest({
+    samlBinding,
+    samlRequest,
+  }: {
+    samlBinding: string;
+    samlRequest: string;
+  }) {
+    emit("auth-request", { samlBinding, samlRequest });
   }
 }
 

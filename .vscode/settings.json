@@ -8,6 +8,7 @@
     "prelogon",
     "prelogonuserauthcookie",
     "tauri",
+    "unlisten",
     "userauthcookie",
     "vpninfo"
   ],

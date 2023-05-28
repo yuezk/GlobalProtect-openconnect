@@ -60,6 +60,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-log",
+ "tokio",
  "url",
  "webkit2gtk",
 ]

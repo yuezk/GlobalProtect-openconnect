@@ -41,7 +41,10 @@ export default function App() {
     authService.onAuthError(async () => {
       const preloginResponse = await portalService.prelogin(portalAddress);
       // Retry SAML login when auth error occurs
-      authService.emitAuthRequest(preloginResponse.samlAuthRequest!);
+      authService.emitAuthRequest({
+        samlBinding: preloginResponse.samlAuthMethod!,
+        samlRequest: preloginResponse.samlAuthRequest!,
+      });
     });
     authService.onAuthCancel(() => {});
   }, [portalAddress]);
@@ -74,7 +77,11 @@ export default function App() {
 
       if (portalService.isSamlAuth(response)) {
         const { samlAuthMethod, samlAuthRequest } = response;
-        await authService.samlLogin(samlAuthMethod, samlAuthRequest);
+        const authData = await authService.samlLogin(
+          samlAuthMethod,
+          samlAuthRequest
+        );
+        console.log("authData", authData);
       } else if (portalService.isPasswordAuth(response)) {
         setPasswordAuthOpen(true);
         setPasswordAuth({

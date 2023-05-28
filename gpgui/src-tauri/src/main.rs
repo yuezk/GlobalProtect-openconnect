@@ -3,7 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use auth::{SamlBinding, AuthWindow};
+use auth::{AuthData, AuthRequest, SamlBinding};
 use env_logger::Env;
 use gpcommon::{Client, ServerApiError, VpnStatus};
 use serde::Serialize;
@@ -37,13 +37,9 @@ async fn saml_login(
     binding: SamlBinding,
     request: String,
     app_handle: AppHandle,
-) -> tauri::Result<()> {
-    let auth_window = AuthWindow::new(app_handle, binding, String::from("PAN GlobalProtect"));
-    if let Err(err) = auth_window.process(request) {
-        println!("Error processing auth window: {}", err);
-        return Err(err);
-    }
-    Ok(())
+) -> tauri::Result<Option<AuthData>> {
+    let ua = "PAN GlobalProtect";
+    auth::saml_login(AuthRequest::new(binding, request), ua, &app_handle).await
 }
 
 #[derive(Debug, Clone, Serialize)]

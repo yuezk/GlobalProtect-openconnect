@@ -25,6 +25,7 @@ env_logger = "0.10"
 webkit2gtk = "0.18.2"
 regex = "1"
 url = "2.3"
+tokio = { version = "1.14", features = ["full"] }
 
 [features]
 # by default Tauri runs in production mode
