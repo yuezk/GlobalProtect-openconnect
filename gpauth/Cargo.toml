@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 wry = "0.24.3"
 webkit2gtk = "0.18.2"
+tokio = { version = "1.14", features = ["full"] }
+regex="1"

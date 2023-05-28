@@ -1,6 +1,7 @@
 import { Body, ResponseType, fetch } from "@tauri-apps/api/http";
 import { Maybe, MaybeProperties } from "../types";
 import { parseXml } from "../utils/parseXml";
+import authService from "./authService";
 import { Gateway } from "./types";
 
 type SamlPreloginResponse = {
@@ -35,6 +36,9 @@ class PortalService {
 
     const response = await fetch<string>(preloginUrl, {
       method: "GET",
+      headers: {
+        "User-Agent": "PAN GlobalProtect",
+      },
       responseType: ResponseType.Text,
       query: {
         tmp: "tmp",
@@ -55,8 +59,8 @@ class PortalService {
     const doc = parseXml(response);
 
     return {
-      samlAuthMethod: doc.text("saml-auth-method"),
-      samlAuthRequest: doc.text("saml-auth-request"),
+      samlAuthMethod: doc.text("saml-auth-method").toUpperCase(),
+      samlAuthRequest: atob(doc.text("saml-request")),
       labelUsername: doc.text("username-label"),
       labelPassword: doc.text("password-label"),
       authMessage: doc.text("authentication-message"),

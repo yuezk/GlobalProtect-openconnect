@@ -1,12 +1,10 @@
-import { invoke } from "@tauri-apps/api";
-import { listen } from "@tauri-apps/api/event";
+import { Event, listen } from "@tauri-apps/api/event";
+import invokeCommand from "../utils/invokeCommand";
 
 type Status = "disconnected" | "connecting" | "connected" | "disconnecting";
 type StatusCallback = (status: Status) => void;
-type StatusEvent = {
-  payload: {
-    status: Status;
-  };
+type StatusPayload = {
+  status: Status;
 };
 
 class VpnService {
@@ -18,7 +16,7 @@ class VpnService {
   }
 
   private async init() {
-    await listen("vpn-status-received", (event: StatusEvent) => {
+    await listen("vpn-status-received", (event: Event<StatusPayload>) => {
       console.log("vpn-status-received", event.payload);
       this.setStatus(event.payload.status);
     });
@@ -35,15 +33,15 @@ class VpnService {
   }
 
   private async status(): Promise<Status> {
-    return this.invokeCommand<Status>("vpn_status");
+    return invokeCommand<Status>("vpn_status");
   }
 
   async connect(server: string, cookie: string) {
-    return this.invokeCommand("vpn_connect", { server, cookie });
+    return invokeCommand("vpn_connect", { server, cookie });
   }
 
   async disconnect() {
-    return this.invokeCommand("vpn_disconnect");
+    return invokeCommand("vpn_disconnect");
   }
 
   onStatusChanged(callback: StatusCallback) {
@@ -58,14 +56,6 @@ class VpnService {
 
   private removeStatusCallback(callback: StatusCallback) {
     this.statusCallbacks = this.statusCallbacks.filter((cb) => cb !== callback);
-  }
-
-  private async invokeCommand<T>(command: string, args?: any) {
-    try {
-      return await invoke<T>(command, args);
-    } catch (err: any) {
-      throw new Error(err.message);
-    }
   }
 }
 

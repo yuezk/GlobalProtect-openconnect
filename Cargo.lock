@@ -54,11 +54,14 @@ dependencies = [
  "env_logger",
  "gpcommon",
  "log",
+ "regex",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-log",
+ "url",
+ "webkit2gtk",
 ]
 
 [[package]]
@@ -534,6 +537,12 @@ name = "data-encoding"
 version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23d8666cb01533c39dde32bcbab8e227b4ed6679b2c925eba05feabea39508fb"
+
+[[package]]
+name = "data-url"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d7439c3735f405729d52c3fbbe4de140eaf938a1fe47d227c27f8254d4302a5"
 
 [[package]]
 name = "derive_more"
@@ -1076,6 +1085,8 @@ dependencies = [
 name = "gpauth"
 version = "0.1.0"
 dependencies = [
+ "regex",
+ "tokio",
  "webkit2gtk",
  "wry",
 ]
@@ -2819,6 +2830,7 @@ dependencies = [
  "anyhow",
  "attohttpc",
  "cocoa",
+ "data-url",
  "dirs-next",
  "embed_plist",
  "encoding_rs",

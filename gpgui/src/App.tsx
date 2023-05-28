@@ -12,9 +12,10 @@ import PasswordAuth, {
 import gatewayService from "./services/gatewayService";
 import portalService from "./services/portalService";
 import vpnService from "./services/vpnService";
+import authService from "./services/authService";
 
 export default function App() {
-  const [portalAddress, setPortalAddress] = useState("220.191.185.154");
+  const [portalAddress, setPortalAddress] = useState("vpn.microstrategy.com"); // useState("220.191.185.154");
   const [status, setStatus] = useState<Status>("disconnected");
   const [processing, setProcessing] = useState(false);
   const [passwordAuthOpen, setPasswordAuthOpen] = useState(false);
@@ -34,6 +35,16 @@ export default function App() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    authService.onAuthSuccess((data) => {});
+    authService.onAuthError(async () => {
+      const preloginResponse = await portalService.prelogin(portalAddress);
+      // Retry SAML login when auth error occurs
+      authService.emitAuthRequest(preloginResponse.samlAuthRequest!);
+    });
+    authService.onAuthCancel(() => {});
+  }, [portalAddress]);
 
   function closeNotification() {
     setNotification((notification) => ({
@@ -62,7 +73,8 @@ export default function App() {
       const response = await portalService.prelogin(portalAddress);
 
       if (portalService.isSamlAuth(response)) {
-        // TODO SAML login
+        const { samlAuthMethod, samlAuthRequest } = response;
+        await authService.samlLogin(samlAuthMethod, samlAuthRequest);
       } else if (portalService.isPasswordAuth(response)) {
         setPasswordAuthOpen(true);
         setPasswordAuth({
@@ -74,6 +86,7 @@ export default function App() {
         throw new Error("Unsupported portal login method");
       }
     } catch (e) {
+      console.error(e);
       setProcessing(false);
     }
   }

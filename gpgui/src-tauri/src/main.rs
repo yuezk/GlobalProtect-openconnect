@@ -3,12 +3,15 @@
     windows_subsystem = "windows"
 )]
 
-use gpcommon::{Client, ServerApiError, VpnStatus};
+use auth::{SamlBinding, AuthWindow};
 use env_logger::Env;
+use gpcommon::{Client, ServerApiError, VpnStatus};
 use serde::Serialize;
 use std::sync::Arc;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_log::LogTarget;
+
+mod auth;
 
 #[tauri::command]
 async fn vpn_status<'a>(client: State<'a, Arc<Client>>) -> Result<VpnStatus, ServerApiError> {
@@ -29,6 +32,20 @@ async fn vpn_disconnect<'a>(client: State<'a, Arc<Client>>) -> Result<(), Server
     client.disconnect().await
 }
 
+#[tauri::command]
+async fn saml_login(
+    binding: SamlBinding,
+    request: String,
+    app_handle: AppHandle,
+) -> tauri::Result<()> {
+    let auth_window = AuthWindow::new(app_handle, binding, String::from("PAN GlobalProtect"));
+    if let Err(err) = auth_window.process(request) {
+        println!("Error processing auth window: {}", err);
+        return Err(err);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct StatusPayload {
     status: VpnStatus,
@@ -43,11 +60,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let _ = client_clone.subscribe_status(move |status| {
             let payload = StatusPayload { status };
             if let Err(err) = app_handle.emit_all("vpn-status-received", payload) {
-                println!("Error emmiting event: {}", err);
+                println!("Error emitting event: {}", err);
             }
         });
 
-        let _ = client_clone.run().await;
+        // let _ = client_clone.run().await;
     });
 
     app.manage(client);
@@ -70,7 +87,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             vpn_status,
             vpn_connect,
-            vpn_disconnect
+            vpn_disconnect,
+            saml_login,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
