@@ -50,6 +50,7 @@ fn main() {
                     LogTarget::Stdout, /*LogTarget::Webview*/
                 ])
                 .level(log::LevelFilter::Info)
+                .with_colors(Default::default())
                 .build(),
         )
         .setup(setup)
