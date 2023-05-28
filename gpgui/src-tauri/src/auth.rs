@@ -6,10 +6,10 @@ use tauri::EventHandler;
 use tauri::{AppHandle, Manager, Window, WindowBuilder, WindowEvent::CloseRequested, WindowUrl};
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::timeout;
-use webkit2gtk::{
-    gio::Cancellable, glib::GString, traits::WebViewExt, LoadEvent, URIResponseExt, WebResource,
-    WebResourceExt,
-};
+use webkit2gtk::gio::Cancellable;
+use webkit2gtk::glib::GString;
+use webkit2gtk::traits::{URIResponseExt, WebViewExt};
+use webkit2gtk::{CookieManagerExt, LoadEvent, WebContextExt, WebResource, WebResourceExt};
 
 const AUTH_WINDOW_LABEL: &str = "auth_window";
 const AUTH_ERROR_EVENT: &str = "auth-error";
@@ -96,11 +96,14 @@ enum AuthEvent {
 pub(crate) async fn saml_login(
     auth_request: AuthRequest,
     ua: &str,
+    clear_cookies: bool,
     app_handle: &AppHandle,
 ) -> tauri::Result<Option<AuthData>> {
+    info!("Starting SAML login");
+
     let (event_tx, event_rx) = mpsc::channel::<AuthEvent>(8);
     let window = build_window(app_handle, ua)?;
-    setup_webview(&window, event_tx.clone())?;
+    setup_webview(&window, clear_cookies, event_tx.clone())?;
     let handler = setup_window(&window, event_tx);
 
     let result = process(&window, auth_request, event_rx).await;
@@ -121,10 +124,18 @@ fn build_window(app_handle: &AppHandle, ua: &str) -> tauri::Result<Window> {
 }
 
 // Setup webview events
-fn setup_webview(window: &Window, event_tx: mpsc::Sender<AuthEvent>) -> tauri::Result<()> {
+fn setup_webview(
+    window: &Window,
+    clear_cookies: bool,
+    event_tx: mpsc::Sender<AuthEvent>,
+) -> tauri::Result<()> {
     window.with_webview(move |wv| {
         let wv = wv.inner();
         let event_tx = event_tx.clone();
+
+        if clear_cookies {
+            clear_webview_cookies(&wv);
+        }
 
         wv.connect_load_changed(move |wv, event| {
             if LoadEvent::Finished != event {
@@ -172,8 +183,6 @@ fn setup_window(window: &Window, event_tx: mpsc::Sender<AuthEvent>) -> EventHand
 
     window.listen_global(AUTH_REQUEST_EVENT, move |event| {
         if let Ok(payload) = TryInto::<AuthRequest>::try_into(event.payload()) {
-            debug!("---------Received auth request");
-
             let event_tx = event_tx.clone();
             let _ = tokio::spawn(async move {
                 if let Err(err) = event_tx.send(AuthEvent::Request(payload)).await {
@@ -189,6 +198,8 @@ async fn process(
     auth_request: AuthRequest,
     event_rx: mpsc::Receiver<AuthEvent>,
 ) -> tauri::Result<Option<AuthData>> {
+    info!("Processing auth request: {:?}", auth_request);
+
     process_request(window, auth_request)?;
 
     let handle = tokio::spawn(show_window_after_timeout(window.clone()));
@@ -205,9 +216,11 @@ fn process_request(window: &Window, auth_request: AuthRequest) -> tauri::Result<
         let wv = wv.inner();
         if is_post {
             // Load SAML request as HTML if POST binding is used
+            info!("Loading SAML request as HTML");
             wv.load_html(&saml_request, None);
         } else {
             // Redirect to SAML request URL if REDIRECT binding is used
+            info!("Redirecting to SAML request URL");
             wv.load_uri(&saml_request);
         }
     })
@@ -215,7 +228,10 @@ fn process_request(window: &Window, auth_request: AuthRequest) -> tauri::Result<
 
 async fn show_window_after_timeout(window: Window) {
     tokio::time::sleep(Duration::from_secs(FALLBACK_SHOW_WINDOW_TIMEOUT)).await;
-    info!("Showing window after timeout expired: {} seconds", FALLBACK_SHOW_WINDOW_TIMEOUT);
+    info!(
+        "Showing window after timeout ({:?} seconds)",
+        FALLBACK_SHOW_WINDOW_TIMEOUT
+    );
     show_window(&window);
 }
 
@@ -223,6 +239,8 @@ async fn process_auth_event(
     window: &Window,
     mut event_rx: mpsc::Receiver<AuthEvent>,
 ) -> Option<AuthData> {
+    info!("Processing auth event...");
+
     let (cancel_timeout_tx, cancel_timeout_rx) = mpsc::channel::<()>(1);
     let cancel_timeout_rx = Arc::new(Mutex::new(cancel_timeout_rx));
 
@@ -236,10 +254,12 @@ async fn process_auth_event(
                     }
                 }
                 AuthEvent::Success(auth_data) => {
+                    info!("Got auth data successfully, closing window");
                     close_window(window);
                     return Some(auth_data);
                 }
                 AuthEvent::Cancel => {
+                    info!("User cancelled the authentication process, closing window");
                     close_window(window);
                     return None;
                 }
@@ -255,6 +275,16 @@ async fn process_auth_event(
                     }
                 }
                 AuthEvent::Error(AuthError::TokenNotFound) => {
+                    let window_visible = window.is_visible().unwrap_or(false);
+                    if window_visible {
+                        continue;
+                    }
+
+                    info!(
+                        "Token not found, showing window in {} seconds",
+                        SHOW_WINDOW_TIMEOUT
+                    );
+
                     let cancel_timeout_rx = cancel_timeout_rx.clone();
                     tokio::spawn(handle_token_not_found(window.clone(), cancel_timeout_rx));
                 }
@@ -269,17 +299,16 @@ async fn process_auth_event(
 async fn handle_token_not_found(window: Window, cancel_timeout_rx: Arc<Mutex<mpsc::Receiver<()>>>) {
     match cancel_timeout_rx.try_lock() {
         Ok(mut cancel_timeout_rx) => {
-            debug!("Scheduling timeout to show window");
             let duration = Duration::from_secs(SHOW_WINDOW_TIMEOUT);
             if let Err(_) = timeout(duration, cancel_timeout_rx.recv()).await {
                 info!("Timeout expired, showing window");
                 show_window(&window);
             } else {
-                debug!("Showing window timeout cancelled");
+                info!("Showing window timeout cancelled");
             }
         }
         Err(_) => {
-            debug!("Timeout already scheduled, skipping");
+            debug!("Window will be shown by another task, skipping");
         }
     }
 }
@@ -289,7 +318,7 @@ async fn handle_token_not_found(window: Window, cancel_timeout_rx: Arc<Mutex<mps
 fn parse_auth_data(main_res: &WebResource, event_tx: mpsc::Sender<AuthEvent>) {
     if let Some(response) = main_res.response() {
         if let Some(auth_data) = read_auth_data_from_response(&response) {
-            info!("Got auth data from HTTP headers: {:?}", auth_data);
+            debug!("Got auth data from HTTP headers: {:?}", auth_data);
             send_auth_data(&event_tx, auth_data);
             return;
         }
@@ -301,7 +330,7 @@ fn parse_auth_data(main_res: &WebResource, event_tx: mpsc::Sender<AuthEvent>) {
             let html = String::from_utf8_lossy(&data);
             match read_auth_data_from_html(&html) {
                 Ok(auth_data) => {
-                    info!("Got auth data from HTML: {:?}", auth_data);
+                    debug!("Got auth data from HTML: {:?}", auth_data);
                     send_auth_data(&event_tx, auth_data);
                 }
                 Err(err) => {
@@ -372,15 +401,14 @@ fn send_auth_data(event_tx: &mpsc::Sender<AuthEvent>, auth_data: AuthData) {
 }
 
 fn show_window(window: &Window) {
-    match window.is_visible() {
-        Ok(true) => {
-            debug!("Window is already visible");
-        }
-        _ => {
-            if let Err(err) = window.show() {
-                warn!("Error showing window: {}", err);
-            }
-        }
+    let visible = window.is_visible().unwrap_or(false);
+    if visible {
+        debug!("Window is already visible, skipping");
+        return;
+    }
+
+    if let Err(err) = window.show() {
+        warn!("Error showing window: {}", err);
     }
 }
 
@@ -388,4 +416,16 @@ fn close_window(window: &Window) {
     if let Err(err) = window.close() {
         warn!("Error closing window: {}", err);
     }
+}
+
+fn clear_webview_cookies(wv: &webkit2gtk::WebView) {
+    if let Some(context) = wv.context() {
+        if let Some(cookie_manager) = context.cookie_manager() {
+            #[allow(deprecated)]
+            cookie_manager.delete_all_cookies();
+            info!("Cookies cleared");
+            return;
+        }
+    }
+    warn!("No cookie manager found");
 }

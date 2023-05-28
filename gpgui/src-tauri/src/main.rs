@@ -40,7 +40,14 @@ async fn saml_login(
     app_handle: AppHandle,
 ) -> tauri::Result<Option<AuthData>> {
     let ua = "PAN GlobalProtect";
-    auth::saml_login(AuthRequest::new(binding, request), ua, &app_handle).await
+    let clear_cookies = false;
+    auth::saml_login(
+        AuthRequest::new(binding, request),
+        ua,
+        clear_cookies,
+        &app_handle,
+    )
+    .await
 }
 
 #[derive(Debug, Clone, Serialize)]
