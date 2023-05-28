@@ -6,6 +6,7 @@
 use auth::{AuthData, AuthRequest, SamlBinding};
 use env_logger::Env;
 use gpcommon::{Client, ServerApiError, VpnStatus};
+use log::warn;
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
@@ -56,11 +57,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let _ = client_clone.subscribe_status(move |status| {
             let payload = StatusPayload { status };
             if let Err(err) = app_handle.emit_all("vpn-status-received", payload) {
-                println!("Error emitting event: {}", err);
+                warn!("Error emitting event: {}", err);
             }
         });
 
-        // let _ = client_clone.run().await;
+        let _ = client_clone.run().await;
     });
 
     app.manage(client);
@@ -77,6 +78,7 @@ fn main() {
                     LogTarget::LogDir,
                     LogTarget::Stdout, /*LogTarget::Webview*/
                 ])
+                .level(log::LevelFilter::Info)
                 .build(),
         )
         .setup(setup)
