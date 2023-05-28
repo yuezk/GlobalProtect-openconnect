@@ -3,52 +3,16 @@
     windows_subsystem = "windows"
 )]
 
-use auth::{AuthData, AuthRequest, SamlBinding};
 use env_logger::Env;
-use gpcommon::{Client, ServerApiError, VpnStatus};
+use gpcommon::{Client, VpnStatus};
 use log::warn;
 use serde::Serialize;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, State};
+use tauri::Manager;
 use tauri_plugin_log::LogTarget;
 
 mod auth;
-
-#[tauri::command]
-async fn vpn_status<'a>(client: State<'a, Arc<Client>>) -> Result<VpnStatus, ServerApiError> {
-    client.status().await
-}
-
-#[tauri::command]
-async fn vpn_connect<'a>(
-    server: String,
-    cookie: String,
-    client: State<'a, Arc<Client>>,
-) -> Result<(), ServerApiError> {
-    client.connect(server, cookie).await
-}
-
-#[tauri::command]
-async fn vpn_disconnect<'a>(client: State<'a, Arc<Client>>) -> Result<(), ServerApiError> {
-    client.disconnect().await
-}
-
-#[tauri::command]
-async fn saml_login(
-    binding: SamlBinding,
-    request: String,
-    app_handle: AppHandle,
-) -> tauri::Result<Option<AuthData>> {
-    let ua = "PAN GlobalProtect";
-    let clear_cookies = false;
-    auth::saml_login(
-        AuthRequest::new(binding, request),
-        ua,
-        clear_cookies,
-        &app_handle,
-    )
-    .await
-}
+mod commands;
 
 #[derive(Debug, Clone, Serialize)]
 struct StatusPayload {
@@ -90,10 +54,10 @@ fn main() {
         )
         .setup(setup)
         .invoke_handler(tauri::generate_handler![
-            vpn_status,
-            vpn_connect,
-            vpn_disconnect,
-            saml_login,
+            commands::vpn_status,
+            commands::vpn_connect,
+            commands::vpn_disconnect,
+            commands::saml_login
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
