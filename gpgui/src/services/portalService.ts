@@ -1,7 +1,6 @@
 import { Body, ResponseType, fetch } from "@tauri-apps/api/http";
 import { Maybe, MaybeProperties } from "../types";
 import { parseXml } from "../utils/parseXml";
-import authService from "./authService";
 import { Gateway } from "./types";
 
 type SamlPreloginResponse = {
@@ -28,6 +27,19 @@ type ConfigResponse = {
   prelogonUserAuthCookie: Maybe<string>;
   preferredGateway: Gateway;
   gateways: Gateway[];
+};
+
+// user: username,
+// passwd: password,
+// "prelogin-cookie": "",
+// "portal-userauthcookie": "",
+// "portal-prelogonuserauthcookie": "",
+type PortalConfigParams = {
+  user: string;
+  passwd?: string | null;
+  "prelogin-cookie"?: string | null;
+  "portal-userauthcookie"?: string | null;
+  "portal-prelogonuserauthcookie"?: string | null;
 };
 
 class PortalService {
@@ -84,40 +96,42 @@ class PortalService {
     return false;
   }
 
-  async fetchConfig({
-    portal,
-    username,
-    password,
-  }: {
-    portal: string;
-    username: string;
-    password: string;
-  }) {
+  async fetchConfig(portal: string, params: PortalConfigParams) {
+    const {
+      user,
+      passwd,
+      "prelogin-cookie": preloginCookie,
+      "portal-userauthcookie": portalUserAuthCookie,
+      "portal-prelogonuserauthcookie": portalPrelogonUserAuthCookie,
+    } = params;
+
     const configUrl = `https://${portal}/global-protect/getconfig.esp`;
+    const body = Body.form({
+      prot: "https:",
+      inputStr: "",
+      jnlpReady: "jnlpReady",
+      computer: "Linux", // TODO
+      clientos: "Linux",
+      ok: "Login",
+      direct: "yes",
+      clientVer: "4100",
+      "os-version": "Linux",
+      "ipv6-support": "yes",
+      server: portal,
+      user,
+      passwd: passwd || "",
+      "prelogin-cookie": preloginCookie || "",
+      "portal-userauthcookie": portalUserAuthCookie || "",
+      "portal-prelogonuserauthcookie": portalPrelogonUserAuthCookie || "",
+    });
+
     const response = await fetch<string>(configUrl, {
       method: "POST",
       headers: {
         "User-Agent": "PAN GlobalProtect",
       },
       responseType: ResponseType.Text,
-      body: Body.form({
-        prot: "https:",
-        inputStr: "",
-        jnlpReady: "jnlpReady",
-        computer: "Linux", // TODO
-        clientos: "Linux",
-        ok: "Login",
-        direct: "yes",
-        clientVer: "4100",
-        "os-version": "Linux",
-        "ipv6-support": "yes",
-        server: portal,
-        user: username,
-        passwd: password,
-        "portal-userauthcookie": "",
-        "portal-prelogonuserauthcookie": "",
-        "prelogin-cookie": "",
-      }),
+      body,
     });
 
     if (!response.ok) {

@@ -37,16 +37,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    authService.onAuthSuccess((data) => {});
     authService.onAuthError(async () => {
       const preloginResponse = await portalService.prelogin(portalAddress);
-      // Retry SAML login when auth error occurs
-      authService.emitAuthRequest({
-        samlBinding: preloginResponse.samlAuthMethod!,
-        samlRequest: preloginResponse.samlAuthRequest!,
-      });
+      if (portalService.isSamlAuth(preloginResponse)) {
+        // Retry SAML login when auth error occurs
+        await authService.emitAuthRequest({
+          samlBinding: preloginResponse.samlAuthMethod,
+          samlRequest: preloginResponse.samlAuthRequest,
+        });
+      }
     });
-    authService.onAuthCancel(() => {});
   }, [portalAddress]);
 
   function closeNotification() {
@@ -70,18 +70,33 @@ export default function App() {
   async function handleConnect(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    setProcessing(true);
+    // setProcessing(true);
+    setStatus("processing");
 
     try {
       const response = await portalService.prelogin(portalAddress);
 
       if (portalService.isSamlAuth(response)) {
         const { samlAuthMethod, samlAuthRequest } = response;
+        setStatus("authenticating");
         const authData = await authService.samlLogin(
           samlAuthMethod,
           samlAuthRequest
         );
-        console.log("authData", authData);
+        if (!authData) {
+          throw new Error("User cancelled");
+        }
+
+        const portalConfigResponse = await portalService.fetchConfig(
+          portalAddress,
+          {
+            user: authData.username,
+            "prelogin-cookie": authData.prelogin_cookie,
+            "portal-userauthcookie": authData.portal_userauthcookie,
+          }
+        );
+
+        console.log("portalConfigResponse", portalConfigResponse);
       } else if (portalService.isPasswordAuth(response)) {
         setPasswordAuthOpen(true);
         setPasswordAuth({
@@ -94,17 +109,17 @@ export default function App() {
       }
     } catch (e) {
       console.error(e);
-      setProcessing(false);
+      setStatus("disconnected");
     }
   }
 
   function handleCancel() {
     // TODO cancel the request first
-    setProcessing(false);
+    setStatus("disconnected");
   }
 
   async function handleDisconnect() {
-    setProcessing(true);
+    setStatus("processing");
 
     try {
       await vpnService.disconnect();
@@ -116,18 +131,20 @@ export default function App() {
         message: err.message,
       });
     } finally {
-      setProcessing(false);
+      setStatus("disconnected");
     }
   }
 
-  async function handlePasswordAuth({ username, password }: Credentials) {
+  async function handlePasswordAuth({
+    username: user,
+    password: passwd,
+  }: Credentials) {
     try {
       setPasswordAuthenticating(true);
-      const portalConfigResponse = await portalService.fetchConfig({
-        portal: portalAddress,
-        username,
-        password,
-      });
+      const portalConfigResponse = await portalService.fetchConfig(
+        portalAddress,
+        { user, passwd }
+      );
 
       const { gateways, preferredGateway, userAuthCookie } =
         portalConfigResponse;
@@ -139,13 +156,13 @@ export default function App() {
 
       const token = await gatewayService.login({
         gateway: preferredGateway,
-        username,
-        password,
+        user,
+        passwd,
         userAuthCookie,
       });
 
       await vpnService.connect(preferredGateway.address!, token);
-      setProcessing(false);
+      // setProcessing(false);
     } catch (err: any) {
       console.error(err);
       setNotification({
@@ -162,7 +179,8 @@ export default function App() {
   function cancelPasswordAuth() {
     setPasswordAuthenticating(false);
     setPasswordAuthOpen(false);
-    setProcessing(false);
+    // setProcessing(false);
+    setStatus("disconnected");
   }
   return (
     <Box padding={2} paddingTop={3}>
@@ -193,10 +211,11 @@ export default function App() {
               Connect
             </Button>
           )}
-          {status === "connecting" && (
+          {["processing", "authenticating", "connecting"].includes(status) && (
             <Button
               variant="outlined"
               fullWidth
+              disabled={status === "authenticating"}
               onClick={handleCancel}
               sx={{ textTransform: "none" }}
             >

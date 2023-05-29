@@ -5,14 +5,14 @@ import { Gateway } from "./types";
 
 type LoginParams = {
   gateway: Gateway;
-  username: string;
-  password: string;
+  user: string;
+  passwd: string;
   userAuthCookie: Maybe<string>;
 };
 
 class GatewayService {
   async login(params: LoginParams) {
-    const { gateway, username, password, userAuthCookie } = params;
+    const { gateway, user, passwd, userAuthCookie } = params;
     if (!gateway.address) {
       throw new Error("Gateway address is required");
     }
@@ -37,8 +37,8 @@ class GatewayService {
         clientos: "Linux",
         "os-version": "Linux",
         server: gateway.address,
-        user: username,
-        passwd: password,
+        user,
+        passwd,
         "portal-userauthcookie": userAuthCookie ?? "",
         "portal-prelogonuserauthcookie": "",
         "prelogin-cookie": "",

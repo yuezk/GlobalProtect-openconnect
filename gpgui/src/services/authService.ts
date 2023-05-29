@@ -1,4 +1,4 @@
-import { Event, emit, listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import invokeCommand from "../utils/invokeCommand";
 
 type AuthData = {
@@ -8,36 +8,20 @@ type AuthData = {
 };
 
 class AuthService {
-  private authSuccessCallback: ((data: AuthData) => void) | undefined;
   private authErrorCallback: (() => void) | undefined;
-  private authCancelCallback: (() => void) | undefined;
 
   constructor() {
     this.init();
   }
 
   private async init() {
-    await listen("auth-success", (event: Event<AuthData>) => {
-      this.authSuccessCallback?.(event.payload);
-    });
-    await listen("auth-error", (event) => {
+    await listen("auth-error", () => {
       this.authErrorCallback?.();
     });
-    await listen("auth-cancel", (event) => {
-      this.authCancelCallback?.();
-    });
-  }
-
-  onAuthSuccess(callback: (data: AuthData) => void) {
-    this.authSuccessCallback = callback;
   }
 
   onAuthError(callback: () => void) {
     this.authErrorCallback = callback;
-  }
-
-  onAuthCancel(callback: () => void) {
-    this.authCancelCallback = callback;
   }
 
   // binding: "POST" | "REDIRECT"
@@ -45,14 +29,14 @@ class AuthService {
     return invokeCommand<AuthData>("saml_login", { binding, request });
   }
 
-  emitAuthRequest({
+  async emitAuthRequest({
     samlBinding,
     samlRequest,
   }: {
     samlBinding: string;
     samlRequest: string;
   }) {
-    emit("auth-request", { samlBinding, samlRequest });
+    await emit("auth-request", { samlBinding, samlRequest });
   }
 }
 

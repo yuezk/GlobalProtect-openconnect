@@ -131,7 +131,7 @@ fn setup_webview(
 ) -> tauri::Result<()> {
     window.with_webview(move |wv| {
         let wv = wv.inner();
-        let event_tx = event_tx.clone();
+        let event_tx_clone = event_tx.clone();
 
         if clear_cookies {
             clear_webview_cookies(&wv);
@@ -146,25 +146,22 @@ fn setup_webview(
             // Empty URI indicates that an error occurred
             if uri.is_empty() {
                 warn!("Empty URI loaded");
-                if let Err(err) = event_tx.blocking_send(AuthEvent::Error(AuthError::TokenInvalid))
-                {
-                    warn!("Error sending event: {}", err);
-                }
+                send_auth_error(&event_tx_clone, AuthError::TokenInvalid);
                 return;
             }
-
             // TODO, redact URI
             debug!("Loaded URI: {}", uri);
 
             if let Some(main_res) = wv.main_resource() {
-                parse_auth_data(&main_res, event_tx.clone());
+                parse_auth_data(&main_res, event_tx_clone.clone());
             } else {
                 warn!("No main_resource");
             }
         });
 
-        wv.connect_load_failed(|_wv, event, err_msg, err| {
-            warn!("Load failed: {:?}, {}, {:?}", event, err_msg, err);
+        wv.connect_load_failed(move |_wv, event, _uri, err| {
+            warn!("Load failed: {:?}, {:?}", event, err);
+            send_auth_error(&event_tx, AuthError::TokenInvalid);
             false
         });
     })
@@ -175,9 +172,7 @@ fn setup_window(window: &Window, event_tx: mpsc::Sender<AuthEvent>) -> EventHand
     window.on_window_event(move |event| {
         if let CloseRequested { api, .. } = event {
             api.prevent_close();
-            if let Err(err) = event_tx_clone.blocking_send(AuthEvent::Cancel) {
-                warn!("Error sending event: {}", err)
-            }
+            send_auth_event(&event_tx_clone, AuthEvent::Cancel);
         }
     });
 
@@ -335,9 +330,7 @@ fn parse_auth_data(main_res: &WebResource, event_tx: mpsc::Sender<AuthEvent>) {
                 }
                 Err(err) => {
                     debug!("Error reading auth data from HTML: {:?}", err);
-                    if let Err(err) = event_tx.blocking_send(AuthEvent::Error(err)) {
-                        warn!("Error sending event: {}", err)
-                    }
+                    send_auth_error(&event_tx, err);
                 }
             }
         }
@@ -395,7 +388,15 @@ fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
 }
 
 fn send_auth_data(event_tx: &mpsc::Sender<AuthEvent>, auth_data: AuthData) {
-    if let Err(err) = event_tx.blocking_send(AuthEvent::Success(auth_data)) {
+    send_auth_event(event_tx, AuthEvent::Success(auth_data));
+}
+
+fn send_auth_error(event_tx: &mpsc::Sender<AuthEvent>, err: AuthError) {
+    send_auth_event(event_tx, AuthEvent::Error(err));
+}
+
+fn send_auth_event(event_tx: &mpsc::Sender<AuthEvent>, auth_event: AuthEvent) {
+    if let Err(err) = event_tx.blocking_send(auth_event) {
         warn!("Error sending event: {}", err)
     }
 }

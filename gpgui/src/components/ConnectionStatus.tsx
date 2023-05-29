@@ -11,6 +11,7 @@ import { BeatLoader } from "react-spinners";
 
 export type Status =
   | "processing"
+  | "authenticating"
   | "disconnected"
   | "connecting"
   | "connected"
@@ -18,6 +19,7 @@ export type Status =
 
 export const statusTextMap: Record<Status, string> = {
   processing: "Processing...",
+  authenticating: "Authenticating...",
   connected: "Connected",
   disconnected: "Not Connected",
   connecting: "Connecting...",
@@ -32,13 +34,14 @@ export default function ConnectionStatus(
   const { palette } = theme;
   const colorsMap: Record<Status, string> = {
     processing: palette.info.main,
+    authenticating: palette.info.main,
     connected: palette.success.main,
     disconnected: palette.action.disabled,
     connecting: palette.info.main,
     disconnecting: palette.info.main,
   };
 
-  const pending = ["processing", "connecting", "disconnecting"].includes(status);
+  const pending = ["processing", "authenticating", "connecting", "disconnecting"].includes(status);
   const connected = status === "connected";
   const disconnected = status === "disconnected";
 
