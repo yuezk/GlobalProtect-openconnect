@@ -1,23 +1,42 @@
 import { Body, ResponseType, fetch } from "@tauri-apps/api/http";
-import { Maybe } from "../types";
 import { parseXml } from "../utils/parseXml";
 import { Gateway } from "./types";
 
 type LoginParams = {
-  gateway: Gateway;
   user: string;
-  passwd: string;
-  userAuthCookie: Maybe<string>;
+  passwd?: string | null;
+  userAuthCookie?: string | null;
+  prelogonUserAuthCookie?: string | null;
 };
 
 class GatewayService {
-  async login(params: LoginParams) {
-    const { gateway, user, passwd, userAuthCookie } = params;
+  async login(gateway: Gateway, params: LoginParams) {
+    const { user, passwd, userAuthCookie, prelogonUserAuthCookie } = params;
     if (!gateway.address) {
       throw new Error("Gateway address is required");
     }
 
     const loginUrl = `https://${gateway.address}/ssl-vpn/login.esp`;
+    const body = Body.form({
+      prot: "https:",
+      inputStr: "",
+      jnlpReady: "jnlpReady",
+      computer: "Linux", // TODO
+      ok: "Login",
+      direct: "yes",
+      "ipv6-support": "yes",
+      clientVer: "4100",
+      clientos: "Linux",
+      "os-version": "Linux",
+      server: gateway.address,
+      user,
+      passwd: passwd || "",
+      "prelogin-cookie": "",
+      "portal-userauthcookie": userAuthCookie || "",
+      "portal-prelogonuserauthcookie": prelogonUserAuthCookie || "",
+    });
+
+    console.log("Login body", body);
 
     const response = await fetch<string>(loginUrl, {
       method: "POST",
@@ -25,24 +44,7 @@ class GatewayService {
         "User-Agent": "PAN GlobalProtect",
       },
       responseType: ResponseType.Text,
-      body: Body.form({
-        prot: "https:",
-        inputStr: "",
-        jnlpReady: "jnlpReady",
-        computer: "Linux", // TODO
-        ok: "Login",
-        direct: "yes",
-        "ipv6-support": "yes",
-        clientVer: "4100",
-        clientos: "Linux",
-        "os-version": "Linux",
-        server: gateway.address,
-        user,
-        passwd,
-        "portal-userauthcookie": userAuthCookie ?? "",
-        "portal-prelogonuserauthcookie": "",
-        "prelogin-cookie": "",
-      }),
+      body,
     });
 
     if (!response.ok) {

@@ -13,6 +13,7 @@ use tauri_plugin_log::LogTarget;
 
 mod auth;
 mod commands;
+mod utils;
 
 #[derive(Debug, Clone, Serialize)]
 struct StatusPayload {

@@ -16,6 +16,9 @@
         "all": true,
         "request": true,
         "scope": ["https://**"]
+      },
+      "window": {
+        "all": true
       }
     },
     "bundle": {

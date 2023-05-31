@@ -1,15 +1,18 @@
+use crate::utils::{clear_webview_cookies, redact_url};
 use log::{debug, info, warn};
 use regex::Regex;
+use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 use tauri::EventHandler;
-use tauri::{AppHandle, Manager, Window, WindowBuilder, WindowEvent::CloseRequested, WindowUrl};
+use tauri::{AppHandle, Manager, Window, WindowEvent::CloseRequested, WindowUrl};
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::timeout;
+use veil::Redact;
 use webkit2gtk::gio::Cancellable;
 use webkit2gtk::glib::GString;
 use webkit2gtk::traits::{URIResponseExt, WebViewExt};
-use webkit2gtk::{CookieManagerExt, LoadEvent, WebContextExt, WebResource, WebResourceExt};
+use webkit2gtk::{LoadEvent, WebResource, WebResourceExt};
 
 const AUTH_WINDOW_LABEL: &str = "auth_window";
 const AUTH_ERROR_EVENT: &str = "auth-error";
@@ -28,10 +31,11 @@ pub(crate) enum SamlBinding {
     Post,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Redact, Clone, Deserialize)]
 pub(crate) struct AuthRequest {
     #[serde(alias = "samlBinding")]
     saml_binding: SamlBinding,
+    #[redact(fixed = 10)]
     #[serde(alias = "samlRequest")]
     saml_request: String,
 }
@@ -49,14 +53,20 @@ impl TryFrom<Option<&str>> for AuthRequest {
     type Error = serde_json::Error;
 
     fn try_from(value: Option<&str>) -> Result<Self, Self::Error> {
-        serde_json::from_str(value.unwrap_or("{}"))
+        match value {
+            Some(value) => serde_json::from_str(value),
+            None => Err(Error::custom("No auth request provided")),
+        }
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Redact, Clone, Serialize)]
 pub(crate) struct AuthData {
+    #[redact]
     username: Option<String>,
+    #[redact(fixed = 10)]
     prelogin_cookie: Option<String>,
+    #[redact(fixed = 10)]
     portal_userauthcookie: Option<String>,
 }
 
@@ -93,27 +103,35 @@ enum AuthEvent {
     Cancel,
 }
 
-pub(crate) async fn saml_login(
-    auth_request: AuthRequest,
-    ua: &str,
-    clear_cookies: bool,
-    app_handle: &AppHandle,
-) -> tauri::Result<Option<AuthData>> {
+pub(crate) struct SamlLoginParams {
+    pub auth_request: AuthRequest,
+    pub user_agent: String,
+    pub clear_cookies: bool,
+    pub app_handle: AppHandle,
+}
+
+pub(crate) async fn saml_login(params: SamlLoginParams) -> tauri::Result<Option<AuthData>> {
     info!("Starting SAML login");
 
     let (event_tx, event_rx) = mpsc::channel::<AuthEvent>(8);
-    let window = build_window(app_handle, ua)?;
-    setup_webview(&window, clear_cookies, event_tx.clone())?;
+    let window = build_window(&params.app_handle, &params.user_agent)?;
+    setup_webview(&window, event_tx.clone())?;
     let handler = setup_window(&window, event_tx);
 
-    let result = process(&window, auth_request, event_rx).await;
+    if params.clear_cookies {
+        if let Err(err) = clear_webview_cookies(&window).await {
+            warn!("Failed to clear webview cookies: {}", err);
+        }
+    }
+
+    let result = process(&window, params.auth_request, event_rx).await;
     window.unlisten(handler);
     result
 }
 
 fn build_window(app_handle: &AppHandle, ua: &str) -> tauri::Result<Window> {
     let url = WindowUrl::App("auth.html".into());
-    WindowBuilder::new(app_handle, AUTH_WINDOW_LABEL, url)
+    Window::builder(app_handle, AUTH_WINDOW_LABEL, url)
         .visible(false)
         .title("GlobalProtect Login")
         .user_agent(ua)
@@ -124,18 +142,10 @@ fn build_window(app_handle: &AppHandle, ua: &str) -> tauri::Result<Window> {
 }
 
 // Setup webview events
-fn setup_webview(
-    window: &Window,
-    clear_cookies: bool,
-    event_tx: mpsc::Sender<AuthEvent>,
-) -> tauri::Result<()> {
+fn setup_webview(window: &Window, event_tx: mpsc::Sender<AuthEvent>) -> tauri::Result<()> {
     window.with_webview(move |wv| {
         let wv = wv.inner();
         let event_tx_clone = event_tx.clone();
-
-        if clear_cookies {
-            clear_webview_cookies(&wv);
-        }
 
         wv.connect_load_changed(move |wv, event| {
             if LoadEvent::Finished != event {
@@ -145,12 +155,11 @@ fn setup_webview(
             let uri = wv.uri().unwrap_or("".into());
             // Empty URI indicates that an error occurred
             if uri.is_empty() {
-                warn!("Empty URI loaded");
-                send_auth_error(&event_tx_clone, AuthError::TokenInvalid);
+                warn!("Empty URI loaded, retrying");
+                send_auth_error(event_tx_clone.clone(), AuthError::TokenInvalid);
                 return;
             }
-            // TODO, redact URI
-            debug!("Loaded URI: {}", uri);
+            info!("Loaded URI: {}", redact_url(&uri));
 
             if let Some(main_res) = wv.main_resource() {
                 parse_auth_data(&main_res, event_tx_clone.clone());
@@ -161,7 +170,7 @@ fn setup_webview(
 
         wv.connect_load_failed(move |_wv, event, _uri, err| {
             warn!("Load failed: {:?}, {:?}", event, err);
-            send_auth_error(&event_tx, AuthError::TokenInvalid);
+            send_auth_error(event_tx.clone(), AuthError::TokenInvalid);
             false
         });
     })
@@ -170,20 +179,17 @@ fn setup_webview(
 fn setup_window(window: &Window, event_tx: mpsc::Sender<AuthEvent>) -> EventHandler {
     let event_tx_clone = event_tx.clone();
     window.on_window_event(move |event| {
-        if let CloseRequested { api, .. } = event {
-            api.prevent_close();
-            send_auth_event(&event_tx_clone, AuthEvent::Cancel);
+        if let CloseRequested { .. } = event {
+            send_auth_event(event_tx_clone.clone(), AuthEvent::Cancel);
         }
     });
 
     window.listen_global(AUTH_REQUEST_EVENT, move |event| {
         if let Ok(payload) = TryInto::<AuthRequest>::try_into(event.payload()) {
             let event_tx = event_tx.clone();
-            let _ = tokio::spawn(async move {
-                if let Err(err) = event_tx.send(AuthEvent::Request(payload)).await {
-                    warn!("Error sending event: {}", err);
-                }
-            });
+            send_auth_event(event_tx.clone(), AuthEvent::Request(payload));
+        } else {
+            warn!("Invalid auth request payload");
         }
     })
 }
@@ -199,7 +205,10 @@ async fn process(
 
     let handle = tokio::spawn(show_window_after_timeout(window.clone()));
     let auth_data = process_auth_event(&window, event_rx).await;
-    handle.abort();
+
+    if !handle.is_finished() {
+        handle.abort();
+    }
     Ok(auth_data)
 }
 
@@ -255,7 +264,6 @@ async fn process_auth_event(
                 }
                 AuthEvent::Cancel => {
                     info!("User cancelled the authentication process, closing window");
-                    close_window(window);
                     return None;
                 }
                 AuthEvent::Error(AuthError::TokenInvalid) => {
@@ -292,19 +300,19 @@ async fn process_auth_event(
 /// we should show the window after a short timeout, it will be cancelled if the
 /// token is found in the response, no matter it's valid or not.
 async fn handle_token_not_found(window: Window, cancel_timeout_rx: Arc<Mutex<mpsc::Receiver<()>>>) {
-    match cancel_timeout_rx.try_lock() {
-        Ok(mut cancel_timeout_rx) => {
-            let duration = Duration::from_secs(SHOW_WINDOW_TIMEOUT);
-            if let Err(_) = timeout(duration, cancel_timeout_rx.recv()).await {
-                info!("Timeout expired, showing window");
-                show_window(&window);
-            } else {
-                info!("Showing window timeout cancelled");
-            }
+    if let Ok(mut cancel_timeout_rx) = cancel_timeout_rx.try_lock() {
+        let duration = Duration::from_secs(SHOW_WINDOW_TIMEOUT);
+        if timeout(duration, cancel_timeout_rx.recv()).await.is_err() {
+            info!(
+                "Timeout expired after {} seconds, showing window",
+                SHOW_WINDOW_TIMEOUT
+            );
+            show_window(&window);
+        } else {
+            info!("Showing window timeout cancelled");
         }
-        Err(_) => {
-            debug!("Window will be shown by another task, skipping");
-        }
+    } else {
+        debug!("Window will be shown by another task, skipping");
     }
 }
 
@@ -314,7 +322,7 @@ fn parse_auth_data(main_res: &WebResource, event_tx: mpsc::Sender<AuthEvent>) {
     if let Some(response) = main_res.response() {
         if let Some(auth_data) = read_auth_data_from_response(&response) {
             debug!("Got auth data from HTTP headers: {:?}", auth_data);
-            send_auth_data(&event_tx, auth_data);
+            send_auth_data(event_tx, auth_data);
             return;
         }
     }
@@ -326,11 +334,11 @@ fn parse_auth_data(main_res: &WebResource, event_tx: mpsc::Sender<AuthEvent>) {
             match read_auth_data_from_html(&html) {
                 Ok(auth_data) => {
                     debug!("Got auth data from HTML: {:?}", auth_data);
-                    send_auth_data(&event_tx, auth_data);
+                    send_auth_data(event_tx, auth_data);
                 }
                 Err(err) => {
                     debug!("Error reading auth data from HTML: {:?}", err);
-                    send_auth_error(&event_tx, err);
+                    send_auth_error(event_tx, err);
                 }
             }
         }
@@ -387,18 +395,20 @@ fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
         .map(|m| m.as_str().to_string())
 }
 
-fn send_auth_data(event_tx: &mpsc::Sender<AuthEvent>, auth_data: AuthData) {
+fn send_auth_data(event_tx: mpsc::Sender<AuthEvent>, auth_data: AuthData) {
     send_auth_event(event_tx, AuthEvent::Success(auth_data));
 }
 
-fn send_auth_error(event_tx: &mpsc::Sender<AuthEvent>, err: AuthError) {
+fn send_auth_error(event_tx: mpsc::Sender<AuthEvent>, err: AuthError) {
     send_auth_event(event_tx, AuthEvent::Error(err));
 }
 
-fn send_auth_event(event_tx: &mpsc::Sender<AuthEvent>, auth_event: AuthEvent) {
-    if let Err(err) = event_tx.blocking_send(auth_event) {
-        warn!("Error sending event: {}", err)
-    }
+fn send_auth_event(event_tx: mpsc::Sender<AuthEvent>, auth_event: AuthEvent) {
+    let _ = tauri::async_runtime::spawn(async move {
+        if let Err(err) = event_tx.send(auth_event).await {
+            warn!("Error sending event: {}", err);
+        }
+    });
 }
 
 fn show_window(window: &Window) {
@@ -417,16 +427,4 @@ fn close_window(window: &Window) {
     if let Err(err) = window.close() {
         warn!("Error closing window: {}", err);
     }
-}
-
-fn clear_webview_cookies(wv: &webkit2gtk::WebView) {
-    if let Some(context) = wv.context() {
-        if let Some(cookie_manager) = context.cookie_manager() {
-            #[allow(deprecated)]
-            cookie_manager.delete_all_cookies();
-            info!("Cookies cleared");
-            return;
-        }
-    }
-    warn!("No cookie manager found");
 }

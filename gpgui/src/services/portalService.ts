@@ -25,15 +25,9 @@ type PreloginResponse = MaybeProperties<
 type ConfigResponse = {
   userAuthCookie: Maybe<string>;
   prelogonUserAuthCookie: Maybe<string>;
-  preferredGateway: Gateway;
   gateways: Gateway[];
 };
 
-// user: username,
-// passwd: password,
-// "prelogin-cookie": "",
-// "portal-userauthcookie": "",
-// "portal-prelogonuserauthcookie": "",
 type PortalConfigParams = {
   user: string;
   passwd?: string | null;
@@ -81,10 +75,7 @@ class PortalService {
   }
 
   isSamlAuth(response: PreloginResponse): response is SamlPreloginResponse {
-    if (response.samlAuthMethod && response.samlAuthRequest) {
-      return true;
-    }
-    return false;
+    return !!(response.samlAuthMethod && response.samlAuthRequest);
   }
 
   isPasswordAuth(
@@ -143,6 +134,8 @@ class PortalService {
   }
 
   private parsePortalConfigResponse(response: string): ConfigResponse {
+    console.log(response);
+
     const result = parseXml(response);
     const gateways = result.all("gateways list > entry").map((entry) => {
       const address = entry.attr("name");
@@ -152,13 +145,13 @@ class PortalService {
       return {
         name,
         address,
-        priority: priority ? parseInt(priority, 10) : undefined,
+        priority: priority ? parseInt(priority, 10) : Infinity,
         priorityRules: entry.all("priority-rule > entry").map((entry) => {
           const name = entry.attr("name");
           const priority = entry.text("priority");
           return {
             name,
-            priority: priority ? parseInt(priority, 10) : undefined,
+            priority: priority ? parseInt(priority, 10) : Infinity,
           };
         }),
       };
@@ -167,9 +160,36 @@ class PortalService {
     return {
       userAuthCookie: result.text("portal-userauthcookie"),
       prelogonUserAuthCookie: result.text("portal-prelogonuserauthcookie"),
-      preferredGateway: gateways[0],
       gateways,
     };
+  }
+
+  preferredGateway(gateways: Gateway[], region: Maybe<string>) {
+    console.log(gateways);
+    let defaultGateway = gateways[0];
+    for (const gateway of gateways) {
+      if (gateway.priority < defaultGateway.priority) {
+        defaultGateway = gateway;
+      }
+    }
+
+    if (!region) {
+      return defaultGateway;
+    }
+
+    let preferredGateway = defaultGateway;
+    let currentPriority = Infinity;
+    for (const gateway of gateways) {
+      const priorityRule = gateway.priorityRules.find(
+        ({ name }) => name === region
+      );
+
+      if (priorityRule && priorityRule.priority < currentPriority) {
+        preferredGateway = gateway;
+        currentPriority = priorityRule.priority;
+      }
+    }
+    return preferredGateway;
   }
 }
 

@@ -1,4 +1,4 @@
-use crate::auth::{self, AuthData, AuthRequest, SamlBinding};
+use crate::auth::{self, AuthData, AuthRequest, SamlBinding, SamlLoginParams};
 use gpcommon::{Client, ServerApiError, VpnStatus};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -32,13 +32,13 @@ pub(crate) async fn saml_login(
     request: String,
     app_handle: AppHandle,
 ) -> tauri::Result<Option<AuthData>> {
-    let ua = "PAN GlobalProtect";
+    let user_agent = String::from("PAN GlobalProtect");
     let clear_cookies = false;
-    auth::saml_login(
-        AuthRequest::new(binding, request),
-        ua,
+    let params = SamlLoginParams {
+        auth_request: AuthRequest::new(binding, request),
+        user_agent,
         clear_cookies,
-        &app_handle,
-    )
-    .await
+        app_handle,
+    };
+    auth::saml_login(params).await
 }

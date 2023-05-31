@@ -1,6 +1,7 @@
+import { WebviewWindow } from "@tauri-apps/api/window";
 import { Box, TextField } from "@mui/material";
 import Button from "@mui/material/Button";
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 
 import "./App.css";
 import ConnectionStatus, { Status } from "./components/ConnectionStatus";
@@ -13,6 +14,7 @@ import gatewayService from "./services/gatewayService";
 import portalService from "./services/portalService";
 import vpnService from "./services/vpnService";
 import authService from "./services/authService";
+import { Maybe } from "./types";
 
 export default function App() {
   const [portalAddress, setPortalAddress] = useState("vpn.microstrategy.com"); // useState("220.191.185.154");
@@ -25,6 +27,7 @@ export default function App() {
     open: false,
     message: "",
   });
+  const regionRef = useRef<Maybe<string>>(null);
 
   useEffect(() => {
     return vpnService.onStatusChanged((latestStatus) => {
@@ -75,6 +78,8 @@ export default function App() {
 
     try {
       const response = await portalService.prelogin(portalAddress);
+      const { region } = response;
+      regionRef.current = region;
 
       if (portalService.isSamlAuth(response)) {
         const { samlAuthMethod, samlAuthRequest } = response;
@@ -97,6 +102,22 @@ export default function App() {
         );
 
         console.log("portalConfigResponse", portalConfigResponse);
+
+        const { gateways, userAuthCookie, prelogonUserAuthCookie } =
+          portalConfigResponse;
+
+        const preferredGateway = portalService.preferredGateway(
+          gateways,
+          regionRef.current
+        );
+
+        const token = await gatewayService.login(preferredGateway, {
+          user: authData.username,
+          userAuthCookie,
+          prelogonUserAuthCookie,
+        });
+
+        await vpnService.connect(preferredGateway.address!, token);
       } else if (portalService.isPasswordAuth(response)) {
         setPasswordAuthOpen(true);
         setPasswordAuth({
@@ -146,16 +167,18 @@ export default function App() {
         { user, passwd }
       );
 
-      const { gateways, preferredGateway, userAuthCookie } =
-        portalConfigResponse;
+      const { gateways, userAuthCookie } = portalConfigResponse;
 
       if (gateways.length === 0) {
         // TODO handle no gateways, treat the portal as a gateway
         throw new Error("No gateways found");
       }
 
-      const token = await gatewayService.login({
-        gateway: preferredGateway,
+      const preferredGateway = portalService.preferredGateway(
+        gateways,
+        regionRef.current
+      );
+      const token = await gatewayService.login(preferredGateway, {
         user,
         passwd,
         userAuthCookie,
