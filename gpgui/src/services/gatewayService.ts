@@ -1,6 +1,5 @@
 import { Body, ResponseType, fetch } from "@tauri-apps/api/http";
 import { parseXml } from "../utils/parseXml";
-import { Gateway } from "./types";
 
 type LoginParams = {
   user: string;
@@ -10,13 +9,13 @@ type LoginParams = {
 };
 
 class GatewayService {
-  async login(gateway: Gateway, params: LoginParams) {
+  async login(gateway: string, params: LoginParams) {
     const { user, passwd, userAuthCookie, prelogonUserAuthCookie } = params;
-    if (!gateway.address) {
+    if (!gateway) {
       throw new Error("Gateway address is required");
     }
 
-    const loginUrl = `https://${gateway.address}/ssl-vpn/login.esp`;
+    const loginUrl = `https://${gateway}/ssl-vpn/login.esp`;
     const body = Body.form({
       prot: "https:",
       inputStr: "",
@@ -28,15 +27,13 @@ class GatewayService {
       clientVer: "4100",
       clientos: "Linux",
       "os-version": "Linux",
-      server: gateway.address,
+      server: gateway,
       user,
       passwd: passwd || "",
       "prelogin-cookie": "",
       "portal-userauthcookie": userAuthCookie || "",
       "portal-prelogonuserauthcookie": prelogonUserAuthCookie || "",
     });
-
-    console.log("Login body", body);
 
     const response = await fetch<string>(loginUrl, {
       method: "POST",

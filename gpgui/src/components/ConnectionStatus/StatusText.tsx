@@ -1,0 +1,13 @@
+import { Typography } from "@mui/material";
+import { useAtomValue } from "jotai";
+import { statusTextAtom } from "../../atoms/status";
+
+export default function StatusText() {
+  const statusText = useAtomValue(statusTextAtom);
+
+  return (
+    <Typography textAlign="center" mt={1.5} variant="subtitle1" paragraph>
+      {statusText}
+    </Typography>
+  );
+}

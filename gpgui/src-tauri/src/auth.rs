@@ -364,6 +364,11 @@ fn read_auth_data_from_response(response: &webkit2gtk::URIResponse) -> Option<Au
 
 /// Read the authentication data from the HTML content
 fn read_auth_data_from_html(html: &str) -> Result<AuthData, AuthError> {
+    if html.contains("Temporarily Unavailable") {
+        info!("SAML result page temporarily unavailable, retrying");
+        return Err(AuthError::TokenInvalid);
+    }
+
     let saml_auth_status = parse_xml_tag(html, "saml-auth-status");
 
     match saml_auth_status {

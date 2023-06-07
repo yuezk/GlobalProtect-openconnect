@@ -1,7 +1,7 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import invokeCommand from "../utils/invokeCommand";
 
-type AuthData = {
+export type AuthData = {
   username: string;
   prelogin_cookie: string | null;
   portal_userauthcookie: string | null;
@@ -22,6 +22,9 @@ class AuthService {
 
   onAuthError(callback: () => void) {
     this.authErrorCallback = callback;
+    return () => {
+      this.authErrorCallback = undefined;
+    };
   }
 
   // binding: "POST" | "REDIRECT"

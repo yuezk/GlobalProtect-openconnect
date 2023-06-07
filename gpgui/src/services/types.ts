@@ -1,13 +1,11 @@
-import { Maybe } from '../types';
-
 type PriorityRule = {
-  name: Maybe<string>;
+  name: string;
   priority: number;
 };
 
 export type Gateway = {
-  name: Maybe<string>;
-  address: Maybe<string>;
+  name: string;
+  address: string;
   priorityRules: PriorityRule[];
   priority: number;
 };

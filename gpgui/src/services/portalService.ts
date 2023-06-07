@@ -1,34 +1,31 @@
 import { Body, ResponseType, fetch } from "@tauri-apps/api/http";
-import { Maybe, MaybeProperties } from "../types";
 import { parseXml } from "../utils/parseXml";
 import { Gateway } from "./types";
 
-type SamlPreloginResponse = {
+export type SamlPrelogin = {
+  isSamlAuth: true;
   samlAuthMethod: string;
-  samlAuthRequest: string;
-};
-
-type PasswordPreloginResponse = {
-  labelUsername: string;
-  labelPassword: string;
-  authMessage: Maybe<string>;
-};
-
-type Region = {
+  samlRequest: string;
   region: string;
 };
 
-type PreloginResponse = MaybeProperties<
-  SamlPreloginResponse & PasswordPreloginResponse & Region
->;
+export type PasswordPrelogin = {
+  isSamlAuth: false;
+  authMessage: string;
+  labelUsername: string;
+  labelPassword: string;
+  region: string;
+};
 
-type ConfigResponse = {
-  userAuthCookie: Maybe<string>;
-  prelogonUserAuthCookie: Maybe<string>;
+export type Prelogin = SamlPrelogin | PasswordPrelogin;
+
+export type PortalConfig = {
+  userAuthCookie: string;
+  prelogonUserAuthCookie: string;
   gateways: Gateway[];
 };
 
-type PortalConfigParams = {
+export type PortalConfigParams = {
   user: string;
   passwd?: string | null;
   "prelogin-cookie"?: string | null;
@@ -37,54 +34,75 @@ type PortalConfigParams = {
 };
 
 class PortalService {
-  async prelogin(portal: string) {
+  async prelogin(portal: string): Promise<Prelogin> {
     const preloginUrl = `https://${portal}/global-protect/prelogin.esp`;
+    try {
+      const response = await fetch<string>(preloginUrl, {
+        method: "POST",
+        headers: {
+          "User-Agent": "PAN GlobalProtect",
+        },
+        responseType: ResponseType.Text,
+        query: {
+          "kerberos-support": "yes",
+        },
+        body: Body.form({
+          tmp: "tmp",
+          clientVer: "4100",
+          clientos: "Linux",
+          "os-version": "Linux",
+          "ipv6-support": "yes",
+          "default-browser": "0",
+          "cas-support": "yes",
+          // "host-id": "TODO, mac address?",
+        }),
+      });
 
-    const response = await fetch<string>(preloginUrl, {
-      method: "GET",
-      headers: {
-        "User-Agent": "PAN GlobalProtect",
-      },
-      responseType: ResponseType.Text,
-      query: {
-        tmp: "tmp",
-        "kerberos-support": "yes",
-        "ipv6-support": "yes",
-        clientVer: "4100",
-        clientos: "Linux",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to connect to portal: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Failed to prelogin: ${response.status}`);
+      }
+      return this.parsePrelogin(response.data);
+    } catch (err) {
+      throw new Error(`Failed to prelogin: Network error`);
     }
-    return this.parsePreloginResponse(response.data);
   }
 
-  private parsePreloginResponse(response: string): PreloginResponse {
+  private parsePrelogin(response: string): Prelogin {
     const doc = parseXml(response);
+    const status = doc.text("status").toUpperCase();
 
-    return {
-      samlAuthMethod: doc.text("saml-auth-method").toUpperCase(),
-      samlAuthRequest: atob(doc.text("saml-request")),
-      labelUsername: doc.text("username-label"),
-      labelPassword: doc.text("password-label"),
-      authMessage: doc.text("authentication-message"),
-      region: doc.text("region"),
-    };
-  }
-
-  isSamlAuth(response: PreloginResponse): response is SamlPreloginResponse {
-    return !!(response.samlAuthMethod && response.samlAuthRequest);
-  }
-
-  isPasswordAuth(
-    response: PreloginResponse
-  ): response is PasswordPreloginResponse {
-    if (response.labelUsername && response.labelPassword) {
-      return true;
+    if (status !== "SUCCESS") {
+      const message = doc.text("msg") || "Unknown error";
+      throw new Error(message);
     }
-    return false;
+
+    const samlAuthMethod = doc.text("saml-auth-method").toUpperCase();
+    const samlRequest = doc.text("saml-request");
+    const labelUsername = doc.text("username-label");
+    const labelPassword = doc.text("password-label");
+    const authMessage = doc.text("authentication-message");
+    const region = doc.text("region");
+
+    if (samlAuthMethod && samlRequest) {
+      return {
+        isSamlAuth: true,
+        samlAuthMethod,
+        samlRequest: atob(samlRequest),
+        region,
+      };
+    }
+
+    if (labelUsername && labelPassword) {
+      return {
+        isSamlAuth: false,
+        authMessage,
+        labelUsername,
+        labelPassword,
+        region,
+      };
+    }
+
+    throw new Error("Unknown prelogin response");
   }
 
   async fetchConfig(portal: string, params: PortalConfigParams) {
@@ -133,7 +151,7 @@ class PortalService {
     return this.parsePortalConfigResponse(response.data);
   }
 
-  private parsePortalConfigResponse(response: string): ConfigResponse {
+  private parsePortalConfigResponse(response: string): PortalConfig {
     console.log(response);
 
     const result = parseXml(response);
@@ -164,7 +182,7 @@ class PortalService {
     };
   }
 
-  preferredGateway(gateways: Gateway[], region: Maybe<string>) {
+  preferredGateway(gateways: Gateway[], region: string) {
     console.log(gateways);
     let defaultGateway = gateways[0];
     for (const gateway of gateways) {
