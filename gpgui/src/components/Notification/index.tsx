@@ -11,16 +11,23 @@ function TransitionDown(props: TransitionProps) {
 }
 
 export default function Notification() {
-  const { title, message, severity } = useAtomValue(notificationConfigAtom);
+  const { title, message, severity, duration } = useAtomValue(
+    notificationConfigAtom
+  );
   const [visible, closeNotification] = useAtom(closeNotificationAtom);
+  const handleClose = () => {
+    if (duration) {
+      closeNotification();
+    }
+  };
 
   return (
     <Snackbar
       open={visible}
       anchorOrigin={{ vertical: "top", horizontal: "center" }}
-      autoHideDuration={5000}
+      autoHideDuration={duration}
       TransitionComponent={TransitionDown}
-      onClose={closeNotification}
+      onClose={handleClose}
       sx={{
         top: 0,
         left: 0,

@@ -5,16 +5,29 @@ import { disconnectVpnAtom } from "../../atoms/gateway";
 import {
   cancelConnectPortalAtom,
   connectPortalAtom,
-  portalAtom,
+  portalAddressAtom,
+  switchingGatewayAtom,
 } from "../../atoms/portal";
-import { statusAtom } from "../../atoms/status";
+import { isOnlineAtom, statusAtom } from "../../atoms/status";
 
 export default function PortalForm() {
-  const [portal, setPortal] = useAtom(portalAtom);
+  const isOnline = useAtomValue(isOnlineAtom);
+  const [portalAddress, setPortalAddress] = useAtom(portalAddressAtom);
   const status = useAtomValue(statusAtom);
   const [processing, connectPortal] = useAtom(connectPortalAtom);
   const cancelConnectPortal = useSetAtom(cancelConnectPortalAtom);
   const disconnectVpn = useSetAtom(disconnectVpnAtom);
+  const switchingGateway = useAtomValue(switchingGatewayAtom);
+
+  function handlePortalAddressChange(e: ChangeEvent<HTMLInputElement>) {
+    let host = e.target.value.trim();
+    if (/^https?:\/\//.test(host)) {
+      try {
+        host = new URL(host).hostname;
+      } catch (e) {}
+    }
+    setPortalAddress(host);
+  }
 
   function handleSubmit(e: ChangeEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -29,26 +42,32 @@ export default function PortalForm() {
         placeholder="Hostname or IP address"
         fullWidth
         size="small"
-        value={portal}
-        onChange={(e) => setPortal(e.target.value.trim())}
-        InputProps={{ readOnly: status !== "disconnected" }}
+        value={portalAddress}
+        onChange={handlePortalAddressChange}
+        InputProps={{ readOnly: status !== "disconnected" || switchingGateway }}
         sx={{ mb: 1 }}
       />
-      {status === "disconnected" && (
+      {status === "disconnected" && !switchingGateway && (
         <Button
           fullWidth
           type="submit"
           variant="contained"
+          disabled={!isOnline}
           sx={{ textTransform: "none" }}
         >
           Connect
         </Button>
       )}
-      {processing && (
+      {(processing || switchingGateway) && (
         <Button
           fullWidth
           variant="outlined"
-          disabled={status === "authenticating-saml"}
+          disabled={
+            status === "authenticating-saml" ||
+            status === "connecting" ||
+            status === "disconnecting" ||
+            switchingGateway
+          }
           onClick={cancelConnectPortal}
           sx={{ textTransform: "none" }}
         >

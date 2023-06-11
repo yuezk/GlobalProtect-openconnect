@@ -1,4 +1,4 @@
-use log::{warn, info, debug};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::ffi::{c_void, CString};
 use std::sync::Arc;
@@ -91,7 +91,7 @@ impl Vpn {
         *self.vpn_options.lock().await = Some(VpnOptions {
             server: VpnOptions::to_cstr(server),
             cookie: VpnOptions::to_cstr(cookie),
-            script: VpnOptions::to_cstr("/usr/share/vpnc-scripts/vpnc-script")
+            script: VpnOptions::to_cstr("/usr/share/vpnc-scripts/vpnc-script"),
         });
 
         let vpn_options = self.vpn_options.clone();
@@ -133,11 +133,14 @@ impl Vpn {
         }
 
         info!("Disconnecting VPN...");
+        self.status_holder
+            .lock()
+            .await
+            .set(VpnStatus::Disconnecting);
         unsafe { ffi::disconnect() };
 
         let mut status_rx = self.status_rx().await;
         debug!("Waiting for the VPN to disconnect...");
-
 
         while status_rx.changed().await.is_ok() {
             if *status_rx.borrow() == VpnStatus::Disconnected {

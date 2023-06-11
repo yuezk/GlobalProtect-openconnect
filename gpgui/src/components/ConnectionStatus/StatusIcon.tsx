@@ -2,7 +2,7 @@ import { GppBad, VerifiedUser as VerifiedIcon } from "@mui/icons-material";
 import { Box, CircularProgress, styled, useTheme } from "@mui/material";
 import { useAtomValue } from "jotai";
 import { BeatLoader } from "react-spinners";
-import { statusAtom, isProcessingAtom } from "../../atoms/status";
+import { isProcessingAtom, statusAtom } from "../../atoms/status";
 
 function useStatusColor() {
   const status = useAtomValue(statusAtom);
@@ -25,14 +25,14 @@ function useStatusColor() {
 
 function BackgroundIcon() {
   const color = useStatusColor();
-  const processing = useAtomValue(isProcessingAtom);
+  const isProcessing = useAtomValue(isProcessingAtom);
 
   return (
     <CircularProgress
       size={150}
       thickness={1}
-      value={processing ? undefined : 100}
-      variant={processing ? "indeterminate" : "determinate"}
+      value={isProcessing ? undefined : 100}
+      variant={isProcessing ? "indeterminate" : "determinate"}
       sx={{
         position: "absolute",
         top: 0,
@@ -40,7 +40,7 @@ function BackgroundIcon() {
         color,
         "& circle": {
           fill: color,
-          fillOpacity: processing ? 0.1 : 0.25,
+          fillOpacity: isProcessing ? 0.1 : 0.25,
           transition: "all 0.3s ease",
         },
       }}
@@ -78,16 +78,26 @@ const IconContainer = styled(Box)(({ theme }) =>
   })
 );
 
-export default function StatusIcon() {
+function InnerStatusIcon() {
   const status = useAtomValue(statusAtom);
-  const processing = useAtomValue(isProcessingAtom);
+  const isProcessing = useAtomValue(isProcessingAtom);
 
+  if (isProcessing) {
+    return <ProcessingIcon />;
+  }
+
+  if (status === "connected") {
+    return <ConnectedIcon />;
+  }
+
+  return <DisconnectedIcon />;
+}
+
+export default function StatusIcon() {
   return (
     <IconContainer>
       <BackgroundIcon />
-      {status === "disconnected" && <DisconnectedIcon />}
-      {processing && <ProcessingIcon />}
-      {status === "connected" && <ConnectedIcon />}
+      <InnerStatusIcon />
     </IconContainer>
   );
 }

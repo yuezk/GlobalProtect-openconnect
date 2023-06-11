@@ -1,39 +1,66 @@
 import { Event, listen } from "@tauri-apps/api/event";
 import invokeCommand from "../utils/invokeCommand";
 
-type Status = "disconnected" | "connecting" | "connected" | "disconnecting";
-type StatusCallback = (status: Status) => void;
-type StatusPayload = {
-  status: Status;
+type VpnStatus = "disconnected" | "connecting" | "connected" | "disconnecting";
+type VpnStatusCallback = (status: VpnStatus) => void;
+type VpnStatusPayload = {
+  status: VpnStatus;
 };
 
+type ServiceStatusCallback = (status: boolean) => void;
+
 class VpnService {
-  private _status: Status = "disconnected";
-  private statusCallbacks: StatusCallback[] = [];
+  private _isOnline?: boolean;
+  private _status?: VpnStatus;
+  private statusCallbacks: VpnStatusCallback[] = [];
+  private serviceStatusCallbacks: ServiceStatusCallback[] = [];
 
   constructor() {
     this.init();
   }
 
   private async init() {
-    await listen("vpn-status-received", (event: Event<StatusPayload>) => {
-      console.log("vpn-status-received", event.payload);
-      this.setStatus(event.payload.status);
+    await listen("service-status-changed", (event: Event<boolean>) => {
+      this.setIsOnline(event.payload);
     });
 
-    const status = await this.status();
-    this.setStatus(status);
+    await listen("vpn-status-received", (event: Event<VpnStatusPayload>) => {
+      this.setStatus(event.payload.status);
+    });
   }
 
-  private setStatus(status: Status) {
-    if (this._status != status) {
-      this._status = status;
-      this.fireStatusCallbacks();
+  async isOnline() {
+    try {
+      const isOnline = await invokeCommand<boolean>("service_online");
+      this.setIsOnline(isOnline);
+      return isOnline;
+    } catch (err) {
+      return false;
     }
   }
 
-  private async status(): Promise<Status> {
-    return invokeCommand<Status>("vpn_status");
+  private setIsOnline(isOnline: boolean) {
+    if (this._isOnline !== isOnline) {
+      this._isOnline = isOnline;
+      this.serviceStatusCallbacks.forEach((cb) => cb(isOnline));
+    }
+  }
+
+  private setStatus(status: VpnStatus) {
+    if (this._status !== status) {
+      this._status = status;
+      this.statusCallbacks.forEach((cb) => cb(status));
+    }
+  }
+
+  async status(): Promise<VpnStatus> {
+    try {
+      const status = await invokeCommand<VpnStatus>("vpn_status");
+      this._status = status;
+      return status;
+    } catch (err) {
+      return "disconnected";
+    }
   }
 
   async connect(server: string, cookie: string) {
@@ -44,18 +71,30 @@ class VpnService {
     return invokeCommand("vpn_disconnect");
   }
 
-  onStatusChanged(callback: StatusCallback) {
+  onVpnStatusChanged(callback: VpnStatusCallback) {
     this.statusCallbacks.push(callback);
-    callback(this._status);
-    return () => this.removeStatusCallback(callback);
+    if (typeof this._status === "string") {
+      callback(this._status);
+    }
+    return () => this.removeVpnStatusCallback(callback);
   }
 
-  private fireStatusCallbacks() {
-    this.statusCallbacks.forEach((cb) => cb(this._status));
+  onServiceStatusChanged(callback: ServiceStatusCallback) {
+    this.serviceStatusCallbacks.push(callback);
+    if (typeof this._isOnline === "boolean") {
+      callback(this._isOnline);
+    }
+    return () => this.removeServiceStatusCallback(callback);
   }
 
-  private removeStatusCallback(callback: StatusCallback) {
+  private removeVpnStatusCallback(callback: VpnStatusCallback) {
     this.statusCallbacks = this.statusCallbacks.filter((cb) => cb !== callback);
+  }
+
+  private removeServiceStatusCallback(callback: ServiceStatusCallback) {
+    this.serviceStatusCallbacks = this.serviceStatusCallbacks.filter(
+      (cb) => cb !== callback
+    );
   }
 }
 

@@ -6,7 +6,17 @@ export default function StatusText() {
   const statusText = useAtomValue(statusTextAtom);
 
   return (
-    <Typography textAlign="center" mt={1.5} variant="subtitle1" paragraph>
+    <Typography
+      textAlign="center"
+      mt={1.5}
+      variant="subtitle1"
+      paragraph
+      sx={{
+        overflow: "hidden",
+        whiteSpace: "nowrap",
+        textOverflow: "ellipsis",
+      }}
+    >
       {statusText}
     </Typography>
   );

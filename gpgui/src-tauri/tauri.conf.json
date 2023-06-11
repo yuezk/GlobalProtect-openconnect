@@ -12,6 +12,9 @@
   },
   "tauri": {
     "allowlist": {
+      "shell": {
+        "open": true
+      },
       "http": {
         "all": true,
         "request": true,
@@ -19,6 +22,9 @@
       },
       "window": {
         "all": true
+      },
+      "process": {
+        "exit": true
       }
     },
     "bundle": {

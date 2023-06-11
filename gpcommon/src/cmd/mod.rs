@@ -12,7 +12,7 @@ mod status;
 
 pub use connect::Connect;
 pub use disconnect::Disconnect;
-pub use status::Status;
+pub use status::GetStatus;
 
 #[derive(Debug)]
 pub(crate) struct CommandContext {

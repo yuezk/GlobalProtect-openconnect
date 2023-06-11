@@ -22,7 +22,8 @@ export const gatewayLoginAtom = atom(
       throw new Error("Failed to login to gateway");
     }
 
-    if (!get(isProcessingAtom)) {
+    const isProcessing = get(isProcessingAtom);
+    if (!isProcessing) {
       console.info("Request cancelled");
       return;
     }
@@ -44,13 +45,21 @@ const connectVpnAtom = atom(
   }
 );
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export const disconnectVpnAtom = atom(null, async (get, set) => {
   try {
     set(statusAtom, "disconnecting");
     await vpnService.disconnect();
-    set(statusAtom, "disconnected");
+    // Sleep a short time, so that the client can receive the service's disconnected event.
+    await sleep(100);
   } catch (err) {
     set(statusAtom, "disconnected");
     set(notifyErrorAtom, "Failed to disconnect from VPN");
   }
+});
+
+export const gatewaySwitcherVisibleAtom = atom(false);
+export const openGatewaySwitcherAtom = atom(null, (get, set) => {
+  set(gatewaySwitcherVisibleAtom, true);
 });

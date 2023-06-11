@@ -25,12 +25,12 @@ export type PortalConfig = {
   gateways: Gateway[];
 };
 
-export type PortalConfigParams = {
+export type PortalCredential = {
   user: string;
-  passwd?: string | null;
-  "prelogin-cookie"?: string | null;
-  "portal-userauthcookie"?: string | null;
-  "portal-prelogonuserauthcookie"?: string | null;
+  passwd?: string; // for password auth
+  "prelogin-cookie"?: string; // for saml auth
+  "portal-userauthcookie"?: string; // cached cookie from previous portal config
+  "portal-prelogonuserauthcookie"?: string; // cached cookie from previous portal config
 };
 
 class PortalService {
@@ -105,7 +105,7 @@ class PortalService {
     throw new Error("Unknown prelogin response");
   }
 
-  async fetchConfig(portal: string, params: PortalConfigParams) {
+  async fetchConfig(portal: string, params: PortalCredential) {
     const {
       user,
       passwd,
@@ -125,8 +125,10 @@ class PortalService {
       direct: "yes",
       clientVer: "4100",
       "os-version": "Linux",
+      clientgpversion: "6.0.1-19",
       "ipv6-support": "yes",
       server: portal,
+      host: portal,
       user,
       passwd: passwd || "",
       "prelogin-cookie": preloginCookie || "",
@@ -152,7 +154,7 @@ class PortalService {
   }
 
   private parsePortalConfigResponse(response: string): PortalConfig {
-    console.log(response);
+    // console.log(response);
 
     const result = parseXml(response);
     const gateways = result.all("gateways list > entry").map((entry) => {
@@ -182,8 +184,16 @@ class PortalService {
     };
   }
 
-  preferredGateway(gateways: Gateway[], region: string) {
-    console.log(gateways);
+  preferredGateway(
+    gateways: Gateway[],
+    { region, previousGateway }: { region: string; previousGateway?: string }
+  ) {
+    for (const gateway of gateways) {
+      if (gateway.name === previousGateway) {
+        return gateway;
+      }
+    }
+
     let defaultGateway = gateways[0];
     for (const gateway of gateways) {
       if (gateway.priority < defaultGateway.priority) {

@@ -1,4 +1,4 @@
-use crate::cmd::{Command, Connect, Disconnect, Status};
+use crate::cmd::{Command, Connect, Disconnect, GetStatus};
 use crate::Response;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -21,7 +21,7 @@ impl Request {
 
     pub fn command(&self) -> Box<dyn Command> {
         match &self.payload {
-            CommandPayload::Status(status) => Box::new(status.clone()),
+            CommandPayload::GetStatus(status) => Box::new(status.clone()),
             CommandPayload::Connect(connect) => Box::new(connect.clone()),
             CommandPayload::Disconnect(disconnect) => Box::new(disconnect.clone()),
         }
@@ -30,14 +30,14 @@ impl Request {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum CommandPayload {
-    Status(Status),
+    GetStatus(GetStatus),
     Connect(Connect),
     Disconnect(Disconnect),
 }
 
-impl From<Status> for CommandPayload {
-    fn from(status: Status) -> Self {
-        Self::Status(status)
+impl From<GetStatus> for CommandPayload {
+    fn from(status: GetStatus) -> Self {
+        Self::GetStatus(status)
     }
 }
 

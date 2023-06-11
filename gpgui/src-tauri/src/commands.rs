@@ -4,6 +4,11 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 
 #[tauri::command]
+pub(crate) async fn service_online<'a>(client: State<'a, Arc<Client>>) -> Result<bool, ()> {
+    Ok(client.is_online().await)
+}
+
+#[tauri::command]
 pub(crate) async fn vpn_status<'a>(
     client: State<'a, Arc<Client>>,
 ) -> Result<VpnStatus, ServerApiError> {
@@ -30,10 +35,10 @@ pub(crate) async fn vpn_disconnect<'a>(
 pub(crate) async fn saml_login(
     binding: SamlBinding,
     request: String,
+    clear_cookies: bool,
     app_handle: AppHandle,
 ) -> tauri::Result<Option<AuthData>> {
     let user_agent = String::from("PAN GlobalProtect");
-    let clear_cookies = false;
     let params = SamlLoginParams {
         auth_request: AuthRequest::new(binding, request),
         user_agent,

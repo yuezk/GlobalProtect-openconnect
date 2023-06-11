@@ -23,30 +23,31 @@ async fn handle_read(
     let mut authenticated: Option<bool> = None;
 
     loop {
-        match reader.read::<Request>().await {
-            Ok(request) => {
+        match reader.read_multiple::<Request>().await {
+            Ok(requests) => {
                 if authenticated.is_none() {
                     authenticated = Some(authenticate(peer_pid));
                 }
-
                 if !authenticated.unwrap_or(false) {
                     warn!("Client not authenticated, closing connection");
                     cancel_token.cancel();
                     break;
                 }
 
-                debug!("Received client request: {:?}", request);
+                for request in requests {
+                    debug!("Received client request: {:?}", request);
 
-                let command = request.command();
-                let context = server_context.clone().into();
+                    let command = request.command();
+                    let context = server_context.clone().into();
 
-                let mut response = match command.handle(context).await {
-                    Ok(data) => Response::from(data),
-                    Err(err) => Response::from(err.to_string()),
-                };
-                response.set_request_id(request.id());
+                    let mut response = match command.handle(context).await {
+                        Ok(data) => Response::from(data),
+                        Err(err) => Response::from(err.to_string()),
+                    };
+                    response.set_request_id(request.id());
 
-                let _ = response_tx.send(response).await;
+                    let _ = response_tx.send(response).await;
+                }
             }
 
             Err(err) if err.kind() == io::ErrorKind::ConnectionAborted => {

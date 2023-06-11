@@ -30,6 +30,7 @@ pub(crate) use writer::Writer;
 
 pub use client::Client;
 pub use client::ServerApiError;
+pub use client::ClientStatus;
 pub use vpn::VpnStatus;
 
 pub fn sha256_digest<P: AsRef<Path>>(file_path: P) -> Result<String, std::io::Error> {

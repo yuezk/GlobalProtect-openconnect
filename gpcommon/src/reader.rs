@@ -13,22 +13,6 @@ impl From<ReadHalf<UnixStream>> for Reader {
 }
 
 impl Reader {
-    pub async fn read<T: for<'a> Deserialize<'a>>(&mut self) -> Result<T, io::Error> {
-        let mut buffer = [0; 2048];
-
-        match self.stream.read(&mut buffer).await {
-            Ok(0) => Err(io::Error::new(
-                io::ErrorKind::ConnectionAborted,
-                "Peer disconnected",
-            )),
-            Ok(bytes_read) => {
-                let data = serde_json::from_slice::<T>(&buffer[..bytes_read])?;
-                Ok(data)
-            }
-            Err(err) => Err(err),
-        }
-    }
-
     pub async fn read_multiple<T: for<'a> Deserialize<'a>>(&mut self) -> Result<Vec<T>, io::Error> {
         let mut buffer = [0; 2048];
 

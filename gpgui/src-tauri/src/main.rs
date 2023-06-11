@@ -4,7 +4,7 @@
 )]
 
 use env_logger::Env;
-use gpcommon::{Client, VpnStatus};
+use gpcommon::{Client, ClientStatus, VpnStatus};
 use log::warn;
 use serde::Serialize;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ mod commands;
 mod utils;
 
 #[derive(Debug, Clone, Serialize)]
-struct StatusPayload {
+struct VpnStatusPayload {
     status: VpnStatus,
 }
 
@@ -26,10 +26,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle();
 
     tauri::async_runtime::spawn(async move {
-        let _ = client_clone.subscribe_status(move |status| {
-            let payload = StatusPayload { status };
-            if let Err(err) = app_handle.emit_all("vpn-status-received", payload) {
-                warn!("Error emitting event: {}", err);
+        let _ = client_clone.subscribe_status(move |client_status| match client_status {
+            ClientStatus::Vpn(vpn_status) => {
+                let payload = VpnStatusPayload { status: vpn_status };
+                if let Err(err) = app_handle.emit_all("vpn-status-received", payload) {
+                    warn!("Error emitting event: {}", err);
+                }
+            }
+            ClientStatus::Service(is_online) => {
+                if let Err(err) = app_handle.emit_all("service-status-changed", is_online) {
+                    warn!("Error emitting event: {}", err);
+                }
             }
         });
 
@@ -56,6 +63,7 @@ fn main() {
         )
         .setup(setup)
         .invoke_handler(tauri::generate_handler![
+            commands::service_online,
             commands::vpn_status,
             commands::vpn_connect,
             commands::vpn_disconnect,

@@ -3,8 +3,8 @@ import invokeCommand from "../utils/invokeCommand";
 
 export type AuthData = {
   username: string;
-  prelogin_cookie: string | null;
-  portal_userauthcookie: string | null;
+  prelogin_cookie?: string;
+  portal_userauthcookie?: string;
 };
 
 class AuthService {
@@ -15,7 +15,8 @@ class AuthService {
   }
 
   private async init() {
-    await listen("auth-error", () => {
+    await listen("auth-error", (evt) => {
+      console.error("auth-error", evt);
       this.authErrorCallback?.();
     });
   }
@@ -28,8 +29,12 @@ class AuthService {
   }
 
   // binding: "POST" | "REDIRECT"
-  async samlLogin(binding: string, request: string) {
-    return invokeCommand<AuthData>("saml_login", { binding, request });
+  async samlLogin(binding: string, request: string, clearCookies: boolean) {
+    return invokeCommand<AuthData>("saml_login", {
+      binding,
+      request,
+      clearCookies,
+    });
   }
 
   async emitAuthRequest({
