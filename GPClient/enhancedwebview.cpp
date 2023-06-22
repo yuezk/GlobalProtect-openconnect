@@ -1,6 +1,7 @@
 #include <QtCore/QProcessEnvironment>
 #include <QtWebEngineWidgets/QWebEngineView>
 
+#include "enhancedwebpage.h"
 #include "enhancedwebview.h"
 #include "cdpcommandmanager.h"
 
@@ -14,6 +15,7 @@ EnhancedWebView::EnhancedWebView(QWidget *parent)
 
 void EnhancedWebView::initialize()
 {
+    setPage(new EnhancedWebPage());
     auto port = QProcessEnvironment::systemEnvironment().value(ENV_CDP_PORT);
     cdp->initialize("http://127.0.0.1:" + port + "/json");
 }
