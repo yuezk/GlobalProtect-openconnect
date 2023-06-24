@@ -45,7 +45,7 @@ class GatewayService {
     });
 
     if (!response.ok) {
-      throw new Error("Login failed");
+      throw new Error(`Gateway login failed: ${response.status}`);
     }
 
     return this.parseLoginResponse(response.data);

@@ -36,8 +36,9 @@ export type PortalCredential = {
 class PortalService {
   async prelogin(portal: string): Promise<Prelogin> {
     const preloginUrl = `https://${portal}/global-protect/prelogin.esp`;
+    let response;
     try {
-      const response = await fetch<string>(preloginUrl, {
+      response = await fetch<string>(preloginUrl, {
         method: "POST",
         headers: {
           "User-Agent": "PAN GlobalProtect",
@@ -57,14 +58,15 @@ class PortalService {
           // "host-id": "TODO, mac address?",
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to prelogin: ${response.status}`);
-      }
-      return this.parsePrelogin(response.data);
     } catch (err) {
-      throw new Error(`Failed to prelogin: Network error`);
+      console.error("Failed to prelogin: Network error", err);
+      throw new Error("Failed to prelogin: Network error");
     }
+
+    if (!response.ok) {
+      throw new Error(`Failed to prelogin: ${response.status}`);
+    }
+    return this.parsePrelogin(response.data);
   }
 
   private parsePrelogin(response: string): Prelogin {
