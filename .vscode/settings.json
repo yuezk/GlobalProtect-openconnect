@@ -6,6 +6,7 @@
     "clientgpversion",
     "clientos",
     "gpcommon",
+    "gpgui",
     "gpservice",
     "Immer",
     "jnlp",
