@@ -68,11 +68,13 @@
     },
     "windows": [
       {
+        "title": "GlobalProtect",
+        "label": "main",
         "fullscreen": false,
+        "width": 260,
         "height": 360,
         "resizable": false,
-        "title": "GlobalProtect",
-        "width": 260
+        "fileDropEnabled": false
       }
     ]
   }

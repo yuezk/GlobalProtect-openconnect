@@ -44,6 +44,18 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     });
 
     app.manage(client);
+
+    match std::env::var("XDG_CURRENT_DESKTOP") {
+        Ok(desktop) => {
+            if desktop == "KDE" {
+                if let Some(main_window) = app.get_window("main") {
+                    let _ = main_window.set_decorations(false);
+                }
+            }
+        }
+        Err(_) => (),
+    }
+
     Ok(())
 }
 

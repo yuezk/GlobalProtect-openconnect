@@ -1,4 +1,4 @@
-import { Alert, AlertTitle, Slide, SlideProps, Snackbar } from "@mui/material";
+import { Alert, AlertTitle, Box, Slide, SlideProps, Snackbar } from "@mui/material";
 import { useAtom, useAtomValue } from "jotai";
 import {
   closeNotificationAtom,
@@ -35,6 +35,7 @@ export default function Notification() {
       }}
     >
       <Alert
+        data-tauri-drag-region
         severity={severity}
         icon={false}
         sx={{
@@ -42,8 +43,8 @@ export default function Notification() {
           borderRadius: 0,
         }}
       >
-        {title && <AlertTitle>{title}</AlertTitle>}
-        {message}
+        {title && <AlertTitle data-tauri-drag-region>{title}</AlertTitle>}
+        {message && <Box data-tauri-drag-region>{message}</Box>}
       </Alert>
     </Snackbar>
   );

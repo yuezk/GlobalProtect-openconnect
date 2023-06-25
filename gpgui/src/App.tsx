@@ -41,7 +41,7 @@ export default function App() {
   const ready = useAtomValue(statusReadyAtom);
 
   return (
-    <Box padding={2} paddingBottom={0}>
+    <Box data-tauri-drag-region padding={2} paddingBottom={0}>
       {ready ? <MainContent /> : <Loading />}
       <Notification />
     </Box>

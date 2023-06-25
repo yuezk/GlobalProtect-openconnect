@@ -4,7 +4,7 @@ import StatusText from "./StatusText";
 
 export default function ConnectionStatus() {
   return (
-    <Box>
+    <Box data-tauri-drag-region>
       <StatusIcon />
       <StatusText />
     </Box>
