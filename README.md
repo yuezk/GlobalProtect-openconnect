@@ -23,3 +23,7 @@ cd gpgui
 pnpm install
 pnpm tauri dev
 ```
+
+### Open the DevTools
+
+Right-click on the GUI window and select "Inspect Element".
