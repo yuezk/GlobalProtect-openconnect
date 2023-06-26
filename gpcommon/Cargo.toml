@@ -16,6 +16,7 @@ async-trait = "0.1"
 ring = "0.16"
 data-encoding = "2.3"
 log = "0.4"
+is_executable = "1.0"
 
 [build-dependencies]
 cc = "1.0"

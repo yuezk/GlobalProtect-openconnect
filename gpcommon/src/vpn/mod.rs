@@ -1,3 +1,4 @@
+use crate::vpn::vpnc_script::find_default_vpnc_script;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::ffi::{c_void, CString};
@@ -7,6 +8,7 @@ use tokio::sync::watch;
 use tokio::sync::{mpsc, Mutex};
 
 mod ffi;
+mod vpnc_script;
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -87,11 +89,21 @@ impl Vpn {
         server: &str,
         cookie: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let script = match find_default_vpnc_script() {
+            Some(script) => {
+                debug!("Using default vpnc-script: {}", script);
+                script
+            }
+            None => {
+                return Err("Failed to find default vpnc-script".into());
+            }
+        };
+
         // Save the VPN options so we can use them later, e.g. reconnect
         *self.vpn_options.lock().await = Some(VpnOptions {
             server: VpnOptions::to_cstr(server),
             cookie: VpnOptions::to_cstr(cookie),
-            script: VpnOptions::to_cstr("/usr/share/vpnc-scripts/vpnc-script"),
+            script: VpnOptions::to_cstr(script),
         });
 
         let vpn_options = self.vpn_options.clone();
