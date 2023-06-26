@@ -16,6 +16,7 @@ import { isProcessingAtom, statusAtom } from "../../atoms/status";
 
 const MenuContainer = styled(Box)(({ theme }) => ({
   position: "absolute",
+  zIndex: 1,
   left: theme.spacing(1),
   top: theme.spacing(1),
 }));
@@ -100,6 +101,7 @@ export default function MainMenu() {
         target="_blank"
         sx={{
           position: "absolute",
+          zIndex: 1,
           right: (theme) => theme.spacing(1),
           top: (theme) => theme.spacing(1),
         }}

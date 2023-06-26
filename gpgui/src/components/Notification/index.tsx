@@ -1,4 +1,11 @@
-import { Alert, AlertTitle, Box, Slide, SlideProps, Snackbar } from "@mui/material";
+import {
+  Alert,
+  AlertTitle,
+  Box,
+  Slide,
+  SlideProps,
+  Snackbar,
+} from "@mui/material";
 import { useAtom, useAtomValue } from "jotai";
 import {
   closeNotificationAtom,

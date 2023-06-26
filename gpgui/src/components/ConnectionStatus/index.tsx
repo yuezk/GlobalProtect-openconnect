@@ -4,9 +4,10 @@ import StatusText from "./StatusText";
 
 export default function ConnectionStatus() {
   return (
-    <Box data-tauri-drag-region>
+    <Box position="relative">
       <StatusIcon />
       <StatusText />
+      <Box data-tauri-drag-region position="absolute" sx={{ inset: 0 }} />
     </Box>
   );
 }

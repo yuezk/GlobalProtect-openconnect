@@ -7,7 +7,6 @@ export default function StatusText() {
 
   return (
     <Typography
-      data-tauri-drag-region
       textAlign="center"
       mt={1.5}
       variant="subtitle1"

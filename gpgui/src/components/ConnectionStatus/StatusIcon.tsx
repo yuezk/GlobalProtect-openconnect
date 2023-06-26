@@ -93,17 +93,11 @@ function InnerStatusIcon() {
   return <DisconnectedIcon />;
 }
 
-const DragRegion = styled(Box)(({ theme }) => ({
-  position: "absolute",
-  inset: 0,
-}));
-
 export default function StatusIcon() {
   return (
     <IconContainer>
       <BackgroundIcon />
       <InnerStatusIcon />
-      <DragRegion data-tauri-drag-region />
     </IconContainer>
   );
 }

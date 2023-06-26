@@ -35,7 +35,7 @@ export default function PortalForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} data-tauri-drag-region>
       <TextField
         autoFocus
         label="Portal address"

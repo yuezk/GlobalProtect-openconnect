@@ -15,7 +15,12 @@ const LinkChip = (props: ChipProps<"a">) => (
 
 export default function Feedback() {
   return (
-    <Stack direction="row" justifyContent="space-evenly" mt={1}>
+    <Stack
+      direction="row"
+      justifyContent="space-evenly"
+      mt={1}
+      data-tauri-drag-region
+    >
       <LinkChip
         avatar={<BugReport />}
         label="Feedback"
