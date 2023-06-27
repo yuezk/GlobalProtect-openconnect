@@ -17,6 +17,7 @@ add_executable(gpclient
     cdpcommand.cpp
     cdpcommandmanager.cpp
     enhancedwebview.cpp
+    enhancedwebpage.cpp
     gatewayauthenticator.cpp
     gatewayauthenticatorparams.cpp
     gpgateway.cpp
