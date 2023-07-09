@@ -5,6 +5,8 @@
     "clickaway",
     "clientgpversion",
     "clientos",
+    "devicename",
+    "distro",
     "gpcommon",
     "gpgui",
     "gpservice",

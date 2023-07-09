@@ -54,16 +54,19 @@ dependencies = [
  "env_logger",
  "gpcommon",
  "log",
+ "openssl",
  "regex",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-log",
+ "tauri-plugin-store",
  "tokio",
  "url",
  "veil",
  "webkit2gtk",
+ "whoami",
 ]
 
 [[package]]
@@ -2981,7 +2984,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-log"
 version = "0.0.0"
-source = "git+https://github.com/tauri-apps/plugins-workspace?branch=v1#794f2d5cb8d53284f0abbeb8f584185b4dce3fc1"
+source = "git+https://github.com/tauri-apps/plugins-workspace?branch=v1#36b7296746bf8d41f0790d8ecd9b097430750a47"
 dependencies = [
  "byte-unit",
  "fern",
@@ -2991,6 +2994,18 @@ dependencies = [
  "serde_repr",
  "tauri",
  "time",
+]
+
+[[package]]
+name = "tauri-plugin-store"
+version = "0.0.0"
+source = "git+https://github.com/tauri-apps/plugins-workspace?branch=v1#36b7296746bf8d41f0790d8ecd9b097430750a47"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror",
 ]
 
 [[package]]
@@ -3656,6 +3671,16 @@ dependencies = [
  "windows 0.39.0",
  "windows-bindgen",
  "windows-metadata",
+]
+
+[[package]]
+name = "whoami"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22fc3756b8a9133049b26c7f61ab35416c130e8c09b660f5b3958b446f52cc50"
+dependencies = [
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

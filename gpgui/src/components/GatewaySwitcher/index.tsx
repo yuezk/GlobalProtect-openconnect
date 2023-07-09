@@ -7,13 +7,13 @@ import {
   MenuList,
 } from "@mui/material";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { gatewaySwitcherVisibleAtom } from "../../atoms/gateway";
 import {
-  GatewayData,
+  gatewaySwitcherVisibleAtom,
   portalGatewaysAtom,
   selectedGatewayAtom,
-  switchToGatewayAtom,
-} from "../../atoms/portal";
+  switchGatewayAtom,
+} from "../../atoms/gateway";
+import { GatewayData } from "../../atoms/portal";
 
 export default function GatewaySwitcher() {
   const [visible, setGatewaySwitcherVisible] = useAtom(
@@ -21,7 +21,7 @@ export default function GatewaySwitcher() {
   );
   const gateways = useAtomValue(portalGatewaysAtom);
   const selectedGateway = useAtomValue(selectedGatewayAtom);
-  const switchToGateway = useSetAtom(switchToGatewayAtom);
+  const switchGateway = useSetAtom(switchGatewayAtom);
 
   const handleClose = () => {
     setGatewaySwitcherVisible(false);
@@ -30,18 +30,24 @@ export default function GatewaySwitcher() {
   const handleMenuClick = (gateway: GatewayData) => () => {
     setGatewaySwitcherVisible(false);
     if (gateway.name !== selectedGateway) {
-      switchToGateway(gateway);
+      switchGateway(gateway);
     }
   };
 
   return (
-    <Drawer anchor="bottom" open={visible} onClose={handleClose}>
+    <Drawer
+      anchor="bottom"
+      variant="temporary"
+      open={visible}
+      onClose={handleClose}
+    >
       <MenuList
         sx={{
           maxHeight: 320,
         }}
       >
         {!gateways.length && <MenuItem disabled>No gateways found</MenuItem>}
+
         {gateways.map(({ name, address }) => (
           <MenuItem key={name} onClick={handleMenuClick({ name, address })}>
             {selectedGateway === name && (

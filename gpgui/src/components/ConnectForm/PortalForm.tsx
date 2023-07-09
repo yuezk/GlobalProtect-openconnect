@@ -1,32 +1,42 @@
 import { Button, TextField } from "@mui/material";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { ChangeEvent } from "react";
-import { disconnectVpnAtom } from "../../atoms/gateway";
 import {
   cancelConnectPortalAtom,
   connectPortalAtom,
-  portalAddressAtom,
-  switchingGatewayAtom,
-} from "../../atoms/portal";
-import { isOnlineAtom, statusAtom } from "../../atoms/status";
+} from "../../atoms/connectPortal";
+import { switchGatewayAtom } from "../../atoms/gateway";
+import { portalAddressAtom } from "../../atoms/portal";
+import {
+  backgroundServiceStartedAtom,
+  isProcessingAtom,
+  statusAtom,
+} from "../../atoms/status";
+import { disconnectVpnAtom } from "../../atoms/vpn";
+
+function normalizePortalAddress(input: string) {
+  const address = input.trim();
+  if (/^https?:\/\//.test(address)) {
+    try {
+      return new URL(address).hostname;
+    } catch (e) {}
+  }
+  return address;
+}
 
 export default function PortalForm() {
-  const isOnline = useAtomValue(isOnlineAtom);
+  const backgroundServiceStarted = useAtomValue(backgroundServiceStartedAtom);
   const [portalAddress, setPortalAddress] = useAtom(portalAddressAtom);
-  const status = useAtomValue(statusAtom);
-  const [processing, connectPortal] = useAtom(connectPortalAtom);
+  // Use useAtom instead of useSetAtom, otherwise the onMount of the atom is not triggered
+  const [, connectPortal] = useAtom(connectPortalAtom);
   const cancelConnectPortal = useSetAtom(cancelConnectPortalAtom);
+  const isProcessing = useAtomValue(isProcessingAtom);
+  const status = useAtomValue(statusAtom);
   const disconnectVpn = useSetAtom(disconnectVpnAtom);
-  const switchingGateway = useAtomValue(switchingGatewayAtom);
+  const switchingGateway = useAtomValue(switchGatewayAtom);
 
   function handlePortalAddressChange(e: ChangeEvent<HTMLInputElement>) {
-    let host = e.target.value.trim();
-    if (/^https?:\/\//.test(host)) {
-      try {
-        host = new URL(host).hostname;
-      } catch (e) {}
-    }
-    setPortalAddress(host);
+    setPortalAddress(normalizePortalAddress(e.target.value));
   }
 
   function handleSubmit(e: ChangeEvent<HTMLFormElement>) {
@@ -47,18 +57,20 @@ export default function PortalForm() {
         InputProps={{ readOnly: status !== "disconnected" || switchingGateway }}
         sx={{ mb: 1 }}
       />
+
       {status === "disconnected" && !switchingGateway && (
         <Button
           fullWidth
           type="submit"
           variant="contained"
-          disabled={!isOnline}
+          disabled={!backgroundServiceStarted}
           sx={{ textTransform: "none" }}
         >
           Connect
         </Button>
       )}
-      {(processing || switchingGateway) && (
+
+      {isProcessing && (
         <Button
           fullWidth
           variant="outlined"
@@ -74,6 +86,7 @@ export default function PortalForm() {
           Cancel
         </Button>
       )}
+
       {status === "connected" && (
         <Button
           fullWidth

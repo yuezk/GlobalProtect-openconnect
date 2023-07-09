@@ -1,6 +1,6 @@
 use log::{info, warn};
-use std::time::Instant;
-use tauri::Window;
+use std::{path::PathBuf, time::Instant};
+use tauri::{AppHandle, Window};
 use tokio::sync::oneshot;
 use url::{form_urlencoded, Url};
 use webkit2gtk::{
@@ -9,7 +9,7 @@ use webkit2gtk::{
 };
 
 pub(crate) fn redact_url(url: &str) -> String {
-    if let Ok(mut url) = Url::parse(&url) {
+    if let Ok(mut url) = Url::parse(url) {
         if let Err(err) = url.set_host(Some("redacted")) {
             warn!("Error redacting URL: {}", err);
         }
@@ -20,7 +20,7 @@ pub(crate) fn redact_url(url: &str) -> String {
             let redacted_query = redact_query(url.query().unwrap_or(""));
             url.set_query(Some(&redacted_query));
         }
-        return url.to_string();
+        url.to_string()
     } else {
         warn!("Error parsing URL: {}", url);
         url.to_string()
@@ -85,4 +85,41 @@ fn send_result(tx: oneshot::Sender<()>) {
     if tx.send(()).is_err() {
         warn!("Error sending clear cookies result");
     }
+}
+
+pub(crate) fn get_openssl_conf() -> String {
+    // OpenSSL version number format: 0xMNN00PP0L
+    // https://www.openssl.org/docs/man3.0/man3/OPENSSL_VERSION_NUMBER.html
+    let version_3_0_4: i64 = 0x30000040;
+    let openssl_version = openssl::version::number();
+
+    // See: https://stackoverflow.com/questions/75763525/curl-35-error0a000152ssl-routinesunsafe-legacy-renegotiation-disabled
+    let option = if openssl_version >= version_3_0_4 {
+        "UnsafeLegacyServerConnect"
+    } else {
+        "UnsafeLegacyRenegotiation"
+    };
+
+    format!(
+        "openssl_conf = openssl_init
+
+[openssl_init]
+ssl_conf = ssl_sect
+
+[ssl_sect]
+system_default = system_default_sect
+
+[system_default_sect]
+Options = {}",
+        option
+    )
+}
+
+pub(crate) fn get_openssl_conf_path(app_handle: &AppHandle) -> PathBuf {
+    let app_dir = app_handle
+        .path_resolver()
+        .app_data_dir()
+        .expect("failed to resolve app dir");
+
+    app_dir.join("openssl.cnf")
 }

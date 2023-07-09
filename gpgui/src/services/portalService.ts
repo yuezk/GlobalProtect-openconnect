@@ -1,4 +1,5 @@
 import { Body, ResponseType, fetch } from "@tauri-apps/api/http";
+import ErrorWithTitle from "../utils/ErrorWithTitle";
 import { parseXml } from "../utils/parseXml";
 import { Gateway } from "./types";
 
@@ -59,12 +60,21 @@ class PortalService {
         }),
       });
     } catch (err) {
-      console.error("Failed to prelogin: Network error", err);
-      throw new Error("Failed to prelogin: Network error");
+      if (
+        typeof err === "string" &&
+        err.includes("unsafe legacy renegotiation")
+      ) {
+        throw new ErrorWithTitle(
+          "SSL Error",
+          "Unsafe Legacy Renegotiation disabled"
+        );
+      }
+      console.error("prelogin error", err);
+      throw new Error("Network error");
     }
 
     if (!response.ok) {
-      throw new Error(`Failed to prelogin: ${response.status}`);
+      throw new Error(`Status code: ${response.status}`);
     }
     return this.parsePrelogin(response.data);
   }
@@ -186,12 +196,12 @@ class PortalService {
     };
   }
 
-  preferredGateway(
+  chooseGateway(
     gateways: Gateway[],
-    { region, previousGateway }: { region: string; previousGateway?: string }
+    { region, preferredGateway }: { region: string; preferredGateway?: string }
   ) {
     for (const gateway of gateways) {
-      if (gateway.name === previousGateway) {
+      if (gateway.name === preferredGateway) {
         return gateway;
       }
     }
@@ -207,7 +217,7 @@ class PortalService {
       return defaultGateway;
     }
 
-    let preferredGateway = defaultGateway;
+    let finalGateway = defaultGateway;
     let currentPriority = Infinity;
     for (const gateway of gateways) {
       const priorityRule = gateway.priorityRules.find(
@@ -215,11 +225,11 @@ class PortalService {
       );
 
       if (priorityRule && priorityRule.priority < currentPriority) {
-        preferredGateway = gateway;
+        finalGateway = gateway;
         currentPriority = priorityRule.priority;
       }
     }
-    return preferredGateway;
+    return finalGateway;
   }
 }
 

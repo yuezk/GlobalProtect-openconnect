@@ -2,11 +2,13 @@ import {
   Alert,
   AlertTitle,
   Box,
+  Link,
   Slide,
   SlideProps,
   Snackbar,
 } from "@mui/material";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { openSettingsAtom } from "../../atoms/menu";
 import {
   closeNotificationAtom,
   notificationConfigAtom,
@@ -22,6 +24,8 @@ export default function Notification() {
     notificationConfigAtom
   );
   const [visible, closeNotification] = useAtom(closeNotificationAtom);
+  const openSettings = useSetAtom(openSettingsAtom);
+
   const handleClose = () => {
     if (duration) {
       closeNotification();
@@ -51,7 +55,23 @@ export default function Notification() {
         }}
       >
         {title && <AlertTitle data-tauri-drag-region>{title}</AlertTitle>}
-        {message && <Box data-tauri-drag-region>{message}</Box>}
+        {message && (
+          <Box data-tauri-drag-region>
+            {message}
+            {/* Guide the user to enable custom OpenSSL settings when encountered the SSL Error */}
+            {title === "SSL Error" && (
+              <Box mt={1}>
+                <Link
+                  component="button"
+                  variant="body2"
+                  onClick={() => openSettings("openssl")}
+                >
+                  Click here to configure
+                </Link>
+              </Box>
+            )}
+          </Box>
+        )}
       </Alert>
     </Snackbar>
   );

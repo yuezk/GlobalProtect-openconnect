@@ -7,8 +7,8 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "gpgui",
-    "version": "0.1.0"
+    "productName": "GlobalProtect",
+    "version": "2.0.0"
   },
   "tauri": {
     "allowlist": {
@@ -42,7 +42,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.tauri.dev",
+      "identifier": "com.yuezk.gpgui",
       "longDescription": "",
       "macOS": {
         "entitlements": null,

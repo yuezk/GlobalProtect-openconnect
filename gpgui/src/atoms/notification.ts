@@ -1,5 +1,6 @@
 import { AlertColor } from "@mui/material";
 import { atom } from "jotai";
+import ErrorWithTitle from "../utils/ErrorWithTitle";
 
 export type Severity = AlertColor;
 
@@ -37,9 +38,11 @@ export const notifyErrorAtom = atom(
       msg = "Unknown error";
     }
 
+    const title = err instanceof ErrorWithTitle ? err.title : "Error";
+
     set(notificationVisibleAtom, true);
     set(notificationConfigAtom, {
-      title: "Error",
+      title,
       message: msg,
       severity: "error",
       duration: duration <= 0 ? undefined : duration,

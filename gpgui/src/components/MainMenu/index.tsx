@@ -11,7 +11,7 @@ import { alpha, styled } from "@mui/material/styles";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useState } from "react";
 import { openGatewaySwitcherAtom } from "../../atoms/gateway";
-import { quitAtom, resetAtom } from "../../atoms/menu";
+import { openSettingsAtom, quitAtom, resetAtom } from "../../atoms/menu";
 import { isProcessingAtom, statusAtom } from "../../atoms/status";
 
 const MenuContainer = styled(Box)(({ theme }) => ({
@@ -49,6 +49,7 @@ export default function MainMenu() {
   const isProcessing = useAtomValue(isProcessingAtom);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const openGatewaySwitcher = useSetAtom(openGatewaySwitcherAtom);
+  const openSettings = useSetAtom(openSettingsAtom);
   const status = useAtomValue(statusAtom);
   const reset = useSetAtom(resetAtom);
   const quit = useSetAtom(quitAtom);
@@ -57,9 +58,7 @@ export default function MainMenu() {
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
+  const handleClose = () => setAnchorEl(null);
 
   return (
     <>
@@ -73,24 +72,20 @@ export default function MainMenu() {
           onClose={handleClose}
           onClick={handleClose}
         >
-          <MenuItem onClick={openGatewaySwitcher} disableRipple>
+          <MenuItem onClick={openGatewaySwitcher}>
             <VpnLock />
             Switch Gateway
           </MenuItem>
-          <MenuItem onClick={handleClose} disableRipple>
+          <MenuItem onClick={() => openSettings()}>
             <Settings />
             Settings
           </MenuItem>
-          <MenuItem
-            onClick={reset}
-            disableRipple
-            disabled={status !== "disconnected"}
-          >
+          <MenuItem onClick={reset} disabled={status !== "disconnected"}>
             <LockReset />
             Reset
           </MenuItem>
           <Divider />
-          <MenuItem onClick={quit} disableRipple>
+          <MenuItem onClick={quit}>
             <ExitToApp />
             Quit
           </MenuItem>

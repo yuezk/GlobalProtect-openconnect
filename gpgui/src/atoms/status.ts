@@ -1,8 +1,9 @@
 import { atom } from "jotai";
 import { atomWithDefault } from "jotai/utils";
 import vpnService from "../services/vpnService";
+import { selectedGatewayAtom, switchGatewayAtom } from "./gateway";
 import { notifyErrorAtom, notifySuccessAtom } from "./notification";
-import { selectedGatewayAtom, switchingGatewayAtom } from "./portal";
+import { unwrap } from "./unwrap";
 
 export type Status =
   | "disconnected"
@@ -16,17 +17,22 @@ export type Status =
   | "disconnecting"
   | "error";
 
-const internalIsOnlineAtom = atomWithDefault(() => vpnService.isOnline());
-export const isOnlineAtom = atom(
-  (get) => get(internalIsOnlineAtom),
+// Whether the gpservice has started
+const _backgroundServiceStartedAtom = atomWithDefault<
+  boolean | Promise<boolean>
+>(() => vpnService.isOnline());
+
+export const backgroundServiceStartedAtom = atom(
+  (get) => get(_backgroundServiceStartedAtom),
   async (get, set, update: boolean) => {
-    const isOnline = await get(internalIsOnlineAtom);
-    // Already online, do nothing
-    if (update && update === isOnline) {
+    const prev = await get(_backgroundServiceStartedAtom);
+    // Already started, do nothing
+    if (update && update === prev) {
       return;
     }
 
-    set(internalIsOnlineAtom, update);
+    set(_backgroundServiceStartedAtom, update);
+    // From stopped to started
     if (update) {
       set(notifySuccessAtom, "The background service is online");
     } else {
@@ -34,25 +40,19 @@ export const isOnlineAtom = atom(
     }
   }
 );
-isOnlineAtom.onMount = (setAtom) => vpnService.onServiceStatusChanged(setAtom);
 
-const internalStatusReadyAtom = atom(false);
-export const statusReadyAtom = atom(
-  (get) => get(internalStatusReadyAtom),
-  (get, set, status: Status) => {
-    set(internalStatusReadyAtom, true);
-    set(statusAtom, status);
-  }
-);
-
-statusReadyAtom.onMount = (setAtom) => {
-  vpnService.status().then(setAtom);
+backgroundServiceStartedAtom.onMount = (setAtom) => {
+  vpnService.onServiceStatusChanged(setAtom);
 };
 
-export const statusAtom = atom<Status>("disconnected");
+// The current status of the vpn connection
+export const statusAtom = atomWithDefault<Status | Promise<Status>>(() =>
+  vpnService.status()
+);
+
 statusAtom.onMount = (setAtom) => vpnService.onVpnStatusChanged(setAtom);
 
-const statusTextMap: Record<Status, String> = {
+const statusTextMap: Record<Status, string> = {
   disconnected: "Not Connected",
   prelogin: "Portal pre-logging in...",
   "authenticating-saml": "Authenticating...",
@@ -65,9 +65,13 @@ const statusTextMap: Record<Status, String> = {
   error: "Error",
 };
 
-export const statusTextAtom = atom((get) => {
-  const status = get(statusAtom);
-  const switchingGateway = get(switchingGatewayAtom);
+export const statusTextAtom = atom<string>((get) => {
+  const status = get(unwrap(statusAtom));
+  const switchingGateway = get(switchGatewayAtom);
+
+  if (!status) {
+    return "Loading...";
+  }
 
   if (status === "connected") {
     const selectedGateway = get(selectedGatewayAtom);
@@ -84,11 +88,16 @@ export const statusTextAtom = atom((get) => {
   return statusTextMap[status];
 });
 
-export const isProcessingAtom = atom((get) => {
-  const status = get(statusAtom);
-  const switchingGateway = get(switchingGatewayAtom);
+export const isProcessingAtom = atom<boolean>((get) => {
+  const status = get(unwrap(statusAtom));
+  const switchingGateway = get(switchGatewayAtom);
 
-  return (
-    (status !== "disconnected" && status !== "connected") || switchingGateway
-  );
+  if (!status) {
+    return false;
+  }
+
+  if (switchingGateway) {
+    return true;
+  }
+  return status !== "disconnected" && status !== "connected";
 });

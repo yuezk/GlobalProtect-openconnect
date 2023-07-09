@@ -29,6 +29,9 @@ regex = "1"
 url = "2.3"
 tokio = { version = "1.14", features = ["full"] }
 veil = "0.1.6"
+whoami = "1.4.1"
+tauri-plugin-store = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v1" }
+openssl = "0.10"
 
 [features]
 # by default Tauri runs in production mode

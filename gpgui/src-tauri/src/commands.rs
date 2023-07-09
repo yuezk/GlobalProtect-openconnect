@@ -1,7 +1,12 @@
-use crate::auth::{self, AuthData, AuthRequest, SamlBinding, SamlLoginParams};
+use crate::{
+    auth::{self, AuthData, AuthRequest, SamlBinding, SamlLoginParams},
+    utils::get_openssl_conf,
+    utils::get_openssl_conf_path,
+};
 use gpcommon::{Client, ServerApiError, VpnStatus};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
+use tokio::fs;
 
 #[tauri::command]
 pub(crate) async fn service_online<'a>(client: State<'a, Arc<Client>>) -> Result<bool, ()> {
@@ -46,4 +51,23 @@ pub(crate) async fn saml_login(
         app_handle,
     };
     auth::saml_login(params).await
+}
+
+#[tauri::command]
+pub(crate) fn os_version() -> String {
+    whoami::distro()
+}
+
+#[tauri::command]
+pub(crate) fn openssl_config() -> String {
+    get_openssl_conf()
+}
+
+#[tauri::command]
+pub(crate) async fn update_openssl_config(app_handle: AppHandle) -> tauri::Result<()> {
+    let openssl_conf = get_openssl_conf();
+    let openssl_conf_path = get_openssl_conf_path(&app_handle);
+
+    fs::write(openssl_conf_path, openssl_conf).await?;
+    Ok(())
 }

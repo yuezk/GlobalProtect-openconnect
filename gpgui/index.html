@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GlobalProtect</title>
   </head>
-  <body data-tauri-drag-region>
+  <body>
     <script>
       /* workaround to webview font size auto scaling */
       var htmlFontSize = getComputedStyle(document.documentElement).fontSize;
       var ratio = parseInt(htmlFontSize, 10) / 16;
-      document.documentElement.style.fontSize = (16 / ratio) + 'px';
+      document.documentElement.style.fontSize = 16 / ratio + "px";
     </script>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="root" data-tauri-drag-region></div>
+    <script type="module" src="/src/pages/main.tsx"></script>
   </body>
 </html>

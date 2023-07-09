@@ -181,7 +181,7 @@ fn setup_window(window: &Window, event_tx: mpsc::Sender<AuthEvent>) -> EventHand
     window.listen_global(AUTH_REQUEST_EVENT, move |event| {
         if let Ok(payload) = TryInto::<AuthRequest>::try_into(event.payload()) {
             let event_tx = event_tx.clone();
-            send_auth_event(event_tx.clone(), AuthEvent::Request(payload));
+            send_auth_event(event_tx, AuthEvent::Request(payload));
         } else {
             warn!("Invalid auth request payload");
         }
@@ -198,7 +198,7 @@ async fn process(
     process_request(window, auth_request)?;
 
     let handle = tokio::spawn(show_window_after_timeout(window.clone()));
-    let auth_data = monitor_events(&window, event_rx).await;
+    let auth_data = monitor_events(window, event_rx).await;
 
     if !handle.is_finished() {
         handle.abort();
@@ -254,12 +254,12 @@ async fn monitor_auth_event(window: &Window, mut event_rx: mpsc::Receiver<AuthEv
         if let Some(auth_event) = event_rx.recv().await {
             match auth_event {
                 AuthEvent::Request(auth_request) => {
-                    attempt_times = attempt_times + 1;
+                    attempt_times += 1;
                     info!(
                         "Got auth request from auth-request event, attempt #{}",
                         attempt_times
                     );
-                    if let Err(err) = process_request(&window, auth_request) {
+                    if let Err(err) = process_request(window, auth_request) {
                         warn!("Error processing auth request: {}", err);
                     }
                 }
@@ -316,7 +316,7 @@ async fn monitor_window_close_event(window: &Window) {
         if matches!(event, WindowEvent::CloseRequested { .. }) {
             if let Ok(mut close_tx_locked) = close_tx.try_lock() {
                 if let Some(close_tx) = close_tx_locked.take() {
-                    if let Err(_) = close_tx.send(()) {
+                    if close_tx.send(()).is_err() {
                         println!("Error sending close event");
                     }
                 }
@@ -352,14 +352,23 @@ async fn handle_token_not_found(window: Window, cancel_timeout_rx: Arc<Mutex<mps
 /// and send it to the event channel
 fn parse_auth_data(main_res: &WebResource, auth_event_tx: mpsc::Sender<AuthEvent>) {
     if let Some(response) = main_res.response() {
-        if let Some(auth_data) = read_auth_data_from_response(&response) {
-            debug!("Got auth data from HTTP headers: {:?}", auth_data);
-            send_auth_data(auth_event_tx, auth_data);
-            return;
+        match read_auth_data_from_response(&response) {
+            Ok(auth_data) => {
+                debug!("Got auth data from HTTP headers: {:?}", auth_data);
+                send_auth_data(auth_event_tx, auth_data);
+                return;
+            }
+            Err(AuthError::TokenInvalid) => {
+                debug!("Received invalid token from HTTP headers");
+                send_auth_error(auth_event_tx, AuthError::TokenInvalid);
+                return;
+            }
+            Err(AuthError::TokenNotFound) => {
+                debug!("Token not found in HTTP headers, trying to read from HTML");
+            }
         }
     }
 
-    let auth_event_tx = auth_event_tx.clone();
     main_res.data(Cancellable::NONE, move |data| {
         if let Ok(data) = data {
             let html = String::from_utf8_lossy(&data);
@@ -378,20 +387,27 @@ fn parse_auth_data(main_res: &WebResource, auth_event_tx: mpsc::Sender<AuthEvent
 }
 
 /// Read the authentication data from the response headers
-fn read_auth_data_from_response(response: &webkit2gtk::URIResponse) -> Option<AuthData> {
-    response.http_headers().and_then(|mut headers| {
-        let auth_data = AuthData::new(
-            headers.get("saml-username").map(GString::into),
-            headers.get("prelogin-cookie").map(GString::into),
-            headers.get("portal-userauthcookie").map(GString::into),
-        );
+fn read_auth_data_from_response(response: &webkit2gtk::URIResponse) -> Result<AuthData, AuthError> {
+    response
+        .http_headers()
+        .map_or(Err(AuthError::TokenNotFound), |mut headers| {
+            let saml_status: Option<String> = headers.get("saml-auth-status").map(GString::into);
+            if saml_status == Some("-1".to_string()) {
+                return Err(AuthError::TokenInvalid);
+            }
 
-        if auth_data.check() {
-            Some(auth_data)
-        } else {
-            None
-        }
-    })
+            let auth_data = AuthData::new(
+                headers.get("saml-username").map(GString::into),
+                headers.get("prelogin-cookie").map(GString::into),
+                headers.get("portal-userauthcookie").map(GString::into),
+            );
+
+            if auth_data.check() {
+                Ok(auth_data)
+            } else {
+                Err(AuthError::TokenNotFound)
+            }
+        })
 }
 
 /// Read the authentication data from the HTML content
@@ -441,7 +457,7 @@ fn send_auth_error(auth_event_tx: mpsc::Sender<AuthEvent>, err: AuthError) {
 }
 
 fn send_auth_event(auth_event_tx: mpsc::Sender<AuthEvent>, auth_event: AuthEvent) {
-    let _ = tauri::async_runtime::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         if let Err(err) = auth_event_tx.send(auth_event).await {
             warn!("Error sending event: {}", err);
         }

@@ -8,7 +8,7 @@ import {
   passwordLoginAtom,
   passwordPreloginAtom,
   usernameAtom,
-} from "../../atoms/portal";
+} from "../../atoms/passwordLogin";
 
 export default function PasswordAuth() {
   const [visible, cancelPasswordAuth] = useAtom(cancelPasswordAuthAtom);
@@ -29,7 +29,7 @@ export default function PasswordAuth() {
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    passwordLogin(username, password);
+    passwordLogin();
   }
 
   return (
