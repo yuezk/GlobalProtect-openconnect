@@ -1,7 +1,18 @@
 import { GppBad, VerifiedUser as VerifiedIcon } from "@mui/icons-material";
-import { Box, CircularProgress, styled, useTheme } from "@mui/material";
-import { useAtomValue } from "jotai";
+import {
+  Box,
+  Button,
+  CircularProgress,
+  Tooltip,
+  styled,
+  useTheme,
+} from "@mui/material";
+import { useAtomValue, useSetAtom } from "jotai";
 import { BeatLoader } from "react-spinners";
+import {
+  openGatewaySwitcherAtom,
+  selectedGatewayAtom,
+} from "../../atoms/gateway";
 import { isProcessingAtom, statusAtom } from "../../atoms/status";
 
 function useStatusColor() {
@@ -59,11 +70,48 @@ function ProcessingIcon() {
   return <BeatLoader color={theme.palette.info.main} />;
 }
 
-const ConnectedIcon = styled(VerifiedIcon)(({ theme }) => ({
-  position: "relative",
-  fontSize: 80,
-  color: theme.palette.success.main,
-}));
+const ConnectedIcon = () => {
+  const selectedGateway = useAtomValue(selectedGatewayAtom);
+  const openGatewaySwitcher = useSetAtom(openGatewaySwitcherAtom);
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      <VerifiedIcon
+        sx={{
+          fontSize: 70,
+          color: (theme) => theme.palette.success.main,
+        }}
+      />
+      <Tooltip title={`Connected to ${selectedGateway?.name}`}>
+        <Button
+          sx={{
+            position: "relative",
+            zIndex: 1,
+            fontSize: "0.75rem",
+            fontWeight: "bold",
+            display: "block",
+            width: 100,
+            mt: 0.2,
+            padding: 0.2,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+          size="small"
+          color="success"
+          onClick={openGatewaySwitcher}
+        >
+          {selectedGateway?.name}
+        </Button>
+      </Tooltip>
+    </Box>
+  );
+};
 
 const IconContainer = styled(Box)(({ theme }) =>
   theme.unstable_sx({

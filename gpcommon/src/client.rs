@@ -201,8 +201,14 @@ impl Client {
             })
     }
 
-    pub async fn connect(&self, server: String, cookie: String) -> Result<(), ServerApiError> {
-        self.send_command(Connect::new(server, cookie).into()).await
+    pub async fn connect(
+        &self,
+        server: String,
+        cookie: String,
+        user_agent: String,
+    ) -> Result<(), ServerApiError> {
+        self.send_command(Connect::new(server, cookie, user_agent).into())
+            .await
     }
 
     pub async fn disconnect(&self) -> Result<(), ServerApiError> {

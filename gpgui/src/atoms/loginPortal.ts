@@ -62,7 +62,7 @@ export const loginPortalAtom = atom(
     }
 
     // Here, we have got the portal config successfully, refresh the cached portal data
-    const previousSelectedGateway = get(selectedGatewayAtom);
+    const previousSelectedGateway = get(selectedGatewayAtom)?.name;
     const selectedGateway = gateways.find(
       ({ name }) => name === previousSelectedGateway
     );

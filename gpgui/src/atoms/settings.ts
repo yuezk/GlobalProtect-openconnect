@@ -5,7 +5,7 @@ import settingsService, {
   DEFAULT_SETTINGS_DATA,
   SETTINGS_DATA,
 } from "../services/settingsService";
-import { atomWithTauriStorage } from "../services/storeService";
+import { atomWithTauriStorage } from "../services/storageService";
 import { unwrap } from "./unwrap";
 
 const settingsDataAtom = atomWithTauriStorage(

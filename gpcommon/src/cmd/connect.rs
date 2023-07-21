@@ -7,11 +7,16 @@ use serde::{Deserialize, Serialize};
 pub struct Connect {
     server: String,
     cookie: String,
+    user_agent: String,
 }
 
 impl Connect {
-    pub fn new(server: String, cookie: String) -> Self {
-        Self { server, cookie }
+    pub fn new(server: String, cookie: String, user_agent: String) -> Self {
+        Self {
+            server,
+            cookie,
+            user_agent,
+        }
     }
 }
 
@@ -25,7 +30,7 @@ impl Command for Connect {
             return Err(format!("VPN is already in state: {:?}", status).into());
         }
 
-        if let Err(err) = vpn.connect(&self.server, &self.cookie).await {
+        if let Err(err) = vpn.connect(&self.server, &self.cookie, &self.user_agent).await {
             return Err(err.to_string().into());
         }
 

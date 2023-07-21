@@ -1,9 +1,11 @@
 use crate::{
     auth::{self, AuthData, AuthRequest, SamlBinding, SamlLoginParams},
+    storage::{AppStorage, KeyHint},
     utils::get_openssl_conf,
     utils::get_openssl_conf_path,
 };
 use gpcommon::{Client, ServerApiError, VpnStatus};
+use serde_json::Value;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tokio::fs;
@@ -24,9 +26,10 @@ pub(crate) async fn vpn_status<'a>(
 pub(crate) async fn vpn_connect<'a>(
     server: String,
     cookie: String,
+    user_agent: String,
     client: State<'a, Arc<Client>>,
 ) -> Result<(), ServerApiError> {
-    client.connect(server, cookie).await
+    client.connect(server, cookie, user_agent).await
 }
 
 #[tauri::command]
@@ -40,10 +43,10 @@ pub(crate) async fn vpn_disconnect<'a>(
 pub(crate) async fn saml_login(
     binding: SamlBinding,
     request: String,
+    user_agent: String,
     clear_cookies: bool,
     app_handle: AppHandle,
 ) -> tauri::Result<Option<AuthData>> {
-    let user_agent = String::from("PAN GlobalProtect");
     let params = SamlLoginParams {
         auth_request: AuthRequest::new(binding, request),
         user_agent,
@@ -69,5 +72,31 @@ pub(crate) async fn update_openssl_config(app_handle: AppHandle) -> tauri::Resul
     let openssl_conf_path = get_openssl_conf_path(&app_handle);
 
     fs::write(openssl_conf_path, openssl_conf).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn store_get<'a>(
+    hint: KeyHint<'_>,
+    app_storage: State<'_, AppStorage<'_>>,
+) -> Result<Option<Value>, ()> {
+    Ok(app_storage.get(hint))
+}
+
+#[tauri::command]
+pub(crate) fn store_set(
+    hint: KeyHint,
+    value: Value,
+    app_storage: State<'_, AppStorage>,
+) -> Result<(), tauri_plugin_store::Error> {
+    app_storage.set(hint, &value)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn store_save(
+    app_storage: State<'_, AppStorage>,
+) -> Result<(), tauri_plugin_store::Error> {
+    app_storage.save()?;
     Ok(())
 }

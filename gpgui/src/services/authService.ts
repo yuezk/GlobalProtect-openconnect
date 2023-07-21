@@ -1,5 +1,6 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import invokeCommand from "../utils/invokeCommand";
+import settingsService from "./settingsService";
 
 export type AuthData = {
   username: string;
@@ -30,9 +31,12 @@ class AuthService {
 
   // binding: "POST" | "REDIRECT"
   async samlLogin(binding: string, request: string, clearCookies: boolean) {
+    const { userAgent } = await settingsService.getSimulation();
+
     return invokeCommand<AuthData>("saml_login", {
       binding,
       request,
+      userAgent: `${userAgent} ${navigator.userAgent}`,
       clearCookies,
     });
   }

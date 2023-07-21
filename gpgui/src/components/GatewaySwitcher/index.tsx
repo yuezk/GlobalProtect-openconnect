@@ -20,7 +20,7 @@ export default function GatewaySwitcher() {
     gatewaySwitcherVisibleAtom
   );
   const gateways = useAtomValue(portalGatewaysAtom);
-  const selectedGateway = useAtomValue(selectedGatewayAtom);
+  const selectedGateway = useAtomValue(selectedGatewayAtom)?.name;
   const switchGateway = useSetAtom(switchGatewayAtom);
 
   const handleClose = () => {

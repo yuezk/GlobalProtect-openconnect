@@ -1,5 +1,6 @@
 import { Body, ResponseType, fetch } from "@tauri-apps/api/http";
 import { parseXml } from "../utils/parseXml";
+import settingsService from "./settingsService";
 
 type LoginParams = {
   user: string;
@@ -15,6 +16,9 @@ class GatewayService {
       throw new Error("Gateway address is required");
     }
 
+    const { userAgent, clientOS, osVersion } =
+      await settingsService.getSimulation();
+
     const loginUrl = `https://${gateway}/ssl-vpn/login.esp`;
     const body = Body.form({
       prot: "https:",
@@ -25,8 +29,8 @@ class GatewayService {
       direct: "yes",
       "ipv6-support": "yes",
       clientVer: "4100",
-      clientos: "Linux",
-      "os-version": "Linux",
+      clientos: clientOS,
+      "os-version": osVersion,
       server: gateway,
       user,
       passwd: passwd || "",
@@ -38,7 +42,7 @@ class GatewayService {
     const response = await fetch<string>(loginUrl, {
       method: "POST",
       headers: {
-        "User-Agent": "PAN GlobalProtect",
+        "User-Agent": userAgent,
       },
       responseType: ResponseType.Text,
       body,

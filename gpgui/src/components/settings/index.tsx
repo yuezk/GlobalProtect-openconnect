@@ -43,14 +43,12 @@ export default function SettingsPanel() {
               value="simulation"
               icon={<Devices />}
               iconPosition="start"
-              sx={{ textTransform: "none" }}
             />
             <Tab
               label="OpenSSL"
               value="openssl"
               icon={<Https />}
               iconPosition="start"
-              sx={{ textTransform: "none" }}
             />
           </TabList>
           <Box sx={{ flex: 1 }}>
@@ -61,12 +59,8 @@ export default function SettingsPanel() {
       </Box>
       <Box sx={{ flexShrink: 0, borderTop: 1, borderColor: "divider" }}>
         <DialogActions>
-          <Button sx={{ textTransform: "none" }} onClick={closeWindow}>
-            Cancel
-          </Button>
-          <Button sx={{ textTransform: "none" }} onClick={save}>
-            Save
-          </Button>
+          <Button onClick={closeWindow}>Cancel</Button>
+          <Button onClick={save}>Save</Button>
         </DialogActions>
       </Box>
     </Box>

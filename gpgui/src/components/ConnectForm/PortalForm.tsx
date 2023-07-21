@@ -1,12 +1,12 @@
-import { Button, TextField } from "@mui/material";
+import { Autocomplete, Button, TextField } from "@mui/material";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { ChangeEvent } from "react";
+import { ChangeEvent, useState } from "react";
 import {
   cancelConnectPortalAtom,
   connectPortalAtom,
 } from "../../atoms/connectPortal";
 import { switchGatewayAtom } from "../../atoms/gateway";
-import { portalAddressAtom } from "../../atoms/portal";
+import { allPortalsAtom, portalAddressAtom } from "../../atoms/portal";
 import {
   backgroundServiceStartedAtom,
   isProcessingAtom,
@@ -26,6 +26,7 @@ function normalizePortalAddress(input: string) {
 
 export default function PortalForm() {
   const backgroundServiceStarted = useAtomValue(backgroundServiceStartedAtom);
+  const allPortals = useAtomValue(allPortalsAtom);
   const [portalAddress, setPortalAddress] = useAtom(portalAddressAtom);
   // Use useAtom instead of useSetAtom, otherwise the onMount of the atom is not triggered
   const [, connectPortal] = useAtom(connectPortalAtom);
@@ -35,8 +36,10 @@ export default function PortalForm() {
   const disconnectVpn = useSetAtom(disconnectVpnAtom);
   const switchingGateway = useAtomValue(switchGatewayAtom);
 
-  function handlePortalAddressChange(e: ChangeEvent<HTMLInputElement>) {
-    setPortalAddress(normalizePortalAddress(e.target.value));
+  const readOnly = status !== "disconnected" || switchingGateway;
+
+  function handlePortalAddressChange(e: unknown, value: string) {
+    setPortalAddress(normalizePortalAddress(value));
   }
 
   function handleSubmit(e: ChangeEvent<HTMLFormElement>) {
@@ -46,16 +49,35 @@ export default function PortalForm() {
 
   return (
     <form onSubmit={handleSubmit} data-tauri-drag-region>
-      <TextField
-        autoFocus
-        label="Portal address"
-        placeholder="Hostname or IP address"
-        fullWidth
+      <Autocomplete
+        freeSolo
+        options={allPortals}
+        inputValue={portalAddress}
+        onInputChange={handlePortalAddressChange}
+        readOnly={readOnly}
+        forcePopupIcon={!readOnly}
+        disableClearable
         size="small"
-        value={portalAddress}
-        onChange={handlePortalAddressChange}
-        InputProps={{ readOnly: status !== "disconnected" || switchingGateway }}
-        sx={{ mb: 1 }}
+        sx={{
+          mb: 1,
+        }}
+        componentsProps={{
+          paper: {
+            sx: {
+              "& .MuiAutocomplete-listbox .MuiAutocomplete-option": {
+                minHeight: "auto",
+              },
+            },
+          },
+        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            autoFocus
+            label="Portal address"
+            placeholder="Hostname or IP address"
+          />
+        )}
       />
 
       {status === "disconnected" && !switchingGateway && (
@@ -64,7 +86,6 @@ export default function PortalForm() {
           type="submit"
           variant="contained"
           disabled={!backgroundServiceStarted}
-          sx={{ textTransform: "none" }}
         >
           Connect
         </Button>
@@ -81,19 +102,13 @@ export default function PortalForm() {
             switchingGateway
           }
           onClick={cancelConnectPortal}
-          sx={{ textTransform: "none" }}
         >
           Cancel
         </Button>
       )}
 
       {status === "connected" && (
-        <Button
-          fullWidth
-          variant="contained"
-          onClick={disconnectVpn}
-          sx={{ textTransform: "none" }}
-        >
+        <Button fullWidth variant="contained" onClick={disconnectVpn}>
           Disconnect
         </Button>
       )}

@@ -2,6 +2,7 @@ import { Body, ResponseType, fetch } from "@tauri-apps/api/http";
 import ErrorWithTitle from "../utils/ErrorWithTitle";
 import { parseXml } from "../utils/parseXml";
 import { Gateway } from "./types";
+import settingsService from "./settingsService";
 
 export type SamlPrelogin = {
   isSamlAuth: true;
@@ -37,12 +38,15 @@ export type PortalCredential = {
 class PortalService {
   async prelogin(portal: string): Promise<Prelogin> {
     const preloginUrl = `https://${portal}/global-protect/prelogin.esp`;
+    const { userAgent, clientOS, osVersion } =
+      await settingsService.getSimulation();
+
     let response;
     try {
       response = await fetch<string>(preloginUrl, {
         method: "POST",
         headers: {
-          "User-Agent": "PAN GlobalProtect",
+          "User-Agent": userAgent,
         },
         responseType: ResponseType.Text,
         query: {
@@ -51,8 +55,8 @@ class PortalService {
         body: Body.form({
           tmp: "tmp",
           clientVer: "4100",
-          clientos: "Linux",
-          "os-version": "Linux",
+          clientos: clientOS,
+          "os-version": osVersion,
           "ipv6-support": "yes",
           "default-browser": "0",
           "cas-support": "yes",
@@ -118,6 +122,9 @@ class PortalService {
   }
 
   async fetchConfig(portal: string, params: PortalCredential) {
+    const { userAgent, clientOS, osVersion, clientVersion } =
+      await settingsService.getSimulation();
+
     const {
       user,
       passwd,
@@ -132,12 +139,12 @@ class PortalService {
       inputStr: "",
       jnlpReady: "jnlpReady",
       computer: "Linux", // TODO
-      clientos: "Linux",
+      clientos: clientOS,
       ok: "Login",
       direct: "yes",
       clientVer: "4100",
-      "os-version": "Linux",
-      clientgpversion: "6.0.1-19",
+      "os-version": osVersion,
+      clientgpversion: clientVersion,
       "ipv6-support": "yes",
       server: portal,
       host: portal,
@@ -151,7 +158,7 @@ class PortalService {
     const response = await fetch<string>(configUrl, {
       method: "POST",
       headers: {
-        "User-Agent": "PAN GlobalProtect",
+        "User-Agent": userAgent,
       },
       responseType: ResponseType.Text,
       body,
@@ -166,8 +173,6 @@ class PortalService {
   }
 
   private parsePortalConfigResponse(response: string): PortalConfig {
-    // console.log(response);
-
     const result = parseXml(response);
     const gateways = result.all("gateways list > entry").map((entry) => {
       const address = entry.attr("name");

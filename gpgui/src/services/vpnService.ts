@@ -1,5 +1,6 @@
 import { Event, listen } from "@tauri-apps/api/event";
 import invokeCommand from "../utils/invokeCommand";
+import settingsService from "./settingsService";
 
 type VpnStatus = "disconnected" | "connecting" | "connected" | "disconnecting";
 type VpnStatusCallback = (status: VpnStatus) => void;
@@ -64,7 +65,8 @@ class VpnService {
   }
 
   async connect(server: string, cookie: string) {
-    return invokeCommand("vpn_connect", { server, cookie });
+    const { userAgent } = await settingsService.getSimulation();
+    return invokeCommand("vpn_connect", { server, cookie, userAgent });
   }
 
   async disconnect() {

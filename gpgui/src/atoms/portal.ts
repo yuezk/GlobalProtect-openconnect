@@ -1,7 +1,7 @@
 import { atom } from "jotai";
 import { atomWithDefault } from "jotai/utils";
 import { PortalCredential } from "../services/portalService";
-import { atomWithTauriStorage } from "../services/storeService";
+import { atomWithTauriStorage } from "../services/storageService";
 import { unwrap } from "./unwrap";
 
 export type GatewayData = {
@@ -31,7 +31,11 @@ const DEFAULT_APP_DATA: AppData = {
   clearCookies: true,
 };
 
-export const appDataAtom = atomWithTauriStorage("APP_DATA", DEFAULT_APP_DATA);
+const keyHint = {
+  key: "APP_DATA",
+  encrypted: true,
+};
+export const appDataAtom = atomWithTauriStorage(keyHint, DEFAULT_APP_DATA);
 const unwrappedAppDataAtom = atom(
   (get) => get(unwrap(appDataAtom)) || DEFAULT_APP_DATA
 );
@@ -49,6 +53,11 @@ export const currentPortalDataAtom = atom<PortalData>((get) => {
   const portalData = portals.find(({ address }) => address === portalAddress);
 
   return portalData || { address: portalAddress, gateways: [] };
+});
+
+export const allPortalsAtom = atom((get) => {
+  const { portals } = get(unwrappedAppDataAtom);
+  return portals.map(({ address }) => address);
 });
 
 export const updatePortalDataAtom = atom(

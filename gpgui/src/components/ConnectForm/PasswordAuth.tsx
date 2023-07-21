@@ -57,7 +57,7 @@ export default function PasswordAuth() {
             <Button
               variant="outlined"
               onClick={cancelPasswordAuth}
-              sx={{ flex: 1, textTransform: "none" }}
+              sx={{ flex: 1 }}
             >
               Cancel
             </Button>
@@ -66,7 +66,6 @@ export default function PasswordAuth() {
               type="submit"
               loading={loading}
               disabled={loading}
-              sx={{ flex: 1, textTransform: "none" }}
             >
               Login
             </LoadingButton>

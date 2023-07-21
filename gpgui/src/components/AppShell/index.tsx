@@ -1,13 +1,8 @@
-import {
-  Box,
-  CssBaseline,
-  ThemeProvider,
-  createTheme,
-  useMediaQuery,
-} from "@mui/material";
-import React, { Suspense, useMemo } from "react";
+import { Box, CssBaseline, ThemeProvider } from "@mui/material";
+import React, { Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import useGlobalTheme from "./useGlobalTheme";
 
 function Loading() {
   console.warn("Loading rendered");
@@ -27,16 +22,7 @@ function Loading() {
 }
 
 function AppShell({ children }: { children: React.ReactNode }) {
-  const prefersDarkMode = useMediaQuery("(prefers-color-scheme: dark)");
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: prefersDarkMode ? "dark" : "light",
-        },
-      }),
-    [prefersDarkMode]
-  );
+  const theme = useGlobalTheme();
 
   return (
     <React.StrictMode>

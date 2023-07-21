@@ -1,9 +1,8 @@
 include!(concat!(env!("OUT_DIR"), "/client_hash.rs"));
 
-// use aes_gcm::{aead::OsRng, Aes256Gcm, KeyInit};
 use gpcommon::{server, SOCKET_PATH};
-use env_logger::Env;
 use log::error;
+use std::fs::File;
 use tokio::signal;
 
 // static mut HTTP_PORT: u16 = 0;
@@ -96,10 +95,10 @@ use tokio::signal;
 //     println!("Shutting down http server");
 // }
 
+const LOG_FILE: &str = "/var/log/gpservice.log";
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-
     // println!("{GPCLIENT_HASH}");
 
     // unsafe {
@@ -109,6 +108,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // tokio::spawn(start_unix_server());
     // start_http_server().await;
     // server::start().await
+
+    let log_file = File::create(LOG_FILE)?;
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{} {} {}] {}",
+                humantime::format_rfc3339_millis(std::time::SystemTime::now()),
+                record.level(),
+                record.target(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Info)
+        .chain(std::io::stdout())
+        .chain(log_file)
+        .apply()?;
 
     if let Err(err) = server::run(SOCKET_PATH, signal::ctrl_c()).await {
         error!("Error running server: {}", err);

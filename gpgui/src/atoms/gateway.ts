@@ -14,7 +14,11 @@ export const portalGatewaysAtom = atom<GatewayData[]>((get) => {
 });
 
 export const selectedGatewayAtom = atom(
-  (get) => get(currentPortalDataAtom).selectedGateway,
+  (get) => {
+    const { selectedGateway } = get(currentPortalDataAtom);
+    const gateways = get(portalGatewaysAtom);
+    return gateways.find(({ name }) => name === selectedGateway);
+  },
   async (get, set, update: string) => {
     const portalData = get(currentPortalDataAtom);
     await set(updatePortalDataAtom, { ...portalData, selectedGateway: update });

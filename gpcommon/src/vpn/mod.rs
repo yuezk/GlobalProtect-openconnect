@@ -56,6 +56,7 @@ pub(crate) struct VpnOptions {
     server: CString,
     cookie: CString,
     script: CString,
+    user_agent: CString,
 }
 
 impl VpnOptions {
@@ -64,6 +65,7 @@ impl VpnOptions {
             server: self.server.as_ptr(),
             cookie: self.cookie.as_ptr(),
             script: self.script.as_ptr(),
+            user_agent: self.user_agent.as_ptr(),
             user_data,
         }
     }
@@ -88,6 +90,7 @@ impl Vpn {
         &self,
         server: &str,
         cookie: &str,
+        user_agent: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let script = match find_default_vpnc_script() {
             Some(script) => {
@@ -104,6 +107,7 @@ impl Vpn {
             server: VpnOptions::to_cstr(server),
             cookie: VpnOptions::to_cstr(cookie),
             script: VpnOptions::to_cstr(script),
+            user_agent: VpnOptions::to_cstr(user_agent),
         });
 
         let vpn_options = self.vpn_options.clone();

@@ -8,6 +8,7 @@ typedef struct vpn_options
     const char *server;
     const char *cookie;
     const char *script;
+    const char *user_agent;
     void *user_data;
 } vpn_options;
 

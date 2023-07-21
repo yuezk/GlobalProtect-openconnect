@@ -1,6 +1,6 @@
 import { UserAttentionType, WebviewWindow } from "@tauri-apps/api/window";
 import invokeCommand from "../utils/invokeCommand";
-import { appStore } from "./storeService";
+import { appStorage } from "./storageService";
 
 export type TabValue = "simulation" | "openssl";
 const SETTINGS_WINDOW_LABEL = "settings";
@@ -68,9 +68,10 @@ export const DEFAULT_SETTINGS_DATA: SettingsData = {
   customOpenSSL: false,
 };
 
-async function getSimulationSettings(): Promise<SimulationSettings> {
+async function getSimulation(): Promise<SimulationSettings> {
   const { clientOS, osVersion, clientVersion } =
-    (await appStore.get<SettingsData>(SETTINGS_DATA)) || DEFAULT_SETTINGS_DATA;
+    (await appStorage.get<SettingsData>(SETTINGS_DATA)) ||
+    DEFAULT_SETTINGS_DATA;
   const currentOsVersion = await getCurrentOsVersion();
 
   return {
@@ -81,8 +82,8 @@ async function getSimulationSettings(): Promise<SimulationSettings> {
       clientVersion
     ),
     clientOS,
-    osVersion,
-    clientVersion,
+    osVersion: determineOsVersion(clientOS, osVersion, currentOsVersion),
+    clientVersion: clientVersion || DEFAULT_CLIENT_VERSION,
   };
 }
 
@@ -131,7 +132,7 @@ export default {
   openSettings,
   closeSettings,
   getCurrentOsVersion,
-  getSimulationSettings,
+  getSimulation,
   buildUserAgent,
   determineOsVersion,
   getOpenSSLConfig,

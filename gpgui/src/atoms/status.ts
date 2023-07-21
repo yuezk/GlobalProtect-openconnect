@@ -4,6 +4,7 @@ import vpnService from "../services/vpnService";
 import { selectedGatewayAtom, switchGatewayAtom } from "./gateway";
 import { notifyErrorAtom, notifySuccessAtom } from "./notification";
 import { unwrap } from "./unwrap";
+import { portalAddressAtom } from "./portal";
 
 export type Status =
   | "disconnected"
@@ -75,14 +76,16 @@ export const statusTextAtom = atom<string>((get) => {
 
   if (status === "connected") {
     const selectedGateway = get(selectedGatewayAtom);
-    return selectedGateway
-      ? `Gateway: ${selectedGateway}`
-      : statusTextMap[status];
+    const portalAddress = get(portalAddressAtom);
+
+    return selectedGateway?.address === portalAddress
+      ? statusTextMap[status]
+      : selectedGateway?.address!;
   }
 
   if (switchingGateway) {
     const selectedGateway = get(selectedGatewayAtom);
-    return `Switching to ${selectedGateway}`;
+    return `Switching to ${selectedGateway?.name}`;
   }
 
   return statusTextMap[status];

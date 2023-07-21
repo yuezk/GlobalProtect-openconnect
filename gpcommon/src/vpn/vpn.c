@@ -53,7 +53,7 @@ int vpn_connect(const vpn_options *options)
     g_user_data = options->user_data;
     g_vpnc_script = options->script;
 
-    vpninfo = openconnect_vpninfo_new("PAN GlobalProtect", validate_peer_cert, NULL, NULL, print_progress, NULL);
+    vpninfo = openconnect_vpninfo_new(options->user_agent, validate_peer_cert, NULL, NULL, print_progress, NULL);
 
     if (!vpninfo)
     {
