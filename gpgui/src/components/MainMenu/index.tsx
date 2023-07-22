@@ -4,7 +4,7 @@ import {
   LockReset,
   Menu as MenuIcon,
   Settings,
-  VpnLock,
+  SyncAlt,
 } from "@mui/icons-material";
 import { Box, Divider, IconButton, Menu, MenuItem } from "@mui/material";
 import { alpha, styled } from "@mui/material/styles";
@@ -73,7 +73,7 @@ export default function MainMenu() {
           onClick={handleClose}
         >
           <MenuItem onClick={openGatewaySwitcher}>
-            <VpnLock />
+            <SyncAlt />
             Switch Gateway
           </MenuItem>
           <MenuItem onClick={() => openSettings()}>

@@ -1,4 +1,5 @@
 import { Box, CssBaseline, ThemeProvider } from "@mui/material";
+import { SnackbarProvider } from "notistack";
 import React, { Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
@@ -27,8 +28,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <React.StrictMode>
       <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Suspense fallback={<Loading />}>{children}</Suspense>
+        <SnackbarProvider>
+          <CssBaseline />
+          <Suspense fallback={<Loading />}>{children}</Suspense>
+        </SnackbarProvider>
       </ThemeProvider>
     </React.StrictMode>
   );

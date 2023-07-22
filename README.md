@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/yuezk/GlobalProtect-openconnect/assets/3297602/9242df9c-217d-42ab-8c21-8f9f69cd4eb5">
+</p>
+
 ## Development
 
 ### Build the service

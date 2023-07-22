@@ -1,10 +1,12 @@
-import { Devices, Https } from "@mui/icons-material";
+import { Devices, Https, VpnLock } from "@mui/icons-material";
 import { TabContext, TabList } from "@mui/lab";
 import { Box, Button, DialogActions, Tab } from "@mui/material";
 import { useSetAtom } from "jotai";
+import { useSnackbar } from "notistack";
 import { useState } from "react";
 import { saveSettingsAtom } from "../../atoms/settings";
 import settingsService, { TabValue } from "../../services/settingsService";
+import OpenConnect from "./OpenConnect";
 import OpenSSL from "./OpenSSL";
 import Simulation from "./Simulation";
 
@@ -15,6 +17,7 @@ const activeTab = new URLSearchParams(window.location.search).get(
 export default function SettingsPanel() {
   const [value, setValue] = useState<TabValue>(activeTab);
   const saveSettings = useSetAtom(saveSettingsAtom);
+  const { enqueueSnackbar } = useSnackbar();
 
   const handleChange = (event: React.SyntheticEvent, newValue: string) => {
     setValue(newValue as TabValue);
@@ -25,8 +28,14 @@ export default function SettingsPanel() {
   };
 
   const save = async () => {
-    await saveSettings();
-    await closeWindow();
+    try {
+      await saveSettings();
+      enqueueSnackbar("Settings saved", { variant: "success" });
+      await closeWindow();
+    } catch (err) {
+      console.warn("Failed to save settings", err);
+      enqueueSnackbar("Failed to save settings", { variant: "error" });
+    }
   };
 
   return (
@@ -43,16 +52,33 @@ export default function SettingsPanel() {
               value="simulation"
               icon={<Devices />}
               iconPosition="start"
+              sx={{ justifyContent: "start" }}
+            />
+            <Tab
+              label="OpenConnect"
+              value="openconnect"
+              icon={<VpnLock />}
+              iconPosition="start"
+              sx={{ justifyContent: "start" }}
             />
             <Tab
               label="OpenSSL"
               value="openssl"
               icon={<Https />}
               iconPosition="start"
+              sx={{ justifyContent: "start" }}
             />
           </TabList>
-          <Box sx={{ flex: 1 }}>
+          <Box
+            sx={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              "& .MuiTabPanel-root[hidden]": { display: "none" },
+            }}
+          >
             <Simulation />
+            <OpenConnect />
             <OpenSSL />
           </Box>
         </TabContext>

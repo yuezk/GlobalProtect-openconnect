@@ -79,6 +79,12 @@ export const opensslConfigAtom = atomWithDefault(async () => {
   return settingsService.getOpenSSLConfig();
 });
 
+export const openconnectConfigAtom = atomWithDefault<string | Promise<string>>(
+  () => {
+    return settingsService.getOpenconnectConfig();
+  }
+);
+
 export const saveSettingsAtom = atom(null, async (get, set) => {
   const clientOS = get(clientOSAtom);
   const osVersion = get(osVersionAtom);
@@ -94,5 +100,12 @@ export const saveSettingsAtom = atom(null, async (get, set) => {
 
   if (customOpenSSL) {
     await settingsService.updateOpenSSLConfig();
+  }
+
+  const initialOpenconnectConfig = await settingsService.getOpenconnectConfig();
+  const openconnectConfig = await get(openconnectConfigAtom);
+
+  if (initialOpenconnectConfig !== openconnectConfig) {
+    await settingsService.updateOpenconnectConfig(openconnectConfig);
   }
 });

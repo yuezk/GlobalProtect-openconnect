@@ -6,9 +6,9 @@ use crate::{
 };
 use gpcommon::{Client, ServerApiError, VpnStatus};
 use serde_json::Value;
-use std::sync::Arc;
+use std::{process::Stdio, sync::Arc};
 use tauri::{AppHandle, State};
-use tokio::fs;
+use tokio::{fs, io::AsyncWriteExt, process::Command};
 
 #[tauri::command]
 pub(crate) async fn service_online<'a>(client: State<'a, Arc<Client>>) -> Result<bool, ()> {
@@ -62,8 +62,8 @@ pub(crate) fn os_version() -> String {
 }
 
 #[tauri::command]
-pub(crate) fn openssl_config() -> String {
-    get_openssl_conf()
+pub(crate) async fn openssl_config() -> Result<String, ()> {
+    Ok(get_openssl_conf())
 }
 
 #[tauri::command]
@@ -73,6 +73,40 @@ pub(crate) async fn update_openssl_config(app_handle: AppHandle) -> tauri::Resul
 
     fs::write(openssl_conf_path, openssl_conf).await?;
     Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn openconnect_config() -> tauri::Result<String> {
+    let file = "/etc/gpservice/gp.conf";
+    let content = fs::read_to_string(file).await?;
+    Ok(content)
+}
+
+#[tauri::command]
+pub(crate) async fn update_openconnect_config(content: String) -> tauri::Result<i32> {
+    let file = "/etc/gpservice/gp.conf";
+    let mut child = Command::new("pkexec")
+        .arg("tee")
+        .arg(file)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .spawn()?;
+
+    let mut stdin = child.stdin.take().unwrap();
+
+    tokio::spawn(async move {
+        stdin.write_all(content.as_bytes()).await.unwrap();
+        drop(stdin);
+    });
+
+    let exit_status = child.wait().await?;
+
+    exit_status.code().ok_or_else(|| {
+        tauri::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Process exited without a code",
+        ))
+    })
 }
 
 #[tauri::command]

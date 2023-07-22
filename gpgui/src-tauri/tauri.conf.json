@@ -25,6 +25,13 @@
       },
       "process": {
         "exit": true
+      },
+      "fs": {
+        "scope": ["$TEMP/gp.conf"],
+        "writeFile": true
+      },
+      "os": {
+        "all": true
       }
     },
     "bundle": {

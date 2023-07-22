@@ -31,6 +31,8 @@ fn main() {
             commands::os_version,
             commands::openssl_config,
             commands::update_openssl_config,
+            commands::openconnect_config,
+            commands::update_openconnect_config,
             commands::store_get,
             commands::store_set,
             commands::store_save,

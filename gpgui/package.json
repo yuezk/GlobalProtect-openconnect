@@ -19,6 +19,7 @@
     "jotai": "^2.2.1",
     "jotai-immer": "^0.2.0",
     "jotai-optics": "^0.3.0",
+    "notistack": "^3.0.1",
     "optics-ts": "^2.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

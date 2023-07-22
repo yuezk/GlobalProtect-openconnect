@@ -7,7 +7,7 @@ export default function useGlobalTheme() {
     () =>
       createTheme({
         palette: {
-          mode: prefersDarkMode ? "dark" : "light",
+          mode: prefersDarkMode ? "light" : "light",
         },
         components: {
           MuiButton: {

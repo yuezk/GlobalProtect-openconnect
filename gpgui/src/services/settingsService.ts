@@ -1,8 +1,11 @@
+import { tempdir } from "@tauri-apps/api/os";
 import { UserAttentionType, WebviewWindow } from "@tauri-apps/api/window";
 import invokeCommand from "../utils/invokeCommand";
 import { appStorage } from "./storageService";
+import { fs } from "@tauri-apps/api";
+import { Command } from "@tauri-apps/api/shell";
 
-export type TabValue = "simulation" | "openssl";
+export type TabValue = "simulation" | "openssl" | "openconnect";
 const SETTINGS_WINDOW_LABEL = "settings";
 
 async function openSettings(options?: { tab?: TabValue }) {
@@ -17,7 +20,7 @@ async function openSettings(options?: { tab?: TabValue }) {
   new WebviewWindow(SETTINGS_WINDOW_LABEL, {
     url: `pages/settings/index.html?tab=${tab}`,
     title: "GlobalProtect Settings",
-    width: 650,
+    width: 680,
     height: 480,
     center: true,
     resizable: false,
@@ -128,6 +131,23 @@ async function updateOpenSSLConfig() {
   return invokeCommand("update_openssl_config");
 }
 
+async function getOpenconnectConfig(): Promise<string> {
+  try {
+    const content = await invokeCommand<string>("openconnect_config");
+    return content;
+  } catch (e) {
+    console.error(e);
+    return "# Failed to read /etc/gpservice/gp.conf";
+  }
+}
+
+async function updateOpenconnectConfig(content: string) {
+  const exitCode = await invokeCommand("update_openconnect_config", { content });
+  if (exitCode) {
+    throw new Error(`Failed to update openconnect config: ${exitCode}`);
+  }
+}
+
 export default {
   openSettings,
   closeSettings,
@@ -137,4 +157,6 @@ export default {
   determineOsVersion,
   getOpenSSLConfig,
   updateOpenSSLConfig,
+  getOpenconnectConfig,
+  updateOpenconnectConfig,
 };
