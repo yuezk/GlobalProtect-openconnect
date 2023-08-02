@@ -4,6 +4,14 @@
 
 ## Development
 
+### Dependencies
+
+The following packages will be required to build depending on your environment:
+
+- Cargo
+- openconnect-devel (containing `openconnect.h`)
+- pnpm
+
 ### Build the service
 
 ```sh
