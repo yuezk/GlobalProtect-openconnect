@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/yuezk/GlobalProtect-openconnect/assets/3297602/9242df9c-217d-42ab-8c21-8f9f69cd4eb5">
+  <img width="300" src="https://github.com/yuezk/GlobalProtect-openconnect/assets/3297602/9242df9c-217d-42ab-8c21-8f9f69cd4eb5">
 </p>
 
 ## Development
@@ -8,9 +8,9 @@
 
 The following packages will be required to build depending on your environment:
 
-- Cargo
-- openconnect-devel (containing `openconnect.h`)
-- pnpm
+- [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html)
+- [pnpm](https://pnpm.io/installation)
+- openconnect-devel (containing `openconnect.h`): `sudo apt install libopenconnect-dev` or `sudo yum install openconnect-devel`
 
 ### Build the service
 
