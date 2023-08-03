@@ -11,6 +11,7 @@ The following packages will be required to build depending on your environment:
 - [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html)
 - [pnpm](https://pnpm.io/installation)
 - openconnect-devel (containing `openconnect.h`): `sudo apt install libopenconnect-dev` or `sudo yum install openconnect-devel`
+- GDK dependencies `sudo apt install libgdk3.0-cil-dev libcairo2-dev libsoup2.4-dev libgdk-pixbuf-2.0-dev libjavascriptcoregtk-4.0-dev libatk1.0-dev libpango1.0-dev libwebkit2gtk-4.0-dev`
 
 ### Build the service
 
