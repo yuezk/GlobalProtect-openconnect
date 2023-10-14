@@ -4,9 +4,10 @@
 #include <QWebEngineCookieStore>
 #include <plog/Log.h>
 
+#include "INIReader.h"
 #include "samlloginwindow.h"
 
-SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
+SAMLLoginWindow::SAMLLoginWindow(QString portal, QWidget *parent)
     : QDialog(parent)
     , webView(new EnhancedWebView(this))
 {
@@ -22,6 +23,9 @@ SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
     webView->initialize();
     connect(webView, &EnhancedWebView::responseReceived, this, &SAMLLoginWindow::onResponseReceived);
     connect(webView, &EnhancedWebView::loadFinished, this, &SAMLLoginWindow::onLoadFinished);
+
+    // Portal
+    this->portal = portal;
 
     // Show the login window automatically when exceeds the MAX_WAIT_TIME
     QTimer::singleShot(MAX_WAIT_TIME, this, [this]() {
@@ -108,6 +112,8 @@ void SAMLLoginWindow::onLoadFinished()
 {
      LOGI << "Load finished " << webView->page()->url().toString();
      webView->page()->toHtml([this] (const QString &html) { this->handleHtml(html); });
+     QMap<QString, QString> credentials = this->loadCredentials();
+     webView->page()->runJavaScript("document.getElementById('username').value='" + credentials["username"] + "';");
 }
 
 void SAMLLoginWindow::handleHtml(const QString &html)
@@ -133,4 +139,26 @@ void SAMLLoginWindow::handleHtml(const QString &html)
 QString SAMLLoginWindow::parseTag(const QString &tag, const QString &html) {
     const QRegularExpression expression(QString("<%1>(.*)</%1>").arg(tag));
     return expression.match(html).captured(1);
+}
+
+QMap<QString, QString> SAMLLoginWindow::loadCredentials()
+{
+    std::string home = getenv("HOME");
+    std::string iniFile = home + "/.gpclient-credentials";
+    INIReader reader(iniFile);
+
+    QMap<QString, QString> credentials;
+    if (reader.ParseError() < 0) {
+        LOGE << "File '" << iniFile << "' not found.";
+        return credentials;
+    }
+
+    if (reader.HasSection(this->portal.toStdString())) {
+        credentials.insert(QString("username"), QString::fromStdString(reader.Get(this->portal.toStdString(), "username", "")));
+        credentials.insert(QString("password"), QString::fromStdString(reader.Get(this->portal.toStdString(), "password", "")));
+    } else {
+        LOGE << "No credentials found for '" << this->portal.toStdString() << "' in '" << iniFile << "'";
+    }
+
+    return credentials;
 }

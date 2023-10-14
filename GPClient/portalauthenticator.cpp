@@ -118,7 +118,7 @@ void PortalAuthenticator::samlAuth()
 {
     LOGI << "Trying to perform SAML login with saml-method " << preloginResponse.samlMethod();
 
-    auto *loginWindow = new SAMLLoginWindow;
+    auto *loginWindow = new SAMLLoginWindow(this->portal);
 
     connect(loginWindow, &SAMLLoginWindow::success, [this, loginWindow](const QMap<QString, QString> samlResult) {
         this->onSAMLLoginSuccess(samlResult);

@@ -12,9 +12,10 @@ class SAMLLoginWindow : public QDialog
     Q_OBJECT
 
 public:
-    explicit SAMLLoginWindow(QWidget *parent = nullptr);
+    explicit SAMLLoginWindow(QString portal, QWidget *parent = nullptr);
 
     void login(const QString samlMethod, const QString samlRequest, const QString preloginUrl);
+    QMap<QString, QString> loadCredentials();
 
 signals:
     void success(QMap<QString, QString> samlResult);
@@ -31,6 +32,7 @@ private:
     bool failed { false };
     EnhancedWebView *webView { nullptr };
     QMap<QString, QString> samlResult;
+    QString portal;
 
     void closeEvent(QCloseEvent *event);
     void handleHtml(const QString &html);
