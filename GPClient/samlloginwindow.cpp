@@ -114,6 +114,7 @@ void SAMLLoginWindow::onLoadFinished()
      webView->page()->toHtml([this] (const QString &html) { this->handleHtml(html); });
      QMap<QString, QString> credentials = this->loadCredentials();
      webView->page()->runJavaScript("document.getElementById('username').value='" + credentials["username"] + "';");
+     webView->page()->runJavaScript("document.getElementById('password').value='" + credentials["password"] + "';");
 }
 
 void SAMLLoginWindow::handleHtml(const QString &html)
