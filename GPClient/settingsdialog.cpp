@@ -40,3 +40,11 @@ void SettingsDialog::setOsVersion(QString osVersion) {
 QString SettingsDialog::osVersion() {
     return ui->osVersionInput->text();
 }
+
+void SettingsDialog::setSamlUserAgent(QString samlUserAgent) {
+    ui->samlUserAgentInput->setText(samlUserAgent);
+}
+
+QString SettingsDialog::samlUserAgent() {
+    return ui->samlUserAgentInput->text();
+}

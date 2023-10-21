@@ -31,7 +31,7 @@ namespace gpclient {
         namespace settings {
 
             extern QSettings *_settings;
-            static const QStringList reservedKeys {"extraArgs", "clientos"};
+            static const QStringList reservedKeys {"extraArgs", "clientos", "samlUserAgent"};
 
             QVariant get(const QString &key, const QVariant &defaultValue = QVariant());
             QStringList get_all(const QString &key, const QVariant &defaultValue = QVariant());
