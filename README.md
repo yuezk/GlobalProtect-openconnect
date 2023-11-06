@@ -77,8 +77,9 @@ sudo dnf install globalprotect-openconnect
 
 - openSUSE Leap
 
-  ```sh
-  sudo zypper ar https://download.opensuse.org/repositories/home:/yuezk/openSUSE_Leap_15.2/home:yuezk.repo
+  ```sh  
+  sudo zypper ar https://download.opensuse.org/repositories/home:/yuezk/15.4/home:yuezk.repo
+  
   sudo zypper ref
   sudo zypper install globalprotect-openconnect
   ```
