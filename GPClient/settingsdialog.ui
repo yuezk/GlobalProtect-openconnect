@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>488</width>
-    <height>220</height>
+    <height>328</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -55,7 +55,17 @@
      </property>
     </widget>
    </item>
-   <item row="3" column="1">
+   <item row="2" column="0">
+    <widget class="QLabel" name="label_3">
+     <property name="text">
+      <string>os-version:</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QLineEdit" name="osVersionInput"/>
+   </item>
+   <item row="4" column="1">
     <widget class="QDialogButtonBox" name="buttonBox">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
@@ -65,13 +75,13 @@
      </property>
     </widget>
    </item>
-   <item row="2" column="1">
-    <widget class="QLineEdit" name="osVersionInput"/>
+   <item row="3" column="1">
+    <widget class="QLineEdit" name="samlUserAgentInput"/>
    </item>
-   <item row="2" column="0">
-    <widget class="QLabel" name="label_3">
+   <item row="3" column="0">
+    <widget class="QLabel" name="label_4">
      <property name="text">
-      <string>os-version:</string>
+      <string>saml-user-agent:</string>
      </property>
     </widget>
    </item>

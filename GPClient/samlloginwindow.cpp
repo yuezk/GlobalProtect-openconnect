@@ -4,7 +4,10 @@
 #include <QWebEngineCookieStore>
 #include <plog/Log.h>
 
+#include "gphelper.h"
 #include "samlloginwindow.h"
+
+using namespace gpclient::helper;
 
 SAMLLoginWindow::SAMLLoginWindow(QWidget *parent)
     : QDialog(parent)
@@ -42,6 +45,9 @@ void SAMLLoginWindow::closeEvent(QCloseEvent *event)
 void SAMLLoginWindow::login(const QString samlMethod, const QString samlRequest, const QString preloginUrl)
 {
     webView->page()->profile()->cookieStore()->deleteSessionCookies();
+    const QString&  ua = settings::get("samlUserAgent", "").toString();
+    if (!ua.isEmpty())
+        webView->page()->profile()->setHttpUserAgent(ua);
 
     if (samlMethod == "POST") {
         webView->setHtml(samlRequest, preloginUrl);

@@ -24,6 +24,9 @@ public:
     void setOsVersion(QString osVersion);
     QString osVersion();
 
+    void setSamlUserAgent(QString samlUserAgent);
+    QString samlUserAgent();
+
 private:
     Ui::SettingsDialog *ui;
 };
