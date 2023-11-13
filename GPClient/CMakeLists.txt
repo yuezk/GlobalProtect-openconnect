@@ -96,6 +96,7 @@ target_link_libraries(gpclient
     Qt5::DBus
     QtSignals
     ${QTKEYCHAIN_LIBRARIES}
+    inih
 )
 
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 8.0 AND CMAKE_BUILD_TYPE STREQUAL Release)

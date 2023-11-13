@@ -151,7 +151,7 @@ void GatewayAuthenticator::samlAuth(QString samlMethod, QString samlRequest, QSt
 {
     LOGI << "Trying to perform SAML login with saml-method " << samlMethod;
 
-    auto *loginWindow = new SAMLLoginWindow;
+    auto *loginWindow = new SAMLLoginWindow(gateway);
 
     connect(loginWindow, &SAMLLoginWindow::success, [this, loginWindow](const QMap<QString, QString> &samlResult) {
         this->onSAMLLoginSuccess(samlResult);
