@@ -1,0 +1,10 @@
+{
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "--privileged",
+    "--cap-add=NET_ADMIN",
+    "--device=/dev/net/tun"
+  ]
+}

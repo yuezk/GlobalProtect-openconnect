@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<prelogin-response>
+    <status>Success</status>
+    <ccusername></ccusername>
+    <autosubmit>false</autosubmit>
+    <msg></msg>
+    <newmsg></newmsg>
+    <authentication-message>Enter login credentials</authentication-message>
+    <username-label>Username</username-label>
+    <password-label>Password</password-label>
+    <panos-version>1</panos-version>
+    <saml-default-browser>yes</saml-default-browser>
+
+    <cas-auth></cas-auth>
+    <saml-auth-status>0</saml-auth-status>
+    <saml-auth-method>REDIRECT</saml-auth-method>
+    <saml-request-timeout>600</saml-request-timeout>
+    <saml-request-id>0</saml-request-id>
+    <saml-request>U0FNTFJlcXVlc3Q9eHh4</saml-request>
+    <auth-api>no</auth-api>
+    <region>CN</region>
+</prelogin-response>

@@ -1,0 +1,32 @@
+[package]
+name = "gpapi"
+version.workspace = true
+edition.workspace = true
+license = "MIT"
+
+[dependencies]
+anyhow.workspace = true
+base64.workspace = true
+log.workspace = true
+reqwest.workspace = true
+roxmltree.workspace = true
+serde.workspace = true
+specta.workspace = true
+specta-macros.workspace = true
+urlencoding.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+whoami.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+redact-engine.workspace = true
+url.workspace = true
+regex.workspace = true
+dotenvy_macro.workspace = true
+users.workspace = true
+
+tauri = { workspace = true, optional = true }
+
+[features]
+tauri = ["dep:tauri"]

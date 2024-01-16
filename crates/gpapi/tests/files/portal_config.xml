@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<policy>
+    <portal-name>vpn.example.com</portal-name>
+    <portal-config-version>4100</portal-config-version>
+    <version>6.0.1-19 </version>
+    <client-role>global-protect-full</client-role>
+    <agent-user-override-key>****</agent-user-override-key>
+    <root-ca>
+        <entry name="DigiCert Global Root CA">
+            <cert>
+                -----BEGIN CERTIFICATE-----
+                -----END CERTIFICATE-----
+            </cert>
+            <install-in-cert-store>yes</install-in-cert-store>
+        </entry>
+        <entry name="Thawte RSA CA 2018">
+            <cert>
+                -----BEGIN CERTIFICATE-----
+                -----END CERTIFICATE-----
+            </cert>
+            <install-in-cert-store>yes</install-in-cert-store>
+        </entry>
+        <entry name="Temp_VPN_Root_Certificate">
+            <cert>
+                -----BEGIN CERTIFICATE-----
+                -----END CERTIFICATE-----
+            </cert>
+            <install-in-cert-store>no</install-in-cert-store>
+        </entry>
+    </root-ca>
+    <connect-method>on-demand</connect-method>
+    <pre-logon-then-on-demand>yes</pre-logon-then-on-demand>
+    <refresh-config>yes</refresh-config>
+    <refresh-config-interval>24</refresh-config-interval>
+    <authentication-modifier>
+        <none />
+    </authentication-modifier>
+    <authentication-override>
+        <accept-cookie>yes</accept-cookie>
+        <generate-cookie>yes</generate-cookie>
+        <cookie-lifetime>
+            <lifetime-in-days>365</lifetime-in-days>
+        </cookie-lifetime>
+        <cookie-encrypt-decrypt-cert>vpn.example.com</cookie-encrypt-decrypt-cert>
+    </authentication-override>
+    <use-sso>yes</use-sso>
+    <ip-address></ip-address>
+    <host></host>
+    <gateways>
+        <cutoff-time>5</cutoff-time>
+        <external>
+            <list>
+                <entry name="xxx.xxx.xxx.xxx">
+                    <priority-rule>
+                        <entry name="Any">
+                            <priority>1</priority>
+                        </entry>
+                    </priority-rule>
+                    <priority>1</priority>
+                    <description>vpn_gateway</description>
+                </entry>
+            </list>
+        </external>
+    </gateways>
+    <gateways-v6>
+        <cutoff-time>5</cutoff-time>
+        <external>
+            <list>
+                <entry name="vpn_gateway">
+                    <ipv4>xxx.xxx.xxx.xxx</ipv4>
+                    <priority-rule>
+                        <entry name="Any">
+                            <priority>1</priority>
+                        </entry>
+                    </priority-rule>
+                    <priority>1</priority>
+                </entry>
+            </list>
+        </external>
+    </gateways-v6>
+    <agent-ui>
+        <can-save-password>yes</can-save-password>
+        <passcode></passcode>
+        <uninstall-passwd></uninstall-passwd>
+        <agent-user-override-timeout>0</agent-user-override-timeout>
+        <max-agent-user-overrides>0</max-agent-user-overrides>
+        <help-page></help-page>
+        <help-page-2></help-page-2>
+        <welcome-page>
+            <display>no</display>
+            <page></page>
+        </welcome-page>
+        <agent-user-override>allowed</agent-user-override>
+        <enable-advanced-view>yes</enable-advanced-view>
+        <enable-do-not-display-this-welcome-page-again>yes</enable-do-not-display-this-welcome-page-again>
+        <can-change-portal>yes</can-change-portal>
+        <show-agent-icon>yes</show-agent-icon>
+        <password-expiry-message></password-expiry-message>
+        <init-panel>no</init-panel>
+        <user-input-on-top>no</user-input-on-top>
+    </agent-ui>
+    <hip-collection>
+        <hip-report-interval>3600</hip-report-interval>
+        <max-wait-time>20</max-wait-time>
+        <collect-hip-data>yes</collect-hip-data>
+        <default>
+            <category>
+                <member>antivirus</member>
+                <member>anti-spyware</member>
+                <member>host-info</member>
+                <member>data-loss-prevention</member>
+                <member>patch-management</member>
+                <member>firewall</member>
+                <member>anti-malware</member>
+                <member>disk-backup</member>
+                <member>disk-encryption</member>
+            </category>
+        </default>
+    </hip-collection>
+    <agent-config>
+        <save-user-credentials>1</save-user-credentials>
+        <portal-2fa>no</portal-2fa>
+        <internal-gateway-2fa>no</internal-gateway-2fa>
+        <auto-discovery-external-gateway-2fa>no</auto-discovery-external-gateway-2fa>
+        <manual-only-gateway-2fa>no</manual-only-gateway-2fa>
+        <disconnect-reasons></disconnect-reasons>
+        <uninstall>allowed</uninstall>
+        <client-upgrade>prompt</client-upgrade>
+        <enable-signout>yes</enable-signout>
+        <use-sso-pin>no</use-sso-pin>
+        <use-sso-macos>no</use-sso-macos>
+        <logout-remove-sso>yes</logout-remove-sso>
+        <krb-auth-fail-fallback>yes</krb-auth-fail-fallback>
+        <default-browser>no</default-browser>
+        <retry-tunnel>30</retry-tunnel>
+        <retry-timeout>5</retry-timeout>
+        <traffic-enforcement>no</traffic-enforcement>
+        <enforce-globalprotect>no</enforce-globalprotect>
+        <enforcer-exception-list />
+        <enforcer-exception-list-domain />
+        <captive-portal-exception-timeout>0</captive-portal-exception-timeout>
+        <captive-portal-login-url></captive-portal-login-url>
+        <traffic-blocking-notification-delay>15</traffic-blocking-notification-delay>
+        <display-traffic-blocking-notification-msg>yes</display-traffic-blocking-notification-msg>
+        <traffic-blocking-notification-msg>&lt;div style=&quot;font-family:'Helvetica
+            Neue';&quot;&gt;&lt;h1 style=&quot;color:red;text-align:center; margin: 0; font-size:
+            30px;&quot;&gt;Notice&lt;/h1&gt;&lt;p style=&quot;margin: 0;font-size: 15px;
+            line-height: 1.2em;&quot;&gt;To access the network, you must first connect to
+            GlobalProtect.&lt;/p&gt;&lt;/div&gt;</traffic-blocking-notification-msg>
+        <allow-traffic-blocking-notification-dismissal>yes</allow-traffic-blocking-notification-dismissal>
+        <display-captive-portal-detection-msg>no</display-captive-portal-detection-msg>
+        <captive-portal-detection-msg>&lt;div style=&quot;font-family:'Helvetica
+            Neue';&quot;&gt;&lt;h1 style=&quot;color:red;text-align:center; margin: 0; font-size:
+            30px;&quot;&gt;Captive Portal Detected&lt;/h1&gt;&lt;p style=&quot;margin: 0; font-size:
+            15px; line-height: 1.2em;&quot;&gt;GlobalProtect has temporarily permitted network
+            access for you to connect to the Internet. Follow instructions from your internet
+            provider.&lt;/p&gt;&lt;p style=&quot;margin: 0; font-size: 15px; line-height:
+            1.2em;&quot;&gt;If you let the connection time out, open GlobalProtect and click Connect
+            to try again.&lt;/p&gt;&lt;/div&gt;</captive-portal-detection-msg>
+        <captive-portal-notification-delay>5</captive-portal-notification-delay>
+        <certificate-store-lookup>user-and-machine</certificate-store-lookup>
+        <scep-certificate-renewal-period>7</scep-certificate-renewal-period>
+        <ext-key-usage-oid-for-client-cert></ext-key-usage-oid-for-client-cert>
+        <retain-connection-smartcard-removal>yes</retain-connection-smartcard-removal>
+        <user-accept-terms-before-creating-tunnel>no</user-accept-terms-before-creating-tunnel>
+        <rediscover-network>yes</rediscover-network>
+        <resubmit-host-info>yes</resubmit-host-info>
+        <can-continue-if-portal-cert-invalid>yes</can-continue-if-portal-cert-invalid>
+        <user-switch-tunnel-rename-timeout>0</user-switch-tunnel-rename-timeout>
+        <pre-logon-tunnel-rename-timeout>0</pre-logon-tunnel-rename-timeout>
+        <preserve-tunnel-upon-user-logoff-timeout>0</preserve-tunnel-upon-user-logoff-timeout>
+        <ipsec-failover-ssl>0</ipsec-failover-ssl>
+        <display-tunnel-fallback-notification>yes</display-tunnel-fallback-notification>
+        <ssl-only-selection>0</ssl-only-selection>
+        <tunnel-mtu>1400</tunnel-mtu>
+        <max-internal-gateway-connection-attempts>0</max-internal-gateway-connection-attempts>
+        <adv-internal-host-detection>no</adv-internal-host-detection>
+        <portal-timeout>30</portal-timeout>
+        <connect-timeout>60</connect-timeout>
+        <receive-timeout>30</receive-timeout>
+        <split-tunnel-option>network-traffic</split-tunnel-option>
+        <enforce-dns>yes</enforce-dns>
+        <append-local-search-domain>no</append-local-search-domain>
+        <flush-dns>no</flush-dns>
+        <auto-proxy-pac></auto-proxy-pac>
+        <proxy-multiple-autodetect>no</proxy-multiple-autodetect>
+        <use-proxy>yes</use-proxy>
+        <wsc-autodetect>yes</wsc-autodetect>
+        <mfa-enabled>no</mfa-enabled>
+        <mfa-listening-port>4501</mfa-listening-port>
+        <mfa-trusted-host-list />
+        <mfa-notification-msg>You have attempted to access a protected resource that requires
+            additional authentication. Proceed to authenticate at</mfa-notification-msg>
+        <mfa-prompt-suppress-time>0</mfa-prompt-suppress-time>
+        <ipv6-preferred>yes</ipv6-preferred>
+        <change-password-message></change-password-message>
+        <log-gateway>no</log-gateway>
+        <cdl-log>no</cdl-log>
+        <dem-notification>yes</dem-notification>
+        <diagnostic-servers />
+        <dem-agent>not-install</dem-agent>
+        <quarantine-add-message>Access to the network from this device has been restricted as per
+            your organization's security policy. Please contact your IT Administrator.</quarantine-add-message>
+        <quarantine-remove-message>Access to the network from this device has been restored as per
+            your organization's security policy.</quarantine-remove-message>
+
+    </agent-config>
+    <user-email>user@example.com</user-email>
+    <portal-userauthcookie>xxxxxx</portal-userauthcookie>
+    <portal-prelogonuserauthcookie>xxxxxx</portal-prelogonuserauthcookie>
+    <config-digest>2d8e997765a2f59cbf80284b2f2fbd38</config-digest>
+</policy>

@@ -1,0 +1,8 @@
+max_width = 100
+hard_tabs = false
+tab_spaces = 2
+newline_style = "Unix"
+reorder_imports = true
+reorder_modules = true
+edition = "2021"
+merge_derives = true

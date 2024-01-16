@@ -1,0 +1,52 @@
+[workspace]
+resolver = "2"
+
+members = ["crates/*", "apps/gpclient", "apps/gpservice", "apps/gpauth"]
+
+[workspace.package]
+version = "2.0.0-beta.1"
+authors = ["Kevin Yue <k3vinyue@gmail.com>"]
+homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
+edition = "2021"
+license = "GPL-3.0"
+
+[workspace.dependencies]
+anyhow = "1.0"
+base64 = "0.21"
+clap = { version = "4.4.2", features = ["derive"] }
+ctrlc = "3.4"
+directories = "5.0"
+env_logger = "0.10"
+is_executable = "1.0"
+log = "0.4"
+regex = "1"
+reqwest = { version = "0.11", features = ["native-tls-vendored", "json"] }
+roxmltree = "0.18"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sysinfo = "0.29"
+tempfile = "3.8"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+url = "2.4"
+urlencoding = "2.1.3"
+axum = "0.7"
+futures = "0.3"
+futures-util = "0.3"
+tokio-tungstenite = "0.20.1"
+specta = "=2.0.0-rc.1"
+specta-macros = "=2.0.0-rc.1"
+users = "0.11"
+whoami = "1"
+tauri = { version = "1.5" }
+thiserror = "1"
+redact-engine = "0.1"
+dotenvy_macro = "0.15"
+compile-time = "0.2"
+
+[profile.release]
+opt-level = 'z'   # Optimize for size
+lto = true        # Enable link-time optimization
+codegen-units = 1 # Reduce number of codegen units to increase optimizations
+panic = 'abort'   # Abort on panic
+strip = true      # Strip symbols from binary*
