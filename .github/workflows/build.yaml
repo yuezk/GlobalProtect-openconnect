@@ -1,10 +1,15 @@
 name: Build GPGUI
 on:
   push:
+    paths-ignore:
+      - LICENSE
+      - "*.md"
+      - .vscode
+      - .devcontainer
     branches:
       - main
-    tags:
-      - v*.*.*
+    # tags:
+    #   - v*.*.*
 jobs:
   # Include arm64 if ref is a tag
   setup-matrix:
