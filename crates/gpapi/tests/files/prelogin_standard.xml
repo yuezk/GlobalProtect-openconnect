@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<prelogin-response>
+    <status>Success</status>
+    <ccusername></ccusername>
+    <autosubmit>false</autosubmit>
+    <msg></msg>
+    <newmsg></newmsg>
+    <authentication-message>Enter login credentials</authentication-message>
+    <username-label>Username</username-label>
+    <password-label>Password</password-label>
+    <panos-version>1</panos-version>
+    <saml-default-browser>yes</saml-default-browser>
+    <auth-api>no</auth-api>
+    <region>US</region>
+</prelogin-response>

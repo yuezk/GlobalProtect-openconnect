@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<jnlp>
+    <application-desc>
+        <argument>(null)</argument>
+        <argument>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</argument>
+        <argument>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</argument>
+        <argument>XXX-GP-Gateway-N</argument>
+        <argument>user</argument>
+        <argument>AD_Authentication</argument>
+        <argument>vsys1</argument>
+        <argument>corp.example.com</argument>
+        <argument>(null)</argument>
+        <argument></argument>
+        <argument></argument>
+        <argument></argument>
+        <argument>tunnel</argument>
+        <argument>-1</argument>
+        <argument>4100</argument>
+        <argument></argument>
+        <argument>xxxxxx</argument>
+        <argument>aaaaaa</argument>
+        <argument></argument>
+        <argument>4</argument>
+        <argument>unknown</argument>
+        <argument></argument>
+    </application-desc>
+</jnlp>
