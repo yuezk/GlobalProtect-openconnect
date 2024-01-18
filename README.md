@@ -1,194 +1,113 @@
 # GlobalProtect-openconnect
-A GlobalProtect VPN client (GUI) for Linux based on Openconnect and built with Qt5, supports SAML auth mode, inspired by [gp-saml-gui](https://github.com/dlenski/gp-saml-gui).
+
+A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method. Inspired by [gp-saml-gui](https://github.com/dlenski/gp-saml-gui).
 
 <p align="center">
-  <img src="https://user-images.githubusercontent.com/3297602/133869036-5c02b0d9-c2d9-4f87-8c81-e44f68cfd6ac.png">
+  <img width="300" src="https://github.com/yuezk/GlobalProtect-openconnect/assets/3297602/9242df9c-217d-42ab-8c21-8f9f69cd4eb5">
 </p>
-
-<a href="https://paypal.me/zongkun" target="_blank"><img src="https://cdn.jsdelivr.net/gh/everdrone/coolbadge@5ea5937cabca5ecbfc45d6b30592bd81f219bc8d/badges/Paypal/Coffee/Blue/Small.png" alt="Buy me a coffee via Paypal" style="height: 32px; width: 268px;" ></a>
-<a href="https://ko-fi.com/M4M75PYKZ" target="_blank"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" style="height: 32px; width: 238px;"></a>
-<a href="https://www.buymeacoffee.com/yuezk" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 32px; width: 114px;" ></a>
-
 
 ## Features
 
-- Similar user experience as the official client in macOS.
-- Supports both SAML and non-SAML authentication modes.
-- Supports automatically selecting the preferred gateway from the multiple gateways.
-- Supports switching gateway from the system tray menu manually.
+- [x] Better Linux support
+- [x] Support both CLI and GUI
+- [x] Support both SSO and non-SSO authentication
+- [x] Support multiple portals
+- [x] Support gateway selection
+- [x] Support auto-connect on startup
+- [x] Support system tray icon
 
+## Usage
 
-## Install
+### CLI
 
-|OS|Stable version | Development version|
-|---|--------------|--------------------|
-|Linux Mint, Ubuntu 18.04 or later|[ppa:yuezk/globalprotect-openconnect](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect)|[ppa:yuezk/globalprotect-openconnect-snapshot](https://launchpad.net/~yuezk/+archive/ubuntu/globalprotect-openconnect-snapshot)|
-|Arch, Manjaro|[globalprotect-openconnect](https://archlinux.org/packages/extra/x86_64/globalprotect-openconnect/)|[AUR: globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)|
-|Fedora|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|[copr: yuezk/globalprotect-openconnect](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/)|
-|openSUSE, CentOS 8|[OBS: globalprotect-openconnect](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect)|[OBS: globalprotect-openconnect-snapshot](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect-snapshot)|
+The CLI version is always free and open source in this repo. It has almost the same features as the GUI version.
 
-Add the repository in the above table and install it with your favorite package manager tool.
+```
+Usage: gpclient [OPTIONS] <COMMAND>
 
-[![Arch package](https://repology.org/badge/version-for-repo/arch/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![AUR package](https://repology.org/badge/version-for-repo/aur/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![Manjaro Stable package](https://repology.org/badge/version-for-repo/manjaro_stable/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![Manjaro Testing package](https://repology.org/badge/version-for-repo/manjaro_testing/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![Manjaro Unstable package](https://repology.org/badge/version-for-repo/manjaro_unstable/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
-[![Parabola package](https://repology.org/badge/version-for-repo/parabola/globalprotect-openconnect.svg)](https://repology.org/project/globalprotect-openconnect/versions)
+Commands:
+  connect     Connect to a portal server
+  disconnect  Disconnect from the server
+  launch-gui  Launch the GUI
+  help        Print this message or the help of the given subcommand(s)
 
-### Linux Mint, Ubuntu 18.04 or later
+Options:
+      --fix-openssl  Get around the OpenSSL `unsafe legacy renegotiation` error
+  -h, --help         Print help
+  -V, --version      Print version
+```
 
-```sh
+See `gpclient -h` for help.
+
+### GUI
+
+The GUI version is also available after you installed it. You can launch it from the application menu or run `gpclient launch-gui` in the terminal.
+
+> [!Note]
+>
+> The GUI version is partially open source. Its background service is open sourced in this repo as [gpservice](./apps/gpservice/). The GUI part is a wrapper of the background service, which is not open sourced.
+
+## Installation
+
+### Debian/Ubuntu based distributions
+
+#### Install from PPA
+
+```
 sudo add-apt-repository ppa:yuezk/globalprotect-openconnect
 sudo apt-get update
 sudo apt-get install globalprotect-openconnect
 ```
 
-> For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
+#### Install from deb package
+
+Download the latest deb package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Then install it with `dpkg`:
+
+```bash
+sudo dpkg -i globalprotect-openconnect_*.deb
+```
 
 ### Arch Linux / Manjaro
 
-```sh
-sudo pacman -S globalprotect-openconnect
+#### Install from AUR
+
+Install from AUR: [globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)
+
+#### Install from package
+
+Download the latest package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Then install it with `pacman`:
+
+```bash
+sudo pacman -U globalprotect-openconnect-*.pkg.tar.zst
 ```
 
-### AUR snapshot version
+### Fedora/OpenSUSE/CentOS/RHEL
 
-```sh
-yay -S globalprotect-openconnect-git
+#### Install from COPR
+
+The package is available on [COPR](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/) for various RPM-based distributions. You can install it with the following commands:
+
 ```
-
-### Fedora
-
-```sh
 sudo dnf copr enable yuezk/globalprotect-openconnect
 sudo dnf install globalprotect-openconnect
 ```
 
-### openSUSE
+#### Install from OBS
 
-- openSUSE Tumbleweed
-  ```sh
-  sudo zypper ar https://download.opensuse.org/repositories/home:/yuezk/openSUSE_Tumbleweed/home:yuezk.repo
-  sudo zypper ref
-  sudo zypper install globalprotect-openconnect
-  ```
+The package is also available on [OBS](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect) for various RPM-based distributions. You can follow the instructions [on this page](https://software.opensuse.org//download.html?project=home%3Ayuezk&package=globalprotect-openconnect) to install it.
 
-- openSUSE Leap
+#### Install from RPM package
 
-  ```sh
-  sudo zypper ar https://download.opensuse.org/repositories/home:/yuezk/15.4/home:yuezk.repo
+Download the latest RPM package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
 
-  sudo zypper ref
-  sudo zypper install globalprotect-openconnect
-  ```
-### CentOS 8
+### Other distributions
 
-1. Add the repository: `https://download.opensuse.org/repositories/home:/yuezk/CentOS_8/home:yuezk.repo`
-1. Install `globalprotect-openconnect`
+The project depends on `openconnect`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`. You can install them first and then download the latest binary release (i.e., `*.bin.tar.gz`) from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
 
+### Install the Old Version (v1.4.9)
 
-## Build & Install from source code
-
-Clone this repo with:
-
-```sh
-git clone https://github.com/yuezk/GlobalProtect-openconnect.git
-cd GlobalProtect-openconnect
-```
-
-### MX Linux
-The following instructions are for **MX-21.2.1_x64 KDE**.
-
-```sh
-sudo apt install qttools5-dev libsecret-1-dev libqt5keychain1
-./scripts/install-debian.sh
-```
-
-### Ubuntu/Mint
-
-> **⚠️ REQUIRED for Ubuntu 18.04 ⚠️**
->
-> Add this [dwmw2/openconnect](https://launchpad.net/~dwmw2/+archive/ubuntu/openconnect) PPA first to install the latest openconnect.
->
-> ```sh
-> sudo add-apt-repository ppa:dwmw2/openconnect
-> sudo apt-get update
-> ```
-
-Build and install with:
-
-```sh
-./scripts/install-ubuntu.sh
-```
-### openSUSE
-
-Build and install with:
-
-```sh
-./scripts/install-opensuse.sh
-```
-
-### Fedora
-
-Build and install with:
-
-```sh
-./scripts/install-fedora.sh
-```
-
-### Other Linux
-
-Install the Qt5 dependencies and OpenConnect:
-
-- QtCore
-- QtWebEngine
-- QtWebSockets
-- QtDBus
-- openconnect v8.x
-- qtkeychain
-
-...then build and install with:
-
-```sh
-./scripts/install.sh
-```
-
-
-### NixOS
-  In `configuration.nix`:
-
-  ```
-  services.globalprotect = {
-    enable = true;
-    # if you need a Host Integrity Protection report
-    csdWrapper = "${pkgs.openconnect}/libexec/openconnect/hipreport.sh";
-  };
-
-  environment.systemPackages = [ globalprotect-openconnect ];
-  ```
-
-## Run
-
-Once the software is installed, you can run `gpclient` to start the UI.
-
-## Passing the Custom Parameters to `OpenConnect` CLI
-
-See [Configuration](https://github.com/yuezk/GlobalProtect-openconnect/wiki/Configuration)
-
-## Display the system tray icon on Gnome 40
-
-Install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension and you will see the system try icon (Restart the system after the installation).
-
-<p align="center">
-  <img src="https://user-images.githubusercontent.com/3297602/130831022-b93492fd-46dd-4a8e-94a4-13b5747120b7.png" />
-<p>
-
-
-## Troubleshooting
-
-Run `gpclient` in the Terminal and collect the logs.
+The 1.x version is still available on the [1.x](https://github.com/yuezk/GlobalProtect-openconnect/tree/1.x) branch, you can build it from the source code by following the instructions in the `README.md` file.
 
 ## [License](./LICENSE)
+
 GPLv3
