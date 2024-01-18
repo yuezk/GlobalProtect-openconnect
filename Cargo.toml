@@ -36,7 +36,7 @@ futures-util = "0.3"
 tokio-tungstenite = "0.20.1"
 specta = "=2.0.0-rc.1"
 specta-macros = "=2.0.0-rc.1"
-users = "0.11"
+uzers = "0.11"
 whoami = "1"
 tauri = { version = "1.5" }
 thiserror = "1"

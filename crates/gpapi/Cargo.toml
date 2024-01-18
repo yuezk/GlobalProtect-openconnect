@@ -24,7 +24,7 @@ redact-engine.workspace = true
 url.workspace = true
 regex.workspace = true
 dotenvy_macro.workspace = true
-users.workspace = true
+uzers.workspace = true
 
 tauri = { workspace = true, optional = true }
 

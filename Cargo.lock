@@ -1423,7 +1423,7 @@ dependencies = [
 
 [[package]]
 name = "gpapi"
-version = "2.0.0-beta.1"
+version = "2.0.0-beta2"
 dependencies = [
  "anyhow",
  "base64 0.21.5",
@@ -1444,13 +1444,13 @@ dependencies = [
  "tokio",
  "url",
  "urlencoding",
- "users",
+ "uzers",
  "whoami",
 ]
 
 [[package]]
 name = "gpauth"
-version = "2.0.0-beta.1"
+version = "2.0.0-beta2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1470,7 +1470,7 @@ dependencies = [
 
 [[package]]
 name = "gpclient"
-version = "2.0.0-beta.1"
+version = "2.0.0-beta2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1491,7 +1491,7 @@ dependencies = [
 
 [[package]]
 name = "gpservice"
-version = "2.0.0-beta.1"
+version = "2.0.0-beta2"
 dependencies = [
  "anyhow",
  "axum",
@@ -2446,7 +2446,7 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openconnect"
-version = "2.0.0-beta.1"
+version = "2.0.0-beta2"
 dependencies = [
  "cc",
  "is_executable",
@@ -4379,16 +4379,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
-name = "users"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24cc0f6d6f267b73e5a2cadf007ba8f9bc39c6a6f9666f8cf25ea809a153b032"
-dependencies = [
- "libc",
- "log",
-]
-
-[[package]]
 name = "utf-8"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4407,6 +4397,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e395fcf16a7a3d8127ec99782007af141946b4795001f876d54fb0d55978560"
 dependencies = [
  "getrandom 0.2.11",
+]
+
+[[package]]
+name = "uzers"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76d283dc7e8c901e79e32d077866eaf599156cbf427fffa8289aecc52c5c3f63"
+dependencies = [
+ "libc",
+ "log",
 ]
 
 [[package]]
