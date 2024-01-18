@@ -18,8 +18,8 @@ use tokio_util::sync::CancellationToken;
 use webkit2gtk::{
   gio::Cancellable,
   glib::{GString, TimeSpan},
-  LoadEvent, URIResponse, URIResponseExt, WebContextExt, WebResource, WebResourceExt, WebView,
-  WebViewExt, WebsiteDataManagerExtManual, WebsiteDataTypes,
+  LoadEvent, SettingsExt, URIResponse, URIResponseExt, WebContextExt, WebResource, WebResourceExt,
+  WebView, WebViewExt, WebsiteDataManagerExtManual, WebsiteDataTypes,
 };
 
 enum AuthDataError {
@@ -76,7 +76,7 @@ impl<'a> AuthWindow<'a> {
 
     let window = Window::builder(&self.app_handle, "auth_window", WindowUrl::default())
       .title("GlobalProtect Login")
-      .user_agent(self.user_agent)
+      // .user_agent(self.user_agent)
       .focused(true)
       .visible(false)
       .center()
@@ -127,6 +127,11 @@ impl<'a> AuthWindow<'a> {
     let raise_window_cancel_token_clone = Arc::clone(&raise_window_cancel_token);
     window.with_webview(move |wv| {
       let wv = wv.inner();
+
+      if let Some(settings) = wv.settings() {
+        let ua = settings.user_agent().unwrap_or("".into());
+        info!("Auth window user agent: {}", ua);
+      }
 
       // Load the initial SAML request
       load_saml_request(&wv, &saml_request);
