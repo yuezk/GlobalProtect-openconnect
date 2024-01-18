@@ -6,8 +6,8 @@ on:
       - "*.md"
       - .vscode
       - .devcontainer
-    branches:
-      - main
+    # branches:
+      # - main
     # tags:
     #   - v*.*.*
 jobs:
