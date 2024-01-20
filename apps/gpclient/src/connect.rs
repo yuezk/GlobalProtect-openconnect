@@ -2,9 +2,10 @@ use std::{fs, sync::Arc};
 
 use clap::Args;
 use gpapi::{
+  clap::args::Os,
   credential::{Credential, PasswordCredential},
   gateway::gateway_login,
-  gp_params::GpParams,
+  gp_params::{ClientOs, GpParams},
   portal::{prelogin, retrieve_config, Prelogin},
   process::auth_launcher::SamlAuthLauncher,
   utils::{self, shutdown_signal},
@@ -36,6 +37,10 @@ pub(crate) struct ConnectArgs {
   script: Option<String>,
   #[arg(long, default_value = GP_USER_AGENT, help = "The user agent to use")]
   user_agent: String,
+  #[arg(long, default_value = "Linux")]
+  os: Os,
+  #[arg(long)]
+  os_version: Option<String>,
   #[arg(long, help = "The HiDPI mode, useful for high resolution screens")]
   hidpi: bool,
   #[arg(long, help = "Do not reuse the remembered authentication cookie")]
@@ -57,9 +62,11 @@ impl<'a> ConnectHandler<'a> {
 
     let gp_params = GpParams::builder()
       .user_agent(&self.args.user_agent)
+      .client_os(ClientOs::from(&self.args.os))
+      .os_version(self.args.os_version.clone())
       .build();
 
-    let prelogin = prelogin(&portal, &self.args.user_agent).await?;
+    let prelogin = prelogin(&portal, &gp_params).await?;
     let portal_credential = self.obtain_portal_credential(&prelogin).await?;
     let mut portal_config = retrieve_config(&portal, &portal_credential, &gp_params).await?;
 
@@ -114,8 +121,10 @@ impl<'a> ConnectHandler<'a> {
     match prelogin {
       Prelogin::Saml(prelogin) => {
         SamlAuthLauncher::new(&self.args.server)
-          .user_agent(&self.args.user_agent)
           .saml_request(prelogin.saml_request())
+          .user_agent(&self.args.user_agent)
+          .os(self.args.os.as_str())
+          .os_version(self.args.os_version.as_deref())
           .hidpi(self.args.hidpi)
           .fix_openssl(self.fix_openssl)
           .clean(self.args.clean)

@@ -1428,6 +1428,7 @@ dependencies = [
  "anyhow",
  "base64 0.21.5",
  "chacha20poly1305",
+ "clap",
  "dotenvy_macro",
  "log",
  "redact-engine",

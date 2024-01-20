@@ -7,23 +7,32 @@ use crate::GP_USER_AGENT;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
 pub enum ClientOs {
-  Linux,
   #[default]
+  Linux,
   Windows,
   Mac,
 }
 
-impl From<&ClientOs> for &str {
-  fn from(os: &ClientOs) -> Self {
+impl From<&str> for ClientOs {
+  fn from(os: &str) -> Self {
     match os {
-      ClientOs::Linux => "Linux",
-      ClientOs::Windows => "Windows",
-      ClientOs::Mac => "Mac",
+      "Linux" => ClientOs::Linux,
+      "Windows" => ClientOs::Windows,
+      "Mac" => ClientOs::Mac,
+      _ => ClientOs::Linux,
     }
   }
 }
 
 impl ClientOs {
+  pub fn as_str(&self) -> &str {
+    match self {
+      ClientOs::Linux => "Linux",
+      ClientOs::Windows => "Windows",
+      ClientOs::Mac => "Mac",
+    }
+  }
+
   pub fn to_openconnect_os(&self) -> &str {
     match self {
       ClientOs::Linux => "linux",
@@ -54,13 +63,13 @@ impl GpParams {
   pub(crate) fn computer(&self) -> &str {
     match self.computer {
       Some(ref computer) => computer,
-      None => (&self.client_os).into()
+      None => self.client_os.as_str(),
     }
   }
 
   pub(crate) fn to_params(&self) -> HashMap<&str, &str> {
     let mut params: HashMap<&str, &str> = HashMap::new();
-    let client_os: &str = (&self.client_os).into();
+    let client_os = (&self.client_os).as_str();
 
     // Common params
     params.insert("prot", "https:");
@@ -120,13 +129,13 @@ impl GpParamsBuilder {
     self
   }
 
-  pub fn os_version(&mut self, os_version: &str) -> &mut Self {
-    self.os_version = Some(os_version.to_string());
+  pub fn os_version<T: Into<Option<String>>>(&mut self, os_version: T) -> &mut Self {
+    self.os_version = os_version.into();
     self
   }
 
-  pub fn client_version(&mut self, client_version: &str) -> &mut Self {
-    self.client_version = Some(client_version.to_string());
+  pub fn client_version<T: Into<Option<String>>>(&mut self, client_version: T) -> &mut Self {
+    self.client_version = client_version.into();
     self
   }
 

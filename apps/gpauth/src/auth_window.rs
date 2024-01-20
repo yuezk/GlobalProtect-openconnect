@@ -7,6 +7,7 @@ use std::{
 use anyhow::bail;
 use gpapi::{
   auth::SamlAuthData,
+  gp_params::GpParams,
   portal::{prelogin, Prelogin},
   utils::{redact::redact_uri, window::WindowExt},
 };
@@ -37,6 +38,7 @@ pub(crate) struct AuthWindow<'a> {
   server: &'a str,
   saml_request: &'a str,
   user_agent: &'a str,
+  gp_params: Option<GpParams>,
   clean: bool,
 }
 
@@ -47,6 +49,7 @@ impl<'a> AuthWindow<'a> {
       server: "",
       saml_request: "",
       user_agent: "",
+      gp_params: None,
       clean: false,
     }
   }
@@ -63,6 +66,11 @@ impl<'a> AuthWindow<'a> {
 
   pub fn user_agent(mut self, user_agent: &'a str) -> Self {
     self.user_agent = user_agent;
+    self
+  }
+
+  pub fn gp_params(mut self, gp_params: GpParams) -> Self {
+    self.gp_params.replace(gp_params);
     self
   }
 
@@ -187,7 +195,7 @@ impl<'a> AuthWindow<'a> {
     })?;
 
     let portal = self.server.to_string();
-    let user_agent = self.user_agent.to_string();
+    let gp_params = self.gp_params.as_ref().unwrap();
 
     loop {
       if let Some(auth_result) = auth_result_rx.recv().await {
@@ -237,7 +245,7 @@ impl<'a> AuthWindow<'a> {
               );
             })?;
 
-            let saml_request = portal_prelogin(&portal, &user_agent).await?;
+            let saml_request = portal_prelogin(&portal, gp_params).await?;
             window.with_webview(move |wv| {
               let wv = wv.inner();
               load_saml_request(&wv, &saml_request);
@@ -258,9 +266,10 @@ fn raise_window(window: &Arc<Window>) {
   }
 }
 
-pub(crate) async fn portal_prelogin(portal: &str, user_agent: &str) -> anyhow::Result<String> {
+pub(crate) async fn portal_prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<String> {
   info!("Portal prelogin...");
-  match prelogin(portal, user_agent).await? {
+
+  match prelogin(portal, gp_params).await? {
     Prelogin::Saml(prelogin) => Ok(prelogin.saml_request().to_string()),
     Prelogin::Standard(_) => Err(anyhow::anyhow!("Received non-SAML prelogin response")),
   }

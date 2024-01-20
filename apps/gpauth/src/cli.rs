@@ -1,6 +1,8 @@
 use clap::Parser;
 use gpapi::{
   auth::{SamlAuthData, SamlAuthResult},
+  clap::args::Os,
+  gp_params::{ClientOs, GpParams},
   utils::{normalize_server, openssl},
   GP_USER_AGENT,
 };
@@ -26,6 +28,10 @@ struct Cli {
   saml_request: Option<String>,
   #[arg(long, default_value = GP_USER_AGENT)]
   user_agent: String,
+  #[arg(long, default_value = "Linux")]
+  os: Os,
+  #[arg(long)]
+  os_version: Option<String>,
   #[arg(long)]
   hidpi: bool,
   #[arg(long)]
@@ -39,10 +45,12 @@ impl Cli {
     let mut openssl_conf = self.prepare_env()?;
 
     self.server = normalize_server(&self.server)?;
+    let gp_params = self.build_gp_params();
+
     // Get the initial SAML request
     let saml_request = match self.saml_request {
       Some(ref saml_request) => saml_request.clone(),
-      None => portal_prelogin(&self.server, &self.user_agent).await?,
+      None => portal_prelogin(&self.server, &gp_params).await?,
     };
 
     self.saml_request.replace(saml_request);
@@ -82,10 +90,21 @@ impl Cli {
     Ok(None)
   }
 
+  fn build_gp_params(&self) -> GpParams {
+    let gp_params = GpParams::builder()
+      .user_agent(&self.user_agent)
+      .client_os(ClientOs::from(&self.os))
+      .os_version(self.os_version.clone())
+      .build();
+
+    gp_params
+  }
+
   async fn saml_auth(&self, app_handle: AppHandle) -> anyhow::Result<SamlAuthData> {
     let auth_window = AuthWindow::new(app_handle)
       .server(&self.server)
       .user_agent(&self.user_agent)
+      .gp_params(self.build_gp_params())
       .saml_request(self.saml_request.as_ref().unwrap())
       .clean(self.clean);
 
