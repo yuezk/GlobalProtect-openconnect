@@ -4,7 +4,7 @@ resolver = "2"
 members = ["crates/*", "apps/gpclient", "apps/gpservice", "apps/gpauth"]
 
 [workspace.package]
-version = "2.0.0-beta2"
+version = "2.0.0-beta3"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
 edition = "2021"

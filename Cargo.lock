@@ -1423,7 +1423,7 @@ dependencies = [
 
 [[package]]
 name = "gpapi"
-version = "2.0.0-beta2"
+version = "2.0.0-beta3"
 dependencies = [
  "anyhow",
  "base64 0.21.5",
@@ -1451,7 +1451,7 @@ dependencies = [
 
 [[package]]
 name = "gpauth"
-version = "2.0.0-beta2"
+version = "2.0.0-beta3"
 dependencies = [
  "anyhow",
  "clap",
@@ -1471,7 +1471,7 @@ dependencies = [
 
 [[package]]
 name = "gpclient"
-version = "2.0.0-beta2"
+version = "2.0.0-beta3"
 dependencies = [
  "anyhow",
  "clap",
@@ -1492,7 +1492,7 @@ dependencies = [
 
 [[package]]
 name = "gpservice"
-version = "2.0.0-beta2"
+version = "2.0.0-beta3"
 dependencies = [
  "anyhow",
  "axum",
@@ -2447,7 +2447,7 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openconnect"
-version = "2.0.0-beta2"
+version = "2.0.0-beta3"
 dependencies = [
  "cc",
  "is_executable",

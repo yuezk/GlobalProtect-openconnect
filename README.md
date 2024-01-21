@@ -87,6 +87,10 @@ sudo dpkg -i globalprotect-openconnect_*.deb
 
 Install from AUR: [globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)
 
+```
+yay -S globalprotect-openconnect-git
+```
+
 #### Install from package
 
 Download the latest package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Then install it with `pacman`:
