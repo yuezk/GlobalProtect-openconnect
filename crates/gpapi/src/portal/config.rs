@@ -132,14 +132,8 @@ pub async fn retrieve_config(
 
   info!("Portal config, user_agent: {}", gp_params.user_agent());
 
-  let res_xml = client
-    .post(&url)
-    .form(&params)
-    .send()
-    .await?
-    .error_for_status()?
-    .text()
-    .await?;
+  let res = client.post(&url).form(&params).send().await?;
+  let res_xml = res.error_for_status()?.text().await?;
 
   ensure!(!res_xml.is_empty(), PortalConfigError::EmptyResponse);
 

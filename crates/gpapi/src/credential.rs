@@ -164,31 +164,34 @@ impl Credential {
     let mut params = HashMap::new();
     params.insert("user", self.username());
 
-    match self {
-      Credential::Password(cred) => {
-        params.insert("passwd", cred.password());
-      }
-      Credential::PreloginCookie(cred) => {
-        params.insert("prelogin-cookie", cred.prelogin_cookie());
-      }
-      Credential::AuthCookie(cred) => {
-        params.insert("portal-userauthcookie", cred.user_auth_cookie());
-        params.insert(
-          "portal-prelogonuserauthcookie",
-          cred.prelogon_user_auth_cookie(),
-        );
-      }
-      Credential::CachedCredential(cred) => {
-        if let Some(password) = cred.password() {
-          params.insert("passwd", password);
-        }
-        params.insert("portal-userauthcookie", cred.auth_cookie.user_auth_cookie());
-        params.insert(
-          "portal-prelogonuserauthcookie",
-          cred.auth_cookie.prelogon_user_auth_cookie(),
-        );
-      }
-    }
+    let (passwd, prelogin_cookie, portal_userauthcookie, portal_prelogonuserauthcookie) = match self
+    {
+      Credential::Password(cred) => (Some(cred.password()), None, None, None),
+      Credential::PreloginCookie(cred) => (None, Some(cred.prelogin_cookie()), None, None),
+      Credential::AuthCookie(cred) => (
+        None,
+        None,
+        Some(cred.user_auth_cookie()),
+        Some(cred.prelogon_user_auth_cookie()),
+      ),
+      Credential::CachedCredential(cred) => (
+        cred.password(),
+        None,
+        Some(cred.auth_cookie.user_auth_cookie()),
+        Some(cred.auth_cookie.prelogon_user_auth_cookie()),
+      ),
+    };
+
+    params.insert("passwd", passwd.unwrap_or_default());
+    params.insert("prelogin-cookie", prelogin_cookie.unwrap_or_default());
+    params.insert(
+      "portal-userauthcookie",
+      portal_userauthcookie.unwrap_or_default(),
+    );
+    params.insert(
+      "portal-prelogonuserauthcookie",
+      portal_prelogonuserauthcookie.unwrap_or_default(),
+    );
 
     params
   }

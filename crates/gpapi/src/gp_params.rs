@@ -48,7 +48,7 @@ pub struct GpParams {
   client_os: ClientOs,
   os_version: Option<String>,
   client_version: Option<String>,
-  computer: Option<String>,
+  computer: String,
   ignore_tls_errors: bool,
 }
 
@@ -62,10 +62,7 @@ impl GpParams {
   }
 
   pub(crate) fn computer(&self) -> &str {
-    match self.computer {
-      Some(ref computer) => computer,
-      None => self.client_os.as_str(),
-    }
+    &self.computer
   }
 
   pub fn ignore_tls_errors(&self) -> bool {
@@ -84,14 +81,8 @@ impl GpParams {
     params.insert("ipv6-support", "yes");
     params.insert("inputStr", "");
     params.insert("clientVer", "4100");
-
     params.insert("clientos", client_os);
-
-    if let Some(computer) = &self.computer {
-      params.insert("computer", computer);
-    } else {
-      params.insert("computer", client_os);
-    }
+    params.insert("computer", &self.computer);
 
     if let Some(os_version) = &self.os_version {
       params.insert("os-version", os_version);
@@ -110,7 +101,7 @@ pub struct GpParamsBuilder {
   client_os: ClientOs,
   os_version: Option<String>,
   client_version: Option<String>,
-  computer: Option<String>,
+  computer: String,
   ignore_tls_errors: bool,
 }
 
@@ -121,7 +112,7 @@ impl GpParamsBuilder {
       client_os: ClientOs::Linux,
       os_version: Default::default(),
       client_version: Default::default(),
-      computer: Default::default(),
+      computer: whoami::hostname(),
       ignore_tls_errors: false,
     }
   }
@@ -147,7 +138,7 @@ impl GpParamsBuilder {
   }
 
   pub fn computer(&mut self, computer: &str) -> &mut Self {
-    self.computer = Some(computer.to_string());
+    self.computer = computer.to_string();
     self
   }
 

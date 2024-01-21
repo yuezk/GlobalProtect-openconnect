@@ -54,6 +54,11 @@ The GUI version is also available after you installed it. You can launch it from
 >
 > This instruction is for the 2.x version. The 1.x version is still available on the [1.x](https://github.com/yuezk/GlobalProtect-openconnect/tree/1.x) branch, you can build it from the source code by following the instructions in the `README.md` file.
 
+> [!Warning]
+>
+> The client requires `openconnect >= 8.20`, please make sure you have it installed, you can check it with `openconnect --version`.
+> Installing the client from PPA will automatically install the required version of `openconnect`.
+
 ### Debian/Ubuntu based distributions
 
 #### Install from PPA
@@ -111,7 +116,7 @@ Download the latest RPM package from [releases](https://github.com/yuezk/GlobalP
 
 ### Other distributions
 
-The project depends on `openconnect`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`. You can install them first and then download the latest binary release (i.e., `*.bin.tar.gz`) from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
+The project depends on `openconnect >= 8.20`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`. You can install them first and then download the latest binary release (i.e., `*.bin.tar.gz`) from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
 
 ## [License](./LICENSE)
 

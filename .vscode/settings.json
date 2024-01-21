@@ -48,6 +48,7 @@
         "vpnc",
         "vpninfo",
         "wmctrl",
-        "XAUTHORITY"
+        "XAUTHORITY",
+        "yuezk"
     ]
 }

@@ -23,14 +23,8 @@ pub async fn gateway_login(
 
   info!("Gateway login, user_agent: {}", gp_params.user_agent());
 
-  let res_xml = client
-    .post(&login_url)
-    .form(&params)
-    .send()
-    .await?
-    .error_for_status()?
-    .text()
-    .await?;
+  let res = client.post(&login_url).form(&params).send().await?;
+  let res_xml = res.error_for_status()?.text().await?;
 
   let doc = Document::parse(&res_xml)?;
 
