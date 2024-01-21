@@ -45,6 +45,8 @@ enum CliCommand {
 {usage-heading} {usage}
 
 {all-args}{after-help}
+
+See 'gpclient help <command>' for more information on a specific command.
 "
 )]
 struct Cli {

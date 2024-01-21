@@ -32,12 +32,13 @@ Commands:
   help        Print this message or the help of the given subcommand(s)
 
 Options:
-      --fix-openssl  Get around the OpenSSL `unsafe legacy renegotiation` error
-  -h, --help         Print help
-  -V, --version      Print version
-```
+      --fix-openssl        Get around the OpenSSL `unsafe legacy renegotiation` error
+      --ignore-tls-errors  Ignore the TLS errors
+  -h, --help               Print help
+  -V, --version            Print version
 
-See `gpclient -h` for help.
+See 'gpclient help <command>' for more information on a specific command.
+```
 
 ### GUI
 
