@@ -64,6 +64,10 @@ sudo apt-get update
 sudo apt-get install globalprotect-openconnect
 ```
 
+> [!Note]
+>
+> For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
+
 #### Install from deb package
 
 Download the latest deb package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Then install it with `dpkg`:
