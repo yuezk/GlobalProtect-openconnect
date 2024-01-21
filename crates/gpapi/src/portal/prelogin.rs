@@ -101,18 +101,13 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
       .any(|required_param| required_param == k)
   });
 
-  println!("params: {:?}", params);
+  let client = Client::builder()
+    .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
+    .user_agent(user_agent)
+    .build()?;
 
-  let client = Client::builder().user_agent(user_agent).build()?;
-
-  let res_xml = client
-    .post(&prelogin_url)
-    .form(&params)
-    .send()
-    .await?
-    .error_for_status()?
-    .text()
-    .await?;
+  let res = client.post(&prelogin_url).form(&params).send().await?;
+  let res_xml = res.error_for_status()?.text().await?;
 
   trace!("Prelogin response: {}", res_xml);
   let doc = Document::parse(&res_xml)?;

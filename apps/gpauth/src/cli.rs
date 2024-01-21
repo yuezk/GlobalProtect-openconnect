@@ -37,11 +37,17 @@ struct Cli {
   #[arg(long)]
   fix_openssl: bool,
   #[arg(long)]
+  ignore_tls_errors: bool,
+  #[arg(long)]
   clean: bool,
 }
 
 impl Cli {
   async fn run(&mut self) -> anyhow::Result<()> {
+    if self.ignore_tls_errors {
+      info!("TLS errors will be ignored");
+    }
+
     let mut openssl_conf = self.prepare_env()?;
 
     self.server = normalize_server(&self.server)?;
@@ -95,6 +101,7 @@ impl Cli {
       .user_agent(&self.user_agent)
       .client_os(ClientOs::from(&self.os))
       .os_version(self.os_version.clone())
+      .ignore_tls_errors(self.ignore_tls_errors)
       .build();
 
     gp_params

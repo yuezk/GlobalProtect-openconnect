@@ -19,11 +19,13 @@ use tokio_util::sync::CancellationToken;
 use webkit2gtk::{
   gio::Cancellable,
   glib::{GString, TimeSpan},
-  LoadEvent, SettingsExt, URIResponse, URIResponseExt, WebContextExt, WebResource, WebResourceExt,
-  WebView, WebViewExt, WebsiteDataManagerExtManual, WebsiteDataTypes,
+  LoadEvent, SettingsExt, TLSErrorsPolicy, URIResponse, URIResponseExt, WebContextExt, WebResource,
+  WebResourceExt, WebView, WebViewExt, WebsiteDataManagerExtManual, WebsiteDataTypes,
 };
 
 enum AuthDataError {
+  /// Failed to load page due to TLS error
+  TlsError,
   /// 1. Found auth data in headers/body but it's invalid
   /// 2. Loaded an empty page, failed to load page. etc.
   Invalid,
@@ -127,6 +129,12 @@ impl<'a> AuthWindow<'a> {
     let saml_request = self.saml_request.to_string();
     let (auth_result_tx, mut auth_result_rx) = mpsc::unbounded_channel::<AuthResult>();
     let raise_window_cancel_token: Arc<RwLock<Option<CancellationToken>>> = Default::default();
+    let gp_params = self.gp_params.as_ref().unwrap();
+    let tls_err_policy = if gp_params.ignore_tls_errors() {
+      TLSErrorsPolicy::Ignore
+    } else {
+      TLSErrorsPolicy::Fail
+    };
 
     if self.clean {
       clear_webview_cookies(window).await?;
@@ -135,6 +143,10 @@ impl<'a> AuthWindow<'a> {
     let raise_window_cancel_token_clone = Arc::clone(&raise_window_cancel_token);
     window.with_webview(move |wv| {
       let wv = wv.inner();
+
+      if let Some(context) = wv.context() {
+        context.set_tls_errors_policy(tls_err_policy);
+      }
 
       if let Some(settings) = wv.settings() {
         let ua = settings.user_agent().unwrap_or("".into());
@@ -176,12 +188,15 @@ impl<'a> AuthWindow<'a> {
         }
       });
 
-      wv.connect_load_failed_with_tls_errors(|_wv, uri, cert, err| {
+      let auth_result_tx_clone = auth_result_tx.clone();
+      wv.connect_load_failed_with_tls_errors(move |_wv, uri, cert, err| {
         let redacted_uri = redact_uri(uri);
         warn!(
           "Failed to load uri: {} with error: {}, cert: {}",
           redacted_uri, err, cert
         );
+
+        send_auth_result(&auth_result_tx_clone, Err(AuthDataError::TlsError));
         true
       });
 
@@ -195,12 +210,14 @@ impl<'a> AuthWindow<'a> {
     })?;
 
     let portal = self.server.to_string();
-    let gp_params = self.gp_params.as_ref().unwrap();
 
     loop {
       if let Some(auth_result) = auth_result_rx.recv().await {
         match auth_result {
           Ok(auth_data) => return Ok(auth_data),
+          Err(AuthDataError::TlsError) => {
+            return Err(anyhow::anyhow!("TLS error: certificate verify failed"))
+          }
           Err(AuthDataError::NotFound) => {
             info!("No auth data found, it may not be the /SAML20/SP/ACS endpoint");
 
@@ -405,6 +422,11 @@ fn read_auth_data(main_resource: &WebResource, auth_result_tx: mpsc::UnboundedSe
       read_auth_data_from_body(main_resource, move |auth_result| {
         send_auth_result(&auth_result_tx, auth_result)
       });
+    }
+    Err(AuthDataError::TlsError) => {
+      // NOTE: This is unreachable
+      info!("TLS error found in headers, trying to read from body...");
+      send_auth_result(&auth_result_tx, Err(AuthDataError::TlsError));
     }
   }
 }

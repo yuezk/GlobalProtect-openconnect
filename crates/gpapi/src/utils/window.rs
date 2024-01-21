@@ -27,7 +27,6 @@ pub fn raise_window(win: &Window) -> anyhow::Result<()> {
     }
     let title = win.title()?;
     tokio::spawn(async move {
-      info!("Raising window: {}", title);
       if let Err(err) = wmctrl_raise_window(&title).await {
         warn!("Failed to raise window: {}", err);
       }

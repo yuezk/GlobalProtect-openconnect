@@ -49,6 +49,7 @@ pub struct GpParams {
   os_version: Option<String>,
   client_version: Option<String>,
   computer: Option<String>,
+  ignore_tls_errors: bool,
 }
 
 impl GpParams {
@@ -67,9 +68,13 @@ impl GpParams {
     }
   }
 
+  pub fn ignore_tls_errors(&self) -> bool {
+    self.ignore_tls_errors
+  }
+
   pub(crate) fn to_params(&self) -> HashMap<&str, &str> {
     let mut params: HashMap<&str, &str> = HashMap::new();
-    let client_os = (&self.client_os).as_str();
+    let client_os = self.client_os.as_str();
 
     // Common params
     params.insert("prot", "https:");
@@ -106,6 +111,7 @@ pub struct GpParamsBuilder {
   os_version: Option<String>,
   client_version: Option<String>,
   computer: Option<String>,
+  ignore_tls_errors: bool,
 }
 
 impl GpParamsBuilder {
@@ -116,6 +122,7 @@ impl GpParamsBuilder {
       os_version: Default::default(),
       client_version: Default::default(),
       computer: Default::default(),
+      ignore_tls_errors: false,
     }
   }
 
@@ -144,6 +151,11 @@ impl GpParamsBuilder {
     self
   }
 
+  pub fn ignore_tls_errors(&mut self, ignore_tls_errors: bool) -> &mut Self {
+    self.ignore_tls_errors = ignore_tls_errors;
+    self
+  }
+
   pub fn build(&self) -> GpParams {
     GpParams {
       user_agent: self.user_agent.clone(),
@@ -151,6 +163,7 @@ impl GpParamsBuilder {
       os_version: self.os_version.clone(),
       client_version: self.client_version.clone(),
       computer: self.computer.clone(),
+      ignore_tls_errors: self.ignore_tls_errors,
     }
   }
 }

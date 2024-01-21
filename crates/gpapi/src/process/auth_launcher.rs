@@ -14,6 +14,7 @@ pub struct SamlAuthLauncher<'a> {
   os_version: Option<&'a str>,
   hidpi: bool,
   fix_openssl: bool,
+  ignore_tls_errors: bool,
   clean: bool,
 }
 
@@ -27,6 +28,7 @@ impl<'a> SamlAuthLauncher<'a> {
       os_version: None,
       hidpi: false,
       fix_openssl: false,
+      ignore_tls_errors: false,
       clean: false,
     }
   }
@@ -61,6 +63,11 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  pub fn ignore_tls_errors(mut self, ignore_tls_errors: bool) -> Self {
+    self.ignore_tls_errors = ignore_tls_errors;
+    self
+  }
+
   pub fn clean(mut self, clean: bool) -> Self {
     self.clean = clean;
     self
@@ -87,12 +94,16 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--os-version").arg(os_version);
     }
 
+    if self.hidpi {
+      auth_cmd.arg("--hidpi");
+    }
+
     if self.fix_openssl {
       auth_cmd.arg("--fix-openssl");
     }
 
-    if self.hidpi {
-      auth_cmd.arg("--hidpi");
+    if self.ignore_tls_errors {
+      auth_cmd.arg("--ignore-tls-errors");
     }
 
     if self.clean {

@@ -15,7 +15,7 @@ use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::info;
 use openconnect::Vpn;
 
-use crate::GP_CLIENT_LOCK_FILE;
+use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE};
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -49,12 +49,12 @@ pub(crate) struct ConnectArgs {
 
 pub(crate) struct ConnectHandler<'a> {
   args: &'a ConnectArgs,
-  fix_openssl: bool,
+  shared_args: &'a SharedArgs,
 }
 
 impl<'a> ConnectHandler<'a> {
-  pub(crate) fn new(args: &'a ConnectArgs, fix_openssl: bool) -> Self {
-    Self { args, fix_openssl }
+  pub(crate) fn new(args: &'a ConnectArgs, shared_args: &'a SharedArgs) -> Self {
+    Self { args, shared_args }
   }
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
@@ -64,6 +64,7 @@ impl<'a> ConnectHandler<'a> {
       .user_agent(&self.args.user_agent)
       .client_os(ClientOs::from(&self.args.os))
       .os_version(self.args.os_version.clone())
+      .ignore_tls_errors(self.shared_args.ignore_tls_errors)
       .build();
 
     let prelogin = prelogin(&portal, &gp_params).await?;
@@ -126,7 +127,8 @@ impl<'a> ConnectHandler<'a> {
           .os(self.args.os.as_str())
           .os_version(self.args.os_version.as_deref())
           .hidpi(self.args.hidpi)
-          .fix_openssl(self.fix_openssl)
+          .fix_openssl(self.shared_args.fix_openssl)
+          .ignore_tls_errors(self.shared_args.ignore_tls_errors)
           .clean(self.args.clean)
           .launch()
           .await
