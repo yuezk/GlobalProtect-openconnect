@@ -47,6 +47,20 @@ pub(crate) struct ConnectArgs {
   clean: bool,
 }
 
+impl ConnectArgs {
+  fn os_version(&self) -> String {
+    if let Some(os_version) = &self.os_version {
+      return os_version.to_owned();
+    }
+
+    match self.os {
+      Os::Linux => format!("Linux {}", whoami::distro()),
+      Os::Windows => String::from("Microsoft Windows 11 Pro , 64-bit"),
+      Os::Mac => String::from("Apple Mac OS X 13.4.0"),
+    }
+  }
+}
+
 pub(crate) struct ConnectHandler<'a> {
   args: &'a ConnectArgs,
   shared_args: &'a SharedArgs,
@@ -63,7 +77,7 @@ impl<'a> ConnectHandler<'a> {
     let gp_params = GpParams::builder()
       .user_agent(&self.args.user_agent)
       .client_os(ClientOs::from(&self.args.os))
-      .os_version(self.args.os_version.clone())
+      .os_version(self.args.os_version())
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
       .build();
 
@@ -125,7 +139,7 @@ impl<'a> ConnectHandler<'a> {
           .saml_request(prelogin.saml_request())
           .user_agent(&self.args.user_agent)
           .os(self.args.os.as_str())
-          .os_version(self.args.os_version.as_deref())
+          .os_version(Some(&self.args.os_version()))
           .hidpi(self.args.hidpi)
           .fix_openssl(self.shared_args.fix_openssl)
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
