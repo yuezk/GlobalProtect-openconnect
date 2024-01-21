@@ -5,7 +5,21 @@ use roxmltree::Document;
 use serde::Serialize;
 use specta::Type;
 
-use crate::utils::{base64, normalize_server, xml};
+use crate::{
+  gp_params::GpParams,
+  utils::{base64, normalize_server, xml},
+};
+
+const REQUIRED_PARAMS: [&str; 8] = [
+  "tmp",
+  "clientVer",
+  "clientos",
+  "os-version",
+  "host-id",
+  "ipv6-support",
+  "default-browser",
+  "cas-support",
+];
 
 #[derive(Debug, Serialize, Type, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -67,20 +81,33 @@ impl Prelogin {
   }
 }
 
-pub async fn prelogin(portal: &str, user_agent: &str) -> anyhow::Result<Prelogin> {
+pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prelogin> {
+  let user_agent = gp_params.user_agent();
   info!("Portal prelogin, user_agent: {}", user_agent);
 
   let portal = normalize_server(portal)?;
-  let prelogin_url = format!("{}/global-protect/prelogin.esp", portal);
-  let client = Client::builder().user_agent(user_agent).build()?;
+  let prelogin_url = format!(
+    "{}/global-protect/prelogin.esp?kerberos-support=yes",
+    portal
+  );
+  let mut params = gp_params.to_params();
+  params.insert("tmp", "tmp");
+  params.insert("default-browser", "0");
+  params.insert("cas-support", "yes");
 
-  let res_xml = client
-    .get(&prelogin_url)
-    .send()
-    .await?
-    .error_for_status()?
-    .text()
-    .await?;
+  params.retain(|k, _| {
+    REQUIRED_PARAMS
+      .iter()
+      .any(|required_param| required_param == k)
+  });
+
+  let client = Client::builder()
+    .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
+    .user_agent(user_agent)
+    .build()?;
+
+  let res = client.post(&prelogin_url).form(&params).send().await?;
+  let res_xml = res.error_for_status()?.text().await?;
 
   trace!("Prelogin response: {}", res_xml);
   let doc = Document::parse(&res_xml)?;

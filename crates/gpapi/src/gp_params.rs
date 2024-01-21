@@ -7,23 +7,32 @@ use crate::GP_USER_AGENT;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
 pub enum ClientOs {
-  Linux,
   #[default]
+  Linux,
   Windows,
   Mac,
 }
 
-impl From<&ClientOs> for &str {
-  fn from(os: &ClientOs) -> Self {
+impl From<&str> for ClientOs {
+  fn from(os: &str) -> Self {
     match os {
-      ClientOs::Linux => "Linux",
-      ClientOs::Windows => "Windows",
-      ClientOs::Mac => "Mac",
+      "Linux" => ClientOs::Linux,
+      "Windows" => ClientOs::Windows,
+      "Mac" => ClientOs::Mac,
+      _ => ClientOs::Linux,
     }
   }
 }
 
 impl ClientOs {
+  pub fn as_str(&self) -> &str {
+    match self {
+      ClientOs::Linux => "Linux",
+      ClientOs::Windows => "Windows",
+      ClientOs::Mac => "Mac",
+    }
+  }
+
   pub fn to_openconnect_os(&self) -> &str {
     match self {
       ClientOs::Linux => "linux",
@@ -40,6 +49,7 @@ pub struct GpParams {
   os_version: Option<String>,
   client_version: Option<String>,
   computer: Option<String>,
+  ignore_tls_errors: bool,
 }
 
 impl GpParams {
@@ -54,13 +64,17 @@ impl GpParams {
   pub(crate) fn computer(&self) -> &str {
     match self.computer {
       Some(ref computer) => computer,
-      None => (&self.client_os).into()
+      None => self.client_os.as_str(),
     }
+  }
+
+  pub fn ignore_tls_errors(&self) -> bool {
+    self.ignore_tls_errors
   }
 
   pub(crate) fn to_params(&self) -> HashMap<&str, &str> {
     let mut params: HashMap<&str, &str> = HashMap::new();
-    let client_os: &str = (&self.client_os).into();
+    let client_os = self.client_os.as_str();
 
     // Common params
     params.insert("prot", "https:");
@@ -97,6 +111,7 @@ pub struct GpParamsBuilder {
   os_version: Option<String>,
   client_version: Option<String>,
   computer: Option<String>,
+  ignore_tls_errors: bool,
 }
 
 impl GpParamsBuilder {
@@ -107,6 +122,7 @@ impl GpParamsBuilder {
       os_version: Default::default(),
       client_version: Default::default(),
       computer: Default::default(),
+      ignore_tls_errors: false,
     }
   }
 
@@ -120,18 +136,23 @@ impl GpParamsBuilder {
     self
   }
 
-  pub fn os_version(&mut self, os_version: &str) -> &mut Self {
-    self.os_version = Some(os_version.to_string());
+  pub fn os_version<T: Into<Option<String>>>(&mut self, os_version: T) -> &mut Self {
+    self.os_version = os_version.into();
     self
   }
 
-  pub fn client_version(&mut self, client_version: &str) -> &mut Self {
-    self.client_version = Some(client_version.to_string());
+  pub fn client_version<T: Into<Option<String>>>(&mut self, client_version: T) -> &mut Self {
+    self.client_version = client_version.into();
     self
   }
 
   pub fn computer(&mut self, computer: &str) -> &mut Self {
     self.computer = Some(computer.to_string());
+    self
+  }
+
+  pub fn ignore_tls_errors(&mut self, ignore_tls_errors: bool) -> &mut Self {
+    self.ignore_tls_errors = ignore_tls_errors;
     self
   }
 
@@ -142,6 +163,7 @@ impl GpParamsBuilder {
       os_version: self.os_version.clone(),
       client_version: self.client_version.clone(),
       computer: self.computer.clone(),
+      ignore_tls_errors: self.ignore_tls_errors,
     }
   }
 }

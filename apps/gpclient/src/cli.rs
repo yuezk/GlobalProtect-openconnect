@@ -16,6 +16,11 @@ const VERSION: &str = concat!(
   ")"
 );
 
+pub(crate) struct SharedArgs {
+  pub(crate) fix_openssl: bool,
+  pub(crate) ignore_tls_errors: bool,
+}
+
 #[derive(Subcommand)]
 enum CliCommand {
   #[command(about = "Connect to a portal server")]
@@ -40,6 +45,8 @@ enum CliCommand {
 {usage-heading} {usage}
 
 {all-args}{after-help}
+
+See 'gpclient help <command>' for more information on a specific command.
 "
 )]
 struct Cli {
@@ -51,6 +58,8 @@ struct Cli {
     help = "Get around the OpenSSL `unsafe legacy renegotiation` error"
   )]
   fix_openssl: bool,
+  #[arg(long, help = "Ignore the TLS errors")]
+  ignore_tls_errors: bool,
 }
 
 impl Cli {
@@ -67,9 +76,17 @@ impl Cli {
     // The temp file will be dropped automatically when the file handle is dropped
     // So, declare it here to ensure it's not dropped
     let _file = self.fix_openssl()?;
+    let shared_args = SharedArgs {
+      fix_openssl: self.fix_openssl,
+      ignore_tls_errors: self.ignore_tls_errors,
+    };
+
+    if self.ignore_tls_errors {
+      info!("TLS errors will be ignored");
+    }
 
     match &self.command {
-      CliCommand::Connect(args) => ConnectHandler::new(args, self.fix_openssl).handle().await,
+      CliCommand::Connect(args) => ConnectHandler::new(args, &shared_args).handle().await,
       CliCommand::Disconnect => DisconnectHandler::new().handle(),
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
     }
@@ -89,11 +106,22 @@ pub(crate) async fn run() {
   if let Err(err) = cli.run().await {
     eprintln!("\nError: {}", err);
 
-    if err.to_string().contains("unsafe legacy renegotiation") && !cli.fix_openssl {
+    let err = err.to_string();
+
+    if err.contains("unsafe legacy renegotiation") && !cli.fix_openssl {
       eprintln!("\nRe-run it with the `--fix-openssl` option to work around this issue, e.g.:\n");
       // Print the command
       let args = std::env::args().collect::<Vec<_>>();
       eprintln!("{} --fix-openssl {}\n", args[0], args[1..].join(" "));
+    }
+
+    if err.contains("certificate verify failed") {
+      eprintln!(
+        "\nRe-run it with the `--ignore-tls-errors` option to ignore the certificate error, e.g.:\n"
+      );
+      // Print the command
+      let args = std::env::args().collect::<Vec<_>>();
+      eprintln!("{} --ignore-tls-errors {}\n", args[0], args[1..].join(" "));
     }
 
     std::process::exit(1);

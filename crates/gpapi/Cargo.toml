@@ -27,6 +27,8 @@ dotenvy_macro.workspace = true
 uzers.workspace = true
 
 tauri = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
 
 [features]
 tauri = ["dep:tauri"]
+clap = ["dep:clap"]

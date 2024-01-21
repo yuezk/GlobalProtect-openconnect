@@ -6,7 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-gpapi = { path = "../../crates/gpapi" }
+gpapi = { path = "../../crates/gpapi", features = ["clap"] }
 openconnect = { path = "../../crates/openconnect" }
 anyhow.workspace = true
 clap.workspace = true

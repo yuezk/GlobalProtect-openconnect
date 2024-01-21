@@ -8,7 +8,7 @@ license.workspace = true
 tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
-gpapi = { path = "../../crates/gpapi", features = ["tauri"] }
+gpapi = { path = "../../crates/gpapi", features = ["tauri", "clap"] }
 anyhow.workspace = true
 clap.workspace = true
 env_logger.workspace = true

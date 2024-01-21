@@ -32,12 +32,13 @@ Commands:
   help        Print this message or the help of the given subcommand(s)
 
 Options:
-      --fix-openssl  Get around the OpenSSL `unsafe legacy renegotiation` error
-  -h, --help         Print help
-  -V, --version      Print version
-```
+      --fix-openssl        Get around the OpenSSL `unsafe legacy renegotiation` error
+      --ignore-tls-errors  Ignore the TLS errors
+  -h, --help               Print help
+  -V, --version            Print version
 
-See `gpclient -h` for help.
+See 'gpclient help <command>' for more information on a specific command.
+```
 
 ### GUI
 
@@ -48,6 +49,10 @@ The GUI version is also available after you installed it. You can launch it from
 > The GUI version is partially open source. Its background service is open sourced in this repo as [gpservice](./apps/gpservice/). The GUI part is a wrapper of the background service, which is not open sourced.
 
 ## Installation
+
+> [!Note]
+>
+> This instruction is for the 2.x version. The 1.x version is still available on the [1.x](https://github.com/yuezk/GlobalProtect-openconnect/tree/1.x) branch, you can build it from the source code by following the instructions in the `README.md` file.
 
 ### Debian/Ubuntu based distributions
 
@@ -103,10 +108,6 @@ Download the latest RPM package from [releases](https://github.com/yuezk/GlobalP
 ### Other distributions
 
 The project depends on `openconnect`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`. You can install them first and then download the latest binary release (i.e., `*.bin.tar.gz`) from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
-
-### Install the Old Version (v1.4.9)
-
-The 1.x version is still available on the [1.x](https://github.com/yuezk/GlobalProtect-openconnect/tree/1.x) branch, you can build it from the source code by following the instructions in the `README.md` file.
 
 ## [License](./LICENSE)
 
