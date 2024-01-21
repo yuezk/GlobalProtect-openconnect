@@ -203,7 +203,8 @@ impl<'a> AuthWindow<'a> {
       wv.connect_load_failed(move |_wv, _event, uri, err| {
         let redacted_uri = redact_uri(uri);
         warn!("Failed to load uri: {} with error: {}", redacted_uri, err);
-        send_auth_result(&auth_result_tx, Err(AuthDataError::Invalid));
+        // NOTE: Don't send error here, since load_changed event will be triggered after this
+        // send_auth_result(&auth_result_tx, Err(AuthDataError::Invalid));
         // true to stop other handlers from being invoked for the event. false to propagate the event further.
         true
       });
