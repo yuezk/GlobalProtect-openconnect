@@ -84,14 +84,8 @@ impl GpParams {
     params.insert("ipv6-support", "yes");
     params.insert("inputStr", "");
     params.insert("clientVer", "4100");
-
     params.insert("clientos", client_os);
-
-    if let Some(computer) = &self.computer {
-      params.insert("computer", computer);
-    } else {
-      params.insert("computer", client_os);
-    }
+    params.insert("computer", self.computer());
 
     if let Some(os_version) = &self.os_version {
       params.insert("os-version", os_version);
