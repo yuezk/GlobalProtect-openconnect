@@ -1423,7 +1423,7 @@ dependencies = [
 
 [[package]]
 name = "gpapi"
-version = "2.0.0-beta4"
+version = "2.0.0-beta5"
 dependencies = [
  "anyhow",
  "base64 0.21.5",
@@ -1431,6 +1431,7 @@ dependencies = [
  "clap",
  "dotenvy_macro",
  "log",
+ "open",
  "redact-engine",
  "regex",
  "reqwest",
@@ -1451,7 +1452,7 @@ dependencies = [
 
 [[package]]
 name = "gpauth"
-version = "2.0.0-beta4"
+version = "2.0.0-beta5"
 dependencies = [
  "anyhow",
  "clap",
@@ -1471,7 +1472,7 @@ dependencies = [
 
 [[package]]
 name = "gpclient"
-version = "2.0.0-beta4"
+version = "2.0.0-beta5"
 dependencies = [
  "anyhow",
  "clap",
@@ -1492,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "gpservice"
-version = "2.0.0-beta4"
+version = "2.0.0-beta5"
 dependencies = [
  "anyhow",
  "axum",
@@ -1964,6 +1965,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f518f335dce6725a761382244631d86cf0ccb2863413590b31338feb467f9c3"
 
 [[package]]
+name = "is-docker"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
+dependencies = [
+ "once_cell",
+]
+
+[[package]]
 name = "is-terminal"
 version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1972,6 +1982,16 @@ dependencies = [
  "hermit-abi",
  "rustix",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "is-wsl"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "173609498df190136aa7dea1a91db051746d339e18476eed5ca40521f02d7aa5"
+dependencies = [
+ "is-docker",
+ "once_cell",
 ]
 
 [[package]]
@@ -2446,8 +2466,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
+name = "open"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90878fb664448b54c4e592455ad02831e23a3f7e157374a8b95654731aac7349"
+dependencies = [
+ "is-wsl",
+ "libc",
+ "pathdiff",
+]
+
+[[package]]
 name = "openconnect"
-version = "2.0.0-beta4"
+version = "2.0.0-beta5"
 dependencies = [
  "cc",
  "is_executable",
@@ -2573,6 +2604,12 @@ name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
+name = "pathdiff"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 
 [[package]]
 name = "percent-encoding"

@@ -8,6 +8,7 @@ pub(crate) fn routes(ctx: Arc<WsServerContext>) -> Router {
   Router::new()
     .route("/health", get(handlers::health))
     .route("/active-gui", post(handlers::active_gui))
+    .route("/auth-data", post(handlers::auth_data))
     .route("/ws", get(handlers::ws_handler))
     .with_state(ctx)
 }

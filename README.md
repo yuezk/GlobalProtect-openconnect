@@ -11,6 +11,7 @@ A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authenticati
 - [x] Better Linux support
 - [x] Support both CLI and GUI
 - [x] Support both SSO and non-SSO authentication
+- [x] Support authentication using default browser
 - [x] Support multiple portals
 - [x] Support gateway selection
 - [x] Support auto-connect on startup

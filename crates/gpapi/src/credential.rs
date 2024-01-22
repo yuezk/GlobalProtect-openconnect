@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::auth::SamlAuthData;
+use crate::{auth::SamlAuthData, utils::base64::decode_to_string};
 
 #[derive(Debug, Serialize, Deserialize, Type, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -151,6 +151,17 @@ pub enum Credential {
 }
 
 impl Credential {
+  /// Create a credential from a globalprotectcallback:<base64 encoded string>
+  pub fn parse_gpcallback(auth_data: &str) -> anyhow::Result<Self> {
+    // Remove the surrounding quotes
+    let auth_data = auth_data.trim_matches('"');
+    let auth_data = auth_data.trim_start_matches("globalprotectcallback:");
+    let auth_data = decode_to_string(auth_data)?;
+    let auth_data = SamlAuthData::parse_html(&auth_data)?;
+
+    Self::try_from(auth_data)
+  }
+
   pub fn username(&self) -> &str {
     match self {
       Credential::Password(cred) => cred.username(),

@@ -26,6 +26,7 @@ const REQUIRED_PARAMS: [&str; 8] = [
 pub struct SamlPrelogin {
   region: String,
   saml_request: String,
+  support_default_browser: bool,
 }
 
 impl SamlPrelogin {
@@ -35,6 +36,10 @@ impl SamlPrelogin {
 
   pub fn saml_request(&self) -> &str {
     &self.saml_request
+  }
+
+  pub fn support_default_browser(&self) -> bool {
+    self.support_default_browser
   }
 }
 
@@ -86,14 +91,14 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
   info!("Portal prelogin, user_agent: {}", user_agent);
 
   let portal = normalize_server(portal)?;
-  let prelogin_url = format!(
-    "{}/global-protect/prelogin.esp?kerberos-support=yes",
-    portal
-  );
+  let prelogin_url = format!("{}/global-protect/prelogin.esp", portal);
   let mut params = gp_params.to_params();
+
   params.insert("tmp", "tmp");
-  params.insert("default-browser", "0");
   params.insert("cas-support", "yes");
+  if gp_params.prefer_default_browser() {
+    params.insert("default-browser", "1");
+  }
 
   params.retain(|k, _| {
     REQUIRED_PARAMS
@@ -125,12 +130,18 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
 
   let saml_method = xml::get_child_text(&doc, "saml-auth-method");
   let saml_request = xml::get_child_text(&doc, "saml-request");
+  let saml_default_browser = xml::get_child_text(&doc, "saml-default-browser");
   // Check if the prelogin response is SAML
   if saml_method.is_some() && saml_request.is_some() {
     let saml_request = base64::decode_to_string(&saml_request.unwrap())?;
+    let support_default_browser = saml_default_browser
+      .map(|s| s.to_lowercase() == "yes")
+      .unwrap_or(false);
+
     let saml_prelogin = SamlPrelogin {
       region,
       saml_request,
+      support_default_browser,
     };
 
     return Ok(Prelogin::Saml(saml_prelogin));

@@ -10,7 +10,12 @@ use log::info;
 
 #[derive(Args)]
 pub(crate) struct LaunchGuiArgs {
-  #[clap(long, help = "Launch the GUI minimized")]
+  #[arg(
+    required = false,
+    help = "The authentication data, used for the default browser authentication"
+  )]
+  auth_data: Option<String>,
+  #[arg(long, help = "Launch the GUI minimized")]
   minimized: bool,
 }
 
@@ -28,6 +33,12 @@ impl<'a> LaunchGuiHandler<'a> {
     let user = whoami::username();
     if user == "root" {
       anyhow::bail!("`launch-gui` cannot be run as root");
+    }
+
+    let auth_data = self.args.auth_data.as_deref().unwrap_or_default();
+    if !auth_data.is_empty() {
+      // Process the authentication data, its format is `globalprotectcallback:<data>`
+      return feed_auth_data(auth_data).await;
     }
 
     if try_active_gui().await.is_ok() {
@@ -64,6 +75,19 @@ impl<'a> LaunchGuiHandler<'a> {
 
     Ok(())
   }
+}
+
+async fn feed_auth_data(auth_data: &str) -> anyhow::Result<()> {
+  let service_endpoint = http_endpoint().await?;
+
+  reqwest::Client::default()
+    .post(format!("{}/auth-data", service_endpoint))
+    .json(&auth_data)
+    .send()
+    .await?
+    .error_for_status()?;
+
+  Ok(())
 }
 
 async fn try_active_gui() -> anyhow::Result<()> {

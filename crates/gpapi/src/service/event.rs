@@ -7,4 +7,6 @@ use super::vpn_state::VpnState;
 pub enum WsEvent {
   VpnState(VpnState),
   ActiveGui,
+  /// External authentication data
+  AuthData(String),
 }

@@ -11,8 +11,10 @@
         "dotenvy",
         "getconfig",
         "globalprotect",
+        "globalprotectcallback",
         "gpapi",
         "gpauth",
+        "gpcallback",
         "gpclient",
         "gpcommon",
         "gpgui",
@@ -50,5 +52,6 @@
         "wmctrl",
         "XAUTHORITY",
         "yuezk"
-    ]
+    ],
+    "rust-analyzer.cargo.features": "all",
 }
