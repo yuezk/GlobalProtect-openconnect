@@ -102,12 +102,6 @@ impl PortalConfig {
 pub enum PortalConfigError {
   #[error("Empty response, retrying can help")]
   EmptyResponse,
-  #[error("Empty auth cookie, retrying can help")]
-  EmptyAuthCookie,
-  #[error("Invalid auth cookie, retrying can help")]
-  InvalidAuthCookie,
-  #[error("Empty gateways, retrying can help")]
-  EmptyGateways,
 }
 
 pub async fn retrieve_config(
@@ -139,24 +133,22 @@ pub async fn retrieve_config(
   ensure!(!res_xml.is_empty(), PortalConfigError::EmptyResponse);
 
   let doc = Document::parse(&res_xml)?;
-  let gateways = parse_gateways(&doc).ok_or_else(|| anyhow::anyhow!("Failed to parse gateways"))?;
+  let mut gateways =
+    parse_gateways(&doc).ok_or_else(|| anyhow::anyhow!("Failed to parse gateways"))?;
 
   let user_auth_cookie = xml::get_child_text(&doc, "portal-userauthcookie").unwrap_or_default();
   let prelogon_user_auth_cookie =
     xml::get_child_text(&doc, "portal-prelogonuserauthcookie").unwrap_or_default();
   let config_digest = xml::get_child_text(&doc, "config-digest");
 
-  ensure!(
-    !user_auth_cookie.is_empty() && !prelogon_user_auth_cookie.is_empty(),
-    PortalConfigError::EmptyAuthCookie
-  );
-
-  ensure!(
-    user_auth_cookie != "empty" && prelogon_user_auth_cookie != "empty",
-    PortalConfigError::InvalidAuthCookie
-  );
-
-  ensure!(!gateways.is_empty(), PortalConfigError::EmptyGateways);
+  if gateways.is_empty() {
+    gateways.push(Gateway {
+      name: server.to_string(),
+      address: server.to_string(),
+      priority: 0,
+      priority_rules: vec![],
+    });
+  }
 
   Ok(PortalConfig::new(
     server.to_string(),

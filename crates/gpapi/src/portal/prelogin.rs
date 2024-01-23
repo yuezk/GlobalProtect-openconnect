@@ -91,11 +91,17 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
   info!("Portal prelogin, user_agent: {}", user_agent);
 
   let portal = normalize_server(portal)?;
-  let prelogin_url = format!("{}/global-protect/prelogin.esp", portal);
+  let prelogin_url = format!(
+    "{portal}/{}/prelogin.esp",
+    if gp_params.is_gateway() {
+      "ssl-vpn"
+    } else {
+      "global-protect"
+    }
+  );
   let mut params = gp_params.to_params();
 
   params.insert("tmp", "tmp");
-  params.insert("cas-support", "yes");
   if gp_params.prefer_default_browser() {
     params.insert("default-browser", "1");
   }

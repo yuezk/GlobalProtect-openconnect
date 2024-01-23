@@ -71,18 +71,21 @@ impl<'a> ConnectHandler<'a> {
     Self { args, shared_args }
   }
 
-  pub(crate) async fn handle(&self) -> anyhow::Result<()> {
-    let portal = utils::normalize_server(self.args.server.as_str())?;
-
-    let gp_params = GpParams::builder()
+  fn build_gp_params(&self) -> GpParams {
+    GpParams::builder()
       .user_agent(&self.args.user_agent)
       .client_os(ClientOs::from(&self.args.os))
       .os_version(self.args.os_version())
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
-      .build();
+      .build()
+  }
+
+  pub(crate) async fn handle(&self) -> anyhow::Result<()> {
+    let portal = utils::normalize_server(self.args.server.as_str())?;
+    let gp_params = self.build_gp_params();
 
     let prelogin = prelogin(&portal, &gp_params).await?;
-    let portal_credential = self.obtain_portal_credential(&prelogin).await?;
+    let portal_credential = self.obtain_credential(&prelogin).await?;
     let mut portal_config = retrieve_config(&portal, &portal_credential, &gp_params).await?;
 
     let selected_gateway = match &self.args.gateway {
@@ -105,7 +108,14 @@ impl<'a> ConnectHandler<'a> {
 
     let gateway = selected_gateway.server();
     let cred = portal_config.auth_cookie().into();
-    let token = gateway_login(gateway, &cred, &gp_params).await?;
+
+    let token = match gateway_login(gateway, &cred, &gp_params).await {
+      Ok(token) => token,
+      Err(_) => {
+        info!("Gateway login failed, retrying with prelogin");
+        self.gateway_login_with_prelogin(gateway).await?
+      }
+    };
 
     let vpn = Vpn::builder(gateway, &token)
       .user_agent(self.args.user_agent.clone())
@@ -132,7 +142,17 @@ impl<'a> ConnectHandler<'a> {
     Ok(())
   }
 
-  async fn obtain_portal_credential(&self, prelogin: &Prelogin) -> anyhow::Result<Credential> {
+  async fn gateway_login_with_prelogin(&self, gateway: &str) -> anyhow::Result<String> {
+    let mut gp_params = self.build_gp_params();
+    gp_params.set_is_gateway(true);
+
+    let prelogin = prelogin(gateway, &gp_params).await?;
+    let cred = self.obtain_credential(&prelogin).await?;
+
+    gateway_login(gateway, &cred, &gp_params).await
+  }
+
+  async fn obtain_credential(&self, prelogin: &Prelogin) -> anyhow::Result<Credential> {
     match prelogin {
       Prelogin::Saml(prelogin) => {
         SamlAuthLauncher::new(&self.args.server)

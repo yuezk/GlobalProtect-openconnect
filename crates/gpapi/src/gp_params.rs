@@ -44,6 +44,7 @@ impl ClientOs {
 
 #[derive(Debug, Serialize, Deserialize, Type, Default)]
 pub struct GpParams {
+  is_gateway: bool,
   user_agent: String,
   client_os: ClientOs,
   os_version: Option<String>,
@@ -56,6 +57,14 @@ pub struct GpParams {
 impl GpParams {
   pub fn builder() -> GpParamsBuilder {
     GpParamsBuilder::new()
+  }
+
+  pub(crate) fn is_gateway(&self) -> bool {
+    self.is_gateway
+  }
+
+  pub fn set_is_gateway(&mut self, is_gateway: bool) {
+    self.is_gateway = is_gateway;
   }
 
   pub(crate) fn user_agent(&self) -> &str {
@@ -103,6 +112,7 @@ impl GpParams {
 }
 
 pub struct GpParamsBuilder {
+  is_gateway: bool,
   user_agent: String,
   client_os: ClientOs,
   os_version: Option<String>,
@@ -115,6 +125,7 @@ pub struct GpParamsBuilder {
 impl GpParamsBuilder {
   pub fn new() -> Self {
     Self {
+      is_gateway: false,
       user_agent: GP_USER_AGENT.to_string(),
       client_os: ClientOs::Linux,
       os_version: Default::default(),
@@ -123,6 +134,11 @@ impl GpParamsBuilder {
       ignore_tls_errors: false,
       prefer_default_browser: false,
     }
+  }
+
+  pub fn is_gateway(&mut self, is_gateway: bool) -> &mut Self {
+    self.is_gateway = is_gateway;
+    self
   }
 
   pub fn user_agent(&mut self, user_agent: &str) -> &mut Self {
@@ -162,6 +178,7 @@ impl GpParamsBuilder {
 
   pub fn build(&self) -> GpParams {
     GpParams {
+      is_gateway: self.is_gateway,
       user_agent: self.user_agent.clone(),
       client_os: self.client_os.clone(),
       os_version: self.os_version.clone(),
