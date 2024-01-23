@@ -115,7 +115,7 @@ pub(crate) async fn run() {
       eprintln!("{} --fix-openssl {}\n", args[0], args[1..].join(" "));
     }
 
-    if err.contains("certificate verify failed") {
+    if err.contains("certificate verify failed") && !cli.ignore_tls_errors {
       eprintln!(
         "\nRe-run it with the `--ignore-tls-errors` option to ignore the certificate error, e.g.:\n"
       );

@@ -120,6 +120,7 @@ pub async fn retrieve_config(
 
   let url = format!("{}/global-protect/getconfig.esp", portal);
   let client = Client::builder()
+    .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
     .user_agent(gp_params.user_agent())
     .build()?;
 

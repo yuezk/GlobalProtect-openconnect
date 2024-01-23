@@ -12,6 +12,7 @@ pub async fn gateway_login(
 ) -> anyhow::Result<String> {
   let login_url = format!("https://{}/ssl-vpn/login.esp", gateway);
   let client = Client::builder()
+    .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
     .user_agent(gp_params.user_agent())
     .build()?;
 
