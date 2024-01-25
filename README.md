@@ -11,6 +11,7 @@ A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authenticati
 - [x] Better Linux support
 - [x] Support both CLI and GUI
 - [x] Support both SSO and non-SSO authentication
+- [x] Support the FIDO2 authentication (e.g., YubiKey)
 - [x] Support authentication using default browser
 - [x] Support multiple portals
 - [x] Support gateway selection
