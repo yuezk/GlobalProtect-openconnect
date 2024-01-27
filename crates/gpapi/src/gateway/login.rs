@@ -22,10 +22,14 @@ pub async fn gateway_login(
   params.extend(extra_params);
   params.insert("server", gateway);
 
+  info!("Gateway login params {:?}", params);
+
   info!("Gateway login, user_agent: {}", gp_params.user_agent());
 
   let res = client.post(&login_url).form(&params).send().await?;
   let res_xml = res.error_for_status()?.text().await?;
+
+  info!("Gateway login request done");
 
   let doc = Document::parse(&res_xml)?;
 

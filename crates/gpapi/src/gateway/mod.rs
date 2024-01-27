@@ -31,6 +31,15 @@ impl Display for Gateway {
 }
 
 impl Gateway {
+  pub fn new(name: String, address: String) -> Self {
+    Self {
+      name,
+      address,
+      priority: 0,
+      priority_rules: vec![],
+    }
+  }
+
   pub fn name(&self) -> &str {
     &self.name
   }

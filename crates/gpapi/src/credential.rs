@@ -141,6 +141,16 @@ impl CachedCredential {
   }
 }
 
+impl From<PasswordCredential> for CachedCredential {
+  fn from(value: PasswordCredential) -> Self {
+    Self::new(
+      value.username().to_owned(),
+      Some(value.password().to_owned()),
+      AuthCookieCredential::new("", "", ""),
+    )
+  }
+}
+
 #[derive(Debug, Serialize, Deserialize, Type, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Credential {

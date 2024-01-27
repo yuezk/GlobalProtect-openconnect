@@ -1,12 +1,13 @@
 use anyhow::bail;
-use log::{info, trace};
-use reqwest::Client;
+use log::info;
+use reqwest::{Client, StatusCode};
 use roxmltree::Document;
 use serde::Serialize;
 use specta::Type;
 
 use crate::{
   gp_params::GpParams,
+  portal::PortalError,
   utils::{base64, normalize_server, xml},
 };
 
@@ -118,9 +119,26 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
     .build()?;
 
   let res = client.post(&prelogin_url).form(&params).send().await?;
-  let res_xml = res.error_for_status()?.text().await?;
+  let status = res.status();
 
-  trace!("Prelogin response: {}", res_xml);
+  if status == StatusCode::NOT_FOUND {
+    bail!(PortalError::PreloginError(
+      "Prelogin endpoint not found".to_string()
+    ))
+  }
+
+  let res_xml = res
+    .error_for_status()?
+    .text()
+    .await
+    .map_err(|e| PortalError::PreloginError(e.to_string()))?;
+
+  let prelogin = parse_res_xml(res_xml).map_err(|e| PortalError::PreloginError(e.to_string()))?;
+
+  Ok(prelogin)
+}
+
+fn parse_res_xml(res_xml: String) -> anyhow::Result<Prelogin> {
   let doc = Document::parse(&res_xml)?;
 
   let status = xml::get_child_text(&doc, "status")
