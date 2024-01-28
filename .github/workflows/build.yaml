@@ -8,8 +8,9 @@ on:
       - .devcontainer
     branches:
       - main
-    # tags:
-    #   - v*.*.*
+    tags:
+      - latest
+      - v*.*.*
 jobs:
   # Include arm64 if ref is a tag
   setup-matrix:
@@ -30,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout gpgui repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.GH_PAT }}
           repository: yuezk/gpgui
@@ -54,42 +55,34 @@ jobs:
           pnpm run build
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: gpgui-fe
           path: app/dist
 
-  build-tauri:
-    needs: [setup-matrix, build-fe]
+  build-tauri-amd64:
+    needs: [build-fe]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
     steps:
       - name: Checkout gpgui repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.GH_PAT }}
           repository: yuezk/gpgui
           path: gpgui
 
       - name: Checkout gp repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           token: ${{ secrets.GH_PAT }}
           repository: yuezk/GlobalProtect-openconnect
           path: gp
 
       - name: Download gpgui-fe artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: gpgui-fe
           path: gpgui/app/dist
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: ${{ matrix.arch }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -104,13 +97,212 @@ jobs:
             -v $(pwd):/${{ github.workspace }} \
             -w ${{ github.workspace }} \
             -e CI=true \
-            --platform linux/${{ matrix.arch }} \
             yuezk/gpdev:main \
             "./gpgui/scripts/build.sh"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          name: artifact-${{ matrix.arch }}-tauri
+          name: artifact-amd64-tauri
           path: |
             gpgui/.tmp/artifact
+
+  build-tauri-arm64:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-fe]
+    runs-on: self-hosted
+    steps:
+      - name: Checkout gpgui repo
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+          repository: yuezk/gpgui
+          path: gpgui
+
+      - name: Checkout gp repo
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+          repository: yuezk/GlobalProtect-openconnect
+          path: gp
+
+      - name: Download gpgui-fe artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: gpgui-fe
+          path: gpgui/app/dist
+      - name: Build Tauri
+        run: |
+          ./gpgui/scripts/build.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: artifact-arm64-tauri
+          path: |
+            gpgui/.tmp/artifact
+
+  package-tarball:
+    needs: [build-tauri-amd64, build-tauri-arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gpgui repo
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+          repository: yuezk/gpgui
+          path: gpgui
+
+      - name: Download artifact-amd64-tauri
+        uses: actions/download-artifact@v3
+        with:
+          name: artifact-amd64-tauri
+          path: gpgui/.tmp/artifact
+
+      - name: Download artifact-arm64-tauri
+        uses: actions/download-artifact@v3
+        with:
+          name: artifact-arm64-tauri
+          path: gpgui/.tmp/artifact
+
+      - name: Create tarball
+        run: |
+          ./gpgui/scripts/build-tarball.sh
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v3
+        with:
+          name: artifact-tarball
+          path: |
+            gpgui/.tmp/tarball/*.tar.gz
+
+  package-rpm:
+    needs: [setup-matrix, package-tarball]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    steps:
+      - name: Checkout gpgui repo
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+          repository: yuezk/gpgui
+          path: gpgui
+
+      - name: Download package tarball
+        uses: actions/download-artifact@v3
+        with:
+          name: artifact-tarball
+          path: gpgui/.tmp/artifact
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.arch }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Create RPM package
+        run: |
+          docker run \
+            --rm \
+            -v $(pwd):/${{ github.workspace }} \
+            -w ${{ github.workspace }} \
+            --platform linux/${{ matrix.arch }} \
+            yuezk/gpdev:rpm-builder \
+            "./gpgui/scripts/build-rpm.sh"
+
+      - name: Upload rpm artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: artifact-${{ matrix.arch }}-rpm
+          path: |
+            gpgui/.tmp/artifact/*.rpm
+
+  package-pkgbuild:
+    needs: [setup-matrix, build-tauri-amd64, build-tauri-arm64]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    steps:
+      - name: Checkout gpgui repo
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+          repository: yuezk/gpgui
+          path: gpgui
+
+      - name: Download artifact-${{ matrix.arch }}
+        uses: actions/download-artifact@v3
+        with:
+          name: artifact-${{ matrix.arch }}-tauri
+          path: gpgui/.tmp/artifact
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.arch }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Generate PKGBUILD
+        run: |
+          export CI_ARCH=${{ matrix.arch }}
+          ./gpgui/scripts/generate-pkgbuild.sh
+
+      - name: Build PKGBUILD package
+        run: |
+          # Build package
+          docker run \
+            --rm \
+            -v $(pwd)/gpgui/.tmp/pkgbuild:/pkgbuild \
+            --platform linux/${{ matrix.arch }} \
+            yuezk/gpdev:pkgbuild
+
+      - name: Upload pkgbuild artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: artifact-${{ matrix.arch }}-pkgbuild
+          path: |
+            gpgui/.tmp/pkgbuild/*.pkg.tar.zst
+
+  gh-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    needs:
+      - package-rpm
+      - package-pkgbuild
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          path: artifact
+          # pattern: artifact-*
+          # merge-multiple: true
+
+      # - name: Generate checksum
+      #   uses: jmgilman/actions-generate-checksum@v1
+      #   with:
+      #     output: checksums.txt
+      #     patterns: |
+      #       artifact/*
+
+      - name: Create GH release
+        uses: softprops/action-gh-release@v1
+        with:
+          token: ${{ secrets.GH_PAT }}
+          prerelease: ${{ contains(github.ref, 'latest') }}
+          fail_on_unmatched_files: true
+          files: |
+            artifact/artifact-*/*
