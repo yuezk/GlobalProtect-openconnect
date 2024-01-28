@@ -139,6 +139,24 @@ impl CachedCredential {
   pub fn set_auth_cookie(&mut self, auth_cookie: AuthCookieCredential) {
     self.auth_cookie = auth_cookie;
   }
+
+  pub fn set_username(&mut self, username: String) {
+    self.username = username;
+  }
+
+  pub fn set_password(&mut self, password: Option<String>) {
+    self.password = password.map(|s| s.to_string());
+  }
+}
+
+impl From<PasswordCredential> for CachedCredential {
+  fn from(value: PasswordCredential) -> Self {
+    Self::new(
+      value.username().to_owned(),
+      Some(value.password().to_owned()),
+      AuthCookieCredential::new("", "", ""),
+    )
+  }
 }
 
 #[derive(Debug, Serialize, Deserialize, Type, Clone)]

@@ -8,6 +8,7 @@ use super::command_traits::CommandExt;
 
 pub struct SamlAuthLauncher<'a> {
   server: &'a str,
+  gateway: bool,
   saml_request: Option<&'a str>,
   user_agent: Option<&'a str>,
   os: Option<&'a str>,
@@ -22,6 +23,7 @@ impl<'a> SamlAuthLauncher<'a> {
   pub fn new(server: &'a str) -> Self {
     Self {
       server,
+      gateway: false,
       saml_request: None,
       user_agent: None,
       os: None,
@@ -31,6 +33,11 @@ impl<'a> SamlAuthLauncher<'a> {
       ignore_tls_errors: false,
       clean: false,
     }
+  }
+
+  pub fn gateway(mut self, gateway: bool) -> Self {
+    self.gateway = gateway;
+    self
   }
 
   pub fn saml_request(mut self, saml_request: &'a str) -> Self {
@@ -77,6 +84,10 @@ impl<'a> SamlAuthLauncher<'a> {
   pub async fn launch(self) -> anyhow::Result<Credential> {
     let mut auth_cmd = Command::new(GP_AUTH_BINARY);
     auth_cmd.arg(self.server);
+
+    if self.gateway {
+      auth_cmd.arg("--gateway");
+    }
 
     if let Some(saml_request) = self.saml_request {
       auth_cmd.arg("--saml-request").arg(saml_request);

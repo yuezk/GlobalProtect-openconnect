@@ -284,12 +284,10 @@ fn raise_window(window: &Arc<Window>) {
   }
 }
 
-pub(crate) async fn portal_prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<String> {
-  info!("Portal prelogin...");
-
+pub async fn portal_prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<String> {
   match prelogin(portal, gp_params).await? {
     Prelogin::Saml(prelogin) => Ok(prelogin.saml_request().to_string()),
-    Prelogin::Standard(_) => Err(anyhow::anyhow!("Received non-SAML prelogin response")),
+    Prelogin::Standard(_) => bail!("Received non-SAML prelogin response"),
   }
 }
 

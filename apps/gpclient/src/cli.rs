@@ -116,9 +116,7 @@ pub(crate) async fn run() {
     }
 
     if err.contains("certificate verify failed") && !cli.ignore_tls_errors {
-      eprintln!(
-        "\nRe-run it with the `--ignore-tls-errors` option to ignore the certificate error, e.g.:\n"
-      );
+      eprintln!("\nRe-run it with the `--ignore-tls-errors` option to ignore the certificate error, e.g.:\n");
       // Print the command
       let args = std::env::args().collect::<Vec<_>>();
       eprintln!("{} --ignore-tls-errors {}\n", args[0], args[1..].join(" "));

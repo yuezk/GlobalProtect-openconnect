@@ -6,9 +6,9 @@ use gpapi::{
   credential::{Credential, PasswordCredential},
   gateway::gateway_login,
   gp_params::{ClientOs, GpParams},
-  portal::{prelogin, retrieve_config, Prelogin},
+  portal::{prelogin, retrieve_config, PortalError, Prelogin},
   process::auth_launcher::SamlAuthLauncher,
-  utils::{self, shutdown_signal},
+  utils::shutdown_signal,
   GP_USER_AGENT,
 };
 use inquire::{Password, PasswordDisplayMode, Select, Text};
@@ -81,12 +81,28 @@ impl<'a> ConnectHandler<'a> {
   }
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
-    let portal = utils::normalize_server(self.args.server.as_str())?;
+    let server = self.args.server.as_str();
+
+    let Err(err) = self.connect_portal_with_prelogin(server).await else {
+      return Ok(());
+    };
+
+    info!("Failed to connect portal with prelogin: {}", err);
+    if err.root_cause().downcast_ref::<PortalError>().is_some() {
+      info!("Trying the gateway authentication workflow...");
+      return self.connect_gateway_with_prelogin(server).await;
+    }
+
+    Err(err)
+  }
+
+  async fn connect_portal_with_prelogin(&self, portal: &str) -> anyhow::Result<()> {
     let gp_params = self.build_gp_params();
 
-    let prelogin = prelogin(&portal, &gp_params).await?;
-    let portal_credential = self.obtain_credential(&prelogin).await?;
-    let mut portal_config = retrieve_config(&portal, &portal_credential, &gp_params).await?;
+    let prelogin = prelogin(portal, &gp_params).await?;
+
+    let cred = self.obtain_credential(&prelogin, portal).await?;
+    let mut portal_config = retrieve_config(portal, &cred, &gp_params).await?;
 
     let selected_gateway = match &self.args.gateway {
       Some(gateway) => portal_config
@@ -109,15 +125,31 @@ impl<'a> ConnectHandler<'a> {
     let gateway = selected_gateway.server();
     let cred = portal_config.auth_cookie().into();
 
-    let token = match gateway_login(gateway, &cred, &gp_params).await {
-      Ok(token) => token,
-      Err(_) => {
-        info!("Gateway login failed, retrying with prelogin");
-        self.gateway_login_with_prelogin(gateway).await?
+    let cookie = match gateway_login(gateway, &cred, &gp_params).await {
+      Ok(cookie) => cookie,
+      Err(err) => {
+        info!("Gateway login failed: {}", err);
+        return self.connect_gateway_with_prelogin(gateway).await;
       }
     };
 
-    let vpn = Vpn::builder(gateway, &token)
+    self.connect_gateway(gateway, &cookie).await
+  }
+
+  async fn connect_gateway_with_prelogin(&self, gateway: &str) -> anyhow::Result<()> {
+    let mut gp_params = self.build_gp_params();
+    gp_params.set_is_gateway(true);
+
+    let prelogin = prelogin(gateway, &gp_params).await?;
+    let cred = self.obtain_credential(&prelogin, &gateway).await?;
+
+    let cookie = gateway_login(gateway, &cred, &gp_params).await?;
+
+    self.connect_gateway(gateway, &cookie).await
+  }
+
+  async fn connect_gateway(&self, gateway: &str, cookie: &str) -> anyhow::Result<()> {
+    let vpn = Vpn::builder(gateway, cookie)
       .user_agent(self.args.user_agent.clone())
       .script(self.args.script.clone())
       .build();
@@ -142,20 +174,17 @@ impl<'a> ConnectHandler<'a> {
     Ok(())
   }
 
-  async fn gateway_login_with_prelogin(&self, gateway: &str) -> anyhow::Result<String> {
-    let mut gp_params = self.build_gp_params();
-    gp_params.set_is_gateway(true);
+  async fn obtain_credential(
+    &self,
+    prelogin: &Prelogin,
+    server: &str,
+  ) -> anyhow::Result<Credential> {
+    let is_gateway = prelogin.is_gateway();
 
-    let prelogin = prelogin(gateway, &gp_params).await?;
-    let cred = self.obtain_credential(&prelogin).await?;
-
-    gateway_login(gateway, &cred, &gp_params).await
-  }
-
-  async fn obtain_credential(&self, prelogin: &Prelogin) -> anyhow::Result<Credential> {
     match prelogin {
       Prelogin::Saml(prelogin) => {
         SamlAuthLauncher::new(&self.args.server)
+          .gateway(is_gateway)
           .saml_request(prelogin.saml_request())
           .user_agent(&self.args.user_agent)
           .os(self.args.os.as_str())
@@ -168,7 +197,8 @@ impl<'a> ConnectHandler<'a> {
           .await
       }
       Prelogin::Standard(prelogin) => {
-        println!("{}", prelogin.auth_message());
+        let prefix = if is_gateway { "Gateway" } else { "Portal" };
+        println!("{} ({}: {})", prelogin.auth_message(), prefix, server);
 
         let user = self.args.user.as_ref().map_or_else(
           || Text::new(&format!("{}:", prelogin.label_username())).prompt(),

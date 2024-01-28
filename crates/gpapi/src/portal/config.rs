@@ -1,16 +1,16 @@
-use anyhow::ensure;
+use anyhow::bail;
 use log::info;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use roxmltree::Document;
 use serde::Serialize;
 use specta::Type;
-use thiserror::Error;
 
 use crate::{
   credential::{AuthCookieCredential, Credential},
   gateway::{parse_gateways, Gateway},
   gp_params::GpParams,
-  utils::{normalize_server, xml},
+  portal::PortalError,
+  utils::{normalize_server, remove_url_scheme, xml},
 };
 
 #[derive(Debug, Serialize, Type)]
@@ -18,25 +18,12 @@ use crate::{
 pub struct PortalConfig {
   portal: String,
   auth_cookie: AuthCookieCredential,
+  config_cred: Credential,
   gateways: Vec<Gateway>,
   config_digest: Option<String>,
 }
 
 impl PortalConfig {
-  pub fn new(
-    portal: String,
-    auth_cookie: AuthCookieCredential,
-    gateways: Vec<Gateway>,
-    config_digest: Option<String>,
-  ) -> Self {
-    Self {
-      portal,
-      auth_cookie,
-      gateways,
-      config_digest,
-    }
-  }
-
   pub fn portal(&self) -> &str {
     &self.portal
   }
@@ -47,6 +34,10 @@ impl PortalConfig {
 
   pub fn auth_cookie(&self) -> &AuthCookieCredential {
     &self.auth_cookie
+  }
+
+  pub fn config_cred(&self) -> &Credential {
+    &self.config_cred
   }
 
   /// In-place sort the gateways by region
@@ -98,12 +89,6 @@ impl PortalConfig {
   }
 }
 
-#[derive(Error, Debug)]
-pub enum PortalConfigError {
-  #[error("Empty response, retrying can help")]
-  EmptyResponse,
-}
-
 pub async fn retrieve_config(
   portal: &str,
   cred: &Credential,
@@ -128,13 +113,35 @@ pub async fn retrieve_config(
   info!("Portal config, user_agent: {}", gp_params.user_agent());
 
   let res = client.post(&url).form(&params).send().await?;
-  let res_xml = res.error_for_status()?.text().await?;
+  let status = res.status();
 
-  ensure!(!res_xml.is_empty(), PortalConfigError::EmptyResponse);
+  if status == StatusCode::NOT_FOUND {
+    bail!(PortalError::ConfigError(
+      "Config endpoint not found".to_string()
+    ))
+  }
 
-  let doc = Document::parse(&res_xml)?;
-  let mut gateways =
-    parse_gateways(&doc).ok_or_else(|| anyhow::anyhow!("Failed to parse gateways"))?;
+  if status.is_client_error() || status.is_server_error() {
+    bail!("Portal config error: {}", status)
+  }
+
+  let res_xml = res
+    .text()
+    .await
+    .map_err(|e| PortalError::ConfigError(e.to_string()))?;
+
+  if res_xml.is_empty() {
+    bail!(PortalError::ConfigError(
+      "Empty portal config response".to_string()
+    ))
+  }
+
+  let doc = Document::parse(&res_xml).map_err(|e| PortalError::ConfigError(e.to_string()))?;
+
+  let mut gateways = parse_gateways(&doc).unwrap_or_else(|| {
+    info!("No gateways found in portal config");
+    vec![]
+  });
 
   let user_auth_cookie = xml::get_child_text(&doc, "portal-userauthcookie").unwrap_or_default();
   let prelogon_user_auth_cookie =
@@ -142,26 +149,18 @@ pub async fn retrieve_config(
   let config_digest = xml::get_child_text(&doc, "config-digest");
 
   if gateways.is_empty() {
-    gateways.push(Gateway {
-      name: server.to_string(),
-      address: server.to_string(),
-      priority: 0,
-      priority_rules: vec![],
-    });
+    gateways.push(Gateway::new(server.to_string(), server.to_string()));
   }
 
-  Ok(PortalConfig::new(
-    server.to_string(),
-    AuthCookieCredential::new(
+  Ok(PortalConfig {
+    portal: server.to_string(),
+    auth_cookie: AuthCookieCredential::new(
       cred.username(),
       &user_auth_cookie,
       &prelogon_user_auth_cookie,
     ),
+    config_cred: cred.clone(),
     gateways,
     config_digest,
-  ))
-}
-
-fn remove_url_scheme(s: &str) -> String {
-  s.replace("http://", "").replace("https://", "")
+  })
 }

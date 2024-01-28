@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use axum::{routing::{get, post}, Router};
+use axum::{
+  routing::{get, post},
+  Router,
+};
 
 use crate::{handlers, ws_server::WsServerContext};
 
