@@ -26,6 +26,7 @@ const REQUIRED_PARAMS: [&str; 8] = [
 #[serde(rename_all = "camelCase")]
 pub struct SamlPrelogin {
   region: String,
+  is_gateway: bool,
   saml_request: String,
   support_default_browser: bool,
 }
@@ -48,6 +49,7 @@ impl SamlPrelogin {
 #[serde(rename_all = "camelCase")]
 pub struct StandardPrelogin {
   region: String,
+  is_gateway: bool,
   auth_message: String,
   label_username: String,
   label_password: String,
@@ -85,21 +87,27 @@ impl Prelogin {
       Prelogin::Standard(standard) => standard.region(),
     }
   }
+
+  pub fn is_gateway(&self) -> bool {
+    match self {
+      Prelogin::Saml(saml) => saml.is_gateway,
+      Prelogin::Standard(standard) => standard.is_gateway,
+    }
+  }
 }
 
 pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prelogin> {
   let user_agent = gp_params.user_agent();
-  info!("Portal prelogin, user_agent: {}", user_agent);
+  info!("Prelogin with user_agent: {}", user_agent);
 
   let portal = normalize_server(portal)?;
-  let prelogin_url = format!(
-    "{portal}/{}/prelogin.esp",
-    if gp_params.is_gateway() {
-      "ssl-vpn"
-    } else {
-      "global-protect"
-    }
-  );
+  let is_gateway = gp_params.is_gateway();
+  let path = if is_gateway {
+    "ssl-vpn"
+  } else {
+    "global-protect"
+  };
+  let prelogin_url = format!("{portal}/{}/prelogin.esp", path);
   let mut params = gp_params.to_params();
 
   params.insert("tmp", "tmp");
@@ -127,18 +135,22 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
     ))
   }
 
+  if status.is_client_error() || status.is_server_error() {
+    bail!("Prelogin error: {}", status)
+  }
+
   let res_xml = res
-    .error_for_status()?
     .text()
     .await
     .map_err(|e| PortalError::PreloginError(e.to_string()))?;
 
-  let prelogin = parse_res_xml(res_xml).map_err(|e| PortalError::PreloginError(e.to_string()))?;
+  let prelogin =
+    parse_res_xml(res_xml, is_gateway).map_err(|e| PortalError::PreloginError(e.to_string()))?;
 
   Ok(prelogin)
 }
 
-fn parse_res_xml(res_xml: String) -> anyhow::Result<Prelogin> {
+fn parse_res_xml(res_xml: String, is_gateway: bool) -> anyhow::Result<Prelogin> {
   let doc = Document::parse(&res_xml)?;
 
   let status = xml::get_child_text(&doc, "status")
@@ -164,6 +176,7 @@ fn parse_res_xml(res_xml: String) -> anyhow::Result<Prelogin> {
 
     let saml_prelogin = SamlPrelogin {
       region,
+      is_gateway,
       saml_request,
       support_default_browser,
     };
@@ -179,6 +192,7 @@ fn parse_res_xml(res_xml: String) -> anyhow::Result<Prelogin> {
       .unwrap_or(String::from("Please enter the login credentials"));
     let standard_prelogin = StandardPrelogin {
       region,
+      is_gateway,
       auth_message,
       label_username: label_username.unwrap(),
       label_password: label_password.unwrap(),

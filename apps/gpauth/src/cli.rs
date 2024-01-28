@@ -25,6 +25,8 @@ const VERSION: &str = concat!(
 struct Cli {
   server: String,
   #[arg(long)]
+  gateway: bool,
+  #[arg(long)]
   saml_request: Option<String>,
   #[arg(long, default_value = GP_USER_AGENT)]
   user_agent: String,
@@ -102,6 +104,7 @@ impl Cli {
       .client_os(ClientOs::from(&self.os))
       .os_version(self.os_version.clone())
       .ignore_tls_errors(self.ignore_tls_errors)
+      .is_gateway(self.gateway)
       .build();
 
     gp_params

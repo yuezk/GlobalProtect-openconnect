@@ -38,3 +38,7 @@ pub fn normalize_server(server: &str) -> anyhow::Result<String> {
 
   Ok(normalized_url)
 }
+
+pub fn remove_url_scheme(s: &str) -> String {
+  s.replace("http://", "").replace("https://", "")
+}
