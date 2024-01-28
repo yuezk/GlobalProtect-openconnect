@@ -15,6 +15,7 @@ A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authenticati
 - [x] Support authentication using default browser
 - [x] Support multiple portals
 - [x] Support gateway selection
+- [x] Support connect gateway directly
 - [x] Support auto-connect on startup
 - [x] Support system tray icon
 
@@ -123,6 +124,13 @@ Download the latest RPM package from [releases](https://github.com/yuezk/GlobalP
 ### Other distributions
 
 The project depends on `openconnect >= 8.20`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`. You can install them first and then download the latest binary release (i.e., `*.bin.tar.gz`) from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
+
+## About Trial
+
+The CLI version is always free, while the GUI version is paid. There two trial modes for the GUI version:
+
+1. 10-day trial: You can use the GUI stable release for 10 days after the installation.
+2. 14-day trial: Each beta release has a fresh trial period (at most 14 days) after released.
 
 ## [License](./LICENSE)
 
