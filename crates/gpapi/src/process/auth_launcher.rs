@@ -129,7 +129,7 @@ impl<'a> SamlAuthLauncher<'a> {
       .wait_with_output()
       .await?;
 
-    let auth_result: SamlAuthResult = serde_json::from_slice(&output.stdout)
+    let auth_result = serde_json::from_slice::<SamlAuthResult>(&output.stdout)
       .map_err(|_| anyhow::anyhow!("Failed to parse auth data"))?;
 
     match auth_result {

@@ -27,11 +27,7 @@ impl SamlAuthResult {
 }
 
 impl SamlAuthData {
-  pub fn new(
-    username: String,
-    prelogin_cookie: Option<String>,
-    portal_userauthcookie: Option<String>,
-  ) -> Self {
+  pub fn new(username: String, prelogin_cookie: Option<String>, portal_userauthcookie: Option<String>) -> Self {
     Self {
       username,
       prelogin_cookie,
@@ -78,13 +74,9 @@ impl SamlAuthData {
     prelogin_cookie: &Option<String>,
     portal_userauthcookie: &Option<String>,
   ) -> bool {
-    let username_valid = username
-      .as_ref()
-      .is_some_and(|username| !username.is_empty());
+    let username_valid = username.as_ref().is_some_and(|username| !username.is_empty());
     let prelogin_cookie_valid = prelogin_cookie.as_ref().is_some_and(|val| val.len() > 5);
-    let portal_userauthcookie_valid = portal_userauthcookie
-      .as_ref()
-      .is_some_and(|val| val.len() > 5);
+    let portal_userauthcookie_valid = portal_userauthcookie.as_ref().is_some_and(|val| val.len() > 5);
 
     username_valid && (prelogin_cookie_valid || portal_userauthcookie_valid)
   }

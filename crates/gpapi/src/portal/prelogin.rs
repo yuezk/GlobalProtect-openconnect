@@ -102,11 +102,7 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
 
   let portal = normalize_server(portal)?;
   let is_gateway = gp_params.is_gateway();
-  let path = if is_gateway {
-    "ssl-vpn"
-  } else {
-    "global-protect"
-  };
+  let path = if is_gateway { "ssl-vpn" } else { "global-protect" };
   let prelogin_url = format!("{portal}/{}/prelogin.esp", path);
   let mut params = gp_params.to_params();
 
@@ -115,11 +111,7 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
     params.insert("default-browser", "1");
   }
 
-  params.retain(|k, _| {
-    REQUIRED_PARAMS
-      .iter()
-      .any(|required_param| required_param == k)
-  });
+  params.retain(|k, _| REQUIRED_PARAMS.iter().any(|required_param| required_param == k));
 
   let client = Client::builder()
     .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
@@ -130,9 +122,7 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
   let status = res.status();
 
   if status == StatusCode::NOT_FOUND {
-    bail!(PortalError::PreloginError(
-      "Prelogin endpoint not found".to_string()
-    ))
+    bail!(PortalError::PreloginError("Prelogin endpoint not found".to_string()))
   }
 
   if status.is_client_error() || status.is_server_error() {
@@ -144,8 +134,7 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
     .await
     .map_err(|e| PortalError::PreloginError(e.to_string()))?;
 
-  let prelogin =
-    parse_res_xml(res_xml, is_gateway).map_err(|e| PortalError::PreloginError(e.to_string()))?;
+  let prelogin = parse_res_xml(res_xml, is_gateway).map_err(|e| PortalError::PreloginError(e.to_string()))?;
 
   Ok(prelogin)
 }
@@ -170,9 +159,7 @@ fn parse_res_xml(res_xml: String, is_gateway: bool) -> anyhow::Result<Prelogin> 
   // Check if the prelogin response is SAML
   if saml_method.is_some() && saml_request.is_some() {
     let saml_request = base64::decode_to_string(&saml_request.unwrap())?;
-    let support_default_browser = saml_default_browser
-      .map(|s| s.to_lowercase() == "yes")
-      .unwrap_or(false);
+    let support_default_browser = saml_default_browser.map(|s| s.to_lowercase() == "yes").unwrap_or(false);
 
     let saml_prelogin = SamlPrelogin {
       region,
@@ -188,8 +175,8 @@ fn parse_res_xml(res_xml: String, is_gateway: bool) -> anyhow::Result<Prelogin> 
   let label_password = xml::get_child_text(&doc, "password-label");
   // Check if the prelogin response is standard login
   if label_username.is_some() && label_password.is_some() {
-    let auth_message = xml::get_child_text(&doc, "authentication-message")
-      .unwrap_or(String::from("Please enter the login credentials"));
+    let auth_message =
+      xml::get_child_text(&doc, "authentication-message").unwrap_or(String::from("Please enter the login credentials"));
     let standard_prelogin = StandardPrelogin {
       region,
       is_gateway,

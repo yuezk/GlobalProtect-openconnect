@@ -20,10 +20,7 @@ pub(crate) struct ConnectOptions {
 #[link(name = "vpn")]
 extern "C" {
   #[link_name = "vpn_connect"]
-  fn vpn_connect(
-    options: *const ConnectOptions,
-    callback: extern "C" fn(i32, *mut c_void),
-  ) -> c_int;
+  fn vpn_connect(options: *const ConnectOptions, callback: extern "C" fn(i32, *mut c_void)) -> c_int;
 
   #[link_name = "vpn_disconnect"]
   fn vpn_disconnect();

@@ -115,12 +115,7 @@ pub fn redact_uri(uri: &str) -> String {
       .map(|query| format!("?{}", query))
       .unwrap_or_default();
 
-    return format!(
-      "{}://[**********]{}{}",
-      url.scheme(),
-      url.path(),
-      redacted_query
-    );
+    return format!("{}://[**********]{}{}", url.scheme(), url.path(), redacted_query);
   }
 
   let redacted_query = redact_query(url.query());
@@ -165,10 +160,7 @@ mod tests {
 
     redaction.add_value("foo").unwrap();
 
-    assert_eq!(
-      redaction.redact_str("hello, foo, bar"),
-      "hello, [**********], bar"
-    );
+    assert_eq!(redaction.redact_str("hello, foo, bar"), "hello, [**********], bar");
   }
 
   #[test]

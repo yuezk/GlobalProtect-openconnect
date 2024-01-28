@@ -30,9 +30,7 @@ pub fn normalize_server(server: &str) -> anyhow::Result<String> {
     .host_str()
     .ok_or(anyhow::anyhow!("Invalid server URL: missing host"))?;
 
-  let port: String = normalized_url
-    .port()
-    .map_or("".into(), |port| format!(":{}", port));
+  let port: String = normalized_url.port().map_or("".into(), |port| format!(":{}", port));
 
   let normalized_url = format!("{}://{}{}", scheme, host, port);
 

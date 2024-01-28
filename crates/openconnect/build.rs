@@ -5,8 +5,5 @@ fn main() {
   println!("cargo:rerun-if-changed=src/ffi/vpn.h");
 
   // Compile the vpn.c file
-  cc::Build::new()
-    .file("src/ffi/vpn.c")
-    .include("src/ffi")
-    .compile("vpn");
+  cc::Build::new().file("src/ffi/vpn.c").include("src/ffi").compile("vpn");
 }

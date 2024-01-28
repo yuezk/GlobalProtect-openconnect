@@ -21,17 +21,11 @@ pub(crate) async fn active_gui(State(ctx): State<Arc<WsServerContext>>) -> impl 
   ctx.send_event(WsEvent::ActiveGui).await;
 }
 
-pub(crate) async fn auth_data(
-  State(ctx): State<Arc<WsServerContext>>,
-  body: String,
-) -> impl IntoResponse {
+pub(crate) async fn auth_data(State(ctx): State<Arc<WsServerContext>>, body: String) -> impl IntoResponse {
   ctx.send_event(WsEvent::AuthData(body)).await;
 }
 
-pub(crate) async fn ws_handler(
-  ws: WebSocketUpgrade,
-  State(ctx): State<Arc<WsServerContext>>,
-) -> impl IntoResponse {
+pub(crate) async fn ws_handler(ws: WebSocketUpgrade, State(ctx): State<Arc<WsServerContext>>) -> impl IntoResponse {
   ws.on_upgrade(move |socket| handle_socket(socket, ctx))
 }
 

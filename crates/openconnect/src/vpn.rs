@@ -27,11 +27,7 @@ impl Vpn {
   }
 
   pub fn connect(&self, on_connected: impl FnOnce() + 'static + Send + Sync) -> i32 {
-    self
-      .callback
-      .write()
-      .unwrap()
-      .replace(Box::new(on_connected));
+    self.callback.write().unwrap().replace(Box::new(on_connected));
     let options = self.build_connect_options();
 
     ffi::connect(&options)
@@ -107,10 +103,7 @@ impl VpnBuilder {
 
   pub fn build(self) -> Vpn {
     let user_agent = self.user_agent.unwrap_or_default();
-    let script = self
-      .script
-      .or_else(find_default_vpnc_script)
-      .unwrap_or_default();
+    let script = self.script.or_else(find_default_vpnc_script).unwrap_or_default();
     let os = self.os.unwrap_or("linux".to_string());
 
     Vpn {

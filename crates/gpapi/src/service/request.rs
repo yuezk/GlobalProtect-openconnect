@@ -58,10 +58,7 @@ impl ConnectArgs {
   }
 
   pub fn openconnect_os(&self) -> Option<String> {
-    self
-      .os
-      .as_ref()
-      .map(|os| os.to_openconnect_os().to_string())
+    self.os.as_ref().map(|os| os.to_openconnect_os().to_string())
   }
 }
 

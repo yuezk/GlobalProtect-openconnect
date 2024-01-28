@@ -21,8 +21,7 @@ impl CommandExt for Command {
   }
 
   fn into_non_root(mut self) -> anyhow::Result<Command> {
-    let user =
-      get_non_root_user().map_err(|_| anyhow::anyhow!("{:?} cannot be run as root", self))?;
+    let user = get_non_root_user().map_err(|_| anyhow::anyhow!("{:?} cannot be run as root", self))?;
 
     self
       .env("HOME", user.home_dir())
@@ -42,8 +41,7 @@ fn get_non_root_user() -> anyhow::Result<User> {
   let user = if current_user == "root" {
     get_real_user()?
   } else {
-    uzers::get_user_by_name(&current_user)
-      .ok_or_else(|| anyhow::anyhow!("User ({}) not found", current_user))?
+    uzers::get_user_by_name(&current_user).ok_or_else(|| anyhow::anyhow!("User ({}) not found", current_user))?
   };
 
   if user.uid() == 0 {

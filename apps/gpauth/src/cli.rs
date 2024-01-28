@@ -13,12 +13,7 @@ use tempfile::NamedTempFile;
 
 use crate::auth_window::{portal_prelogin, AuthWindow};
 
-const VERSION: &str = concat!(
-  env!("CARGO_PKG_VERSION"),
-  " (",
-  compile_time::date_str!(),
-  ")"
-);
+const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
 
 #[derive(Parser, Clone)]
 #[command(version = VERSION)]

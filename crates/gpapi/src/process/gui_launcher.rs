@@ -66,10 +66,7 @@ impl GuiLauncher {
 
     let mut non_root_cmd = cmd.into_non_root()?;
 
-    let mut child = non_root_cmd
-      .kill_on_drop(true)
-      .stdin(Stdio::piped())
-      .spawn()?;
+    let mut child = non_root_cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn()?;
 
     let mut stdin = child
       .stdin

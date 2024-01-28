@@ -10,11 +10,7 @@ use crate::{
   utils::{normalize_server, remove_url_scheme},
 };
 
-pub async fn gateway_login(
-  gateway: &str,
-  cred: &Credential,
-  gp_params: &GpParams,
-) -> anyhow::Result<String> {
+pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<String> {
   let url = normalize_server(gateway)?;
   let gateway = remove_url_scheme(&url);
 
@@ -70,11 +66,7 @@ fn build_gateway_token(doc: &Document, computer: &str) -> anyhow::Result<String>
   Ok(token)
 }
 
-fn read_args<'a>(
-  args: &'a [String],
-  index: usize,
-  key: &'a str,
-) -> anyhow::Result<(&'a str, &'a str)> {
+fn read_args<'a>(args: &'a [String], index: usize, key: &'a str) -> anyhow::Result<(&'a str, &'a str)> {
   args
     .get(index)
     .ok_or_else(|| anyhow::anyhow!("Failed to read {key} from args"))

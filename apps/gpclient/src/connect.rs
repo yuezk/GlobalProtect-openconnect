@@ -21,17 +21,9 @@ use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE};
 pub(crate) struct ConnectArgs {
   #[arg(help = "The portal server to connect to")]
   server: String,
-  #[arg(
-    short,
-    long,
-    help = "The gateway to connect to, it will prompt if not specified"
-  )]
+  #[arg(short, long, help = "The gateway to connect to, it will prompt if not specified")]
   gateway: Option<String>,
-  #[arg(
-    short,
-    long,
-    help = "The username to use, it will prompt if not specified"
-  )]
+  #[arg(short, long, help = "The username to use, it will prompt if not specified")]
   user: Option<String>,
   #[arg(long, short, help = "The VPNC script to use")]
   script: Option<String>,
@@ -174,11 +166,7 @@ impl<'a> ConnectHandler<'a> {
     Ok(())
   }
 
-  async fn obtain_credential(
-    &self,
-    prelogin: &Prelogin,
-    server: &str,
-  ) -> anyhow::Result<Credential> {
+  async fn obtain_credential(&self, prelogin: &Prelogin, server: &str) -> anyhow::Result<Credential> {
     let is_gateway = prelogin.is_gateway();
 
     match prelogin {

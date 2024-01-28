@@ -98,12 +98,7 @@ impl WsServer {
     lock_file: Arc<LockFile>,
     redaction: Arc<Redaction>,
   ) -> Self {
-    let ctx = Arc::new(WsServerContext::new(
-      api_key,
-      ws_req_tx,
-      vpn_state_rx,
-      redaction,
-    ));
+    let ctx = Arc::new(WsServerContext::new(api_key, ws_req_tx, vpn_state_rx, redaction));
     let cancel_token = CancellationToken::new();
 
     Self {

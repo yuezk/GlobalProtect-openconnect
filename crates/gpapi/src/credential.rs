@@ -112,11 +112,7 @@ pub struct CachedCredential {
 }
 
 impl CachedCredential {
-  pub fn new(
-    username: String,
-    password: Option<String>,
-    auth_cookie: AuthCookieCredential,
-  ) -> Self {
+  pub fn new(username: String, password: Option<String>, auth_cookie: AuthCookieCredential) -> Self {
     Self {
       username,
       password,
@@ -193,8 +189,7 @@ impl Credential {
     let mut params = HashMap::new();
     params.insert("user", self.username());
 
-    let (passwd, prelogin_cookie, portal_userauthcookie, portal_prelogonuserauthcookie) = match self
-    {
+    let (passwd, prelogin_cookie, portal_userauthcookie, portal_prelogonuserauthcookie) = match self {
       Credential::Password(cred) => (Some(cred.password()), None, None, None),
       Credential::PreloginCookie(cred) => (None, Some(cred.prelogin_cookie()), None, None),
       Credential::AuthCookie(cred) => (
@@ -213,10 +208,7 @@ impl Credential {
 
     params.insert("passwd", passwd.unwrap_or_default());
     params.insert("prelogin-cookie", prelogin_cookie.unwrap_or_default());
-    params.insert(
-      "portal-userauthcookie",
-      portal_userauthcookie.unwrap_or_default(),
-    );
+    params.insert("portal-userauthcookie", portal_userauthcookie.unwrap_or_default());
     params.insert(
       "portal-prelogonuserauthcookie",
       portal_prelogonuserauthcookie.unwrap_or_default(),

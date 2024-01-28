@@ -9,12 +9,7 @@ use crate::{
   launch_gui::{LaunchGuiArgs, LaunchGuiHandler},
 };
 
-const VERSION: &str = concat!(
-  env!("CARGO_PKG_VERSION"),
-  " (",
-  compile_time::date_str!(),
-  ")"
-);
+const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
 
 pub(crate) struct SharedArgs {
   pub(crate) fix_openssl: bool,
@@ -53,10 +48,7 @@ struct Cli {
   #[command(subcommand)]
   command: CliCommand,
 
-  #[arg(
-    long,
-    help = "Get around the OpenSSL `unsafe legacy renegotiation` error"
-  )]
+  #[arg(long, help = "Get around the OpenSSL `unsafe legacy renegotiation` error")]
   fix_openssl: bool,
   #[arg(long, help = "Ignore the TLS errors")]
   ignore_tls_errors: bool,

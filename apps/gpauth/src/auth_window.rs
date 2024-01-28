@@ -19,8 +19,8 @@ use tokio_util::sync::CancellationToken;
 use webkit2gtk::{
   gio::Cancellable,
   glib::{GString, TimeSpan},
-  LoadEvent, SettingsExt, TLSErrorsPolicy, URIResponse, URIResponseExt, WebContextExt, WebResource,
-  WebResourceExt, WebView, WebViewExt, WebsiteDataManagerExtManual, WebsiteDataTypes,
+  LoadEvent, SettingsExt, TLSErrorsPolicy, URIResponse, URIResponseExt, WebContextExt, WebResource, WebResourceExt,
+  WebView, WebViewExt, WebsiteDataManagerExtManual, WebsiteDataTypes,
 };
 
 enum AuthDataError {
@@ -216,9 +216,7 @@ impl<'a> AuthWindow<'a> {
       if let Some(auth_result) = auth_result_rx.recv().await {
         match auth_result {
           Ok(auth_data) => return Ok(auth_data),
-          Err(AuthDataError::TlsError) => {
-            return Err(anyhow::anyhow!("TLS error: certificate verify failed"))
-          }
+          Err(AuthDataError::TlsError) => bail!("TLS error: certificate verify failed"),
           Err(AuthDataError::NotFound) => {
             info!("No auth data found, it may not be the /SAML20/SP/ACS endpoint");
 
@@ -227,10 +225,7 @@ impl<'a> AuthWindow<'a> {
               let window = Arc::clone(window);
               let cancel_token = CancellationToken::new();
 
-              raise_window_cancel_token
-                .write()
-                .await
-                .replace(cancel_token.clone());
+              raise_window_cancel_token.write().await.replace(cancel_token.clone());
 
               tokio::spawn(async move {
                 let delay_secs = 1;

@@ -79,21 +79,11 @@ impl PortalConfig {
     }
 
     // If no gateway is found, return the gateway with the lowest priority
-    preferred_gateway.unwrap_or_else(|| {
-      self
-        .gateways
-        .iter()
-        .min_by_key(|gateway| gateway.priority)
-        .unwrap()
-    })
+    preferred_gateway.unwrap_or_else(|| self.gateways.iter().min_by_key(|gateway| gateway.priority).unwrap())
   }
 }
 
-pub async fn retrieve_config(
-  portal: &str,
-  cred: &Credential,
-  gp_params: &GpParams,
-) -> anyhow::Result<PortalConfig> {
+pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<PortalConfig> {
   let portal = normalize_server(portal)?;
   let server = remove_url_scheme(&portal);
 
@@ -116,24 +106,17 @@ pub async fn retrieve_config(
   let status = res.status();
 
   if status == StatusCode::NOT_FOUND {
-    bail!(PortalError::ConfigError(
-      "Config endpoint not found".to_string()
-    ))
+    bail!(PortalError::ConfigError("Config endpoint not found".to_string()))
   }
 
   if status.is_client_error() || status.is_server_error() {
     bail!("Portal config error: {}", status)
   }
 
-  let res_xml = res
-    .text()
-    .await
-    .map_err(|e| PortalError::ConfigError(e.to_string()))?;
+  let res_xml = res.text().await.map_err(|e| PortalError::ConfigError(e.to_string()))?;
 
   if res_xml.is_empty() {
-    bail!(PortalError::ConfigError(
-      "Empty portal config response".to_string()
-    ))
+    bail!(PortalError::ConfigError("Empty portal config response".to_string()))
   }
 
   let doc = Document::parse(&res_xml).map_err(|e| PortalError::ConfigError(e.to_string()))?;
@@ -144,8 +127,7 @@ pub async fn retrieve_config(
   });
 
   let user_auth_cookie = xml::get_child_text(&doc, "portal-userauthcookie").unwrap_or_default();
-  let prelogon_user_auth_cookie =
-    xml::get_child_text(&doc, "portal-prelogonuserauthcookie").unwrap_or_default();
+  let prelogon_user_auth_cookie = xml::get_child_text(&doc, "portal-prelogonuserauthcookie").unwrap_or_default();
   let config_digest = xml::get_child_text(&doc, "config-digest");
 
   if gateways.is_empty() {
@@ -154,11 +136,7 @@ pub async fn retrieve_config(
 
   Ok(PortalConfig {
     portal: server.to_string(),
-    auth_cookie: AuthCookieCredential::new(
-      cred.username(),
-      &user_auth_cookie,
-      &prelogon_user_auth_cookie,
-    ),
+    auth_cookie: AuthCookieCredential::new(cred.username(), &user_auth_cookie, &prelogon_user_auth_cookie),
     config_cred: cred.clone(),
     gateways,
     config_digest,

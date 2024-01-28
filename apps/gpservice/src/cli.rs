@@ -6,9 +6,7 @@ use clap::Parser;
 use gpapi::{
   process::gui_launcher::GuiLauncher,
   service::{request::WsRequest, vpn_state::VpnState},
-  utils::{
-    crypto::generate_key, env_file, lock_file::LockFile, redact::Redaction, shutdown_signal,
-  },
+  utils::{crypto::generate_key, env_file, lock_file::LockFile, redact::Redaction, shutdown_signal},
   GP_SERVICE_LOCK_FILE,
 };
 use log::{info, warn, LevelFilter};
@@ -16,12 +14,7 @@ use tokio::sync::{mpsc, watch};
 
 use crate::{vpn_task::VpnTask, ws_server::WsServer};
 
-const VERSION: &str = concat!(
-  env!("CARGO_PKG_VERSION"),
-  " (",
-  compile_time::date_str!(),
-  ")"
-);
+const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
 
 #[derive(Parser)]
 #[command(version = VERSION)]
@@ -51,13 +44,7 @@ impl Cli {
     let (vpn_state_tx, vpn_state_rx) = watch::channel(VpnState::Disconnected);
 
     let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx);
-    let ws_server = WsServer::new(
-      api_key.clone(),
-      ws_req_tx,
-      vpn_state_rx,
-      lock_file.clone(),
-      redaction,
-    );
+    let ws_server = WsServer::new(api_key.clone(), ws_req_tx, vpn_state_rx, lock_file.clone(), redaction);
 
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(4);
     let shutdown_tx_clone = shutdown_tx.clone();
@@ -76,11 +63,7 @@ impl Cli {
     if no_gui {
       info!("GUI is disabled");
     } else {
-      let envs = self
-        .env_file
-        .as_ref()
-        .map(env_file::load_env_vars)
-        .transpose()?;
+      let envs = self.env_file.as_ref().map(env_file::load_env_vars).transpose()?;
 
       let minimized = self.minimized;
 
