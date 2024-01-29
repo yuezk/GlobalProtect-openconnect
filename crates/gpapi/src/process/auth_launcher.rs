@@ -1,5 +1,6 @@
 use std::process::Stdio;
 
+use anyhow::bail;
 use tokio::process::Command;
 
 use crate::{auth::SamlAuthResult, credential::Credential, GP_AUTH_BINARY};
@@ -129,12 +130,13 @@ impl<'a> SamlAuthLauncher<'a> {
       .wait_with_output()
       .await?;
 
-    let auth_result = serde_json::from_slice::<SamlAuthResult>(&output.stdout)
-      .map_err(|_| anyhow::anyhow!("Failed to parse auth data"))?;
+    let Ok(auth_result) = serde_json::from_slice::<SamlAuthResult>(&output.stdout) else {
+      bail!("Failed to parse auth data")
+    };
 
     match auth_result {
       SamlAuthResult::Success(auth_data) => Credential::try_from(auth_data),
-      SamlAuthResult::Failure(msg) => Err(anyhow::anyhow!(msg)),
+      SamlAuthResult::Failure(msg) => bail!(msg),
     }
   }
 }

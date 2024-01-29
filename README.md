@@ -127,7 +127,7 @@ The project depends on `openconnect >= 8.20`, `webkit2gtk`, `libsecret`, `libaya
 
 ## About Trial
 
-The CLI version is always free, while the GUI version is paid. There two trial modes for the GUI version:
+The CLI version is always free, while the GUI version is paid. There are two trial modes for the GUI version:
 
 1. 10-day trial: You can use the GUI stable release for 10 days after the installation.
 2. 14-day trial: Each beta release has a fresh trial period (at most 14 days) after released.
