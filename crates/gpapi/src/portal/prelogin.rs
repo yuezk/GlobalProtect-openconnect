@@ -150,8 +150,10 @@ fn parse_res_xml(res_xml: String, is_gateway: bool) -> anyhow::Result<Prelogin> 
     bail!("Prelogin failed: {}", msg)
   }
 
-  let region = xml::get_child_text(&doc, "region")
-    .ok_or_else(|| anyhow::anyhow!("Prelogin response does not contain region element"))?;
+  let region = xml::get_child_text(&doc, "region").unwrap_or_else(|| {
+    info!("Prelogin response does not contain region element");
+    String::from("Unknown")
+  });
 
   let saml_method = xml::get_child_text(&doc, "saml-auth-method");
   let saml_request = xml::get_child_text(&doc, "saml-request");
