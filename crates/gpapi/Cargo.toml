@@ -25,6 +25,7 @@ url.workspace = true
 regex.workspace = true
 dotenvy_macro.workspace = true
 uzers.workspace = true
+serde_urlencoded.workspace = true
 
 tauri = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }

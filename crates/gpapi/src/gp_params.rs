@@ -83,6 +83,18 @@ impl GpParams {
     self.prefer_default_browser
   }
 
+  pub fn client_os(&self) -> &str {
+    self.client_os.as_str()
+  }
+
+  pub fn os_version(&self) -> Option<&str> {
+    self.os_version.as_deref()
+  }
+
+  pub fn client_version(&self) -> Option<&str> {
+    self.client_version.as_deref()
+  }
+
   pub(crate) fn to_params(&self) -> HashMap<&str, &str> {
     let mut params: HashMap<&str, &str> = HashMap::new();
     let client_os = self.client_os.as_str();

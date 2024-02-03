@@ -1438,6 +1438,7 @@ dependencies = [
  "roxmltree",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "specta",
  "specta-macros",
  "tauri",

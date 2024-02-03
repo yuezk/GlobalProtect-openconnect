@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, oneshot, watch, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct VpnTaskContext {
-  vpn_handle: Arc<RwLock<Option<Vpn>>>,
+  vpn_handle: Arc<std::sync::RwLock<Option<Vpn>>>,
   vpn_state_tx: Arc<watch::Sender<VpnState>>,
   disconnect_rx: RwLock<Option<oneshot::Receiver<()>>>,
 }
@@ -32,16 +32,18 @@ impl VpnTaskContext {
     }
 
     let info = req.info().clone();
-    let vpn_handle = self.vpn_handle.clone();
+    let vpn_handle = Arc::clone(&self.vpn_handle);
     let args = req.args();
     let vpn = Vpn::builder(req.gateway().server(), args.cookie())
       .user_agent(args.user_agent())
       .script(args.vpnc_script())
+      .csd_uid(args.csd_uid())
+      .csd_wrapper(args.csd_wrapper())
       .os(args.openconnect_os())
       .build();
 
     // Save the VPN handle
-    vpn_handle.write().await.replace(vpn);
+    vpn_handle.write().unwrap().replace(vpn);
 
     let vpn_state_tx = self.vpn_state_tx.clone();
     let connect_info = Box::new(info.clone());
@@ -55,17 +57,30 @@ impl VpnTaskContext {
     thread::spawn(move || {
       let vpn_state_tx_clone = vpn_state_tx.clone();
 
-      vpn_handle.blocking_read().as_ref().map(|vpn| {
-        vpn.connect(move || {
-          let connect_info = Box::new(info.clone());
-          vpn_state_tx.send(VpnState::Connected(connect_info)).ok();
+      if let Err(err) = vpn_handle.read().map(|vpn| {
+        vpn.as_ref().map(|vpn| {
+          vpn.connect(move || {
+            let connect_info = Box::new(info.clone());
+            vpn_state_tx.send(VpnState::Connected(connect_info)).ok();
+          })
         })
-      });
+      }) {
+        info!("VPN connect failed: {:?}", err);
+      }
+      // .as_ref().map(|vpn| {
+      //   vpn.connect(move || {
+      //     let connect_info = Box::new(info.clone());
+      //     vpn_state_tx.send(VpnState::Connected(connect_info)).ok();
+      //   })
+      // });
+
+      // println!("VPN connect result: {:?}", ret);
 
       // Notify the VPN is disconnected
       vpn_state_tx_clone.send(VpnState::Disconnected).ok();
       // Remove the VPN handle
-      vpn_handle.blocking_write().take();
+      // vpn_handle.blocking_write().take();
+      vpn_handle.write().unwrap().take();
 
       disconnect_tx.send(()).ok();
     });
@@ -73,7 +88,9 @@ impl VpnTaskContext {
 
   pub async fn disconnect(&self) {
     if let Some(disconnect_rx) = self.disconnect_rx.write().await.take() {
-      if let Some(vpn) = self.vpn_handle.read().await.as_ref() {
+      info!("Disconnecting VPN...");
+      if let Some(vpn) = self.vpn_handle.read().unwrap().as_ref() {
+        info!("VPN is connected, start disconnecting...");
         self.vpn_state_tx.send(VpnState::Disconnecting).ok();
         vpn.disconnect()
       }

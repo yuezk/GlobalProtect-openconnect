@@ -143,6 +143,9 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 void vpn_disconnect()
 {
     char cmd = OC_CMD_CANCEL;
+
+    INFO("Stopping VPN connection: %d", g_cmd_pipe_fd);
+
     if (write(g_cmd_pipe_fd, &cmd, 1) < 0)
     {
         ERROR("Failed to write to command pipe, VPN connection may not be stopped");
