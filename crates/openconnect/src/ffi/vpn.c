@@ -61,6 +61,8 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     INFO("User agent: %s", options->user_agent);
     INFO("VPNC script: %s", options->script);
     INFO("OS: %s", options->os);
+    INFO("CSD_USER: %d", options->csd_uid);
+    INFO("CSD_WRAPPER: %s", options->csd_wrapper);
 
     vpninfo = openconnect_vpninfo_new(options->user_agent, validate_peer_cert, NULL, NULL, print_progress, NULL);
 
@@ -89,6 +91,10 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     if (options->servercert) {
         INFO("Setting server certificate: %s", options->servercert);
         openconnect_set_system_trust(vpninfo, 0);
+    }
+
+    if (options->csd_wrapper) {
+        openconnect_setup_csd(vpninfo, options->csd_uid, 1, options->csd_wrapper);
     }
 
     g_cmd_pipe_fd = openconnect_setup_cmd_pipe(vpninfo);

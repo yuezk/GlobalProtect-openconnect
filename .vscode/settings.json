@@ -4,6 +4,7 @@
         "bincode",
         "chacha",
         "clientos",
+        "cstring",
         "datetime",
         "disconnectable",
         "distro",

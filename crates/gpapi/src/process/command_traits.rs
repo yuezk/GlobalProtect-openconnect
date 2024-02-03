@@ -1,7 +1,8 @@
-use anyhow::bail;
-use std::{env, ffi::OsStr};
+use std::ffi::OsStr;
 use tokio::process::Command;
-use uzers::{os::unix::UserExt, User};
+use uzers::os::unix::UserExt;
+
+use super::users::get_non_root_user;
 
 pub trait CommandExt {
   fn new_pkexec<S: AsRef<OsStr>>(program: S) -> Command;
@@ -33,30 +34,4 @@ impl CommandExt for Command {
 
     Ok(self)
   }
-}
-
-fn get_non_root_user() -> anyhow::Result<User> {
-  let current_user = whoami::username();
-
-  let user = if current_user == "root" {
-    get_real_user()?
-  } else {
-    uzers::get_user_by_name(&current_user).ok_or_else(|| anyhow::anyhow!("User ({}) not found", current_user))?
-  };
-
-  if user.uid() == 0 {
-    bail!("Non-root user not found")
-  }
-
-  Ok(user)
-}
-
-fn get_real_user() -> anyhow::Result<User> {
-  // Read the UID from SUDO_UID or PKEXEC_UID environment variable if available.
-  let uid = match env::var("SUDO_UID") {
-    Ok(uid) => uid.parse::<u32>()?,
-    _ => env::var("PKEXEC_UID")?.parse::<u32>()?,
-  };
-
-  uzers::get_user_by_uid(uid).ok_or_else(|| anyhow::anyhow!("User not found"))
 }

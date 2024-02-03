@@ -7,7 +7,10 @@ use gpapi::{
   gateway::gateway_login,
   gp_params::{ClientOs, GpParams},
   portal::{prelogin, retrieve_config, PortalError, Prelogin},
-  process::auth_launcher::SamlAuthLauncher,
+  process::{
+    auth_launcher::SamlAuthLauncher,
+    users::{get_non_root_user, get_user_by_name},
+  },
   utils::shutdown_signal,
   GP_USER_AGENT,
 };
@@ -27,6 +30,13 @@ pub(crate) struct ConnectArgs {
   user: Option<String>,
   #[arg(long, short, help = "The VPNC script to use")]
   script: Option<String>,
+
+  #[arg(long, help = "Same as the '--csd-user' option in the openconnect command")]
+  csd_user: Option<String>,
+
+  #[arg(long, help = "Same as the '--csd-wrapper' option in the openconnect command")]
+  csd_wrapper: Option<String>,
+
   #[arg(long, default_value = GP_USER_AGENT, help = "The user agent to use")]
   user_agent: String,
   #[arg(long, default_value = "Linux")]
@@ -133,7 +143,7 @@ impl<'a> ConnectHandler<'a> {
     gp_params.set_is_gateway(true);
 
     let prelogin = prelogin(gateway, &gp_params).await?;
-    let cred = self.obtain_credential(&prelogin, &gateway).await?;
+    let cred = self.obtain_credential(&prelogin, gateway).await?;
 
     let cookie = gateway_login(gateway, &cred, &gp_params).await?;
 
@@ -141,9 +151,13 @@ impl<'a> ConnectHandler<'a> {
   }
 
   async fn connect_gateway(&self, gateway: &str, cookie: &str) -> anyhow::Result<()> {
+    let csd_uid = get_csd_uid(&self.args.csd_user)?;
+
     let vpn = Vpn::builder(gateway, cookie)
       .user_agent(self.args.user_agent.clone())
       .script(self.args.script.clone())
+      .csd_uid(csd_uid)
+      .csd_wrapper(self.args.csd_wrapper.clone())
       .build();
 
     let vpn = Arc::new(vpn);
@@ -210,4 +224,12 @@ fn write_pid_file() {
 
   fs::write(GP_CLIENT_LOCK_FILE, pid.to_string()).unwrap();
   info!("Wrote PID {} to {}", pid, GP_CLIENT_LOCK_FILE);
+}
+
+fn get_csd_uid(csd_user: &Option<String>) -> anyhow::Result<u32> {
+  if let Some(csd_user) = csd_user {
+    get_user_by_name(csd_user).map(|user| user.uid())
+  } else {
+    get_non_root_user().map_or_else(|_| Ok(0), |user| Ok(user.uid()))
+  }
 }

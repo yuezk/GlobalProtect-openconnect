@@ -18,6 +18,9 @@ pub struct Vpn {
   certificate: Option<CString>,
   servercert: Option<CString>,
 
+  csd_uid: u32,
+  csd_wrapper: Option<CString>,
+
   callback: OnConnectedCallback,
 }
 
@@ -56,6 +59,9 @@ impl Vpn {
       os: self.os.as_ptr(),
       certificate: Self::option_to_ptr(&self.certificate),
       servercert: Self::option_to_ptr(&self.servercert),
+
+      csd_uid: self.csd_uid,
+      csd_wrapper: Self::option_to_ptr(&self.csd_wrapper),
     }
   }
 
@@ -73,6 +79,9 @@ pub struct VpnBuilder {
   user_agent: Option<String>,
   script: Option<String>,
   os: Option<String>,
+
+  csd_uid: u32,
+  csd_wrapper: Option<String>,
 }
 
 impl VpnBuilder {
@@ -83,6 +92,8 @@ impl VpnBuilder {
       user_agent: None,
       script: None,
       os: None,
+      csd_uid: 0,
+      csd_wrapper: None,
     }
   }
 
@@ -101,6 +112,16 @@ impl VpnBuilder {
     self
   }
 
+  pub fn csd_uid(mut self, csd_uid: u32) -> Self {
+    self.csd_uid = csd_uid;
+    self
+  }
+
+  pub fn csd_wrapper<T: Into<Option<String>>>(mut self, csd_wrapper: T) -> Self {
+    self.csd_wrapper = csd_wrapper.into();
+    self
+  }
+
   pub fn build(self) -> Vpn {
     let user_agent = self.user_agent.unwrap_or_default();
     let script = self.script.or_else(find_default_vpnc_script).unwrap_or_default();
@@ -114,6 +135,10 @@ impl VpnBuilder {
       os: Self::to_cstring(&os),
       certificate: None,
       servercert: None,
+
+      csd_uid: self.csd_uid,
+      csd_wrapper: self.csd_wrapper.as_deref().map(Self::to_cstring),
+
       callback: Default::default(),
     }
   }

@@ -16,6 +16,9 @@ typedef struct vpn_options
     const char *os;
     const char *certificate;
     const char *servercert;
+
+    const uid_t csd_uid;
+    const char *csd_wrapper;
 } vpn_options;
 
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback);
