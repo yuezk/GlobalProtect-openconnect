@@ -44,6 +44,7 @@ redact-engine = "0.1"
 dotenvy_macro = "0.15"
 compile-time = "0.2"
 serde_urlencoded = "0.7"
+md5="0.7"
 
 [profile.release]
 opt-level = 'z'   # Optimize for size
