@@ -67,6 +67,7 @@ The GUI version is also available after you installed it. You can launch it from
 #### Install from PPA
 
 ```
+sudo apt-get install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.0
 sudo add-apt-repository ppa:yuezk/globalprotect-openconnect
 sudo apt-get update
 sudo apt-get install globalprotect-openconnect
