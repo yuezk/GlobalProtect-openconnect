@@ -32,6 +32,8 @@ pub struct ConnectArgs {
   cookie: String,
   vpnc_script: Option<String>,
   user_agent: Option<String>,
+  csd_uid: u32,
+  csd_wrapper: Option<String>,
   os: Option<ClientOs>,
 }
 
@@ -42,6 +44,8 @@ impl ConnectArgs {
       vpnc_script: None,
       user_agent: None,
       os: None,
+      csd_uid: 0,
+      csd_wrapper: None,
     }
   }
 
@@ -59,6 +63,14 @@ impl ConnectArgs {
 
   pub fn openconnect_os(&self) -> Option<String> {
     self.os.as_ref().map(|os| os.to_openconnect_os().to_string())
+  }
+
+  pub fn csd_uid(&self) -> u32 {
+    self.csd_uid
+  }
+
+  pub fn csd_wrapper(&self) -> Option<String> {
+    self.csd_wrapper.clone()
   }
 }
 
@@ -78,6 +90,16 @@ impl ConnectRequest {
 
   pub fn with_vpnc_script<T: Into<Option<String>>>(mut self, vpnc_script: T) -> Self {
     self.args.vpnc_script = vpnc_script.into();
+    self
+  }
+
+  pub fn with_csd_uid(mut self, csd_uid: u32) -> Self {
+    self.args.csd_uid = csd_uid;
+    self
+  }
+
+  pub fn with_csd_wrapper<T: Into<Option<String>>>(mut self, csd_wrapper: T) -> Self {
+    self.args.csd_wrapper = csd_wrapper.into();
     self
   }
 

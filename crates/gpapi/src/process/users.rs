@@ -23,6 +23,11 @@ pub fn get_non_root_user() -> anyhow::Result<User> {
   Ok(user)
 }
 
+pub fn get_current_user() -> anyhow::Result<User> {
+  let current_user = whoami::username();
+  get_user_by_name(&current_user)
+}
+
 fn get_real_user() -> anyhow::Result<User> {
   // Read the UID from SUDO_UID or PKEXEC_UID environment variable if available.
   let uid = match env::var("SUDO_UID") {

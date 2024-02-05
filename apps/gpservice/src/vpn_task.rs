@@ -32,11 +32,13 @@ impl VpnTaskContext {
     }
 
     let info = req.info().clone();
-    let vpn_handle = self.vpn_handle.clone();
+    let vpn_handle = Arc::clone(&self.vpn_handle);
     let args = req.args();
     let vpn = Vpn::builder(req.gateway().server(), args.cookie())
       .user_agent(args.user_agent())
       .script(args.vpnc_script())
+      .csd_uid(args.csd_uid())
+      .csd_wrapper(args.csd_wrapper())
       .os(args.openconnect_os())
       .build();
 
@@ -73,7 +75,9 @@ impl VpnTaskContext {
 
   pub async fn disconnect(&self) {
     if let Some(disconnect_rx) = self.disconnect_rx.write().await.take() {
+      info!("Disconnecting VPN...");
       if let Some(vpn) = self.vpn_handle.read().await.as_ref() {
+        info!("VPN is connected, start disconnecting...");
         self.vpn_state_tx.send(VpnState::Disconnecting).ok();
         vpn.disconnect()
       }
