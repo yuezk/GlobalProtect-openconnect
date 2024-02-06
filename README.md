@@ -124,7 +124,10 @@ Download the latest RPM package from [releases](https://github.com/yuezk/GlobalP
 
 ### Other distributions
 
-The project depends on `openconnect >= 8.20`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`. You can install them first and then download the latest binary release (i.e., `*.bin.tar.gz`) from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
+- Install `openconnect >= 8.20`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`.
+- Download `globalprotect-openconnect.tar.gz` from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
+- Extract the tarball and run `make build` to build the client.
+- Run `make install` to install the client.
 
 ## About Trial
 
