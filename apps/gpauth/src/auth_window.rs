@@ -413,7 +413,19 @@ fn read_auth_data(main_resource: &WebResource, auth_result_tx: mpsc::UnboundedSe
     }
     Err(AuthDataError::NotFound) => {
       info!("No auth data found in headers, trying to read from body...");
+      let url = main_resource.uri().unwrap_or("".into());
+      let is_acs_endpoint = url.contains("/SAML20/SP/ACS");
+
       read_auth_data_from_body(main_resource, move |auth_result| {
+        // If the endpoint is `/SAML20/SP/ACS` and no auth data found in body, it should be considered as invalid
+        let auth_result = auth_result.map_err(|err| {
+          if matches!(err, AuthDataError::NotFound) && is_acs_endpoint {
+            AuthDataError::Invalid
+          } else {
+            err
+          }
+        });
+
         send_auth_result(&auth_result_tx, auth_result)
       });
     }
