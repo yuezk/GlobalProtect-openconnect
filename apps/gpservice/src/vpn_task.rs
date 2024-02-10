@@ -39,6 +39,7 @@ impl VpnTaskContext {
       .script(args.vpnc_script())
       .csd_uid(args.csd_uid())
       .csd_wrapper(args.csd_wrapper())
+      .mtu(args.mtu())
       .os(args.openconnect_os())
       .build();
 

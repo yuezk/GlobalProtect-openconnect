@@ -21,6 +21,8 @@ pub struct Vpn {
   csd_uid: u32,
   csd_wrapper: Option<CString>,
 
+  mtu: u32,
+
   callback: OnConnectedCallback,
 }
 
@@ -62,6 +64,8 @@ impl Vpn {
 
       csd_uid: self.csd_uid,
       csd_wrapper: Self::option_to_ptr(&self.csd_wrapper),
+
+      mtu: self.mtu,
     }
   }
 
@@ -82,6 +86,8 @@ pub struct VpnBuilder {
 
   csd_uid: u32,
   csd_wrapper: Option<String>,
+
+  mtu: u32,
 }
 
 impl VpnBuilder {
@@ -94,6 +100,7 @@ impl VpnBuilder {
       os: None,
       csd_uid: 0,
       csd_wrapper: None,
+      mtu: 0,
     }
   }
 
@@ -122,6 +129,11 @@ impl VpnBuilder {
     self
   }
 
+  pub fn mtu(mut self, mtu: u32) -> Self {
+    self.mtu = mtu;
+    self
+  }
+
   pub fn build(self) -> Vpn {
     let user_agent = self.user_agent.unwrap_or_default();
     let script = self.script.or_else(find_default_vpnc_script).unwrap_or_default();
@@ -138,6 +150,8 @@ impl VpnBuilder {
 
       csd_uid: self.csd_uid,
       csd_wrapper: self.csd_wrapper.as_deref().map(Self::to_cstring),
+
+      mtu: self.mtu,
 
       callback: Default::default(),
     }

@@ -19,6 +19,8 @@ typedef struct vpn_options
 
     const uid_t csd_uid;
     const char *csd_wrapper;
+
+    const int mtu;
 } vpn_options;
 
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback);

@@ -18,6 +18,8 @@ pub(crate) struct ConnectOptions {
 
   pub csd_uid: u32,
   pub csd_wrapper: *const c_char,
+
+  pub mtu: u32,
 }
 
 #[link(name = "vpn")]
