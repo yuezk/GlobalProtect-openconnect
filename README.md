@@ -133,11 +133,11 @@ Download the latest RPM package from [releases](https://github.com/yuezk/GlobalP
 
 1. How to deal with error `Secure Storage not ready`
   
-   You need to install the `gnome-keyring` package, and restart the system (See #321, #316).
+   You need to install the `gnome-keyring` package, and restart the system (See [#321](https://github.com/yuezk/GlobalProtect-openconnect/issues/321), [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)).
 
 2. How to deal with error `(gpauth:18869): Gtk-WARNING **: 10:33:37.566: cannot open display:`
   
-   If you encounter this error when using the CLI version, try to run the command with `sudo -E` (See #316).
+   If you encounter this error when using the CLI version, try to run the command with `sudo -E` (See [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)).
 
 ## About Trial
 
