@@ -59,7 +59,7 @@ The GUI version is also available after you installed it. You can launch it from
 
 > [!Warning]
 >
-> The client requires `openconnect >= 8.20`, please make sure you have it installed, you can check it with `openconnect --version`.
+> The client requires `openconnect >= 8.20, pkexec, and gnome-keyring`, please make sure you have them installed.
 > Installing the client from PPA will automatically install the required version of `openconnect`.
 
 ### Debian/Ubuntu based distributions
@@ -114,7 +114,7 @@ sudo dnf copr enable yuezk/globalprotect-openconnect
 sudo dnf install globalprotect-openconnect
 ```
 
-#### Install from OBS
+#### Install from OBS (OpenSUSE Build Service)
 
 The package is also available on [OBS](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect) for various RPM-based distributions. You can follow the instructions [on this page](https://software.opensuse.org//download.html?project=home%3Ayuezk&package=globalprotect-openconnect) to install it.
 
@@ -128,6 +128,16 @@ Download the latest RPM package from [releases](https://github.com/yuezk/GlobalP
 - Download `globalprotect-openconnect.tar.gz` from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
 - Extract the tarball and run `make build` to build the client.
 - Run `make install` to install the client.
+
+## FAQ
+
+1. How to deal with error `Secure Storage not ready`
+  
+   You need to install the `gnome-keyring` package, and restart the system (See #321, #316).
+
+2. How to deal with error `(gpauth:18869): Gtk-WARNING **: 10:33:37.566: cannot open display:`
+  
+   If you encounter this error when using the CLI version, try to run the command with `sudo -E` (See #316).
 
 ## About Trial
 
