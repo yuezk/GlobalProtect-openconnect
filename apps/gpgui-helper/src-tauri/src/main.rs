@@ -3,6 +3,7 @@
 
 use gpgui_helper::cli;
 
-fn main() {
+#[tokio::main]
+async fn main() {
   cli::run()
 }

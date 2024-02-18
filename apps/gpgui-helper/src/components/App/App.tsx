@@ -3,15 +3,38 @@ import {
   Button,
   CssBaseline,
   LinearProgress,
-  LinearProgressProps,
   Typography,
 } from "@mui/material";
+import { appWindow } from "@tauri-apps/api/window";
 
 import "./styles.css";
 
 import logo from "../../assets/icon.svg";
+import { useEffect, useState } from 'react';
 
 export default function App() {
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    const unlisten = appWindow.listen("app://download-error", () => {
+      setError(true);
+    });
+
+    return () => {
+      unlisten.then((unlisten) => unlisten());
+    }
+  }, []);
+
+  useEffect(() => {
+    const unlisten = appWindow.listen("app://download", () => {
+      setError(false);
+    });
+
+    return () => {
+      unlisten.then((unlisten) => unlisten());
+    }
+  }, []);
+
   return (
     <>
       <CssBaseline />
@@ -27,12 +50,11 @@ export default function App() {
             component="img"
             src={logo}
             alt="logo"
-            sx={{ width: 64, height: 64 }}
+            sx={{ width: "4rem", height: "4rem" }}
             data-tauri-drag-region
           />
           <Box flex={1} ml={2}>
-            <DownloadIndicator />
-            {/* <DownloadFailed /> */}
+            {error ? <DownloadFailed /> : <DownloadIndicator />}
           </Box>
         </Box>
       </Box>
@@ -41,13 +63,25 @@ export default function App() {
 }
 
 function DownloadIndicator() {
+  const [progress, setProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    const unlisten = appWindow.listen("app://download-progress", (event) => {
+      setProgress(event.payload as number);
+    });
+
+    return () => {
+      unlisten.then((unlisten) => unlisten());
+    }
+  }, []);
+
   return (
     <>
       <Typography variant="h1" fontSize="1rem" data-tauri-drag-region>
         Updating the GUI components...
       </Typography>
       <Box mt={1}>
-        <LinearProgressWithLabel value={50} />
+        <LinearProgressWithLabel value={progress} />
       </Box>
     </>
   );
@@ -64,6 +98,7 @@ function DownloadFailed() {
           variant="contained"
           color="primary"
           size="small"
+          onClick={() => appWindow.emit("app://download")}
           sx={{
             textTransform: "none",
           }}
@@ -75,17 +110,27 @@ function DownloadFailed() {
   );
 }
 
-function LinearProgressWithLabel(props: LinearProgressProps & { value: number }) {
+function LinearProgressWithLabel(props: { value: number | null }) {
+  const { value } = props;
+
   return (
     <Box sx={{ display: "flex", alignItems: "center" }}>
-      <Box sx={{ width: "100%", mr: 1 }}>
-        <LinearProgress variant="determinate" {...props} />
+      <Box flex="1">
+        <LinearProgress
+          variant={value === null ? "indeterminate" : "determinate"}
+          value={value ?? 0}
+          sx={{
+            py: 1.2,
+            '.MuiLinearProgress-bar': {
+              transition: "none"
+            }
+          }} />
       </Box>
-      <Box sx={{ minWidth: 35 }}>
-        <Typography variant="body2" color="text.secondary">{`${Math.round(
-          props.value,
-        )}%`}</Typography>
-      </Box>
+      {value !== null && (
+        <Box sx={{ minWidth: 35, textAlign: "right", ml: 1 }}>
+          <Typography variant="body2" color="text.secondary">{`${Math.round(value)}%`}</Typography>
+        </Box>
+      )}
     </Box>
   );
 }

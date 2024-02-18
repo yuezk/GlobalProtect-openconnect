@@ -9,9 +9,7 @@ license.workspace = true
 tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
-tauri = { workspace = true, features = [
-  "window-start-dragging",
-] }
+tauri = { workspace = true, features = ["window-start-dragging"] }
 tokio.workspace = true
 anyhow.workspace = true
 log.workspace = true
@@ -23,3 +21,4 @@ async-stream = "0.3"
 futures-util.workspace = true
 downloader = "0.2"
 tempfile.workspace = true
+reqwest = { workspace = true, features = ["stream"] }

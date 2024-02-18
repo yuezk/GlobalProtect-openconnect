@@ -1541,6 +1541,7 @@ dependencies = [
  "env_logger",
  "futures-util",
  "log",
+ "reqwest",
  "tauri",
  "tauri-build",
  "tempfile",
