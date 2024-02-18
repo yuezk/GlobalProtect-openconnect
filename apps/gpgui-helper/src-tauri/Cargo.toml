@@ -1,0 +1,25 @@
+[package]
+name = "gpgui-helper"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { workspace = true, features = [
+  "window-start-dragging",
+] }
+tokio.workspace = true
+anyhow.workspace = true
+log.workspace = true
+clap.workspace = true
+compile-time.workspace = true
+env_logger.workspace = true
+base64.workspace = true
+async-stream = "0.3"
+futures-util.workspace = true
+downloader = "0.2"
+tempfile.workspace = true
