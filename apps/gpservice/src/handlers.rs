@@ -1,6 +1,7 @@
 use std::{borrow::Cow, ops::ControlFlow, sync::Arc};
 
 use axum::{
+  body::Bytes,
   extract::{
     ws::{self, CloseFrame, Message, WebSocket},
     State, WebSocketUpgrade,
@@ -24,6 +25,13 @@ pub(crate) async fn active_gui(State(ctx): State<Arc<WsServerContext>>) -> impl 
 pub(crate) async fn auth_data(State(ctx): State<Arc<WsServerContext>>, body: String) -> impl IntoResponse {
   ctx.send_event(WsEvent::AuthData(body)).await;
 }
+
+pub(crate) struct UpdateGuiPayload {
+  pub(crate) file: String,
+  pub(crate) checksum: String,
+}
+
+pub async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) -> impl IntoResponse {}
 
 pub(crate) async fn ws_handler(ws: WebSocketUpgrade, State(ctx): State<Arc<WsServerContext>>) -> impl IntoResponse {
   ws.on_upgrade(move |socket| handle_socket(socket, ctx))
