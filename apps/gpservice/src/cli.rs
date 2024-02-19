@@ -112,7 +112,7 @@ fn init_logger() -> Arc<Redaction> {
       let timestamp = buf.timestamp();
       writeln!(
         buf,
-        "[{} {} {}] {}",
+        "[{} {}  {}] {}",
         timestamp,
         record.level(),
         record.module_path().unwrap_or_default(),
@@ -127,10 +127,8 @@ fn init_logger() -> Arc<Redaction> {
 
 async fn launch_gui(envs: Option<HashMap<String, String>>, api_key: Vec<u8>, mut minimized: bool) {
   loop {
-    let api_key_clone = api_key.clone();
-    let gui_launcher = GuiLauncher::new()
+    let gui_launcher = GuiLauncher::new(env!("CARGO_PKG_VERSION"), &api_key)
       .envs(envs.clone())
-      .api_key(api_key_clone)
       .minimized(minimized);
 
     match gui_launcher.launch().await {

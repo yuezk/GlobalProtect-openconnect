@@ -127,28 +127,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
 
 [[package]]
-name = "async-stream"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd56dd203fef61ac097dd65721a419ddccb106b2d2b70ba60a6b529f03961a51"
-dependencies = [
- "async-stream-impl",
- "futures-core",
- "pin-project-lite",
-]
-
-[[package]]
-name = "async-stream-impl"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16e62a023e7c117e27523144c5d2459f4397fcc3cab0085af8e2224f643a0193"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.48",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1475,6 +1453,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "sha256",
  "specta",
  "specta-macros",
  "tauri",
@@ -1533,13 +1512,12 @@ name = "gpgui-helper"
 version = "2.0.0"
 dependencies = [
  "anyhow",
- "async-stream",
- "base64 0.21.5",
  "clap",
  "compile-time",
  "downloader",
  "env_logger",
  "futures-util",
+ "gpapi",
  "log",
  "reqwest",
  "tauri",
@@ -1561,6 +1539,7 @@ dependencies = [
  "gpapi",
  "log",
  "openconnect",
+ "serde",
  "serde_json",
  "tokio",
  "tokio-util",
@@ -3501,6 +3480,19 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
+]
+
+[[package]]
+name = "sha256"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18278f6a914fa3070aa316493f7d2ddfb9ac86ebc06fa3b83bffda487e9065b0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "hex",
+ "sha2",
+ "tokio",
 ]
 
 [[package]]

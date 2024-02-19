@@ -1,5 +1,5 @@
-use base64::prelude::*;
 use clap::Parser;
+use gpapi::utils::base64;
 use log::{info, LevelFilter};
 
 use crate::app::App;
@@ -9,27 +9,33 @@ const GP_API_KEY: &[u8; 32] = &[0; 32];
 
 #[derive(Parser)]
 #[command(version = VERSION)]
-struct Cli {}
+struct Cli {
+  #[arg(long, help = "Read the API key from stdin")]
+  api_key_on_stdin: bool,
+
+  #[arg(long, default_value = env!("CARGO_PKG_VERSION"), help = "The version of the GUI")]
+  gui_version: String,
+}
 
 impl Cli {
   fn run(&self) -> anyhow::Result<()> {
-    #[cfg(debug_assertions)]
-    let api_key = GP_API_KEY.to_vec();
-    #[cfg(not(debug_assertions))]
     let api_key = self.read_api_key()?;
-
-    let app = App::new(api_key);
+    let app = App::new(api_key, &self.gui_version);
 
     app.run()
   }
 
   fn read_api_key(&self) -> anyhow::Result<Vec<u8>> {
-    let mut api_key = String::new();
-    std::io::stdin().read_line(&mut api_key)?;
+    if self.api_key_on_stdin {
+      let mut api_key = String::new();
+      std::io::stdin().read_line(&mut api_key)?;
 
-    let api_key = BASE64_STANDARD.decode(api_key.trim())?;
+      let api_key = base64::decode_to_vec(api_key.trim())?;
 
-    Ok(api_key)
+      Ok(api_key)
+    } else {
+      Ok(GP_API_KEY.to_vec())
+    }
   }
 }
 

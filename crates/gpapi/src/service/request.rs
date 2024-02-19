@@ -135,3 +135,9 @@ pub enum WsRequest {
   Connect(Box<ConnectRequest>),
   Disconnect(DisconnectRequest),
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdateGuiRequest {
+  pub path: String,
+  pub checksum: String,
+}

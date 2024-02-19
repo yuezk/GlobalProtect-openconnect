@@ -1,39 +1,43 @@
-import {
-  Box,
-  Button,
-  CssBaseline,
-  LinearProgress,
-  Typography,
-} from "@mui/material";
+import { Box, Button, CssBaseline, LinearProgress, Typography } from "@mui/material";
 import { appWindow } from "@tauri-apps/api/window";
+import logo from "../../assets/icon.svg";
+import { useEffect, useState } from "react";
 
 import "./styles.css";
 
-import logo from "../../assets/icon.svg";
-import { useEffect, useState } from 'react';
+function useUpdateProgress() {
+  const [progress, setProgress] = useState<number | null>(null);
+
+  useEffect(() => {
+    const unlisten = appWindow.listen("app://update-progress", (event) => {
+      setProgress(event.payload as number);
+    });
+
+    return () => {
+      unlisten.then((unlisten) => unlisten());
+    };
+  }, []);
+
+  return progress;
+}
 
 export default function App() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    const unlisten = appWindow.listen("app://download-error", () => {
+    const unlisten = appWindow.listen("app://update-error", () => {
       setError(true);
     });
 
     return () => {
       unlisten.then((unlisten) => unlisten());
-    }
+    };
   }, []);
 
-  useEffect(() => {
-    const unlisten = appWindow.listen("app://download", () => {
-      setError(false);
-    });
-
-    return () => {
-      unlisten.then((unlisten) => unlisten());
-    }
-  }, []);
+  const handleRetry = () => {
+    setError(false);
+    appWindow.emit("app://update");
+  };
 
   return (
     <>
@@ -54,7 +58,7 @@ export default function App() {
             data-tauri-drag-region
           />
           <Box flex={1} ml={2}>
-            {error ? <DownloadFailed /> : <DownloadIndicator />}
+            {error ? <DownloadFailed onRetry={handleRetry} /> : <DownloadIndicator />}
           </Box>
         </Box>
       </Box>
@@ -63,17 +67,7 @@ export default function App() {
 }
 
 function DownloadIndicator() {
-  const [progress, setProgress] = useState<number | null>(null);
-
-  useEffect(() => {
-    const unlisten = appWindow.listen("app://download-progress", (event) => {
-      setProgress(event.payload as number);
-    });
-
-    return () => {
-      unlisten.then((unlisten) => unlisten());
-    }
-  }, []);
+  const progress = useUpdateProgress();
 
   return (
     <>
@@ -87,7 +81,7 @@ function DownloadIndicator() {
   );
 }
 
-function DownloadFailed() {
+function DownloadFailed({ onRetry }: { onRetry: () => void }) {
   return (
     <>
       <Typography variant="h1" fontSize="1rem" data-tauri-drag-region>
@@ -98,7 +92,7 @@ function DownloadFailed() {
           variant="contained"
           color="primary"
           size="small"
-          onClick={() => appWindow.emit("app://download")}
+          onClick={onRetry}
           sx={{
             textTransform: "none",
           }}
@@ -121,10 +115,11 @@ function LinearProgressWithLabel(props: { value: number | null }) {
           value={value ?? 0}
           sx={{
             py: 1.2,
-            '.MuiLinearProgress-bar': {
-              transition: "none"
-            }
-          }} />
+            ".MuiLinearProgress-bar": {
+              transition: "none",
+            },
+          }}
+        />
       </Box>
       {value !== null && (
         <Box sx={{ minWidth: 35, textAlign: "right", ml: 1 }}>

@@ -1,16 +1,23 @@
-use std::{borrow::Cow, ops::ControlFlow, sync::Arc};
+use std::{borrow::Cow, fs::Permissions, ops::ControlFlow, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
 
+use anyhow::bail;
 use axum::{
   body::Bytes,
   extract::{
     ws::{self, CloseFrame, Message, WebSocket},
     State, WebSocketUpgrade,
   },
+  http::StatusCode,
   response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
-use gpapi::service::event::WsEvent;
+use gpapi::{
+  service::{event::WsEvent, request::UpdateGuiRequest},
+  utils::checksum::verify_checksum,
+  GP_GUI_BINARY,
+};
 use log::{info, warn};
+use tokio::fs;
 
 use crate::ws_server::WsServerContext;
 
@@ -26,12 +33,47 @@ pub(crate) async fn auth_data(State(ctx): State<Arc<WsServerContext>>, body: Str
   ctx.send_event(WsEvent::AuthData(body)).await;
 }
 
-pub(crate) struct UpdateGuiPayload {
-  pub(crate) file: String,
-  pub(crate) checksum: String,
+pub async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) -> Result<(), StatusCode> {
+  let payload = match ctx.decrypt::<UpdateGuiRequest>(body.to_vec()) {
+    Ok(payload) => payload,
+    Err(err) => {
+      warn!("Failed to decrypt update payload: {}", err);
+      return Err(StatusCode::BAD_REQUEST);
+    }
+  };
+
+  info!("Update GUI: {:?}", payload);
+  let UpdateGuiRequest { path, checksum } = payload;
+
+  info!("Verifying checksum");
+  verify_checksum(&path, &checksum).map_err(|err| {
+    warn!("Failed to verify checksum: {}", err);
+    StatusCode::BAD_REQUEST
+  })?;
+
+  info!("Installing GUI");
+  install_gui(&path).await.map_err(|err| {
+    warn!("Failed to install GUI: {}", err);
+    StatusCode::INTERNAL_SERVER_ERROR
+  })?;
+
+  Ok(())
 }
 
-pub async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) -> impl IntoResponse {}
+async fn install_gui(src: &str) -> anyhow::Result<()> {
+  let path = PathBuf::from(GP_GUI_BINARY);
+  let Some(dir) = path.parent() else {
+    bail!("Failed to get parent directory of GUI binary");
+  };
+
+  fs::create_dir_all(dir).await?;
+
+  // Copy the file to the final location and make it executable
+  fs::copy(src, GP_GUI_BINARY).await?;
+  fs::set_permissions(GP_GUI_BINARY, Permissions::from_mode(0o755)).await?;
+
+  Ok(())
+}
 
 pub(crate) async fn ws_handler(ws: WebSocketUpgrade, State(ctx): State<Arc<WsServerContext>>) -> impl IntoResponse {
   ws.on_upgrade(move |socket| handle_socket(socket, ctx))
