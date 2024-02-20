@@ -37,6 +37,9 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Same as the '--csd-wrapper' option in the openconnect command")]
   csd_wrapper: Option<String>,
 
+  #[arg(short, long, help = "Request MTU from server (legacy servers only)")]
+  mtu: Option<u32>,
+
   #[arg(long, default_value = GP_USER_AGENT, help = "The user agent to use")]
   user_agent: String,
   #[arg(long, default_value = "Linux")]
@@ -152,12 +155,14 @@ impl<'a> ConnectHandler<'a> {
 
   async fn connect_gateway(&self, gateway: &str, cookie: &str) -> anyhow::Result<()> {
     let csd_uid = get_csd_uid(&self.args.csd_user)?;
+    let mtu = self.args.mtu.unwrap_or(0);
 
     let vpn = Vpn::builder(gateway, cookie)
       .user_agent(self.args.user_agent.clone())
       .script(self.args.script.clone())
       .csd_uid(csd_uid)
       .csd_wrapper(self.args.csd_wrapper.clone())
+      .mtu(mtu)
       .build();
 
     let vpn = Arc::new(vpn);

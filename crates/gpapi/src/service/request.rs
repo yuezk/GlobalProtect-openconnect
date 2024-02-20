@@ -34,6 +34,7 @@ pub struct ConnectArgs {
   user_agent: Option<String>,
   csd_uid: u32,
   csd_wrapper: Option<String>,
+  mtu: u32,
   os: Option<ClientOs>,
 }
 
@@ -46,6 +47,7 @@ impl ConnectArgs {
       os: None,
       csd_uid: 0,
       csd_wrapper: None,
+      mtu: 0,
     }
   }
 
@@ -71,6 +73,10 @@ impl ConnectArgs {
 
   pub fn csd_wrapper(&self) -> Option<String> {
     self.csd_wrapper.clone()
+  }
+
+  pub fn mtu(&self) -> u32 {
+    self.mtu
   }
 }
 
@@ -100,6 +106,11 @@ impl ConnectRequest {
 
   pub fn with_csd_wrapper<T: Into<Option<String>>>(mut self, csd_wrapper: T) -> Self {
     self.args.csd_wrapper = csd_wrapper.into();
+    self
+  }
+
+  pub fn with_mtu(mut self, mtu: u32) -> Self {
+    self.args.mtu = mtu;
     self
   }
 
