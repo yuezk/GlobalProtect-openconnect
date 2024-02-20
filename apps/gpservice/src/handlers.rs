@@ -1,4 +1,12 @@
-use std::{borrow::Cow, fs::Permissions, ops::ControlFlow, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
+use std::{
+  borrow::Cow,
+  fs::{File, Permissions},
+  io::BufReader,
+  ops::ControlFlow,
+  os::unix::fs::PermissionsExt,
+  path::PathBuf,
+  sync::Arc,
+};
 
 use anyhow::bail;
 use axum::{
@@ -17,7 +25,9 @@ use gpapi::{
   GP_GUI_BINARY,
 };
 use log::{info, warn};
+use tar::Archive;
 use tokio::fs;
+use xz2::read::XzDecoder;
 
 use crate::ws_server::WsServerContext;
 
@@ -60,6 +70,7 @@ pub async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) ->
   Ok(())
 }
 
+// Unpack GPGUI archive, gpgui_2.0.0_{arch}.bin.tar.xz and install it
 async fn install_gui(src: &str) -> anyhow::Result<()> {
   let path = PathBuf::from(GP_GUI_BINARY);
   let Some(dir) = path.parent() else {
@@ -68,8 +79,27 @@ async fn install_gui(src: &str) -> anyhow::Result<()> {
 
   fs::create_dir_all(dir).await?;
 
-  // Copy the file to the final location and make it executable
-  fs::copy(src, GP_GUI_BINARY).await?;
+  // Unpack the archive
+  info!("Unpacking GUI archive");
+  let tar = XzDecoder::new(BufReader::new(File::open(src)?));
+  let mut ar = Archive::new(tar);
+
+  for entry in ar.entries()? {
+    let mut entry = entry?;
+    let path = entry.path()?;
+
+    if let Some(name) = path.file_name() {
+      let name = name.to_string_lossy();
+
+      if name == "gpgui" {
+        let mut file = File::create(GP_GUI_BINARY)?;
+        std::io::copy(&mut entry, &mut file)?;
+        break;
+      }
+    }
+  }
+
+  // Make the binary executable
   fs::set_permissions(GP_GUI_BINARY, Permissions::from_mode(0o755)).await?;
 
   Ok(())

@@ -80,12 +80,20 @@ impl GuiUpdater {
   pub async fn update(&self) {
     info!("Update GUI, version: {}", self.version);
 
-    #[cfg(target_arch = "x86_64")]
-    let arch = "amd64";
-    #[cfg(target_arch = "aarch64")]
-    let arch = "arm64";
+    #[cfg(debug_assertions)]
+    let release_tag = "latest";
+    #[cfg(not(debug_assertions))]
+    let release_tag = format!("v{}", self.version);
 
-    let file_url = format!("https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v{}/gpgui-linux-{}", self.version, arch);
+    #[cfg(target_arch = "x86_64")]
+    let arch = "x86_64";
+    #[cfg(target_arch = "aarch64")]
+    let arch = "aarch64";
+
+    let file_url = format!(
+      "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{}/gpgui_{}_{}.bin.tar.xz",
+      release_tag, self.version, arch
+    );
     let checksum_url = format!("{}.sha256", file_url);
 
     info!("Downloading file: {}", file_url);

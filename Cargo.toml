@@ -4,6 +4,7 @@ resolver = "2"
 members = ["crates/*", "apps/gpclient", "apps/gpservice", "apps/gpauth", "apps/gpgui-helper/src-tauri"]
 
 [workspace.package]
+rust-version = "1.70"
 version = "2.0.0"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
