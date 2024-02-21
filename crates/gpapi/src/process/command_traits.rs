@@ -12,11 +12,7 @@ pub trait CommandExt {
 impl CommandExt for Command {
   fn new_pkexec<S: AsRef<OsStr>>(program: S) -> Command {
     let mut cmd = Command::new("pkexec");
-    cmd
-      .arg("--disable-internal-agent")
-      .arg("--user")
-      .arg("root")
-      .arg(program);
+    cmd.arg("--user").arg("root").arg(program);
 
     cmd
   }

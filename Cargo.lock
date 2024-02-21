@@ -904,6 +904,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "downloader"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d05213e96f184578b5f70105d4d0a644a168e99e12d7bea0b200c15d67b5c182"
+dependencies = [
+ "futures",
+ "rand 0.8.5",
+ "reqwest",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "dtoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1440,6 +1453,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "sha256",
  "specta",
  "specta-macros",
  "tauri",
@@ -1494,6 +1508,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpgui-helper"
+version = "2.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "compile-time",
+ "downloader",
+ "env_logger",
+ "futures-util",
+ "gpapi",
+ "log",
+ "reqwest",
+ "tauri",
+ "tauri-build",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "gpservice"
 version = "2.0.0"
 dependencies = [
@@ -1506,6 +1539,7 @@ dependencies = [
  "gpapi",
  "log",
  "openconnect",
+ "serde",
  "serde_json",
  "tokio",
  "tokio-util",
@@ -3446,6 +3480,19 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
+]
+
+[[package]]
+name = "sha256"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18278f6a914fa3070aa316493f7d2ddfb9ac86ebc06fa3b83bffda487e9065b0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "hex",
+ "sha2",
+ "tokio",
 ]
 
 [[package]]

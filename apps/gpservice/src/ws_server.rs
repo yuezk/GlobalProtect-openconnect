@@ -6,6 +6,7 @@ use gpapi::{
   utils::{crypto::Crypto, lock_file::LockFile, redact::Redaction},
 };
 use log::{info, warn};
+use serde::de::DeserializeOwned;
 use tokio::{
   net::TcpListener,
   sync::{mpsc, watch, RwLock},
@@ -36,6 +37,10 @@ impl WsServerContext {
       redaction,
       connections: Default::default(),
     }
+  }
+
+  pub fn decrypt<T: DeserializeOwned>(&self, encrypted: Vec<u8>) -> anyhow::Result<T> {
+    self.crypto.decrypt(encrypted)
   }
 
   pub async fn send_event(&self, event: WsEvent) {

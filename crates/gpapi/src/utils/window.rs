@@ -2,16 +2,21 @@ use std::{process::ExitStatus, time::Duration};
 
 use anyhow::bail;
 use log::{info, warn};
-use tauri::{window::MenuHandle, Window};
+use tauri::Window;
 use tokio::process::Command;
 
 pub trait WindowExt {
   fn raise(&self) -> anyhow::Result<()>;
+  fn hide_menu(&self);
 }
 
 impl WindowExt for Window {
   fn raise(&self) -> anyhow::Result<()> {
     raise_window(self)
+  }
+
+  fn hide_menu(&self) {
+    hide_menu(self);
   }
 }
 
@@ -34,7 +39,8 @@ pub fn raise_window(win: &Window) -> anyhow::Result<()> {
   }
 
   // Calling window.show() on Windows will cause the menu to be shown.
-  hide_menu(win.menu_handle());
+  // We need to hide it again.
+  hide_menu(win);
 
   Ok(())
 }
@@ -71,7 +77,9 @@ async fn wmctrl_try_raise_window(title: &str) -> anyhow::Result<ExitStatus> {
   Ok(exit_status)
 }
 
-fn hide_menu(menu_handle: MenuHandle) {
+fn hide_menu(win: &Window) {
+  let menu_handle = win.menu_handle();
+
   tokio::spawn(async move {
     loop {
       let menu_visible = menu_handle.is_visible().unwrap_or(false);
