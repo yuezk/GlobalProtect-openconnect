@@ -2,3 +2,8 @@
 /target
 .pnpm-store
 .env
+.vendor
+*.tar.xz
+
+.cargo
+.build

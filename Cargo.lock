@@ -1440,6 +1440,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "sha256",
  "specta",
  "specta-macros",
  "tauri",
@@ -1494,6 +1495,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpgui-helper"
+version = "2.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "compile-time",
+ "env_logger",
+ "futures-util",
+ "gpapi",
+ "log",
+ "reqwest",
+ "tauri",
+ "tauri-build",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "gpservice"
 version = "2.0.0"
 dependencies = [
@@ -1506,9 +1525,12 @@ dependencies = [
  "gpapi",
  "log",
  "openconnect",
+ "serde",
  "serde_json",
+ "tar",
  "tokio",
  "tokio-util",
+ "xz2",
 ]
 
 [[package]]
@@ -2176,6 +2198,17 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "lzma-sys"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fda04ab3764e6cde78b9974eec4f779acaba7c4e84b36eca3cf77c581b85d27"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
 ]
 
 [[package]]
@@ -3446,6 +3479,19 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
+]
+
+[[package]]
+name = "sha256"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18278f6a914fa3070aa316493f7d2ddfb9ac86ebc06fa3b83bffda487e9065b0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "hex",
+ "sha2",
+ "tokio",
 ]
 
 [[package]]
@@ -5090,6 +5136,15 @@ name = "xmlparser"
 version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
+
+[[package]]
+name = "xz2"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "388c44dc09d76f1536602ead6d325eb532f5c122f17782bd57fb47baeeb767e2"
+dependencies = [
+ "lzma-sys",
+]
 
 [[package]]
 name = "zeroize"

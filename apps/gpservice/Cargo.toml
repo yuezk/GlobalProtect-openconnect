@@ -13,7 +13,10 @@ tokio.workspace = true
 tokio-util.workspace = true
 axum = { workspace = true, features = ["ws"] }
 futures.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 env_logger.workspace = true
 log.workspace = true
 compile-time.workspace = true
+xz2 = "0.1"
+tar = "0.4"

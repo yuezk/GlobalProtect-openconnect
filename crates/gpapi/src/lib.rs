@@ -23,6 +23,8 @@ pub const GP_SERVICE_BINARY: &str = "/usr/bin/gpservice";
 #[cfg(not(debug_assertions))]
 pub const GP_GUI_BINARY: &str = "/usr/bin/gpgui";
 #[cfg(not(debug_assertions))]
+pub const GP_GUI_HELPER_BINARY: &str = "/usr/bin/gpgui-helper";
+#[cfg(not(debug_assertions))]
 pub(crate) const GP_AUTH_BINARY: &str = "/usr/bin/gpauth";
 
 #[cfg(debug_assertions)]
@@ -31,5 +33,7 @@ pub const GP_CLIENT_BINARY: &str = dotenvy_macro::dotenv!("GP_CLIENT_BINARY");
 pub const GP_SERVICE_BINARY: &str = dotenvy_macro::dotenv!("GP_SERVICE_BINARY");
 #[cfg(debug_assertions)]
 pub const GP_GUI_BINARY: &str = dotenvy_macro::dotenv!("GP_GUI_BINARY");
+#[cfg(debug_assertions)]
+pub const GP_GUI_HELPER_BINARY: &str = dotenvy_macro::dotenv!("GP_GUI_HELPER_BINARY");
 #[cfg(debug_assertions)]
 pub(crate) const GP_AUTH_BINARY: &str = dotenvy_macro::dotenv!("GP_AUTH_BINARY");

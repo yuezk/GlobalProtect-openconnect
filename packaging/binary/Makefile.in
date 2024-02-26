@@ -1,0 +1,30 @@
+install:
+	@echo "===> Installing..."
+
+	install -Dm755 artifacts/usr/bin/gpclient $(DESTDIR)/usr/bin/gpclient
+	install -Dm755 artifacts/usr/bin/gpservice $(DESTDIR)/usr/bin/gpservice
+	install -Dm755 artifacts/usr/bin/gpauth $(DESTDIR)/usr/bin/gpauth
+	install -Dm755 artifacts/usr/bin/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper
+
+	install -Dm644 artifacts/usr/share/applications/gpgui.desktop $(DESTDIR)/usr/share/applications/gpgui.desktop
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
+	install -Dm644 artifacts/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
+	install -Dm644 artifacts/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
+	install -Dm644 artifacts/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
+
+uninstall:
+	@echo "===> Uninstalling from $(DESTDIR)..."
+
+	rm -f $(DESTDIR)/usr/bin/gpclient
+	rm -f $(DESTDIR)/usr/bin/gpservice
+	rm -f $(DESTDIR)/usr/bin/gpauth
+	rm -f $(DESTDIR)/usr/bin/gpgui-helper
+	rm -f $(DESTDIR)/usr/bin/gpgui
+
+	rm -f $(DESTDIR)/usr/share/applications/gpgui.desktop
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy

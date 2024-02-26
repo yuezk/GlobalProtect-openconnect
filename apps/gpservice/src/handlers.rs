@@ -1,15 +1,33 @@
-use std::{borrow::Cow, ops::ControlFlow, sync::Arc};
+use std::{
+  borrow::Cow,
+  fs::{File, Permissions},
+  io::BufReader,
+  ops::ControlFlow,
+  os::unix::fs::PermissionsExt,
+  path::PathBuf,
+  sync::Arc,
+};
 
+use anyhow::bail;
 use axum::{
+  body::Bytes,
   extract::{
     ws::{self, CloseFrame, Message, WebSocket},
     State, WebSocketUpgrade,
   },
+  http::StatusCode,
   response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
-use gpapi::service::event::WsEvent;
+use gpapi::{
+  service::{event::WsEvent, request::UpdateGuiRequest},
+  utils::checksum::verify_checksum,
+  GP_GUI_BINARY,
+};
 use log::{info, warn};
+use tar::Archive;
+use tokio::fs;
+use xz2::read::XzDecoder;
 
 use crate::ws_server::WsServerContext;
 
@@ -23,6 +41,68 @@ pub(crate) async fn active_gui(State(ctx): State<Arc<WsServerContext>>) -> impl 
 
 pub(crate) async fn auth_data(State(ctx): State<Arc<WsServerContext>>, body: String) -> impl IntoResponse {
   ctx.send_event(WsEvent::AuthData(body)).await;
+}
+
+pub async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) -> Result<(), StatusCode> {
+  let payload = match ctx.decrypt::<UpdateGuiRequest>(body.to_vec()) {
+    Ok(payload) => payload,
+    Err(err) => {
+      warn!("Failed to decrypt update payload: {}", err);
+      return Err(StatusCode::BAD_REQUEST);
+    }
+  };
+
+  info!("Update GUI: {:?}", payload);
+  let UpdateGuiRequest { path, checksum } = payload;
+
+  info!("Verifying checksum");
+  verify_checksum(&path, &checksum).map_err(|err| {
+    warn!("Failed to verify checksum: {}", err);
+    StatusCode::BAD_REQUEST
+  })?;
+
+  info!("Installing GUI");
+  install_gui(&path).await.map_err(|err| {
+    warn!("Failed to install GUI: {}", err);
+    StatusCode::INTERNAL_SERVER_ERROR
+  })?;
+
+  Ok(())
+}
+
+// Unpack GPGUI archive, gpgui_2.0.0_{arch}.bin.tar.xz and install it
+async fn install_gui(src: &str) -> anyhow::Result<()> {
+  let path = PathBuf::from(GP_GUI_BINARY);
+  let Some(dir) = path.parent() else {
+    bail!("Failed to get parent directory of GUI binary");
+  };
+
+  fs::create_dir_all(dir).await?;
+
+  // Unpack the archive
+  info!("Unpacking GUI archive");
+  let tar = XzDecoder::new(BufReader::new(File::open(src)?));
+  let mut ar = Archive::new(tar);
+
+  for entry in ar.entries()? {
+    let mut entry = entry?;
+    let path = entry.path()?;
+
+    if let Some(name) = path.file_name() {
+      let name = name.to_string_lossy();
+
+      if name == "gpgui" {
+        let mut file = File::create(GP_GUI_BINARY)?;
+        std::io::copy(&mut entry, &mut file)?;
+        break;
+      }
+    }
+  }
+
+  // Make the binary executable
+  fs::set_permissions(GP_GUI_BINARY, Permissions::from_mode(0o755)).await?;
+
+  Ok(())
 }
 
 pub(crate) async fn ws_handler(ws: WebSocketUpgrade, State(ctx): State<Arc<WsServerContext>>) -> impl IntoResponse {

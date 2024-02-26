@@ -1,0 +1,25 @@
+[package]
+name = "gpgui-helper"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+gpapi = { path = "../../../crates/gpapi", features = ["tauri"] }
+tauri = { workspace = true, features = ["window-start-dragging"] }
+tokio.workspace = true
+anyhow.workspace = true
+log.workspace = true
+clap.workspace = true
+compile-time.workspace = true
+env_logger.workspace = true
+futures-util.workspace = true
+tempfile.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

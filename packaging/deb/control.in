@@ -1,0 +1,14 @@
+Source: globalprotect-openconnect
+Section: net
+Priority: optional
+Maintainer: Kevin Yue <k3vinyue@gmail.com>
+Standards-Version: 4.1.4
+Build-Depends: debhelper (>= 9), pkg-config, jq (>= 1), make (>= 4), openconnect (>= 8.20), libxml2, libsecret-1-0, libayatana-appindicator3-1, libwebkit2gtk-4.0-37, libgtk-3-0, gnome-keyring, @RUST@
+Homepage: https://github.com/yuezk/GlobalProtect-openconnect
+
+Package: globalprotect-openconnect
+Architecture: any
+Multi-Arch: foreign
+Depends: ${misc:Depends}, ${shlibs:Depends}, openconnect (>=8.20), libxml2, libsecret-1-0, libayatana-appindicator3-1, gnome-keyring
+Description: A GUI for GlobalProtect VPN
+ A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method.
