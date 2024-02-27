@@ -53,15 +53,6 @@ The GUI version is also available after you installed it. You can launch it from
 
 ## Installation
 
-> [!Note]
->
-> This instruction is for the 2.x version. The 1.x version is still available on the [1.x](https://github.com/yuezk/GlobalProtect-openconnect/tree/1.x) branch, you can build it from the source code by following the instructions in the `README.md` file.
-
-> [!Warning]
->
-> The client requires `openconnect >= 8.20, pkexec, and gnome-keyring`, please make sure you have them installed.
-> Installing the client from PPA will automatically install the required version of `openconnect`.
-
 ### Debian/Ubuntu based distributions
 
 #### Install from PPA
@@ -103,7 +94,7 @@ Download the latest package from [releases](https://github.com/yuezk/GlobalProte
 sudo pacman -U globalprotect-openconnect-*.pkg.tar.zst
 ```
 
-### Fedora/OpenSUSE/CentOS/RHEL
+### Fedora 38 and later / Fedora Rawhide
 
 #### Install from COPR
 
@@ -114,29 +105,56 @@ sudo dnf copr enable yuezk/globalprotect-openconnect
 sudo dnf install globalprotect-openconnect
 ```
 
-#### Install from OBS (OpenSUSE Build Service)
+### openSUSE Leap 15.6 / openSUSE Tumbleweed
+
+#### Install from OBS (openSUSE Build Service)
 
 The package is also available on [OBS](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect) for various RPM-based distributions. You can follow the instructions [on this page](https://software.opensuse.org//download.html?project=home%3Ayuezk&package=globalprotect-openconnect) to install it.
+
+### Other RPM-based distributions
 
 #### Install from RPM package
 
 Download the latest RPM package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
 
+```bash
+sudo rpm -i globalprotect-openconnect-*.rpm
+```
+
 ### Other distributions
 
 - Install `openconnect >= 8.20`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`.
-- Download `globalprotect-openconnect.tar.gz` from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
-- Extract the tarball and run `make build` to build the client.
-- Run `make install` to install the client.
+- Download `globalprotect-openconnect_${version}_${arch}.bin.tar.xz` from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
+- Extract the tarball with `tar -xJf globalprotect-openconnect_${version}_${arch}.bin.tar.xz`.
+- Run `sudo make install` to install the client.
+
+## Build from source
+
+You can also build the client from source, steps are as follows:
+
+### Prerequisites
+
+- [Install Rust](https://www.rust-lang.org/tools/install)
+- Install Tauri dependencies: https://tauri.app/v1/guides/getting-started/prerequisites/#setting-up-linux
+- Install `perl`
+- Install `openconnect >= 8.20` and `libopenconnect-dev` (or `openconnect-devel` on RPM-based distributions)
+- Install `pkexec`, `gnome-keyring` (or `pam_kwallet` on KDE)
+
+### Build
+
+1. Download the source code tarball from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Choose `globalprotect-openconnect-${version}.tar.gz`.
+2. Extract the tarball with `tar -xzf globalprotect-openconnect-${version}.tar.gz`.
+3. Enter the source directory and run `make build BUILD_FE=0` to build the client.
+3. Run `sudo make install` to install the client. (Note, `DESTDIR` is not supported)
 
 ## FAQ
 
 1. How to deal with error `Secure Storage not ready`
-  
+
    You need to install the `gnome-keyring` package, and restart the system (See [#321](https://github.com/yuezk/GlobalProtect-openconnect/issues/321), [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)).
 
 2. How to deal with error `(gpauth:18869): Gtk-WARNING **: 10:33:37.566: cannot open display:`
-  
+
    If you encounter this error when using the CLI version, try to run the command with `sudo -E` (See [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)).
 
 ## About Trial
