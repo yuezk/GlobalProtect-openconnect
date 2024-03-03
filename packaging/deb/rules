@@ -3,4 +3,4 @@
 export OFFLINE = @OFFLINE@ BUILD_FE=0
 
 %:
-	dh $@
+	dh $@ --no-parallel

@@ -1,5 +1,8 @@
+.SHELLFLAGS += -e
+
 OFFLINE ?= 0
 BUILD_FE ?= 1
+INCLUDE_GUI ?= 0
 CARGO ?= cargo
 
 VERSION = $(shell $(CARGO) metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
@@ -33,6 +36,7 @@ clean-tarball:
 # Create a tarball, include the cargo dependencies if OFFLINE is set to 1
 tarball: clean-tarball
 	if [ $(BUILD_FE) -eq 1 ]; then \
+		echo "Building frontend..."; \
 		cd apps/gpgui-helper && pnpm install && pnpm build; \
 	fi
 
@@ -48,9 +52,22 @@ tarball: clean-tarball
 		tar -cJf vendor.tar.xz .vendor; \
 	fi
 
+	@echo "Creating tarball..."
 	tar --exclude .vendor --exclude target --transform 's,^,${PKG}/,' -czf .build/tarball/${PKG}.tar.gz * .cargo
 
-build: build-fe build-rs
+download-gui:
+	rm -rf .build/gpgui
+
+	if [ $(INCLUDE_GUI) -eq 1 ]; then \
+		echo "Downloading GlobalProtect GUI..."; \
+		mkdir -p .build/gpgui; \
+		curl -sSL https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v$(VERSION)/gpgui_$(VERSION)_$(shell uname -m).bin.tar.xz -o .build/gpgui/gpgui_$(VERSION)_x$(shell uname -m).bin.tar.xz; \
+		tar -xJf .build/gpgui/*.tar.xz -C .build/gpgui; \
+	else \
+		echo "Skipping GlobalProtect GUI download (INCLUDE_GUI=0)"; \
+	fi
+
+build: download-gui build-fe build-rs
 
 # Install and build the frontend
 # If OFFLINE is set to 1, skip it
@@ -87,6 +104,10 @@ install:
 	install -Dm755 target/release/gpauth $(DESTDIR)/usr/bin/gpauth
 	install -Dm755 target/release/gpservice $(DESTDIR)/usr/bin/gpservice
 	install -Dm755 target/release/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper
+
+	if [ -f .build/gpgui/gpgui_*/gpgui ]; then \
+		install -Dm755 .build/gpgui/gpgui_*/gpgui $(DESTDIR)/usr/bin/gpgui; \
+	fi
 
 	install -Dm644 packaging/files/usr/share/applications/gpgui.desktop $(DESTDIR)/usr/share/applications/gpgui.desktop
 	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
@@ -144,21 +165,20 @@ check-ppa:
 
 # Usage: make ppa SERIES=focal OFFLINE=1 PUBLISH=1
 ppa: check-ppa init-debian
-	cd .build/deb/${PKG}
-
-	sed -i "s/@RUST@/rust-all(>=1.70)/g" debian/control
+	sed -i "s/@RUST@/rust-all(>=1.70)/g" .build/deb/$(PKG)/debian/control
 
 	$(eval SERIES_VER = $(shell distro-info --series $(SERIES) -r | cut -d' ' -f1))
 	@echo "Building for $(SERIES) $(SERIES_VER)"
 
-	dch --create --distribution $(SERIES) --package $(PKG_NAME) --newversion $(VERSION)-$(REVISION)ppa$(PPA_REVISION)~ubuntu$(SERIES_VER) "Bugfix and improvements."
+	rm -rf .build/deb/$(PKG)/debian/changelog
+	cd .build/deb/$(PKG) && dch --create --distribution $(SERIES) --package $(PKG_NAME) --newversion $(VERSION)-$(REVISION)ppa$(PPA_REVISION)~ubuntu$(SERIES_VER) "Bugfix and improvements."
 
-	echo "y" | debuild -e PATH -S -sa -k"$(GPG_KEY_ID)" -p"gpg --batch --passphrase $(GPG_KEY_PASS) --pinentry-mode loopback"
+	cd .build/deb/$(PKG) && echo "y" | debuild -e PATH -S -sa -k"$(GPG_KEY_ID)" -p"gpg --batch --passphrase $(GPG_KEY_PASS) --pinentry-mode loopback"
 
 	if [ $(PUBLISH) -eq 1 ]; then \
-		dput ppa:yuezk/globalprotect-openconnect ../*.changes; \
-	else
-		echo "Skipping ppa publish (PUBLISH=0)"
+		cd .build/deb/$(PKG) && dput ppa:yuezk/globalprotect-openconnect ../*.changes; \
+	else \
+		echo "Skipping ppa publish (PUBLISH=0)"; \
 	fi
 
 clean-rpm:
