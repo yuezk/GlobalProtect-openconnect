@@ -1,0 +1,148 @@
+name: Release Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release'
+        required: true
+      arch:
+        type: choice
+        description: 'Architecture to build'
+        required: true
+        default: all
+        options:
+          - all
+          - x86_64
+          - arm64
+      release-deb:
+        type: boolean
+        description: 'Build DEB package'
+        required: true
+        default: true
+      release-rpm:
+        type: boolean
+        description: 'Build RPM package'
+        required: true
+        default: true
+      release-pkg:
+        type: boolean
+        description: 'Build PKG package'
+        required: true
+        default: true
+      release-binary:
+        type: boolean
+        description: 'Build binary package'
+        required: true
+        default: true
+      gh-release:
+        type: boolean
+        description: 'Update GitHub release'
+        required: true
+        default: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check tag exists
+      uses: mukunku/tag-exists-action@v1.6.0
+      id: check-tag
+      with:
+        tag: ${{ inputs.tag }}
+    - name: Exit if tag does not exist
+      run: |
+        if [[ "${{ steps.check-tag.outputs.exists }}" == "false" ]]; then
+          echo "Tag ${{ inputs.tag }} does not exist"
+          exit 1
+        fi
+
+  setup-matrix:
+    needs:
+    - check
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.result }}
+    steps:
+    - name: Set up matrix
+      id: set-matrix
+      uses: actions/github-script@v7
+      with:
+        result-encoding: string
+        script: |
+          const inputs = ${{ toJson(inputs) }}
+          const { arch } = inputs
+          const osMap = {
+            "all": ["ubuntu-latest", "arm64"],
+            "x86_64": ["ubuntu-latest"],
+            "arm64": ["arm64"]
+          }
+
+          const package = Object.entries(inputs)
+            .filter(([key, value]) => key.startsWith('release-') && value)
+            .map(([key, value]) => key.replace('release-', ''))
+
+          return JSON.stringify({
+            os: osMap[arch],
+            package,
+          })
+
+  build:
+    needs:
+    - setup-matrix
+    strategy:
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Prepare workspace
+      run: rm -rf build-${{ matrix.package }} && mkdir -p build-${{ matrix.package }}
+    - name: Download ${{ inputs.tag }} source code
+      uses: robinraju/release-downloader@v1.9
+      with:
+        token: ${{ secrets.GH_PAT }}
+        tag: ${{ inputs.tag }}
+        fileName: globalprotect-openconnect-*.tar.gz
+        tarBall: false
+        zipBall: false
+        out-file-path: build-${{ matrix.package }}
+    - name: Docker Login
+      run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
+    - name: Build ${{ matrix.package }} package in Docker
+      run: |
+        docker run --rm -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} -e INCLUDE_GUI=1 yuezk/gpdev:${{ matrix.package }}-builder
+
+    - name: Install ${{ matrix.package }} package in Docker
+      run: |
+        docker run --rm -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} yuezk/gpdev:${{ matrix.package }}-builder \
+          bash install.sh
+
+    - name: Upload ${{ matrix.package }} package
+      uses: actions/upload-artifact@v3
+      with:
+        name: artifact-${{ matrix.os }}-${{ matrix.package }}
+        if-no-files-found: error
+        path: |
+          build-${{ matrix.package }}/artifacts/*
+
+  gh-release:
+    needs:
+    - build
+    runs-on: ubuntu-latest
+    if: ${{ inputs.gh-release }}
+    steps:
+    - name: Prepare workspace
+      run: rm -rf gh-release && mkdir gh-release
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        path: gh-release
+    - name: Update release
+      uses: softprops/action-gh-release@v1
+      with:
+        token: ${{ secrets.GH_PAT }}
+        prerelease: ${{ contains(github.ref, 'latest') }}
+        fail_on_unmatched_files: true
+        tag_name: ${{ inputs.tag }}
+        files: |
+          gh-release/artifact-*/*
+

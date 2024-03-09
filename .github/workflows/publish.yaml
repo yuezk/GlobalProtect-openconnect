@@ -1,0 +1,85 @@
+name: Publish Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish'
+        required: true
+      revision:
+        description: 'Package revision'
+        required: true
+        default: "1"
+      ppa:
+        description: 'Publish to PPA'
+        type: boolean
+        required: true
+        default: true
+      obs:
+        description: 'Publish to OBS'
+        type: boolean
+        required: true
+        default: true
+      aur:
+        description: 'Publish to AUR'
+        type: boolean
+        required: true
+        default: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check tag exists
+      uses: mukunku/tag-exists-action@v1.6.0
+      id: check-tag
+      with:
+        tag: ${{ inputs.tag }}
+    - name: Exit if tag does not exist
+      run: |
+        if [[ "${{ steps.check-tag.outputs.exists }}" == "false" ]]; then
+          echo "Tag ${{ inputs.tag }} does not exist"
+          exit 1
+        fi
+
+  publish-ppa:
+    needs: check
+    if: ${{ inputs.ppa }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: pnpm/action-setup@v2
+      with:
+        version: 8
+    - name: Prepare workspace
+      run: rm -rf publish-ppa && mkdir publish-ppa
+    - name: Download ${{ inputs.tag }} source code
+      uses: robinraju/release-downloader@v1.9
+      with:
+        token: ${{ secrets.GH_PAT }}
+        tag: ${{ inputs.tag }}
+        fileName: globalprotect-openconnect-*.tar.gz
+        tarBall: false
+        zipBall: false
+        out-file-path: publish-ppa
+    - name: Make the offline tarball
+      run: |
+        cd publish-ppa
+        tar -xf globalprotect-openconnect-*.tar.gz
+        cd globalprotect-openconnect-*/
+        make tarball OFFLINE=1
+
+        mkdir -p .build/debian
+        sed 's/@RUST@/rust-all(>=1.70)/g' packaging/deb/control.in > .build/debian/control
+        sed 's/@OFFLINE@/1/g' packaging/deb/rules.in > .build/debian/rules
+    - name: Publish to PPA
+      uses: yuezk/publish-ppa-package@dev
+      with:
+        repository: "yuezk/globalprotect-openconnect-snapshot"
+        gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+        gpg_passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
+        tarball: publish-ppa/globalprotect-openconnect-*/.build/tarball/*.tar.gz
+        debian_dir: publish-ppa/globalprotect-openconnect-*/.build/debian
+        deb_email: "k3vinyue@gmail.com"
+        deb_fullname: "Kevin Yue"
+        extra_ppa: "liushuyu-011/rust-bpo-1.75"
+        revision: ${{ inputs.revision }}

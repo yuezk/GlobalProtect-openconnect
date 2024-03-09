@@ -1,0 +1,7 @@
+#!/usr/bin/make -f
+
+export OFFLINE = @OFFLINE@
+export BUILD_FE = 0
+
+%:
+	dh $@ --no-parallel

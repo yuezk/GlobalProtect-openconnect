@@ -5,7 +5,7 @@ install:
 	install -Dm755 artifacts/usr/bin/gpservice $(DESTDIR)/usr/bin/gpservice
 	install -Dm755 artifacts/usr/bin/gpauth $(DESTDIR)/usr/bin/gpauth
 	install -Dm755 artifacts/usr/bin/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper
-  install -Dm755 artifacts/usr/bin/gpgui $(DESTDIR)/usr/bin/gpgui
+	install -Dm755 artifacts/usr/bin/gpgui $(DESTDIR)/usr/bin/gpgui
 
 	install -Dm644 artifacts/usr/share/applications/gpgui.desktop $(DESTDIR)/usr/share/applications/gpgui.desktop
 	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg

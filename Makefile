@@ -144,7 +144,7 @@ init-debian: clean-debian tarball
 	cd .build/deb/${PKG} && debmake
 
 	cp -f packaging/deb/control.in .build/deb/$(PKG)/debian/control
-	cp -f packaging/deb/rules .build/deb/$(PKG)/debian/rules
+	cp -f packaging/deb/rules.in .build/deb/$(PKG)/debian/rules
 
 	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/deb/$(PKG)/debian/rules
 
@@ -242,7 +242,7 @@ binary: clean-binary tarball
 
 	mkdir -p .build/binary/$(PKG_NAME)_$(VERSION)/artifacts
 
-	make -C .build/binary/${PKG} build OFFLINE=$(OFFLINE) BUILD_FE=0
+	make -C .build/binary/${PKG} build OFFLINE=$(OFFLINE) BUILD_FE=0 INCLUDE_GUI=$(INCLUDE_GUI)
 	make -C .build/binary/${PKG} install DESTDIR=$(PWD)/.build/binary/$(PKG_NAME)_$(VERSION)/artifacts
 
 	cp packaging/binary/Makefile.in .build/binary/$(PKG_NAME)_$(VERSION)/Makefile
