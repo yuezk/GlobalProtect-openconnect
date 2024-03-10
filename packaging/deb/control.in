@@ -3,7 +3,17 @@ Section: net
 Priority: optional
 Maintainer: Kevin Yue <k3vinyue@gmail.com>
 Standards-Version: 4.1.4
-Build-Depends: debhelper (>= 9), pkg-config, jq (>= 1), make (>= 4), openconnect (>= 8.20), libxml2, libsecret-1-0, libayatana-appindicator3-1, libwebkit2gtk-4.0-37, libgtk-3-0, gnome-keyring, @RUST@
+Build-Depends: debhelper (>= 9),
+  pkg-config,
+  jq (>= 1),
+  make (>= 4),
+  libxml2,
+  libsecret-1-0,
+  libayatana-appindicator3-1,
+  gnome-keyring,
+  libwebkit2gtk-4.0-dev,
+  libopenconnect-dev (>= 8.20),
+  @RUST@
 Homepage: https://github.com/yuezk/GlobalProtect-openconnect
 
 Package: globalprotect-openconnect
