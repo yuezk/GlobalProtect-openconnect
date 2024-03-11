@@ -12,8 +12,7 @@ Build-Depends: debhelper (>= 9),
   libayatana-appindicator3-1,
   gnome-keyring,
   libwebkit2gtk-4.0-dev,
-  libopenconnect-dev (>= 8.20),
-  @RUST@
+  libopenconnect-dev (>= 8.20),@RUST@
 Homepage: https://github.com/yuezk/GlobalProtect-openconnect
 
 Package: globalprotect-openconnect

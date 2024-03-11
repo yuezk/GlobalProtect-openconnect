@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    purge|remove|upgrade)
+        # Remove the gpgui binary downloaded at runtime
+        rm -f /usr/bin/gpgui
+    ;;
+
+    *)
+    ;;
+esac
+
+exit 0

@@ -145,6 +145,7 @@ init-debian: clean-debian tarball
 
 	cp -f packaging/deb/control.in .build/deb/$(PKG)/debian/control
 	cp -f packaging/deb/rules.in .build/deb/$(PKG)/debian/rules
+	cp -f packaging/deb/postrm .build/deb/$(PKG)/debian/postrm
 
 	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/deb/$(PKG)/debian/rules
 

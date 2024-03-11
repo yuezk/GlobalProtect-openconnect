@@ -34,6 +34,9 @@ A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authenticati
 %prep
 %setup
 
+%postun
+rm -f %{_bindir}/gpgui
+
 %build
 # The injected RUSTFLAGS could fail the build
 unset RUSTFLAGS
