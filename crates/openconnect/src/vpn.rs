@@ -1,11 +1,13 @@
 use std::{
   ffi::{c_char, CString},
+  fmt,
   sync::{Arc, RwLock},
 };
 
+use common::vpn_utils::{find_vpnc_script, is_executable};
 use log::info;
 
-use crate::{ffi, vpnc_script::find_default_vpnc_script};
+use crate::ffi;
 
 type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce() + 'static + Send + Sync>>>>;
 
@@ -77,11 +79,31 @@ impl Vpn {
   }
 }
 
+#[derive(Debug)]
+pub struct VpnError<'a> {
+  message: &'a str,
+}
+
+impl<'a> VpnError<'a> {
+  fn new(message: &'a str) -> Self {
+    Self { message }
+  }
+}
+
+impl fmt::Display for VpnError<'_> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", self.message)
+  }
+}
+
+impl std::error::Error for VpnError<'_> {}
+
 pub struct VpnBuilder {
   server: String,
   cookie: String,
-  user_agent: Option<String>,
   script: Option<String>,
+
+  user_agent: Option<String>,
   os: Option<String>,
 
   csd_uid: u32,
@@ -95,22 +117,25 @@ impl VpnBuilder {
     Self {
       server: server.to_string(),
       cookie: cookie.to_string(),
-      user_agent: None,
       script: None,
+
+      user_agent: None,
       os: None,
+
       csd_uid: 0,
       csd_wrapper: None,
+
       mtu: 0,
     }
   }
 
-  pub fn user_agent<T: Into<Option<String>>>(mut self, user_agent: T) -> Self {
-    self.user_agent = user_agent.into();
+  pub fn script<T: Into<Option<String>>>(mut self, script: T) -> Self {
+    self.script = script.into();
     self
   }
 
-  pub fn script<T: Into<Option<String>>>(mut self, script: T) -> Self {
-    self.script = script.into();
+  pub fn user_agent<T: Into<Option<String>>>(mut self, user_agent: T) -> Self {
+    self.user_agent = user_agent.into();
     self
   }
 
@@ -134,12 +159,27 @@ impl VpnBuilder {
     self
   }
 
-  pub fn build(self) -> Vpn {
+  pub fn build(self) -> Result<Vpn, VpnError<'static>> {
+    let script = match self.script {
+      Some(script) => {
+        if !is_executable(&script) {
+          return Err(VpnError::new("vpnc script is not executable"));
+        }
+        script
+      }
+      None => find_vpnc_script().ok_or_else(|| VpnError::new("Failed to find vpnc-script"))?,
+    };
+
+    if let Some(csd_wrapper) = &self.csd_wrapper {
+      if !is_executable(csd_wrapper) {
+        return Err(VpnError::new("CSD wrapper is not executable"));
+      }
+    }
+
     let user_agent = self.user_agent.unwrap_or_default();
-    let script = self.script.or_else(find_default_vpnc_script).unwrap_or_default();
     let os = self.os.unwrap_or("linux".to_string());
 
-    Vpn {
+    Ok(Vpn {
       server: Self::to_cstring(&self.server),
       cookie: Self::to_cstring(&self.cookie),
       user_agent: Self::to_cstring(&user_agent),
@@ -154,7 +194,7 @@ impl VpnBuilder {
       mtu: self.mtu,
 
       callback: Default::default(),
-    }
+    })
   }
 
   fn to_cstring(value: &str) -> CString {

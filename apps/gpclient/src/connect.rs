@@ -158,12 +158,12 @@ impl<'a> ConnectHandler<'a> {
     let mtu = self.args.mtu.unwrap_or(0);
 
     let vpn = Vpn::builder(gateway, cookie)
-      .user_agent(self.args.user_agent.clone())
       .script(self.args.script.clone())
+      .user_agent(self.args.user_agent.clone())
       .csd_uid(csd_uid)
       .csd_wrapper(self.args.csd_wrapper.clone())
       .mtu(mtu)
-      .build();
+      .build()?;
 
     let vpn = Arc::new(vpn);
     let vpn_clone = vpn.clone();

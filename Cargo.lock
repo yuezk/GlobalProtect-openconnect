@@ -563,6 +563,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "2.1.0"
+dependencies = [
+ "is_executable",
+]
+
+[[package]]
 name = "compile-time"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2522,7 +2529,7 @@ name = "openconnect"
 version = "2.1.0"
 dependencies = [
  "cc",
- "is_executable",
+ "common",
  "log",
 ]
 

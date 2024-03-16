@@ -4,7 +4,7 @@ use gpapi::service::{
   request::{ConnectRequest, WsRequest},
   vpn_state::VpnState,
 };
-use log::info;
+use log::{info, warn};
 use openconnect::Vpn;
 use tokio::sync::{mpsc, oneshot, watch, RwLock};
 use tokio_util::sync::CancellationToken;
@@ -31,22 +31,29 @@ impl VpnTaskContext {
       return;
     }
 
+    let vpn_state_tx = self.vpn_state_tx.clone();
     let info = req.info().clone();
     let vpn_handle = Arc::clone(&self.vpn_handle);
     let args = req.args();
-    let vpn = Vpn::builder(req.gateway().server(), args.cookie())
-      .user_agent(args.user_agent())
+    let vpn = match Vpn::builder(req.gateway().server(), args.cookie())
       .script(args.vpnc_script())
+      .user_agent(args.user_agent())
       .csd_uid(args.csd_uid())
       .csd_wrapper(args.csd_wrapper())
       .mtu(args.mtu())
       .os(args.openconnect_os())
-      .build();
+      .build()
+    {
+      Ok(vpn) => vpn,
+      Err(err) => {
+        warn!("Failed to create VPN: {}", err);
+        vpn_state_tx.send(VpnState::Disconnected).ok();
+        return;
+      }
+    };
 
     // Save the VPN handle
     vpn_handle.write().await.replace(vpn);
-
-    let vpn_state_tx = self.vpn_state_tx.clone();
     let connect_info = Box::new(info.clone());
     vpn_state_tx.send(VpnState::Connecting(connect_info)).ok();
 
