@@ -1486,6 +1486,7 @@ version = "2.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "common",
  "compile-time",
  "directories",
  "env_logger",

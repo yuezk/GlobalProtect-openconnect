@@ -1,6 +1,7 @@
 use std::{fs, sync::Arc};
 
 use clap::Args;
+use common::vpn_utils::find_csd_wrapper;
 use gpapi::{
   clap::args::Os,
   credential::{Credential, PasswordCredential},
@@ -30,6 +31,12 @@ pub(crate) struct ConnectArgs {
   user: Option<String>,
   #[arg(long, short, help = "The VPNC script to use")]
   script: Option<String>,
+
+  #[arg(
+    long,
+    help = "Use the default CSD wrapper to generate the HIP report and send it to the server"
+  )]
+  hip: bool,
 
   #[arg(long, help = "Same as the '--csd-user' option in the openconnect command")]
   csd_user: Option<String>,
@@ -112,16 +119,19 @@ impl<'a> ConnectHandler<'a> {
     let selected_gateway = match &self.args.gateway {
       Some(gateway) => portal_config
         .find_gateway(gateway)
-        .ok_or_else(|| anyhow::anyhow!("Cannot find gateway {}", gateway))?,
+        .ok_or_else(|| anyhow::anyhow!("Cannot find gateway specified: {}", gateway))?,
       None => {
         portal_config.sort_gateways(prelogin.region());
         let gateways = portal_config.gateways();
 
         if gateways.len() > 1 {
-          Select::new("Which gateway do you want to connect to?", gateways)
+          let gateway = Select::new("Which gateway do you want to connect to?", gateways)
             .with_vim_mode(true)
-            .prompt()?
+            .prompt()?;
+          info!("Connecting to the selected gateway: {}", gateway);
+          gateway
         } else {
+          info!("Connecting to the only available gateway: {}", gateways[0]);
           gateways[0]
         }
       }
@@ -154,14 +164,21 @@ impl<'a> ConnectHandler<'a> {
   }
 
   async fn connect_gateway(&self, gateway: &str, cookie: &str) -> anyhow::Result<()> {
-    let csd_uid = get_csd_uid(&self.args.csd_user)?;
     let mtu = self.args.mtu.unwrap_or(0);
+    let csd_uid = get_csd_uid(&self.args.csd_user)?;
+    let csd_wrapper = if self.args.csd_user.is_some() {
+      self.args.csd_wrapper.clone()
+    } else if self.args.hip {
+      find_csd_wrapper()
+    } else {
+      None
+    };
 
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
       .user_agent(self.args.user_agent.clone())
       .csd_uid(csd_uid)
-      .csd_wrapper(self.args.csd_wrapper.clone())
+      .csd_wrapper(csd_wrapper)
       .mtu(mtu)
       .build()?;
 
