@@ -1,5 +1,5 @@
 use anyhow::bail;
-use log::info;
+use log::{info, warn};
 use reqwest::{Client, StatusCode};
 use roxmltree::Document;
 use serde::Serialize;
@@ -10,7 +10,7 @@ use crate::{
   gateway::{parse_gateways, Gateway},
   gp_params::GpParams,
   portal::PortalError,
-  utils::{normalize_server, remove_url_scheme, xml},
+  utils::{normalize_server, parse_gp_error, remove_url_scheme, xml},
 };
 
 #[derive(Debug, Serialize, Type)]
@@ -110,7 +110,14 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   }
 
   if status.is_client_error() || status.is_server_error() {
-    bail!("Portal config error: {}", status)
+    let (reason, res) = parse_gp_error(res).await;
+
+    warn!(
+      "Portal config error: reason={}, status={}, response={}",
+      reason, status, res
+    );
+
+    bail!("Portal config error, reason: {}", reason);
   }
 
   let res_xml = res.text().await.map_err(|e| PortalError::ConfigError(e.to_string()))?;

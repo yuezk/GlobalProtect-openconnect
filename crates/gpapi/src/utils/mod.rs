@@ -1,4 +1,4 @@
-use reqwest::Url;
+use reqwest::{Response, Url};
 
 pub(crate) mod xml;
 
@@ -40,4 +40,19 @@ pub fn normalize_server(server: &str) -> anyhow::Result<String> {
 
 pub fn remove_url_scheme(s: &str) -> String {
   s.replace("http://", "").replace("https://", "")
+}
+
+pub(crate) async fn parse_gp_error(res: Response) -> (String, String) {
+  let reason = res
+    .headers()
+    .get("x-private-pan-globalprotect")
+    .map_or_else(|| "<none>", |v| v.to_str().unwrap_or("<invalid header>"))
+    .to_string();
+
+  let res = res.text().await.map_or_else(
+    |_| "<failed to read response>".to_string(),
+    |v| if v.is_empty() { "<empty>".to_string() } else { v },
+  );
+
+  (reason, res)
 }

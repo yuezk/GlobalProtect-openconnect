@@ -1,5 +1,5 @@
 use anyhow::bail;
-use log::info;
+use log::{info, warn};
 use reqwest::{Client, StatusCode};
 use roxmltree::Document;
 use serde::Serialize;
@@ -8,7 +8,7 @@ use specta::Type;
 use crate::{
   gp_params::GpParams,
   portal::PortalError,
-  utils::{base64, normalize_server, xml},
+  utils::{base64, normalize_server, parse_gp_error, xml},
 };
 
 const REQUIRED_PARAMS: [&str; 8] = [
@@ -126,6 +126,10 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
   }
 
   if status.is_client_error() || status.is_server_error() {
+    let (reason, res) = parse_gp_error(res).await;
+
+    warn!("Prelogin error: reason={}, status={}, response={}", reason, status, res);
+
     bail!("Prelogin error: {}", status)
   }
 

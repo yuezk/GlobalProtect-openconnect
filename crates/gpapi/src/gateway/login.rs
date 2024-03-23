@@ -1,5 +1,5 @@
 use anyhow::bail;
-use log::info;
+use log::{info, warn};
 use reqwest::Client;
 use roxmltree::Document;
 use urlencoding::encode;
@@ -7,7 +7,7 @@ use urlencoding::encode;
 use crate::{
   credential::Credential,
   gp_params::GpParams,
-  utils::{normalize_server, remove_url_scheme},
+  utils::{normalize_server, parse_gp_error, remove_url_scheme},
 };
 
 pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<String> {
@@ -32,7 +32,14 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
   let status = res.status();
 
   if status.is_client_error() || status.is_server_error() {
-    bail!("Gateway login error: {}", status)
+    let (reason, res) = parse_gp_error(res).await;
+
+    warn!(
+      "Gateway login error: reason={}, status={}, response={}",
+      reason, status, res
+    );
+
+    bail!("Gateway login error, reason: {}", reason);
   }
 
   let res_xml = res.text().await?;
