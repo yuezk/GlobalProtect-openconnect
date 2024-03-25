@@ -6,6 +6,7 @@ use urlencoding::encode;
 
 use crate::{
   credential::Credential,
+  error::PortalError,
   gp_params::GpParams,
   utils::{normalize_server, parse_gp_error, remove_url_scheme},
 };
@@ -28,7 +29,13 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
 
   info!("Gateway login, user_agent: {}", gp_params.user_agent());
 
-  let res = client.post(&login_url).form(&params).send().await?;
+  let res = client
+    .post(&login_url)
+    .form(&params)
+    .send()
+    .await
+    .map_err(|e| anyhow::anyhow!(PortalError::GatewayError(e.to_string())))?;
+
   let status = res.status();
 
   if status.is_client_error() || status.is_server_error() {

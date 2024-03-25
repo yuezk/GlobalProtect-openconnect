@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod credential;
+pub mod error;
 pub mod gateway;
 pub mod gp_params;
 pub mod portal;

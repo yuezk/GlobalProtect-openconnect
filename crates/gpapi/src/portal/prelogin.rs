@@ -6,8 +6,8 @@ use serde::Serialize;
 use specta::Type;
 
 use crate::{
+  error::PortalError,
   gp_params::GpParams,
-  portal::PortalError,
   utils::{base64, normalize_server, parse_gp_error, xml},
 };
 

@@ -5,9 +5,10 @@ use common::vpn_utils::find_csd_wrapper;
 use gpapi::{
   clap::args::Os,
   credential::{Credential, PasswordCredential},
+  error::PortalError,
   gateway::gateway_login,
   gp_params::{ClientOs, GpParams},
-  portal::{prelogin, retrieve_config, PortalError, Prelogin},
+  portal::{prelogin, retrieve_config, Prelogin},
   process::{
     auth_launcher::SamlAuthLauncher,
     users::{get_non_root_user, get_user_by_name},
@@ -152,6 +153,8 @@ impl<'a> ConnectHandler<'a> {
   }
 
   async fn connect_gateway_with_prelogin(&self, gateway: &str) -> anyhow::Result<()> {
+    info!("Treat the portal as the gateway, connecting...");
+
     let mut gp_params = self.build_gp_params();
     gp_params.set_is_gateway(true);
 

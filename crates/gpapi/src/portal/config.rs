@@ -7,9 +7,9 @@ use specta::Type;
 
 use crate::{
   credential::{AuthCookieCredential, Credential},
+  error::PortalError,
   gateway::{parse_gateways, Gateway},
   gp_params::GpParams,
-  portal::PortalError,
   utils::{normalize_server, parse_gp_error, remove_url_scheme, xml},
 };
 
