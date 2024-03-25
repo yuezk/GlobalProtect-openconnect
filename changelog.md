@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.1 - 2024-03-25
+
+- Add the `--hip` option to enable HIP report
+- Fix not working in OpenSuse 15.5 (fix #336, #322)
+- Treat portal as gateway when the gateway login is failed (fix #338)
+- Improve the error message (fix #327)
+
 ## 2.1.0 - 2024-02-27
 
 - Update distribution channel for `gpgui` to complaint with the GPL-3 license.
