@@ -102,7 +102,12 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
 
   info!("Portal config, user_agent: {}", gp_params.user_agent());
 
-  let res = client.post(&url).form(&params).send().await?;
+  let res = client
+    .post(&url)
+    .form(&params)
+    .send()
+    .await
+    .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e.to_string())))?;
   let status = res.status();
 
   if status == StatusCode::NOT_FOUND {

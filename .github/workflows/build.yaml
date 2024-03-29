@@ -9,6 +9,9 @@ on:
     branches:
       - main
       - dev
+      - hotfix/*
+      - feature/*
+      - release/*
     tags:
       - latest
       - v*.*.*
@@ -42,6 +45,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.ref }}
         path: source/gp
     - name: Create tarball
       run: |
@@ -95,12 +99,14 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.ref }}
         path: gpgui-source/gp
-    - name: Checkout gpgui
+    - name: Checkout gpgui@${{ github.ref_name }}
       uses: actions/checkout@v3
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/gpgui
+        ref: ${{ github.ref_name }}
         path: gpgui-source/gpgui
     - name: Tarball
       run: |

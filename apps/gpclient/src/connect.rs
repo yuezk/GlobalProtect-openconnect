@@ -153,7 +153,7 @@ impl<'a> ConnectHandler<'a> {
   }
 
   async fn connect_gateway_with_prelogin(&self, gateway: &str) -> anyhow::Result<()> {
-    info!("Treat the portal as the gateway, connecting...");
+    info!("Performing the gateway authentication...");
 
     let mut gp_params = self.build_gp_params();
     gp_params.set_is_gateway(true);
