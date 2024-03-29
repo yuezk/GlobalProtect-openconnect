@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.2 - 2024-03-29
+
+- Treat portal as gateway when the gateway login is failed (fix #338)
+
 ## 2.1.1 - 2024-03-25
 
 - Add the `--hip` option to enable HIP report
