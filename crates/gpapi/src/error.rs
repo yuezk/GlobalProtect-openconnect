@@ -6,6 +6,6 @@ pub enum PortalError {
   PreloginError(String),
   #[error("Portal config error: {0}")]
   ConfigError(String),
-  #[error("Gateway error: {0}")]
-  GatewayError(String),
+  #[error("Network error: {0}")]
+  NetworkError(String),
 }
