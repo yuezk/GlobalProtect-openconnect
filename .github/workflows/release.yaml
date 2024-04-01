@@ -109,11 +109,16 @@ jobs:
       run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
     - name: Build ${{ matrix.package }} package in Docker
       run: |
-        docker run --rm -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} -e INCLUDE_GUI=1 yuezk/gpdev:${{ matrix.package }}-builder
+        docker run --rm \
+          -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} \
+          -e INCLUDE_GUI=1 \
+          yuezk/gpdev:${{ matrix.package }}-builder
 
     - name: Install ${{ matrix.package }} package in Docker
       run: |
-        docker run --rm -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} yuezk/gpdev:${{ matrix.package }}-builder \
+        docker run --rm \
+          -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} \
+          yuezk/gpdev:${{ matrix.package }}-builder \
           bash install.sh
 
     - name: Upload ${{ matrix.package }} package
@@ -140,7 +145,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         token: ${{ secrets.GH_PAT }}
-        prerelease: ${{ contains(github.ref, 'latest') }}
+        prerelease: ${{ contains(github.ref, 'snapshot') }}
         fail_on_unmatched_files: true
         tag_name: ${{ inputs.tag }}
         files: |

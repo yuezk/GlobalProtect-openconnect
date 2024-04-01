@@ -1,4 +1,4 @@
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use log::{info, warn};
 use reqwest::{Client, StatusCode};
 use roxmltree::Document;
@@ -29,6 +29,7 @@ pub struct SamlPrelogin {
   is_gateway: bool,
   saml_request: String,
   support_default_browser: bool,
+  is_cas: bool,
 }
 
 impl SamlPrelogin {
@@ -42,6 +43,14 @@ impl SamlPrelogin {
 
   pub fn support_default_browser(&self) -> bool {
     self.support_default_browser
+  }
+
+  pub fn is_cas(&self) -> bool {
+    self.is_cas
+  }
+
+  fn set_is_cas(&mut self, is_cas: bool) {
+    self.is_cas = is_cas;
   }
 }
 
@@ -97,6 +106,29 @@ impl Prelogin {
 }
 
 pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prelogin> {
+  match prelogin_impl(portal, gp_params).await {
+    Ok(prelogin) => Ok(prelogin),
+    Err(e) => {
+      if e.to_string().contains("CAS is not supported by the client") {
+        info!("CAS authentication detected, retrying with default browser");
+        let mut gp_params = gp_params.clone();
+        gp_params.set_prefer_default_browser(true);
+
+        let mut prelogin = prelogin_impl(portal, &gp_params).await?;
+        // Mark the prelogin as CAS
+        if let Prelogin::Saml(saml) = &mut prelogin {
+          saml.set_is_cas(true);
+        }
+
+        Ok(prelogin)
+      } else {
+        Err(e)
+      }
+    }
+  }
+}
+
+pub async fn prelogin_impl(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prelogin> {
   let user_agent = gp_params.user_agent();
   info!("Prelogin with user_agent: {}", user_agent);
 
@@ -107,11 +139,15 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
   let mut params = gp_params.to_params();
 
   params.insert("tmp", "tmp");
+  // CAS support requires external browser
   if gp_params.prefer_default_browser() {
     params.insert("default-browser", "1");
+    params.insert("cas-support", "yes");
   }
 
   params.retain(|k, _| REQUIRED_PARAMS.iter().any(|required_param| required_param == k));
+
+  info!("Prelogin with params: {:?}", params);
 
   let client = Client::builder()
     .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
@@ -124,8 +160,8 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
     .send()
     .await
     .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e.to_string())))?;
-  let status = res.status();
 
+  let status = res.status();
   if status == StatusCode::NOT_FOUND {
     bail!(PortalError::PreloginError("Prelogin endpoint not found".to_string()))
   }
@@ -177,6 +213,7 @@ fn parse_res_xml(res_xml: String, is_gateway: bool) -> anyhow::Result<Prelogin> 
       is_gateway,
       saml_request,
       support_default_browser,
+      is_cas: false,
     };
 
     return Ok(Prelogin::Saml(saml_prelogin));
@@ -196,8 +233,8 @@ fn parse_res_xml(res_xml: String, is_gateway: bool) -> anyhow::Result<Prelogin> 
       label_password: label_password.unwrap(),
     };
 
-    return Ok(Prelogin::Standard(standard_prelogin));
+    Ok(Prelogin::Standard(standard_prelogin))
+  } else {
+    Err(anyhow!("Invalid prelogin response"))
   }
-
-  bail!("Invalid prelogin response");
 }

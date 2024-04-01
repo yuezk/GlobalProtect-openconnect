@@ -82,7 +82,7 @@ async fn feed_auth_data(auth_data: &str) -> anyhow::Result<()> {
 
   reqwest::Client::default()
     .post(format!("{}/auth-data", service_endpoint))
-    .json(&auth_data)
+    .body(auth_data.to_string())
     .send()
     .await?
     .error_for_status()?;

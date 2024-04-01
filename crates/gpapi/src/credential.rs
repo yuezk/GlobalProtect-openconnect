@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use log::info;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -156,24 +157,49 @@ impl From<PasswordCredential> for CachedCredential {
 }
 
 #[derive(Debug, Serialize, Deserialize, Type, Clone)]
+pub struct TokenCredential {
+  #[serde(alias = "un")]
+  username: String,
+  token: String,
+}
+
+impl TokenCredential {
+  pub fn username(&self) -> &str {
+    &self.username
+  }
+
+  pub fn token(&self) -> &str {
+    &self.token
+  }
+}
+
+#[derive(Debug, Serialize, Deserialize, Type, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Credential {
   Password(PasswordCredential),
   PreloginCookie(PreloginCookieCredential),
   AuthCookie(AuthCookieCredential),
+  TokenCredential(TokenCredential),
   CachedCredential(CachedCredential),
 }
 
 impl Credential {
-  /// Create a credential from a globalprotectcallback:<base64 encoded string>
-  pub fn parse_gpcallback(auth_data: &str) -> anyhow::Result<Self> {
-    // Remove the surrounding quotes
-    let auth_data = auth_data.trim_matches('"');
+  /// Create a credential from a globalprotectcallback:<base64 encoded string>,
+  /// or globalprotectcallback:cas-as=1&un=user@xyz.com&token=very_long_string
+  pub fn from_gpcallback(auth_data: &str) -> anyhow::Result<Self> {
     let auth_data = auth_data.trim_start_matches("globalprotectcallback:");
-    let auth_data = decode_to_string(auth_data)?;
-    let auth_data = SamlAuthData::parse_html(&auth_data)?;
 
-    Self::try_from(auth_data)
+    if auth_data.starts_with("cas-as") {
+      info!("Got token auth data: {}", auth_data);
+      let token_cred: TokenCredential = serde_urlencoded::from_str(auth_data)?;
+      Ok(Self::TokenCredential(token_cred))
+    } else {
+      info!("Parsing SAML auth data...");
+      let auth_data = decode_to_string(auth_data)?;
+      let auth_data = SamlAuthData::from_html(&auth_data)?;
+
+      Self::try_from(auth_data)
+    }
   }
 
   pub fn username(&self) -> &str {
@@ -181,6 +207,7 @@ impl Credential {
       Credential::Password(cred) => cred.username(),
       Credential::PreloginCookie(cred) => cred.username(),
       Credential::AuthCookie(cred) => cred.username(),
+      Credential::TokenCredential(cred) => cred.username(),
       Credential::CachedCredential(cred) => cred.username(),
     }
   }
@@ -189,20 +216,23 @@ impl Credential {
     let mut params = HashMap::new();
     params.insert("user", self.username());
 
-    let (passwd, prelogin_cookie, portal_userauthcookie, portal_prelogonuserauthcookie) = match self {
-      Credential::Password(cred) => (Some(cred.password()), None, None, None),
-      Credential::PreloginCookie(cred) => (None, Some(cred.prelogin_cookie()), None, None),
+    let (passwd, prelogin_cookie, portal_userauthcookie, portal_prelogonuserauthcookie, token) = match self {
+      Credential::Password(cred) => (Some(cred.password()), None, None, None, None),
+      Credential::PreloginCookie(cred) => (None, Some(cred.prelogin_cookie()), None, None, None),
       Credential::AuthCookie(cred) => (
         None,
         None,
         Some(cred.user_auth_cookie()),
         Some(cred.prelogon_user_auth_cookie()),
+        None,
       ),
+      Credential::TokenCredential(cred) => (None, None, None, None, Some(cred.token())),
       Credential::CachedCredential(cred) => (
         cred.password(),
         None,
         Some(cred.auth_cookie.user_auth_cookie()),
         Some(cred.auth_cookie.prelogon_user_auth_cookie()),
+        None,
       ),
     };
 
@@ -213,6 +243,10 @@ impl Credential {
       "portal-prelogonuserauthcookie",
       portal_prelogonuserauthcookie.unwrap_or_default(),
     );
+
+    if let Some(token) = token {
+      params.insert("token", token);
+    }
 
     params
   }
@@ -243,5 +277,40 @@ impl From<&AuthCookieCredential> for Credential {
 impl From<&CachedCredential> for Credential {
   fn from(value: &CachedCredential) -> Self {
     Self::CachedCredential(value.clone())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn cred_from_gpcallback_cas() {
+    let auth_data = "globalprotectcallback:cas-as=1&un=xyz@email.com&token=very_long_string";
+
+    let cred = Credential::from_gpcallback(auth_data).unwrap();
+
+    match cred {
+      Credential::TokenCredential(token_cred) => {
+        assert_eq!(token_cred.username(), "xyz@email.com");
+        assert_eq!(token_cred.token(), "very_long_string");
+      }
+      _ => panic!("Expected TokenCredential"),
+    }
+  }
+
+  #[test]
+  fn cred_from_gpcallback_non_cas() {
+    let auth_data = "PGh0bWw+PCEtLSA8c2FtbC1hdXRoLXN0YXR1cz4xPC9zYW1sLWF1dGgtc3RhdHVzPjxwcmVsb2dpbi1jb29raWU+cHJlbG9naW4tY29va2llPC9wcmVsb2dpbi1jb29raWU+PHNhbWwtdXNlcm5hbWU+eHl6QGVtYWlsLmNvbTwvc2FtbC11c2VybmFtZT48c2FtbC1zbG8+bm88L3NhbWwtc2xvPjxzYW1sLVNlc3Npb25Ob3RPbk9yQWZ0ZXI+PC9zYW1sLVNlc3Npb25Ob3RPbk9yQWZ0ZXI+IC0tPjwvaHRtbD4=";
+
+    let cred = Credential::from_gpcallback(auth_data).unwrap();
+
+    match cred {
+      Credential::PreloginCookie(cred) => {
+        assert_eq!(cred.username(), "xyz@email.com");
+        assert_eq!(cred.prelogin_cookie(), "prelogin-cookie");
+      }
+      _ => panic!("Expected PreloginCookieCredential")
+    }
   }
 }

@@ -15,6 +15,13 @@ PUBLISH ?= 0
 
 export DEBEMAIL = k3vinyue@gmail.com
 export DEBFULLNAME = Kevin Yue
+export SNAPSHOT = $(shell test -f SNAPSHOT && echo "true" || echo "false")
+
+ifeq ($(SNAPSHOT), true)
+	RELEASE_TAG = snapshot
+else
+	RELEASE_TAG = v$(VERSION)
+endif
 
 CARGO_BUILD_ARGS = --release
 
@@ -61,7 +68,8 @@ download-gui:
 	if [ $(INCLUDE_GUI) -eq 1 ]; then \
 		echo "Downloading GlobalProtect GUI..."; \
 		mkdir -p .build/gpgui; \
-		curl -sSL https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v$(VERSION)/gpgui_$(VERSION)_$(shell uname -m).bin.tar.xz -o .build/gpgui/gpgui_$(VERSION)_x$(shell uname -m).bin.tar.xz; \
+		curl -sSL https://github.com/yuezk/GlobalProtect-openconnect/releases/download/$(RELEASE_TAG)/gpgui_$(shell uname -m).bin.tar.xz \
+			-o .build/gpgui/gpgui_$(shell uname -m).bin.tar.xz; \
 		tar -xJf .build/gpgui/*.tar.xz -C .build/gpgui; \
 	else \
 		echo "Skipping GlobalProtect GUI download (INCLUDE_GUI=0)"; \
@@ -195,7 +203,7 @@ init-rpm: clean-rpm
 	sed -i "s/@VERSION@/$(VERSION)/g" .build/rpm/globalprotect-openconnect.spec
 	sed -i "s/@REVISION@/$(REVISION)/g" .build/rpm/globalprotect-openconnect.spec
 	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/rpm/globalprotect-openconnect.spec
-	sed -i "s/@DATE@/$(shell date "+%a %b %d %Y")/g" .build/rpm/globalprotect-openconnect.spec
+	sed -i "s/@DATE@/$(shell LC_ALL=en.US date "+%a %b %d %Y")/g" .build/rpm/globalprotect-openconnect.spec
 
 	sed -i "s/@VERSION@/$(VERSION)/g" .build/rpm/globalprotect-openconnect.changes
 	sed -i "s/@DATE@/$(shell LC_ALL=en.US date -u "+%a %b %e %T %Z %Y")/g" .build/rpm/globalprotect-openconnect.changes

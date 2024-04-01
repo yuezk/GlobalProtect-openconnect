@@ -42,7 +42,7 @@ impl ClientOs {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize, Type, Default)]
+#[derive(Debug, Serialize, Deserialize, Type, Default, Clone)]
 pub struct GpParams {
   is_gateway: bool,
   user_agent: String,
@@ -81,6 +81,10 @@ impl GpParams {
 
   pub fn prefer_default_browser(&self) -> bool {
     self.prefer_default_browser
+  }
+
+  pub fn set_prefer_default_browser(&mut self, prefer_default_browser: bool) {
+    self.prefer_default_browser = prefer_default_browser;
   }
 
   pub fn client_os(&self) -> &str {

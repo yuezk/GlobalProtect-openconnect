@@ -9,6 +9,12 @@ use tauri::{Manager, Window};
 
 use crate::downloader::{ChecksumFetcher, FileDownloader};
 
+#[cfg(not(debug_assertions))]
+const SNAPSHOT: &str = match option_env!("SNAPSHOT") {
+    Some(val) => val,
+    None => "false"
+};
+
 pub struct ProgressNotifier {
   win: Window,
 }
@@ -81,9 +87,13 @@ impl GuiUpdater {
     info!("Update GUI, version: {}", self.version);
 
     #[cfg(debug_assertions)]
-    let release_tag = "latest";
+    let release_tag = "snapshot";
     #[cfg(not(debug_assertions))]
-    let release_tag = format!("v{}", self.version);
+    let release_tag = if SNAPSHOT == "true" {
+      String::from("snapshot")
+    } else {
+      format!("v{}", self.version)
+    };
 
     #[cfg(target_arch = "x86_64")]
     let arch = "x86_64";
@@ -91,8 +101,8 @@ impl GuiUpdater {
     let arch = "aarch64";
 
     let file_url = format!(
-      "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{}/gpgui_{}_{}.bin.tar.xz",
-      release_tag, self.version, arch
+      "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{}/gpgui_{}.bin.tar.xz",
+      release_tag, arch
     );
     let checksum_url = format!("{}.sha256", file_url);
 

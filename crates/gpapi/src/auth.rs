@@ -1,4 +1,4 @@
-use anyhow::bail;
+use anyhow::anyhow;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -35,7 +35,7 @@ impl SamlAuthData {
     }
   }
 
-  pub fn parse_html(html: &str) -> anyhow::Result<SamlAuthData> {
+  pub fn from_html(html: &str) -> anyhow::Result<SamlAuthData> {
     match parse_xml_tag(html, "saml-auth-status") {
       Some(saml_status) if saml_status == "1" => {
         let username = parse_xml_tag(html, "saml-username");
@@ -43,21 +43,17 @@ impl SamlAuthData {
         let portal_userauthcookie = parse_xml_tag(html, "portal-userauthcookie");
 
         if SamlAuthData::check(&username, &prelogin_cookie, &portal_userauthcookie) {
-          return Ok(SamlAuthData::new(
+          Ok(SamlAuthData::new(
             username.unwrap(),
             prelogin_cookie,
             portal_userauthcookie,
-          ));
+          ))
+        } else {
+          Err(anyhow!("Found invalid auth data in HTML"))
         }
-
-        bail!("Found invalid auth data in HTML");
       }
-      Some(status) => {
-        bail!("Found invalid SAML status {} in HTML", status);
-      }
-      None => {
-        bail!("No auth data found in HTML");
-      }
+      Some(status) => Err(anyhow!("Found invalid SAML status {} in HTML", status)),
+      None => Err(anyhow!("No auth data found in HTML")),
     }
   }
 
