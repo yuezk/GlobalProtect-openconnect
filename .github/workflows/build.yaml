@@ -25,9 +25,9 @@ jobs:
         id: set-matrix
         run: |
           if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
-            echo "matrix=[\"ubuntu-latest\", \"arm64\"]" >> $GITHUB_OUTPUT
+            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "arm64", "arch": "arm64"]' >> $GITHUB_OUTPUT
           else
-            echo "matrix=[\"ubuntu-latest\"]" >> $GITHUB_OUTPUT
+            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}]' >> $GITHUB_OUTPUT
           fi
 
   tarball:
@@ -70,7 +70,8 @@ jobs:
       matrix:
         os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
         package: [deb, rpm, pkg, binary]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os.runner }}
+    name: build-gp (${{ matrix.package }}, ${{ matrix.os.arch }})
     steps:
     - name: Prepare workspace
       run: |
@@ -98,7 +99,7 @@ jobs:
     - name: Upload ${{ matrix.package }} package
       uses: actions/upload-artifact@v3
       with:
-        name: artifact-gp-${{ matrix.os }}-${{ matrix.package }}
+        name: artifact-gp-${{ matrix.package }}-${{ matrix.os.arch }}
         if-no-files-found: error
         path: |
           build-gp-${{ matrix.package }}/artifacts/*
@@ -109,7 +110,8 @@ jobs:
     strategy:
       matrix:
         os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os.runner }}
+    name: build-gpgui (${{ matrix.os.arch }})
     steps:
     - uses: pnpm/action-setup@v2
       with:
@@ -148,7 +150,7 @@ jobs:
     - name: Upload gpgui
       uses: actions/upload-artifact@v3
       with:
-        name: artifact-gpgui-${{ matrix.os }}
+        name: artifact-gpgui-${{ matrix.os.arch }}
         if-no-files-found: error
         path: |
           gpgui-source/*.bin.tar.xz
