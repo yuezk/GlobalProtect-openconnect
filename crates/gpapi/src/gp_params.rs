@@ -51,7 +51,6 @@ pub struct GpParams {
   client_version: Option<String>,
   computer: String,
   ignore_tls_errors: bool,
-  prefer_default_browser: bool,
 }
 
 impl GpParams {
@@ -77,14 +76,6 @@ impl GpParams {
 
   pub fn ignore_tls_errors(&self) -> bool {
     self.ignore_tls_errors
-  }
-
-  pub fn prefer_default_browser(&self) -> bool {
-    self.prefer_default_browser
-  }
-
-  pub fn set_prefer_default_browser(&mut self, prefer_default_browser: bool) {
-    self.prefer_default_browser = prefer_default_browser;
   }
 
   pub fn client_os(&self) -> &str {
@@ -135,7 +126,6 @@ pub struct GpParamsBuilder {
   client_version: Option<String>,
   computer: String,
   ignore_tls_errors: bool,
-  prefer_default_browser: bool,
 }
 
 impl GpParamsBuilder {
@@ -148,7 +138,6 @@ impl GpParamsBuilder {
       client_version: Default::default(),
       computer: whoami::hostname(),
       ignore_tls_errors: false,
-      prefer_default_browser: false,
     }
   }
 
@@ -187,11 +176,6 @@ impl GpParamsBuilder {
     self
   }
 
-  pub fn prefer_default_browser(&mut self, prefer_default_browser: bool) -> &mut Self {
-    self.prefer_default_browser = prefer_default_browser;
-    self
-  }
-
   pub fn build(&self) -> GpParams {
     GpParams {
       is_gateway: self.is_gateway,
@@ -201,7 +185,6 @@ impl GpParamsBuilder {
       client_version: self.client_version.clone(),
       computer: self.computer.clone(),
       ignore_tls_errors: self.ignore_tls_errors,
-      prefer_default_browser: self.prefer_default_browser,
     }
   }
 }

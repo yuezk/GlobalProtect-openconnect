@@ -7,6 +7,7 @@ use std::{
 use anyhow::bail;
 use gpapi::{
   auth::SamlAuthData,
+  error::AuthDataParseError,
   gp_params::GpParams,
   portal::{prelogin, Prelogin},
   utils::{redact::redact_uri, window::WindowExt},
@@ -359,32 +360,29 @@ fn read_auth_data_from_html(html: &str) -> AuthResult {
     return Err(AuthDataError::Invalid);
   }
 
-  match parse_xml_tag(html, "saml-auth-status") {
-    Some(saml_status) if saml_status == "1" => {
-      let username = parse_xml_tag(html, "saml-username");
-      let prelogin_cookie = parse_xml_tag(html, "prelogin-cookie");
-      let portal_userauthcookie = parse_xml_tag(html, "portal-userauthcookie");
-
-      if SamlAuthData::check(&username, &prelogin_cookie, &portal_userauthcookie) {
-        return Ok(SamlAuthData::new(
-          username.unwrap(),
-          prelogin_cookie,
-          portal_userauthcookie,
-        ));
+  let auth_data = match SamlAuthData::from_html(html) {
+    Ok(auth_data) => Ok(auth_data),
+    Err(err) => {
+      if let Some(gpcallback) = extract_gpcallback(html) {
+        info!("Found gpcallback from html...");
+        SamlAuthData::from_gpcallback(gpcallback)
+      } else {
+        Err(err)
       }
+    }
+  };
 
-      info!("Found invalid auth data in HTML");
-      Err(AuthDataError::Invalid)
-    }
-    Some(status) => {
-      info!("Found invalid SAML status {} in HTML", status);
-      Err(AuthDataError::Invalid)
-    }
-    None => {
-      info!("No auth data found in HTML");
-      Err(AuthDataError::NotFound)
-    }
-  }
+  auth_data.map_err(|err| match err {
+    AuthDataParseError::NotFound => AuthDataError::NotFound,
+    AuthDataParseError::Invalid => AuthDataError::Invalid,
+  })
+}
+
+fn extract_gpcallback(html: &str) -> Option<&str> {
+  let re = Regex::new(r#"globalprotectcallback:[^"]+"#).unwrap();
+  re.captures(html)
+    .and_then(|captures| captures.get(0))
+    .map(|m| m.as_str())
 }
 
 fn read_auth_data(main_resource: &WebResource, auth_result_tx: mpsc::UnboundedSender<AuthResult>) {
@@ -437,13 +435,6 @@ fn read_auth_data(main_resource: &WebResource, auth_result_tx: mpsc::UnboundedSe
   }
 }
 
-fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
-  let re = Regex::new(&format!("<{}>(.*)</{}>", tag, tag)).unwrap();
-  re.captures(html)
-    .and_then(|captures| captures.get(1))
-    .map(|m| m.as_str().to_string())
-}
-
 pub(crate) async fn clear_webview_cookies(window: &Window) -> anyhow::Result<()> {
   let (tx, rx) = oneshot::channel::<Result<(), String>>();
 
@@ -488,4 +479,28 @@ pub(crate) async fn clear_webview_cookies(window: &Window) -> anyhow::Result<()>
   })?;
 
   rx.await?.map_err(|err| anyhow::anyhow!(err))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn extract_gpcallback_some() {
+    let html = r#"
+      <meta http-equiv="refresh" content="0; URL=globalprotectcallback:PGh0bWw+PCEtLSA8c">
+      <meta http-equiv="refresh" content="0; URL=globalprotectcallback:PGh0bWw+PCEtLSA8c">
+    "#;
+
+    assert_eq!(extract_gpcallback(html), Some("globalprotectcallback:PGh0bWw+PCEtLSA8c"));
+  }
+
+  #[test]
+  fn extract_gpcallback_none() {
+    let html = r#"
+      <meta http-equiv="refresh" content="0; URL=PGh0bWw+PCEtLSA8c">
+    "#;
+
+    assert_eq!(extract_gpcallback(html), None);
+  }
 }

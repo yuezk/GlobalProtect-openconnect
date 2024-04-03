@@ -135,7 +135,7 @@ impl<'a> SamlAuthLauncher<'a> {
     };
 
     match auth_result {
-      SamlAuthResult::Success(auth_data) => Credential::try_from(auth_data),
+      SamlAuthResult::Success(auth_data) => Ok(Credential::from(auth_data)),
       SamlAuthResult::Failure(msg) => bail!(msg),
     }
   }

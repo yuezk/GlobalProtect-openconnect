@@ -9,3 +9,11 @@ pub enum PortalError {
   #[error("Network error: {0}")]
   NetworkError(String),
 }
+
+#[derive(Error, Debug)]
+pub enum AuthDataParseError {
+  #[error("No auth data found")]
+  NotFound,
+  #[error("Invalid auth data")]
+  Invalid,
+}
