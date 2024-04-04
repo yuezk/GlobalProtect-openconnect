@@ -68,12 +68,12 @@ impl SamlAuthData {
     if auth_data.starts_with("cas-as") {
       info!("Got token auth data: {}", auth_data);
 
-      let token_cred: SamlAuthData = serde_urlencoded::from_str(auth_data).map_err(|e| {
+      let auth_data: SamlAuthData = serde_urlencoded::from_str(auth_data).map_err(|e| {
         warn!("Failed to parse token auth data: {}", e);
         AuthDataParseError::Invalid
       })?;
 
-      Ok(token_cred)
+      Ok(auth_data)
     } else {
       info!("Parsing SAML auth data...");
 

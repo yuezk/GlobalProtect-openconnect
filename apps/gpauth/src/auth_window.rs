@@ -185,6 +185,10 @@ impl<'a> AuthWindow<'a> {
           }
 
           info!("Loaded uri: {}", redact_uri(&uri));
+          if uri.starts_with("globalprotectcallback:") {
+            return;
+          }
+
           read_auth_data(&main_resource, auth_result_tx_clone.clone());
         }
       });
@@ -203,7 +207,9 @@ impl<'a> AuthWindow<'a> {
 
       wv.connect_load_failed(move |_wv, _event, uri, err| {
         let redacted_uri = redact_uri(uri);
-        warn!("Failed to load uri: {} with error: {}", redacted_uri, err);
+        if !uri.starts_with("globalprotectcallback:") {
+          warn!("Failed to load uri: {} with error: {}", redacted_uri, err);
+        }
         // NOTE: Don't send error here, since load_changed event will be triggered after this
         // send_auth_result(&auth_result_tx, Err(AuthDataError::Invalid));
         // true to stop other handlers from being invoked for the event. false to propagate the event further.
@@ -340,7 +346,7 @@ fn read_auth_data_from_headers(response: &URIResponse) -> AuthResult {
 
 fn read_auth_data_from_body<F>(main_resource: &WebResource, callback: F)
 where
-  F: FnOnce(AuthResult) + Send + 'static,
+  F: FnOnce(Result<SamlAuthData, AuthDataParseError>) + Send + 'static,
 {
   main_resource.data(Cancellable::NONE, |data| match data {
     Ok(data) => {
@@ -349,15 +355,15 @@ where
     }
     Err(err) => {
       info!("Failed to read response body: {}", err);
-      callback(Err(AuthDataError::Invalid))
+      callback(Err(AuthDataParseError::Invalid))
     }
   });
 }
 
-fn read_auth_data_from_html(html: &str) -> AuthResult {
+fn read_auth_data_from_html(html: &str) -> Result<SamlAuthData, AuthDataParseError> {
   if html.contains("Temporarily Unavailable") {
     info!("Found 'Temporarily Unavailable' in HTML, auth failed");
-    return Err(AuthDataError::Invalid);
+    return Err(AuthDataParseError::Invalid);
   }
 
   let auth_data = match SamlAuthData::from_html(html) {
@@ -372,10 +378,7 @@ fn read_auth_data_from_html(html: &str) -> AuthResult {
     }
   };
 
-  auth_data.map_err(|err| match err {
-    AuthDataParseError::NotFound => AuthDataError::NotFound,
-    AuthDataParseError::Invalid => AuthDataError::Invalid,
-  })
+  auth_data
 }
 
 fn extract_gpcallback(html: &str) -> Option<&str> {
@@ -386,13 +389,12 @@ fn extract_gpcallback(html: &str) -> Option<&str> {
 }
 
 fn read_auth_data(main_resource: &WebResource, auth_result_tx: mpsc::UnboundedSender<AuthResult>) {
-  if main_resource.response().is_none() {
+  let Some(response) = main_resource.response() else {
     info!("No response found in main resource");
     send_auth_result(&auth_result_tx, Err(AuthDataError::Invalid));
     return;
-  }
+  };
 
-  let response = main_resource.response().unwrap();
   info!("Trying to read auth data from response headers...");
 
   match read_auth_data_from_headers(&response) {
@@ -405,22 +407,27 @@ fn read_auth_data(main_resource: &WebResource, auth_result_tx: mpsc::UnboundedSe
       read_auth_data_from_body(main_resource, move |auth_result| {
         // Since we have already found invalid auth data in headers, which means this could be the `/SAML20/SP/ACS` endpoint
         // any error result from body should be considered as invalid, and trigger a retry
-        let auth_result = auth_result.map_err(|_| AuthDataError::Invalid);
+        let auth_result = auth_result.map_err(|err| {
+          info!("Failed to read auth data from body: {}", err);
+          AuthDataError::Invalid
+        });
         send_auth_result(&auth_result_tx, auth_result);
       });
     }
     Err(AuthDataError::NotFound) => {
       info!("No auth data found in headers, trying to read from body...");
-      let url = main_resource.uri().unwrap_or("".into());
-      let is_acs_endpoint = url.contains("/SAML20/SP/ACS");
+
+      let is_acs_endpoint = main_resource.uri().map_or(false, |uri| uri.contains("/SAML20/SP/ACS"));
 
       read_auth_data_from_body(main_resource, move |auth_result| {
         // If the endpoint is `/SAML20/SP/ACS` and no auth data found in body, it should be considered as invalid
         let auth_result = auth_result.map_err(|err| {
-          if matches!(err, AuthDataError::NotFound) && is_acs_endpoint {
-            AuthDataError::Invalid
+          info!("Failed to read auth data from body: {}", err);
+
+          if !is_acs_endpoint && matches!(err, AuthDataParseError::NotFound) {
+            AuthDataError::NotFound
           } else {
-            err
+            AuthDataError::Invalid
           }
         });
 
@@ -492,7 +499,10 @@ mod tests {
       <meta http-equiv="refresh" content="0; URL=globalprotectcallback:PGh0bWw+PCEtLSA8c">
     "#;
 
-    assert_eq!(extract_gpcallback(html), Some("globalprotectcallback:PGh0bWw+PCEtLSA8c"));
+    assert_eq!(
+      extract_gpcallback(html),
+      Some("globalprotectcallback:PGh0bWw+PCEtLSA8c")
+    );
   }
 
   #[test]
