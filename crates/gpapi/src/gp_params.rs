@@ -42,7 +42,7 @@ impl ClientOs {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize, Type, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Type, Default)]
 pub struct GpParams {
   is_gateway: bool,
   user_agent: String,
