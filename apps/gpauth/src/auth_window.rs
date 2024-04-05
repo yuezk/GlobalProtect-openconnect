@@ -366,26 +366,24 @@ fn read_auth_data_from_html(html: &str) -> Result<SamlAuthData, AuthDataParseErr
     return Err(AuthDataParseError::Invalid);
   }
 
-  let auth_data = match SamlAuthData::from_html(html) {
+  match SamlAuthData::from_html(html) {
     Ok(auth_data) => Ok(auth_data),
     Err(err) => {
       if let Some(gpcallback) = extract_gpcallback(html) {
         info!("Found gpcallback from html...");
-        SamlAuthData::from_gpcallback(gpcallback)
+        SamlAuthData::from_gpcallback(&gpcallback)
       } else {
         Err(err)
       }
     }
-  };
-
-  auth_data
+  }
 }
 
-fn extract_gpcallback(html: &str) -> Option<&str> {
+fn extract_gpcallback(html: &str) -> Option<String> {
   let re = Regex::new(r#"globalprotectcallback:[^"]+"#).unwrap();
   re.captures(html)
     .and_then(|captures| captures.get(0))
-    .map(|m| m.as_str())
+    .map(|m| html_escape::decode_html_entities(m.as_str()).to_string())
 }
 
 fn read_auth_data(main_resource: &WebResource, auth_result_tx: mpsc::UnboundedSender<AuthResult>) {
@@ -500,8 +498,20 @@ mod tests {
     "#;
 
     assert_eq!(
-      extract_gpcallback(html),
+      extract_gpcallback(html).as_deref(),
       Some("globalprotectcallback:PGh0bWw+PCEtLSA8c")
+    );
+  }
+
+  #[test]
+  fn extract_gpcallback_cas() {
+    let html = r#"
+      <meta http-equiv="refresh" content="0; URL=globalprotectcallback:cas-as=1&amp;un=xyz@email.com&amp;token=very_long_string">
+    "#;
+
+    assert_eq!(
+      extract_gpcallback(html).as_deref(),
+      Some("globalprotectcallback:cas-as=1&un=xyz@email.com&token=very_long_string")
     );
   }
 

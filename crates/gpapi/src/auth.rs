@@ -66,7 +66,7 @@ impl SamlAuthData {
     let auth_data = data.trim_start_matches("globalprotectcallback:");
 
     if auth_data.starts_with("cas-as") {
-      info!("Got token auth data: {}", auth_data);
+      info!("Got CAS auth data from globalprotectcallback");
 
       let auth_data: SamlAuthData = serde_urlencoded::from_str(auth_data).map_err(|e| {
         warn!("Failed to parse token auth data: {}", e);
