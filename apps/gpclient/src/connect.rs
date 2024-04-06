@@ -32,6 +32,8 @@ pub(crate) struct ConnectArgs {
   user: Option<String>,
   #[arg(long, short, help = "The VPNC script to use")]
   script: Option<String>,
+  #[arg(long, help = "Treat the server as a gateway, instead of a portal")]
+  as_gateway: bool,
 
   #[arg(
     long,
@@ -95,6 +97,12 @@ impl<'a> ConnectHandler<'a> {
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
     let server = self.args.server.as_str();
+    let as_gateway = self.args.as_gateway;
+
+    if as_gateway {
+      info!("Treating the server as a gateway");
+      return self.connect_gateway_with_prelogin(server).await;
+    }
 
     let Err(err) = self.connect_portal_with_prelogin(server).await else {
       return Ok(());
