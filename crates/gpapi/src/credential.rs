@@ -37,13 +37,13 @@ impl From<&CachedCredential> for PasswordCredential {
 
 #[derive(Debug, Serialize, Deserialize, Type, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct PreloginCookieCredential {
+pub struct PreloginCredential {
   username: String,
   prelogin_cookie: Option<String>,
   token: Option<String>,
 }
 
-impl PreloginCookieCredential {
+impl PreloginCredential {
   pub fn new(username: &str, prelogin_cookie: Option<&str>, token: Option<&str>) -> Self {
     Self {
       username: username.to_string(),
@@ -65,7 +65,7 @@ impl PreloginCookieCredential {
   }
 }
 
-impl From<SamlAuthData> for PreloginCookieCredential {
+impl From<SamlAuthData> for PreloginCredential {
   fn from(value: SamlAuthData) -> Self {
     let username = value.username().to_string();
     let prelogin_cookie = value.prelogin_cookie();
@@ -160,7 +160,7 @@ impl From<PasswordCredential> for CachedCredential {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Credential {
   Password(PasswordCredential),
-  PreloginCookie(PreloginCookieCredential),
+  Prelogin(PreloginCredential),
   AuthCookie(AuthCookieCredential),
   CachedCredential(CachedCredential),
 }
@@ -177,7 +177,7 @@ impl Credential {
   pub fn username(&self) -> &str {
     match self {
       Credential::Password(cred) => cred.username(),
-      Credential::PreloginCookie(cred) => cred.username(),
+      Credential::Prelogin(cred) => cred.username(),
       Credential::AuthCookie(cred) => cred.username(),
       Credential::CachedCredential(cred) => cred.username(),
     }
@@ -189,7 +189,7 @@ impl Credential {
 
     let (passwd, prelogin_cookie, portal_userauthcookie, portal_prelogonuserauthcookie, token) = match self {
       Credential::Password(cred) => (Some(cred.password()), None, None, None, None),
-      Credential::PreloginCookie(cred) => (None, cred.prelogin_cookie(), None, None, cred.token()),
+      Credential::Prelogin(cred) => (None, cred.prelogin_cookie(), None, None, cred.token()),
       Credential::AuthCookie(cred) => (
         None,
         None,
@@ -224,9 +224,9 @@ impl Credential {
 
 impl From<SamlAuthData> for Credential {
   fn from(value: SamlAuthData) -> Self {
-    let cred = PreloginCookieCredential::from(value);
+    let cred = PreloginCredential::from(value);
 
-    Self::PreloginCookie(cred)
+    Self::Prelogin(cred)
   }
 }
 
