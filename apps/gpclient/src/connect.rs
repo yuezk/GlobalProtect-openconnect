@@ -111,10 +111,15 @@ impl<'a> ConnectHandler<'a> {
     info!("Failed to connect portal with prelogin: {}", err);
     if err.root_cause().downcast_ref::<PortalError>().is_some() {
       info!("Trying the gateway authentication workflow...");
-      return self.connect_gateway_with_prelogin(server).await;
-    }
+      self.connect_gateway_with_prelogin(server).await?;
 
-    Err(err)
+      eprintln!("\nNOTE: the server may be a gateway, not a portal.");
+      eprintln!("NOTE: try to use the `--as-gateway` option if you were authenticated twice.");
+
+      Ok(())
+    } else {
+      Err(err)
+    }
   }
 
   async fn connect_portal_with_prelogin(&self, portal: &str) -> anyhow::Result<()> {
