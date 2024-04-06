@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.3 - 2024-04-06
+
+- Support CAS authentication (fix [#339](https://github.com/yuezk/GlobalProtect-openconnect/issues/339))
+- CLI: Add `--as-gateway` option to connect as gateway directly (fix [#318](https://github.com/yuezk/GlobalProtect-openconnect/issues/318))
+- GUI: Add an option to use symbolic tray icon (fix [#341](https://github.com/yuezk/GlobalProtect-openconnect/issues/341))
+
 ## 2.1.2 - 2024-03-29
 
 - Treat portal as gateway when the gateway login is failed (fix #338)
