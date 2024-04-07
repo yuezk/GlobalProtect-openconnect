@@ -32,7 +32,7 @@ pub(crate) struct ConnectArgs {
   user: Option<String>,
   #[arg(long, short, help = "The VPNC script to use")]
   script: Option<String>,
-  #[arg(long, help = "Treat the server as a gateway, instead of a portal")]
+  #[arg(long, help = "Connect the server as a gateway, instead of a portal")]
   as_gateway: bool,
 
   #[arg(
