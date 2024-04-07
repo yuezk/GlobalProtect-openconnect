@@ -366,17 +366,14 @@ fn read_auth_data_from_html(html: &str) -> Result<SamlAuthData, AuthDataParseErr
     return Err(AuthDataParseError::Invalid);
   }
 
-  match SamlAuthData::from_html(html) {
-    Ok(auth_data) => Ok(auth_data),
-    Err(err) => {
-      if let Some(gpcallback) = extract_gpcallback(html) {
-        info!("Found gpcallback from html...");
-        SamlAuthData::from_gpcallback(&gpcallback)
-      } else {
-        Err(err)
-      }
+  SamlAuthData::from_html(html).or_else(|err| {
+    if let Some(gpcallback) = extract_gpcallback(html) {
+      info!("Found gpcallback from html...");
+      SamlAuthData::from_gpcallback(&gpcallback)
+    } else {
+      Err(err)
     }
-  }
+  })
 }
 
 fn extract_gpcallback(html: &str) -> Option<String> {
