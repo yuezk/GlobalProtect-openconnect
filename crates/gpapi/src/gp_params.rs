@@ -130,13 +130,15 @@ pub struct GpParamsBuilder {
 
 impl GpParamsBuilder {
   pub fn new() -> Self {
+    let computer = whoami::fallible::hostname().unwrap_or_else(|_| String::from("localhost"));
+
     Self {
       is_gateway: false,
       user_agent: GP_USER_AGENT.to_string(),
       client_os: ClientOs::Linux,
       os_version: Default::default(),
       client_version: Default::default(),
-      computer: whoami::hostname(),
+      computer,
       ignore_tls_errors: false,
     }
   }

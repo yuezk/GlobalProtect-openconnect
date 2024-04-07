@@ -162,7 +162,7 @@ pub enum Credential {
   Password(PasswordCredential),
   Prelogin(PreloginCredential),
   AuthCookie(AuthCookieCredential),
-  CachedCredential(CachedCredential),
+  Cached(CachedCredential),
 }
 
 impl Credential {
@@ -179,7 +179,7 @@ impl Credential {
       Credential::Password(cred) => cred.username(),
       Credential::Prelogin(cred) => cred.username(),
       Credential::AuthCookie(cred) => cred.username(),
-      Credential::CachedCredential(cred) => cred.username(),
+      Credential::Cached(cred) => cred.username(),
     }
   }
 
@@ -197,7 +197,7 @@ impl Credential {
         Some(cred.prelogon_user_auth_cookie()),
         None,
       ),
-      Credential::CachedCredential(cred) => (
+      Credential::Cached(cred) => (
         cred.password(),
         None,
         Some(cred.auth_cookie.user_auth_cookie()),
@@ -244,6 +244,6 @@ impl From<&AuthCookieCredential> for Credential {
 
 impl From<&CachedCredential> for Credential {
   fn from(value: &CachedCredential) -> Self {
-    Self::CachedCredential(value.clone())
+    Self::Cached(value.clone())
   }
 }
