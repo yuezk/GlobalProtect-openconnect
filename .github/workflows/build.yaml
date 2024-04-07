@@ -25,7 +25,7 @@ jobs:
         id: set-matrix
         run: |
           if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
-            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "arm64", "arch": "arm64"]' >> $GITHUB_OUTPUT
+            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "arm64", "arch": "arm64"}]' >> $GITHUB_OUTPUT
           else
             echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}]' >> $GITHUB_OUTPUT
           fi
@@ -182,7 +182,7 @@ jobs:
         gh -R "$REPO" release create $RELEASE_TAG \
           --title "$RELEASE_TAG" \
           --notes "$NOTES" \
-          --target ${{ github.ref }} \
+          ${{ github.ref == 'refs/heads/dev' && '--target dev' || '' }} \
           ${{ github.ref == 'refs/heads/dev' && '--prerelease' || '' }} \
           gh-release/artifact-source/* \
           gh-release/artifact-gpgui-*/*
