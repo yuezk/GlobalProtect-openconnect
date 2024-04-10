@@ -11,7 +11,12 @@ use crate::{
   utils::{normalize_server, parse_gp_error, remove_url_scheme},
 };
 
-pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<String> {
+pub enum GatewayLogin {
+  Cookie(String),
+  Mfa(String, String),
+}
+
+pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<GatewayLogin> {
   let url = normalize_server(gateway)?;
   let gateway = remove_url_scheme(&url);
 
@@ -49,10 +54,22 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
     bail!("Gateway login error, reason: {}", reason);
   }
 
-  let res_xml = res.text().await?;
-  let doc = Document::parse(&res_xml)?;
+  let res = res.text().await?;
 
-  build_gateway_token(&doc, gp_params.computer())
+  // MFA detected
+  if res.contains("Challenge") {
+    let Some((message, input_str)) = parse_mfa(&res) else {
+      bail!("Failed to parse MFA challenge: {res}");
+    };
+
+    return Ok(GatewayLogin::Mfa(message, input_str));
+  }
+
+  let doc = Document::parse(&res)?;
+
+  let cookie = build_gateway_token(&doc, gp_params.computer())?;
+
+  Ok(GatewayLogin::Cookie(cookie))
 }
 
 fn build_gateway_token(doc: &Document, computer: &str) -> anyhow::Result<String> {
@@ -85,4 +102,34 @@ fn read_args<'a>(args: &'a [String], index: usize, key: &'a str) -> anyhow::Resu
     .get(index)
     .ok_or_else(|| anyhow::anyhow!("Failed to read {key} from args"))
     .map(|s| (key, s.as_ref()))
+}
+
+fn parse_mfa(res: &str) -> Option<(String, String)> {
+  let message = res
+    .lines()
+    .find(|l| l.contains("respMsg"))
+    .and_then(|l| l.split('"').nth(1).map(|s| s.to_string()))?;
+
+  let input_str = res
+    .lines()
+    .find(|l| l.contains("inputStr"))
+    .and_then(|l| l.split('"').nth(1).map(|s| s.to_string()))?;
+
+  Some((message, input_str))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn mfa() {
+    let res = r#"var respStatus = "Challenge";
+var respMsg = "MFA message";
+thisForm.inputStr.value = "5ef64e83000119ed";"#;
+
+    let (message, input_str) = parse_mfa(res).unwrap();
+    assert_eq!(message, "MFA message");
+    assert_eq!(input_str, "5ef64e83000119ed");
+  }
 }

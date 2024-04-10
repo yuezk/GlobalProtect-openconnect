@@ -42,7 +42,7 @@ impl ClientOs {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize, Type, Default)]
+#[derive(Debug, Serialize, Deserialize, Type, Default, Clone)]
 pub struct GpParams {
   is_gateway: bool,
   user_agent: String,
@@ -51,6 +51,9 @@ pub struct GpParams {
   client_version: Option<String>,
   computer: String,
   ignore_tls_errors: bool,
+  // Used for MFA
+  input_str: Option<String>,
+  otp: Option<String>,
 }
 
 impl GpParams {
@@ -90,6 +93,14 @@ impl GpParams {
     self.client_version.as_deref()
   }
 
+  pub fn set_input_str(&mut self, input_str: &str) {
+    self.input_str = Some(input_str.to_string());
+  }
+
+  pub fn set_otp(&mut self, otp: &str) {
+    self.otp = Some(otp.to_string());
+  }
+
   pub(crate) fn to_params(&self) -> HashMap<&str, &str> {
     let mut params: HashMap<&str, &str> = HashMap::new();
     let client_os = self.client_os.as_str();
@@ -100,10 +111,15 @@ impl GpParams {
     params.insert("ok", "Login");
     params.insert("direct", "yes");
     params.insert("ipv6-support", "yes");
-    params.insert("inputStr", "");
     params.insert("clientVer", "4100");
     params.insert("clientos", client_os);
     params.insert("computer", &self.computer);
+
+    // MFA
+    params.insert("inputStr", self.input_str.as_deref().unwrap_or_default());
+    if let Some(otp) = &self.otp {
+      params.insert("passwd", otp);
+    }
 
     if let Some(os_version) = &self.os_version {
       params.insert("os-version", os_version);
@@ -187,6 +203,8 @@ impl GpParamsBuilder {
       client_version: self.client_version.clone(),
       computer: self.computer.clone(),
       ignore_tls_errors: self.ignore_tls_errors,
+      input_str: Default::default(),
+      otp: Default::default(),
     }
   }
 }
