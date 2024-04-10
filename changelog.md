@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.4 - 2024-04-10
+
+- Support MFA authentication (fix [#343](https://github.com/yuezk/GlobalProtect-openconnect/issues/343))
+- Improve the Gateway switcher UI
+
 ## 2.1.3 - 2024-04-07
 
 - Support CAS authentication (fix [#339](https://github.com/yuezk/GlobalProtect-openconnect/issues/339))
