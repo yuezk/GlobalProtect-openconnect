@@ -6,7 +6,7 @@ use gpapi::{
   clap::args::Os,
   credential::{Credential, PasswordCredential},
   error::PortalError,
-  gateway::gateway_login,
+  gateway::{gateway_login, GatewayLogin},
   gp_params::{ClientOs, GpParams},
   portal::{prelogin, retrieve_config, Prelogin},
   process::{
@@ -154,7 +154,7 @@ impl<'a> ConnectHandler<'a> {
     let gateway = selected_gateway.server();
     let cred = portal_config.auth_cookie().into();
 
-    let cookie = match gateway_login(gateway, &cred, &gp_params).await {
+    let cookie = match self.login_gateway(gateway, &cred, &gp_params).await {
       Ok(cookie) => cookie,
       Err(err) => {
         info!("Gateway login failed: {}", err);
@@ -174,9 +174,26 @@ impl<'a> ConnectHandler<'a> {
     let prelogin = prelogin(gateway, &gp_params).await?;
     let cred = self.obtain_credential(&prelogin, gateway).await?;
 
-    let cookie = gateway_login(gateway, &cred, &gp_params).await?;
+    let cookie = self.login_gateway(gateway, &cred, &gp_params).await?;
 
     self.connect_gateway(gateway, &cookie).await
+  }
+
+  async fn login_gateway(&self, gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<String> {
+    let mut gp_params = gp_params.clone();
+
+    loop {
+      match gateway_login(gateway, cred, &gp_params).await? {
+        GatewayLogin::Cookie(cookie) => return Ok(cookie),
+        GatewayLogin::Mfa(message, input_str) => {
+          let otp = Text::new(&message).prompt()?;
+          gp_params.set_input_str(&input_str);
+          gp_params.set_otp(&otp);
+
+          info!("Retrying gateway login with MFA...");
+        }
+      }
+    }
   }
 
   async fn connect_gateway(&self, gateway: &str, cookie: &str) -> anyhow::Result<()> {
