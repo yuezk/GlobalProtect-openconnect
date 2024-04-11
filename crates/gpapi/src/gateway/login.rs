@@ -8,7 +8,7 @@ use crate::{
   credential::Credential,
   error::PortalError,
   gp_params::GpParams,
-  utils::{normalize_server, parse_gp_error, remove_url_scheme},
+  utils::{normalize_server, parse_gp_response, remove_url_scheme},
 };
 
 pub enum GatewayLogin {
@@ -41,20 +41,10 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
     .await
     .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e.to_string())))?;
 
-  let status = res.status();
-
-  if status.is_client_error() || status.is_server_error() {
-    let (reason, res) = parse_gp_error(res).await;
-
-    warn!(
-      "Gateway login error: reason={}, status={}, response={}",
-      reason, status, res
-    );
-
-    bail!("Gateway login error, reason: {}", reason);
-  }
-
-  let res = res.text().await?;
+  let res = parse_gp_response(res).await.map_err(|err| {
+    warn!("{err}");
+    anyhow::anyhow!("Gateway login error: {}", err.reason)
+  })?;
 
   // MFA detected
   if res.contains("Challenge") {

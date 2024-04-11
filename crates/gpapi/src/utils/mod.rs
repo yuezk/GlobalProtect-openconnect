@@ -1,5 +1,3 @@
-use reqwest::{Response, Url};
-
 pub(crate) mod xml;
 
 pub mod base64;
@@ -15,7 +13,11 @@ pub mod window;
 
 mod shutdown_signal;
 
+use log::warn;
 pub use shutdown_signal::shutdown_signal;
+
+use reqwest::{Response, StatusCode, Url};
+use thiserror::Error;
 
 /// Normalize the server URL to the format `https://<host>:<port>`
 pub fn normalize_server(server: &str) -> anyhow::Result<String> {
@@ -42,7 +44,41 @@ pub fn remove_url_scheme(s: &str) -> String {
   s.replace("http://", "").replace("https://", "")
 }
 
-pub(crate) async fn parse_gp_error(res: Response) -> (String, String) {
+#[derive(Error, Debug)]
+#[error("GP response error: reason={reason}, status={status}, body={body}")]
+pub(crate) struct GpError {
+  pub status: StatusCode,
+  pub reason: String,
+  body: String,
+}
+
+impl GpError {
+  pub fn is_status_error(&self) -> bool {
+    self.status.is_client_error() || self.status.is_server_error()
+  }
+}
+
+pub(crate) async fn parse_gp_response(res: Response) -> anyhow::Result<String, GpError> {
+  let status = res.status();
+
+  if status.is_client_error() || status.is_server_error() {
+    let (reason, body) = parse_gp_error(res).await;
+
+    return Err(GpError { status, reason, body });
+  }
+
+  res.text().await.map_err(|err| {
+    warn!("Failed to read response: {}", err);
+
+    GpError {
+      status,
+      reason: "failed to read response".to_string(),
+      body: "<failed to read response>".to_string(),
+    }
+  })
+}
+
+async fn parse_gp_error(res: Response) -> (String, String) {
   let reason = res
     .headers()
     .get("x-private-pan-globalprotect")

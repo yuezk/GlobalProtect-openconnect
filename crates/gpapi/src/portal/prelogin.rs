@@ -8,7 +8,7 @@ use specta::Type;
 use crate::{
   error::PortalError,
   gp_params::GpParams,
-  utils::{base64, normalize_server, parse_gp_error, xml},
+  utils::{base64, normalize_server, parse_gp_response, xml},
 };
 
 const REQUIRED_PARAMS: [&str; 8] = [
@@ -126,23 +126,18 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
     .await
     .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e.to_string())))?;
 
-  let status = res.status();
-  if status == StatusCode::NOT_FOUND {
-    bail!(PortalError::PreloginError("Prelogin endpoint not found".to_string()))
-  }
+  let res_xml = parse_gp_response(res).await.or_else(|err| {
+    if err.status == StatusCode::NOT_FOUND {
+      bail!(PortalError::PreloginError("Prelogin endpoint not found".to_string()))
+    }
 
-  if status.is_client_error() || status.is_server_error() {
-    let (reason, res) = parse_gp_error(res).await;
+    if err.is_status_error() {
+      warn!("{err}");
+      bail!("Prelogin error: {}", err.reason)
+    }
 
-    warn!("Prelogin error: reason={}, status={}, response={}", reason, status, res);
-
-    bail!("Prelogin error: {}", status)
-  }
-
-  let res_xml = res
-    .text()
-    .await
-    .map_err(|e| PortalError::PreloginError(e.to_string()))?;
+    Err(anyhow!(PortalError::PreloginError(err.reason)))
+  })?;
 
   let prelogin = parse_res_xml(res_xml, is_gateway).map_err(|e| PortalError::PreloginError(e.to_string()))?;
 

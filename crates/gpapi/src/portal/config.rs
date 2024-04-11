@@ -10,7 +10,7 @@ use crate::{
   error::PortalError,
   gateway::{parse_gateways, Gateway},
   gp_params::GpParams,
-  utils::{normalize_server, parse_gp_error, remove_url_scheme, xml},
+  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml},
 };
 
 #[derive(Debug, Serialize, Type)]
@@ -108,24 +108,19 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     .send()
     .await
     .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e.to_string())))?;
-  let status = res.status();
 
-  if status == StatusCode::NOT_FOUND {
-    bail!(PortalError::ConfigError("Config endpoint not found".to_string()))
-  }
+  let res_xml = parse_gp_response(res).await.or_else(|err| {
+    if err.status == StatusCode::NOT_FOUND {
+      bail!(PortalError::ConfigError("Config endpoint not found".to_string()));
+    }
 
-  if status.is_client_error() || status.is_server_error() {
-    let (reason, res) = parse_gp_error(res).await;
+    if err.is_status_error() {
+      warn!("{err}");
+      bail!("Portal config error: {}", err.reason);
+    }
 
-    warn!(
-      "Portal config error: reason={}, status={}, response={}",
-      reason, status, res
-    );
-
-    bail!("Portal config error, reason: {}", reason);
-  }
-
-  let res_xml = res.text().await.map_err(|e| PortalError::ConfigError(e.to_string()))?;
+    Err(anyhow::anyhow!(PortalError::ConfigError(err.reason)))
+  })?;
 
   if res_xml.is_empty() {
     bail!(PortalError::ConfigError("Empty portal config response".to_string()))
