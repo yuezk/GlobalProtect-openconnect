@@ -19,8 +19,9 @@ use gpapi::{
 use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::info;
 use openconnect::Vpn;
+use tokio::{io::AsyncReadExt, net::TcpListener};
 
-use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE};
+use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE, GP_CLIENT_PORT_FILE};
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -60,6 +61,8 @@ pub(crate) struct ConnectArgs {
   hidpi: bool,
   #[arg(long, help = "Do not reuse the remembered authentication cookie")]
   clean: bool,
+  #[arg(long, help = "Use the default browser to authenticate")]
+  default_browser: bool,
 }
 
 impl ConnectArgs {
@@ -240,7 +243,9 @@ impl<'a> ConnectHandler<'a> {
 
     match prelogin {
       Prelogin::Saml(prelogin) => {
-        SamlAuthLauncher::new(&self.args.server)
+        let use_default_browser = prelogin.support_default_browser() && self.args.default_browser;
+
+        let cred = SamlAuthLauncher::new(&self.args.server)
           .gateway(is_gateway)
           .saml_request(prelogin.saml_request())
           .user_agent(&self.args.user_agent)
@@ -250,8 +255,21 @@ impl<'a> ConnectHandler<'a> {
           .fix_openssl(self.shared_args.fix_openssl)
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
           .clean(self.args.clean)
+          .default_browser(use_default_browser)
           .launch()
-          .await
+          .await?;
+
+        if let Some(cred) = cred {
+          return Ok(cred);
+        }
+
+        if !use_default_browser {
+          // This should never happen
+          unreachable!("SAML authentication failed without using the default browser");
+        }
+
+        info!("Waiting for the browser authentication to complete...");
+        wait_credentials().await
       }
       Prelogin::Standard(prelogin) => {
         let prefix = if is_gateway { "Gateway" } else { "Portal" };
@@ -272,6 +290,27 @@ impl<'a> ConnectHandler<'a> {
       }
     }
   }
+}
+
+async fn wait_credentials() -> anyhow::Result<Credential> {
+  // Start a local server to receive the browser authentication data
+  let listener = TcpListener::bind("127.0.0.1:0").await?;
+  let port = listener.local_addr()?.port();
+
+  // Write the port to a file
+  fs::write(GP_CLIENT_PORT_FILE, port.to_string())?;
+
+  info!("Listening authentication data on port {}", port);
+  let (mut socket, _) = listener.accept().await?;
+
+  info!("Received the browser authentication data from the socket");
+  let mut data = String::new();
+  socket.read_to_string(&mut data).await?;
+
+  // Remove the port file
+  fs::remove_file(GP_CLIENT_PORT_FILE)?;
+
+  Credential::from_gpcallback(&data)
 }
 
 fn write_pid_file() {

@@ -11,7 +11,10 @@ use serde_json::json;
 use tauri::{App, AppHandle, RunEvent};
 use tempfile::NamedTempFile;
 
-use crate::auth_window::{portal_prelogin, AuthWindow};
+use crate::{
+  auth_window::{portal_prelogin, AuthWindow},
+  browser_authenticator::BrowserAuthenticator,
+};
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
 
@@ -37,6 +40,8 @@ struct Cli {
   ignore_tls_errors: bool,
   #[arg(long)]
   clean: bool,
+  #[arg(long)]
+  default_browser: bool,
 }
 
 impl Cli {
@@ -55,6 +60,15 @@ impl Cli {
       Some(ref saml_request) => saml_request.clone(),
       None => portal_prelogin(&self.server, &gp_params).await?,
     };
+
+    if self.default_browser {
+      let browser_auth = BrowserAuthenticator::new(&saml_request);
+      browser_auth.authenticate()?;
+
+      info!("Please continue the authentication process in the default browser");
+
+      return Ok(());
+    }
 
     self.saml_request.replace(saml_request);
 

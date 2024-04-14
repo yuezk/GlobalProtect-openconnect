@@ -7,6 +7,9 @@ use gpapi::{
   utils::{endpoint::http_endpoint, env_file, shutdown_signal},
 };
 use log::info;
+use tokio::io::AsyncWriteExt;
+
+use crate::GP_CLIENT_PORT_FILE;
 
 #[derive(Args)]
 pub(crate) struct LaunchGuiArgs {
@@ -78,6 +81,11 @@ impl<'a> LaunchGuiHandler<'a> {
 }
 
 async fn feed_auth_data(auth_data: &str) -> anyhow::Result<()> {
+  let _ = tokio::join!(feed_auth_data_gui(auth_data), feed_auth_data_cli(auth_data));
+  Ok(())
+}
+
+async fn feed_auth_data_gui(auth_data: &str) -> anyhow::Result<()> {
   let service_endpoint = http_endpoint().await?;
 
   reqwest::Client::default()
@@ -86,6 +94,15 @@ async fn feed_auth_data(auth_data: &str) -> anyhow::Result<()> {
     .send()
     .await?
     .error_for_status()?;
+
+  Ok(())
+}
+
+async fn feed_auth_data_cli(auth_data: &str) -> anyhow::Result<()> {
+  let port = tokio::fs::read_to_string(GP_CLIENT_PORT_FILE).await?;
+  let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port.trim())).await?;
+
+  stream.write_all(auth_data.as_bytes()).await?;
 
   Ok(())
 }

@@ -18,6 +18,7 @@ pub struct SamlAuthLauncher<'a> {
   fix_openssl: bool,
   ignore_tls_errors: bool,
   clean: bool,
+  default_browser: bool,
 }
 
 impl<'a> SamlAuthLauncher<'a> {
@@ -33,6 +34,7 @@ impl<'a> SamlAuthLauncher<'a> {
       fix_openssl: false,
       ignore_tls_errors: false,
       clean: false,
+      default_browser: false,
     }
   }
 
@@ -81,8 +83,13 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  pub fn default_browser(mut self, default_browser: bool) -> Self {
+    self.default_browser = default_browser;
+    self
+  }
+
   /// Launch the authenticator binary as the current user or SUDO_USER if available.
-  pub async fn launch(self) -> anyhow::Result<Credential> {
+  pub async fn launch(self) -> anyhow::Result<Option<Credential>> {
     let mut auth_cmd = Command::new(GP_AUTH_BINARY);
     auth_cmd.arg(self.server);
 
@@ -122,6 +129,10 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--clean");
     }
 
+    if self.default_browser {
+      auth_cmd.arg("--default-browser");
+    }
+
     let mut non_root_cmd = auth_cmd.into_non_root()?;
     let output = non_root_cmd
       .kill_on_drop(true)
@@ -130,12 +141,16 @@ impl<'a> SamlAuthLauncher<'a> {
       .wait_with_output()
       .await?;
 
+    if self.default_browser {
+      return Ok(None);
+    }
+
     let Ok(auth_result) = serde_json::from_slice::<SamlAuthResult>(&output.stdout) else {
       bail!("Failed to parse auth data")
     };
 
     match auth_result {
-      SamlAuthResult::Success(auth_data) => Ok(Credential::from(auth_data)),
+      SamlAuthResult::Success(auth_data) => Ok(Some(Credential::from(auth_data))),
       SamlAuthResult::Failure(msg) => bail!(msg),
     }
   }
