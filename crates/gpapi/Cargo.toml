@@ -31,9 +31,7 @@ sha256.workspace = true
 
 tauri = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
-open = { version = "5", optional = true }
 
 [features]
 tauri = ["dep:tauri"]
 clap = ["dep:clap"]
-browser-auth = ["dep:open"]

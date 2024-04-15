@@ -44,6 +44,7 @@ compile-time = "0.2"
 serde_urlencoded = "0.7"
 md5="0.7"
 sha256="1"
+open = "5"
 
 # Tauri dependencies
 tauri = { version = "1.5" }
