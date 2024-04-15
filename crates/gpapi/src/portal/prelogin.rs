@@ -139,20 +139,23 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
     Err(anyhow!(PortalError::PreloginError(err.reason)))
   })?;
 
-  let prelogin = parse_res_xml(res_xml, is_gateway).map_err(|e| PortalError::PreloginError(e.to_string()))?;
+  let prelogin = parse_res_xml(&res_xml, is_gateway).map_err(|err| {
+    warn!("Parse response error, response: {}", res_xml);
+    PortalError::PreloginError(err.to_string())
+  })?;
 
   Ok(prelogin)
 }
 
-fn parse_res_xml(res_xml: String, is_gateway: bool) -> anyhow::Result<Prelogin> {
-  let doc = Document::parse(&res_xml)?;
+fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
+  let doc = Document::parse(res_xml)?;
 
   let status = xml::get_child_text(&doc, "status")
     .ok_or_else(|| anyhow::anyhow!("Prelogin response does not contain status element"))?;
   // Check the status of the prelogin response
   if status.to_uppercase() != "SUCCESS" {
     let msg = xml::get_child_text(&doc, "msg").unwrap_or(String::from("Unknown error"));
-    bail!("Prelogin failed: {}", msg)
+    bail!("{}", msg)
   }
 
   let region = xml::get_child_text(&doc, "region").unwrap_or_else(|| {
