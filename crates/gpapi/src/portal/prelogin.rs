@@ -98,10 +98,12 @@ impl Prelogin {
 
 pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prelogin> {
   let user_agent = gp_params.user_agent();
-  info!("Prelogin with user_agent: {}", user_agent);
+  let is_gateway = gp_params.is_gateway();
+  let prelogin_type = if is_gateway { "Gateway" } else { "Portal" };
+
+  info!("{} prelogin with user_agent: {}", prelogin_type, user_agent);
 
   let portal = normalize_server(portal)?;
-  let is_gateway = gp_params.is_gateway();
   let path = if is_gateway { "ssl-vpn" } else { "global-protect" };
   let prelogin_url = format!("{portal}/{}/prelogin.esp", path);
   let mut params = gp_params.to_params();
@@ -111,8 +113,6 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
   params.insert("cas-support", "yes");
 
   params.retain(|k, _| REQUIRED_PARAMS.iter().any(|required_param| required_param == k));
-
-  info!("Prelogin with params: {:?}", params);
 
   let client = Client::builder()
     .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
