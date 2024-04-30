@@ -70,7 +70,7 @@ sudo apt-get install globalprotect-openconnect
 
 #### **Ubuntu 24.04**
 
-The `libwebkit2gtk-4.0-37` is [removed](https://bugs.launchpad.net/ubuntu/+source/webkit2gtk/+bug/2061914) from its repo, before [the issue](https://github.com/yuezk/GlobalProtect-openconnect/issues/351) gets resolved, you need to install them manually:
+The `libwebkit2gtk-4.0-37` was [removed](https://bugs.launchpad.net/ubuntu/+source/webkit2gtk/+bug/2061914) from its repo, before [the issue](https://github.com/yuezk/GlobalProtect-openconnect/issues/351) gets resolved, you need to install them manually:
 
 ```bash
 wget http://launchpadlibrarian.net/704701349/libwebkit2gtk-4.0-37_2.43.3-1_amd64.deb

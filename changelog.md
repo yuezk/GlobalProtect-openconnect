@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.0 - 2024-04-30
+
+- CLI: support authentication with external browser (fix [#298](https://github.com/yuezk/GlobalProtect-openconnect/issues/298))
+- GUI: support using file-based storage when the system keyring is not available.
+
 ## 2.1.4 - 2024-04-10
 
 - Support MFA authentication (fix [#343](https://github.com/yuezk/GlobalProtect-openconnect/issues/343))
