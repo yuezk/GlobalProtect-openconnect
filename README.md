@@ -43,6 +43,12 @@ Options:
 See 'gpclient help <command>' for more information on a specific command.
 ```
 
+To use the default browser for authentication with the CLI version, you need to use the following command:
+
+```bash
+sudo -E gpclient connect --default-browser <portal>
+```
+
 ### GUI
 
 The GUI version is also available after you installed it. You can launch it from the application menu or run `gpclient launch-gui` in the terminal.
