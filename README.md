@@ -87,7 +87,7 @@ The latest package is not available in the PPA either, but you still needs to ad
 
 #### Install from deb package
 
-Download the latest deb package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Then install it with `dpkg`:
+Download the latest deb package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Then install it with `apt`:
 
 ```bash
 sudo apt install --fix-broken globalprotect-openconnect_*.deb
