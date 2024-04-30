@@ -55,7 +55,7 @@ The GUI version is also available after you installed it. You can launch it from
 
 ### Debian/Ubuntu based distributions
 
-#### Install from PPA
+#### Install from PPA (Ubuntu 18.04 and later, except 24.04)
 
 ```
 sudo apt-get install gir1.2-gtk-3.0 gir1.2-webkit2-4.0
@@ -67,6 +67,23 @@ sudo apt-get install globalprotect-openconnect
 > [!Note]
 >
 > For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
+
+#### **Ubuntu 24.04**
+
+The `libwebkit2gtk-4.0-37` is [removed](https://bugs.launchpad.net/ubuntu/+source/webkit2gtk/+bug/2061914) from its repo, before [the issue](https://github.com/yuezk/GlobalProtect-openconnect/issues/351) gets resolved, you need to install them manually:
+
+```bash
+wget http://launchpadlibrarian.net/704701349/libwebkit2gtk-4.0-37_2.43.3-1_amd64.deb
+wget http://launchpadlibrarian.net/704701345/libjavascriptcoregtk-4.0-18_2.43.3-1_amd64.deb
+
+sudo dpkg --install *.deb
+```
+
+And the latest package is not available in the PPA, you can follow the [Install from deb package](#install-from-deb-package) section to install the latest package.
+
+#### **Ubuntu 18.04**
+
+The latest package is not available in the PPA either, but you still needs to add the `ppa:yuezk/globalprotect-openconnect` repo beforehand to use the required `openconnect` package. Then you can follow the [Install from deb package](#install-from-deb-package) section to install the latest package.
 
 #### Install from deb package
 
@@ -150,6 +167,8 @@ You can also build the client from source, steps are as follows:
 ## FAQ
 
 1. How to deal with error `Secure Storage not ready`
+
+   Try upgrade the client to `2.2.0` or later, which will use a file-based storage as a fallback.
 
    You need to install the `gnome-keyring` package, and restart the system (See [#321](https://github.com/yuezk/GlobalProtect-openconnect/issues/321), [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)).
 
