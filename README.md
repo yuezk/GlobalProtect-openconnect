@@ -147,22 +147,22 @@ sudo rpm -i globalprotect-openconnect-*.rpm
 
 Install from the ```rios``` or ```slonko``` overlays.  Example using rios:
 
-Enable the overlay:
+1. # Enable the overlay:
 ```
 eselect repository enable rios
 ```
 
-Sync with the repository:
+2. # Sync with the repository:
 
-If you have eix installed, use it:
+  - If you have eix installed, use it:
 ```
 eix-sync
 ```
-Otherwise, use:
+  - Otherwise, use:
 ```
 emerge --sync
 ```
-Install:
+3. # Install:
 
 ```emerge globalprotect-openconnect```
 
