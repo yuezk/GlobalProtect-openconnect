@@ -143,6 +143,30 @@ Download the latest RPM package from [releases](https://github.com/yuezk/GlobalP
 ```bash
 sudo rpm -i globalprotect-openconnect-*.rpm
 ```
+### Gentoo
+
+Install from the ```rios``` or ```slonko``` overlays.  Example using rios:
+
+#### 1. Enable the overlay
+```
+sudo eselect repository enable rios
+```
+
+#### 2. Sync with the repository
+
+  - If you have eix installed, use it:
+```
+sudo eix-sync
+```
+  - Otherwise, use:
+```
+sudo emerge --sync
+```
+
+#### 3. Install
+
+```sudo emerge globalprotect-openconnect```
+
 
 ### Other distributions
 
