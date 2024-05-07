@@ -3,6 +3,7 @@ use gpapi::{
   auth::{SamlAuthData, SamlAuthResult},
   clap::args::Os,
   gp_params::{ClientOs, GpParams},
+  process::browser_authenticator::BrowserAuthenticator,
   utils::{normalize_server, openssl},
   GP_USER_AGENT,
 };
@@ -11,10 +12,7 @@ use serde_json::json;
 use tauri::{App, AppHandle, RunEvent};
 use tempfile::NamedTempFile;
 
-use crate::{
-  auth_window::{portal_prelogin, AuthWindow},
-  browser_authenticator::BrowserAuthenticator,
-};
+use crate::auth_window::{portal_prelogin, AuthWindow};
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
 

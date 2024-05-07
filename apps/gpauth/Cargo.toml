@@ -8,7 +8,11 @@ license.workspace = true
 tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
-gpapi = { path = "../../crates/gpapi", features = ["tauri", "clap"] }
+gpapi = { path = "../../crates/gpapi", features = [
+  "tauri",
+  "clap",
+  "browser-auth",
+] }
 anyhow.workspace = true
 clap.workspace = true
 env_logger.workspace = true
@@ -22,4 +26,3 @@ html-escape = "0.2.13"
 webkit2gtk = "0.18.2"
 tauri = { workspace = true, features = ["http-all"] }
 compile-time.workspace = true
-open.workspace = true
