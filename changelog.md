@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.1 - 2024-05-07
+
+- GUI: Restore the default browser auth implementation (fix [#360](https://github.com/yuezk/GlobalProtect-openconnect/issues/360))
+
 ## 2.2.0 - 2024-04-30
 
 - CLI: support authentication with external browser (fix [#298](https://github.com/yuezk/GlobalProtect-openconnect/issues/298))
