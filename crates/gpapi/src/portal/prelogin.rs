@@ -181,22 +181,24 @@ fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
     return Ok(Prelogin::Saml(saml_prelogin));
   }
 
-  let label_username = xml::get_child_text(&doc, "username-label");
-  let label_password = xml::get_child_text(&doc, "password-label");
-  // Check if the prelogin response is standard login
-  if label_username.is_some() && label_password.is_some() {
-    let auth_message =
-      xml::get_child_text(&doc, "authentication-message").unwrap_or(String::from("Please enter the login credentials"));
-    let standard_prelogin = StandardPrelogin {
-      region,
-      is_gateway,
-      auth_message,
-      label_username: label_username.unwrap(),
-      label_password: label_password.unwrap(),
-    };
+  let label_username = xml::get_child_text(&doc, "username-label").unwrap_or_else(|| {
+    info!("Username label has no value, using default");
+    String::from("Username")
+  });
+  let label_password = xml::get_child_text(&doc, "password-label").unwrap_or_else(|| {
+    info!("Password label has no value, using default");
+    String::from("Password")
+  });
 
-    Ok(Prelogin::Standard(standard_prelogin))
-  } else {
-    Err(anyhow!("Invalid prelogin response"))
-  }
+  let auth_message =
+    xml::get_child_text(&doc, "authentication-message").unwrap_or(String::from("Please enter the login credentials"));
+  let standard_prelogin = StandardPrelogin {
+    region,
+    is_gateway,
+    auth_message,
+    label_username,
+    label_password,
+  };
+
+  Ok(Prelogin::Standard(standard_prelogin))
 }
