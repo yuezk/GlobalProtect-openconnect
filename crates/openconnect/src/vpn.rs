@@ -4,7 +4,7 @@ use std::{
   sync::{Arc, RwLock},
 };
 
-use common::vpn_utils::{find_vpnc_script, is_executable};
+use common::vpn_utils::{check_executable, find_vpnc_script};
 use log::info;
 
 use crate::ffi;
@@ -80,23 +80,23 @@ impl Vpn {
 }
 
 #[derive(Debug)]
-pub struct VpnError<'a> {
-  message: &'a str,
+pub struct VpnError {
+  message: String,
 }
 
-impl<'a> VpnError<'a> {
-  fn new(message: &'a str) -> Self {
+impl VpnError {
+  fn new(message: String) -> Self {
     Self { message }
   }
 }
 
-impl fmt::Display for VpnError<'_> {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for VpnError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "{}", self.message)
   }
 }
 
-impl std::error::Error for VpnError<'_> {}
+impl std::error::Error for VpnError {}
 
 pub struct VpnBuilder {
   server: String,
@@ -159,21 +159,17 @@ impl VpnBuilder {
     self
   }
 
-  pub fn build(self) -> Result<Vpn, VpnError<'static>> {
+  pub fn build(self) -> Result<Vpn, VpnError> {
     let script = match self.script {
       Some(script) => {
-        if !is_executable(&script) {
-          return Err(VpnError::new("vpnc script is not executable"));
-        }
+        check_executable(&script).map_err(|e| VpnError::new(e.to_string()))?;
         script
       }
-      None => find_vpnc_script().ok_or_else(|| VpnError::new("Failed to find vpnc-script"))?,
+      None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script")))?,
     };
 
     if let Some(csd_wrapper) = &self.csd_wrapper {
-      if !is_executable(csd_wrapper) {
-        return Err(VpnError::new("CSD wrapper is not executable"));
-      }
+      check_executable(csd_wrapper).map_err(|e| VpnError::new(e.to_string()))?;
     }
 
     let user_agent = self.user_agent.unwrap_or_default();

@@ -1,7 +1,6 @@
-use is_executable::IsExecutable;
-use std::path::Path;
+use std::{io, path::Path};
 
-pub use is_executable::is_executable;
+use is_executable::IsExecutable;
 
 const VPNC_SCRIPT_LOCATIONS: [&str; 6] = [
   "/usr/local/share/vpnc-scripts/vpnc-script",
@@ -38,4 +37,18 @@ pub fn find_vpnc_script() -> Option<String> {
 
 pub fn find_csd_wrapper() -> Option<String> {
   find_executable(&CSD_WRAPPER_LOCATIONS)
+}
+
+/// If file exists, check if it is executable
+pub fn check_executable(file: &str) -> Result<(), io::Error> {
+  let path = Path::new(file);
+
+  if path.exists() && !path.is_executable() {
+    return Err(io::Error::new(
+      io::ErrorKind::PermissionDenied,
+      format!("{} is not executable", file),
+    ));
+  }
+
+  Ok(())
 }
