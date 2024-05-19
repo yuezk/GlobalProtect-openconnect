@@ -42,6 +42,7 @@ impl VpnTaskContext {
       .csd_wrapper(args.csd_wrapper())
       .mtu(args.mtu())
       .os(args.openconnect_os())
+      .disable_ipv6(args.disable_ipv6())
       .build()
     {
       Ok(vpn) => vpn,

@@ -64,6 +64,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     INFO("CSD_USER: %d", options->csd_uid);
     INFO("CSD_WRAPPER: %s", options->csd_wrapper);
     INFO("MTU: %d", options->mtu);
+    INFO("DISABLE_IPV6: %d", options->disable_ipv6);
 
     vpninfo = openconnect_vpninfo_new(options->user_agent, validate_peer_cert, NULL, NULL, print_progress, NULL);
 
@@ -101,6 +102,10 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     if (options->mtu > 0) {
         int mtu = options->mtu < 576 ? 576 : options->mtu;
         openconnect_set_reqmtu(vpninfo, mtu);
+    }
+
+    if (options->disable_ipv6) {
+        openconnect_disable_ipv6(vpninfo);
     }
 
     g_cmd_pipe_fd = openconnect_setup_cmd_pipe(vpninfo);

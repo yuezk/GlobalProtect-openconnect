@@ -24,6 +24,7 @@ pub struct Vpn {
   csd_wrapper: Option<CString>,
 
   mtu: u32,
+  disable_ipv6: bool,
 
   callback: OnConnectedCallback,
 }
@@ -68,6 +69,7 @@ impl Vpn {
       csd_wrapper: Self::option_to_ptr(&self.csd_wrapper),
 
       mtu: self.mtu,
+      disable_ipv6: self.disable_ipv6 as u32,
     }
   }
 
@@ -110,6 +112,7 @@ pub struct VpnBuilder {
   csd_wrapper: Option<String>,
 
   mtu: u32,
+  disable_ipv6: bool,
 }
 
 impl VpnBuilder {
@@ -126,6 +129,7 @@ impl VpnBuilder {
       csd_wrapper: None,
 
       mtu: 0,
+      disable_ipv6: false,
     }
   }
 
@@ -159,6 +163,11 @@ impl VpnBuilder {
     self
   }
 
+  pub fn disable_ipv6(mut self, disable_ipv6: bool) -> Self {
+    self.disable_ipv6 = disable_ipv6;
+    self
+  }
+
   pub fn build(self) -> Result<Vpn, VpnError> {
     let script = match self.script {
       Some(script) => {
@@ -188,6 +197,7 @@ impl VpnBuilder {
       csd_wrapper: self.csd_wrapper.as_deref().map(Self::to_cstring),
 
       mtu: self.mtu,
+      disable_ipv6: self.disable_ipv6,
 
       callback: Default::default(),
     })

@@ -36,6 +36,7 @@ pub struct ConnectArgs {
   csd_wrapper: Option<String>,
   mtu: u32,
   os: Option<ClientOs>,
+  disable_ipv6: bool,
 }
 
 impl ConnectArgs {
@@ -48,6 +49,7 @@ impl ConnectArgs {
       csd_uid: 0,
       csd_wrapper: None,
       mtu: 0,
+      disable_ipv6: false,
     }
   }
 
@@ -77,6 +79,10 @@ impl ConnectArgs {
 
   pub fn mtu(&self) -> u32 {
     self.mtu
+  }
+
+  pub fn disable_ipv6(&self) -> bool {
+    self.disable_ipv6
   }
 }
 
@@ -109,11 +115,6 @@ impl ConnectRequest {
     self
   }
 
-  pub fn with_mtu(mut self, mtu: u32) -> Self {
-    self.args.mtu = mtu;
-    self
-  }
-
   pub fn with_user_agent<T: Into<Option<String>>>(mut self, user_agent: T) -> Self {
     self.args.user_agent = user_agent.into();
     self
@@ -121,6 +122,16 @@ impl ConnectRequest {
 
   pub fn with_os<T: Into<Option<ClientOs>>>(mut self, os: T) -> Self {
     self.args.os = os.into();
+    self
+  }
+
+  pub fn with_mtu(mut self, mtu: u32) -> Self {
+    self.args.mtu = mtu;
+    self
+  }
+
+  pub fn with_disable_ipv6(mut self, disable_ipv6: bool) -> Self {
+    self.args.disable_ipv6 = disable_ipv6;
     self
   }
 

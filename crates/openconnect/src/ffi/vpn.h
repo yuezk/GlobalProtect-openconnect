@@ -21,6 +21,8 @@ typedef struct vpn_options
     const char *csd_wrapper;
 
     const int mtu;
+
+    const int disable_ipv6;
 } vpn_options;
 
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback);
@@ -35,7 +37,7 @@ static char *format_message(const char *format, va_list args)
     int len = vsnprintf(NULL, 0, format, args_copy);
     va_end(args_copy);
 
-    char *buffer = malloc(len + 1);
+    char *buffer = (char*)malloc(len + 1);
     if (buffer == NULL)
     {
         return NULL;

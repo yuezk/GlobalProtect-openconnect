@@ -50,6 +50,8 @@ pub(crate) struct ConnectArgs {
 
   #[arg(short, long, help = "Request MTU from server (legacy servers only)")]
   mtu: Option<u32>,
+  #[arg(long, help = "Do not ask for IPv6 connectivity")]
+  disable_ipv6: bool,
 
   #[arg(long, default_value = GP_USER_AGENT, help = "The user agent to use")]
   user_agent: String,
@@ -216,6 +218,7 @@ impl<'a> ConnectHandler<'a> {
       .csd_uid(csd_uid)
       .csd_wrapper(csd_wrapper)
       .mtu(mtu)
+      .disable_ipv6(self.args.disable_ipv6)
       .build()?;
 
     let vpn = Arc::new(vpn);
