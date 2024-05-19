@@ -118,27 +118,40 @@ impl WsServer {
   }
 
   pub async fn start(&self, shutdown_tx: mpsc::Sender<()>) {
-    if let Ok(listener) = TcpListener::bind("127.0.0.1:0").await {
-      let local_addr = listener.local_addr().unwrap();
+    let listener = match self.start_tcp_server().await {
+      Ok(listener) => listener,
+      Err(err) => {
+        warn!("Failed to start WS server: {}", err);
+        let _ = shutdown_tx.send(()).await;
+        return;
+      },
+    };
 
-      self.lock_file.lock(local_addr.port().to_string()).unwrap();
-
-      info!("WS server listening on port: {}", local_addr.port());
-
-      tokio::select! {
-        _ = watch_vpn_state(self.ctx.vpn_state_rx(), Arc::clone(&self.ctx)) => {
-          info!("VPN state watch task completed");
-        }
-        _ = start_server(listener, self.ctx.clone()) => {
-            info!("WS server stopped");
-        }
-        _ = self.cancel_token.cancelled() => {
-          info!("WS server cancelled");
-        }
+    tokio::select! {
+      _ = watch_vpn_state(self.ctx.vpn_state_rx(), Arc::clone(&self.ctx)) => {
+        info!("VPN state watch task completed");
+      }
+      _ = start_server(listener, self.ctx.clone()) => {
+          info!("WS server stopped");
+      }
+      _ = self.cancel_token.cancelled() => {
+        info!("WS server cancelled");
       }
     }
 
     let _ = shutdown_tx.send(()).await;
+  }
+
+  async fn start_tcp_server(&self) -> anyhow::Result<TcpListener> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let local_addr = listener.local_addr()?;
+    let port = local_addr.port();
+
+    info!("WS server listening on port: {}", port);
+
+    self.lock_file.lock(port.to_string())?;
+
+    Ok(listener)
   }
 }
 
