@@ -63,6 +63,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     INFO("OS: %s", options->os);
     INFO("CSD_USER: %d", options->csd_uid);
     INFO("CSD_WRAPPER: %s", options->csd_wrapper);
+    INFO("RECONNECT_TIMEOUT: %d", options->reconnect_timeout);
     INFO("MTU: %d", options->mtu);
     INFO("DISABLE_IPV6: %d", options->disable_ipv6);
 
@@ -137,7 +138,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 
     while (1)
     {
-        int ret = openconnect_mainloop(vpninfo, 300, 10);
+        int ret = openconnect_mainloop(vpninfo, options->reconnect_timeout, 10);
 
         if (ret)
         {

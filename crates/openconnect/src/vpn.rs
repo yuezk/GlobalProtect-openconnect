@@ -23,6 +23,7 @@ pub struct Vpn {
   csd_uid: u32,
   csd_wrapper: Option<CString>,
 
+  reconnect_timeout: u32,
   mtu: u32,
   disable_ipv6: bool,
 
@@ -68,6 +69,7 @@ impl Vpn {
       csd_uid: self.csd_uid,
       csd_wrapper: Self::option_to_ptr(&self.csd_wrapper),
 
+      reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6 as u32,
     }
@@ -111,6 +113,7 @@ pub struct VpnBuilder {
   csd_uid: u32,
   csd_wrapper: Option<String>,
 
+  reconnect_timeout: u32,
   mtu: u32,
   disable_ipv6: bool,
 }
@@ -128,6 +131,7 @@ impl VpnBuilder {
       csd_uid: 0,
       csd_wrapper: None,
 
+      reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,
     }
@@ -155,6 +159,11 @@ impl VpnBuilder {
 
   pub fn csd_wrapper<T: Into<Option<String>>>(mut self, csd_wrapper: T) -> Self {
     self.csd_wrapper = csd_wrapper.into();
+    self
+  }
+
+  pub fn reconnect_timeout(mut self, reconnect_timeout: u32) -> Self {
+    self.reconnect_timeout = reconnect_timeout;
     self
   }
 
@@ -196,6 +205,7 @@ impl VpnBuilder {
       csd_uid: self.csd_uid,
       csd_wrapper: self.csd_wrapper.as_deref().map(Self::to_cstring),
 
+      reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6,
 

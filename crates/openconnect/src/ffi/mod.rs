@@ -19,6 +19,7 @@ pub(crate) struct ConnectOptions {
   pub csd_uid: u32,
   pub csd_wrapper: *const c_char,
 
+  pub reconnect_timeout: u32,
   pub mtu: u32,
   pub disable_ipv6: u32,
 }

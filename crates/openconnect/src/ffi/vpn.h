@@ -20,8 +20,8 @@ typedef struct vpn_options
     const uid_t csd_uid;
     const char *csd_wrapper;
 
+    const int reconnect_timeout;
     const int mtu;
-
     const int disable_ipv6;
 } vpn_options;
 

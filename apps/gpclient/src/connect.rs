@@ -48,6 +48,8 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Same as the '--csd-wrapper' option in the openconnect command")]
   csd_wrapper: Option<String>,
 
+  #[arg(long, default_value = "300", help = "Reconnection retry timeout in seconds")]
+  reconnect_timeout: u32,
   #[arg(short, long, help = "Request MTU from server (legacy servers only)")]
   mtu: Option<u32>,
   #[arg(long, help = "Do not ask for IPv6 connectivity")]
@@ -217,6 +219,7 @@ impl<'a> ConnectHandler<'a> {
       .user_agent(self.args.user_agent.clone())
       .csd_uid(csd_uid)
       .csd_wrapper(csd_wrapper)
+      .reconnect_timeout(self.args.reconnect_timeout)
       .mtu(mtu)
       .disable_ipv6(self.args.disable_ipv6)
       .build()?;

@@ -38,10 +38,11 @@ impl VpnTaskContext {
     let vpn = match Vpn::builder(req.gateway().server(), args.cookie())
       .script(args.vpnc_script())
       .user_agent(args.user_agent())
+      .os(args.openconnect_os())
       .csd_uid(args.csd_uid())
       .csd_wrapper(args.csd_wrapper())
+      .reconnect_timeout(args.reconnect_timeout())
       .mtu(args.mtu())
-      .os(args.openconnect_os())
       .disable_ipv6(args.disable_ipv6())
       .build()
     {

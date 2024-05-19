@@ -32,10 +32,11 @@ pub struct ConnectArgs {
   cookie: String,
   vpnc_script: Option<String>,
   user_agent: Option<String>,
+  os: Option<ClientOs>,
   csd_uid: u32,
   csd_wrapper: Option<String>,
+  reconnect_timeout: u32,
   mtu: u32,
-  os: Option<ClientOs>,
   disable_ipv6: bool,
 }
 
@@ -48,6 +49,7 @@ impl ConnectArgs {
       os: None,
       csd_uid: 0,
       csd_wrapper: None,
+      reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,
     }
@@ -75,6 +77,10 @@ impl ConnectArgs {
 
   pub fn csd_wrapper(&self) -> Option<String> {
     self.csd_wrapper.clone()
+  }
+
+  pub fn reconnect_timeout(&self) -> u32 {
+    self.reconnect_timeout
   }
 
   pub fn mtu(&self) -> u32 {
@@ -122,6 +128,11 @@ impl ConnectRequest {
 
   pub fn with_os<T: Into<Option<ClientOs>>>(mut self, os: T) -> Self {
     self.args.os = os.into();
+    self
+  }
+
+  pub fn with_reconnect_timeout(mut self, reconnect_timeout: u32) -> Self {
+    self.args.reconnect_timeout = reconnect_timeout;
     self
   }
 
