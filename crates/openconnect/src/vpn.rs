@@ -18,6 +18,8 @@ pub struct Vpn {
   script: CString,
   os: CString,
   certificate: Option<CString>,
+  sslkey: Option<CString>,
+  key_password: Option<CString>,
   servercert: Option<CString>,
 
   csd_uid: u32,
@@ -63,7 +65,10 @@ impl Vpn {
       user_agent: self.user_agent.as_ptr(),
       script: self.script.as_ptr(),
       os: self.os.as_ptr(),
+
       certificate: Self::option_to_ptr(&self.certificate),
+      sslkey: Self::option_to_ptr(&self.sslkey),
+      key_password: Self::option_to_ptr(&self.key_password),
       servercert: Self::option_to_ptr(&self.servercert),
 
       csd_uid: self.csd_uid,
@@ -110,6 +115,10 @@ pub struct VpnBuilder {
   user_agent: Option<String>,
   os: Option<String>,
 
+  certificate: Option<String>,
+  sslkey: Option<String>,
+  key_password: Option<String>,
+
   csd_uid: u32,
   csd_wrapper: Option<String>,
 
@@ -127,6 +136,10 @@ impl VpnBuilder {
 
       user_agent: None,
       os: None,
+
+      certificate: None,
+      sslkey: None,
+      key_password: None,
 
       csd_uid: 0,
       csd_wrapper: None,
@@ -149,6 +162,21 @@ impl VpnBuilder {
 
   pub fn os<T: Into<Option<String>>>(mut self, os: T) -> Self {
     self.os = os.into();
+    self
+  }
+
+  pub fn certificate<T: Into<Option<String>>>(mut self, certificate: T) -> Self {
+    self.certificate = certificate.into();
+    self
+  }
+
+  pub fn sslkey<T: Into<Option<String>>>(mut self, sslkey: T) -> Self {
+    self.sslkey = sslkey.into();
+    self
+  }
+
+  pub fn key_password<T: Into<Option<String>>>(mut self, key_password: T) -> Self {
+    self.key_password = key_password.into();
     self
   }
 
@@ -199,7 +227,10 @@ impl VpnBuilder {
       user_agent: Self::to_cstring(&user_agent),
       script: Self::to_cstring(&script),
       os: Self::to_cstring(&os),
-      certificate: None,
+
+      certificate: self.certificate.as_deref().map(Self::to_cstring),
+      sslkey: self.sslkey.as_deref().map(Self::to_cstring),
+      key_password: self.key_password.as_deref().map(Self::to_cstring),
       servercert: None,
 
       csd_uid: self.csd_uid,

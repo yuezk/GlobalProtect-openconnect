@@ -88,10 +88,7 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   let server = remove_url_scheme(&portal);
 
   let url = format!("{}/global-protect/getconfig.esp", portal);
-  let client = Client::builder()
-    .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
-    .user_agent(gp_params.user_agent())
-    .build()?;
+  let client = Client::try_from(gp_params)?;
 
   let mut params = cred.to_params();
   let extra_params = gp_params.to_params();

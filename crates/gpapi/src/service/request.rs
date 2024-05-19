@@ -33,6 +33,9 @@ pub struct ConnectArgs {
   vpnc_script: Option<String>,
   user_agent: Option<String>,
   os: Option<ClientOs>,
+  certificate: Option<String>,
+  sslkey: Option<String>,
+  key_password: Option<String>,
   csd_uid: u32,
   csd_wrapper: Option<String>,
   reconnect_timeout: u32,
@@ -47,6 +50,9 @@ impl ConnectArgs {
       vpnc_script: None,
       user_agent: None,
       os: None,
+      certificate: None,
+      sslkey: None,
+      key_password: None,
       csd_uid: 0,
       csd_wrapper: None,
       reconnect_timeout: 300,
@@ -69,6 +75,18 @@ impl ConnectArgs {
 
   pub fn openconnect_os(&self) -> Option<String> {
     self.os.as_ref().map(|os| os.to_openconnect_os().to_string())
+  }
+
+  pub fn certificate(&self) -> Option<String> {
+    self.certificate.clone()
+  }
+
+  pub fn sslkey(&self) -> Option<String> {
+    self.sslkey.clone()
+  }
+
+  pub fn key_password(&self) -> Option<String> {
+    self.key_password.clone()
   }
 
   pub fn csd_uid(&self) -> u32 {
@@ -128,6 +146,21 @@ impl ConnectRequest {
 
   pub fn with_os<T: Into<Option<ClientOs>>>(mut self, os: T) -> Self {
     self.args.os = os.into();
+    self
+  }
+
+  pub fn with_certificate<T: Into<Option<String>>>(mut self, certificate: T) -> Self {
+    self.args.certificate = certificate.into();
+    self
+  }
+
+  pub fn with_sslkey<T: Into<Option<String>>>(mut self, sslkey: T) -> Self {
+    self.args.sslkey = sslkey.into();
+    self
+  }
+
+  pub fn with_key_password<T: Into<Option<String>>>(mut self, key_password: T) -> Self {
+    self.args.key_password = key_password.into();
     self
   }
 

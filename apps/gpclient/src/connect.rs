@@ -1,4 +1,4 @@
-use std::{fs, sync::Arc};
+use std::{cell::RefCell, fs, sync::Arc};
 
 use clap::Args;
 use common::vpn_utils::find_csd_wrapper;
@@ -13,7 +13,7 @@ use gpapi::{
     auth_launcher::SamlAuthLauncher,
     users::{get_non_root_user, get_user_by_name},
   },
-  utils::shutdown_signal,
+  utils::{request::RequestIdentityError, shutdown_signal},
   GP_USER_AGENT,
 };
 use inquire::{Password, PasswordDisplayMode, Select, Text};
@@ -41,6 +41,13 @@ pub(crate) struct ConnectArgs {
     help = "Use the default CSD wrapper to generate the HIP report and send it to the server"
   )]
   hip: bool,
+
+  #[arg(short, long, help = "Use SSL client certificate file (.pem or .p12)")]
+  certificate: Option<String>,
+  #[arg(short = 'k', long, help = "Use SSL private key file (.pem)")]
+  sslkey: Option<String>,
+  #[arg(short = 'p', long, help = "The key passphrase of the private key")]
+  key_password: Option<String>,
 
   #[arg(long, help = "Same as the '--csd-user' option in the openconnect command")]
   csd_user: Option<String>,
@@ -86,11 +93,16 @@ impl ConnectArgs {
 pub(crate) struct ConnectHandler<'a> {
   args: &'a ConnectArgs,
   shared_args: &'a SharedArgs,
+  latest_key_password: RefCell<Option<String>>,
 }
 
 impl<'a> ConnectHandler<'a> {
   pub(crate) fn new(args: &'a ConnectArgs, shared_args: &'a SharedArgs) -> Self {
-    Self { args, shared_args }
+    Self {
+      args,
+      shared_args,
+      latest_key_password: Default::default(),
+    }
   }
 
   fn build_gp_params(&self) -> GpParams {
@@ -99,10 +111,45 @@ impl<'a> ConnectHandler<'a> {
       .client_os(ClientOs::from(&self.args.os))
       .os_version(self.args.os_version())
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
+      .certificate(self.args.certificate.clone())
+      .sslkey(self.args.sslkey.clone())
+      .key_password(self.latest_key_password.borrow().clone())
       .build()
   }
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
+    self.latest_key_password.replace(self.args.key_password.clone());
+
+    loop {
+      let Err(err) = self.handle_impl().await else {
+        return Ok(())
+      };
+
+      let Some(root_cause) = err.root_cause().downcast_ref::<RequestIdentityError>() else {
+        return Err(err);
+      };
+
+      match root_cause {
+        RequestIdentityError::NoKey => {
+          eprintln!("ERROR: No private key found in the certificate file");
+          eprintln!("ERROR: Please provide the private key file using the `-k` option");
+          return Ok(())
+        }
+        RequestIdentityError::NoPassphrase(cert_type) | RequestIdentityError::DecryptError(cert_type) => {
+          // Decrypt the private key error, ask for the key password
+          let message = format!("Enter the {} passphrase:", cert_type);
+          let password = Password::new(&message)
+            .without_confirmation()
+            .with_display_mode(PasswordDisplayMode::Masked)
+            .prompt()?;
+
+          self.latest_key_password.replace(Some(password));
+        }
+      }
+    }
+  }
+
+  pub(crate) async fn handle_impl(&self) -> anyhow::Result<()> {
     let server = self.args.server.as_str();
     let as_gateway = self.args.as_gateway;
 
@@ -217,6 +264,9 @@ impl<'a> ConnectHandler<'a> {
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
       .user_agent(self.args.user_agent.clone())
+      .certificate(self.args.certificate.clone())
+      .sslkey(self.args.sslkey.clone())
+      .key_password(self.latest_key_password.borrow().clone())
       .csd_uid(csd_uid)
       .csd_wrapper(csd_wrapper)
       .reconnect_timeout(self.args.reconnect_timeout)

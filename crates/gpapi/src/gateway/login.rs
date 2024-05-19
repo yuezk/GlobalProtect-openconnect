@@ -21,10 +21,7 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
   let gateway = remove_url_scheme(&url);
 
   let login_url = format!("{}/ssl-vpn/login.esp", url);
-  let client = Client::builder()
-    .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
-    .user_agent(gp_params.user_agent())
-    .build()?;
+  let client = Client::try_from(gp_params)?;
 
   let mut params = cred.to_params();
   let extra_params = gp_params.to_params();

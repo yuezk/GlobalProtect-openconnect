@@ -63,6 +63,8 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     INFO("OS: %s", options->os);
     INFO("CSD_USER: %d", options->csd_uid);
     INFO("CSD_WRAPPER: %s", options->csd_wrapper);
+    INFO("CERTIFICATE: %s", options->certificate);
+    INFO("SSLKEY: %s", options->sslkey);
     INFO("RECONNECT_TIMEOUT: %d", options->reconnect_timeout);
     INFO("MTU: %d", options->mtu);
     INFO("DISABLE_IPV6: %d", options->disable_ipv6);
@@ -80,6 +82,11 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     openconnect_set_protocol(vpninfo, "gp");
     openconnect_set_hostname(vpninfo, options->server);
     openconnect_set_cookie(vpninfo, options->cookie);
+    openconnect_set_client_cert(vpninfo, options->certificate, options->sslkey);
+
+    if (options->key_password) {
+      openconnect_set_key_password(vpninfo, options->key_password);
+    }
 
     if (options->os) {
         openconnect_set_reported_os(vpninfo, options->os);

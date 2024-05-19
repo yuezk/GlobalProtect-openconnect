@@ -14,6 +14,8 @@ pub(crate) struct ConnectOptions {
   pub script: *const c_char,
   pub os: *const c_char,
   pub certificate: *const c_char,
+  pub sslkey: *const c_char,
+  pub key_password: *const c_char,
   pub servercert: *const c_char,
 
   pub csd_uid: u32,

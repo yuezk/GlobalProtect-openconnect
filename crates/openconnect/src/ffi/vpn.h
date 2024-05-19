@@ -15,6 +15,8 @@ typedef struct vpn_options
     const char *script;
     const char *os;
     const char *certificate;
+    const char *sslkey;
+    const char *key_password;
     const char *servercert;
 
     const uid_t csd_uid;

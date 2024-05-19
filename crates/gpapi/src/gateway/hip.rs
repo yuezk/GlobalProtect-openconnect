@@ -156,11 +156,7 @@ fn build_csd_token(cookie: &str) -> anyhow::Result<String> {
 }
 
 pub async fn hip_report(gateway: &str, cookie: &str, csd_wrapper: &str, gp_params: &GpParams) -> anyhow::Result<()> {
-  let client = Client::builder()
-    .danger_accept_invalid_certs(gp_params.ignore_tls_errors())
-    .user_agent(gp_params.user_agent())
-    .build()?;
-
+  let client = Client::try_from(gp_params)?;
   let md5 = build_csd_token(cookie)?;
 
   info!("Submit HIP report md5: {}", md5);

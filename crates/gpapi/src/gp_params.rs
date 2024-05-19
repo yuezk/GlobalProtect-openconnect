@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::GP_USER_AGENT;
+use crate::{
+  utils::request::{create_identity_from_pem, create_identity_from_pkcs12},
+  GP_USER_AGENT,
+};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
 pub enum ClientOs {
@@ -51,6 +55,9 @@ pub struct GpParams {
   client_version: Option<String>,
   computer: String,
   ignore_tls_errors: bool,
+  certificate: Option<String>,
+  sslkey: Option<String>,
+  key_password: Option<String>,
   // Used for MFA
   input_str: Option<String>,
   otp: Option<String>,
@@ -142,6 +149,9 @@ pub struct GpParamsBuilder {
   client_version: Option<String>,
   computer: String,
   ignore_tls_errors: bool,
+  certificate: Option<String>,
+  sslkey: Option<String>,
+  key_password: Option<String>,
 }
 
 impl GpParamsBuilder {
@@ -156,6 +166,9 @@ impl GpParamsBuilder {
       client_version: Default::default(),
       computer,
       ignore_tls_errors: false,
+      certificate: Default::default(),
+      sslkey: Default::default(),
+      key_password: Default::default(),
     }
   }
 
@@ -194,6 +207,21 @@ impl GpParamsBuilder {
     self
   }
 
+  pub fn certificate<T: Into<Option<String>>>(&mut self, certificate: T) -> &mut Self {
+    self.certificate = certificate.into();
+    self
+  }
+
+  pub fn sslkey<T: Into<Option<String>>>(&mut self, sslkey: T) -> &mut Self {
+    self.sslkey = sslkey.into();
+    self
+  }
+
+  pub fn key_password<T: Into<Option<String>>>(&mut self, password: T) -> &mut Self {
+    self.key_password = password.into();
+    self
+  }
+
   pub fn build(&self) -> GpParams {
     GpParams {
       is_gateway: self.is_gateway,
@@ -203,6 +231,9 @@ impl GpParamsBuilder {
       client_version: self.client_version.clone(),
       computer: self.computer.clone(),
       ignore_tls_errors: self.ignore_tls_errors,
+      certificate: self.certificate.clone(),
+      sslkey: self.sslkey.clone(),
+      key_password: self.key_password.clone(),
       input_str: Default::default(),
       otp: Default::default(),
     }
@@ -212,5 +243,28 @@ impl GpParamsBuilder {
 impl Default for GpParamsBuilder {
   fn default() -> Self {
     Self::new()
+  }
+}
+
+impl TryFrom<&GpParams> for Client {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &GpParams) -> Result<Self, Self::Error> {
+    let mut builder = Client::builder()
+      .danger_accept_invalid_certs(value.ignore_tls_errors)
+      .user_agent(&value.user_agent);
+
+    if let Some(cert) = value.certificate.as_deref() {
+      // .p12 or .pfx file
+      let identity = if cert.ends_with(".p12") || cert.ends_with(".pfx") {
+        create_identity_from_pkcs12(cert, value.key_password.as_deref())?
+      } else {
+        create_identity_from_pem(cert, value.sslkey.as_deref(), value.key_password.as_deref())?
+      };
+      builder = builder.identity(identity);
+    }
+
+    let client = builder.build()?;
+    Ok(client)
   }
 }
