@@ -17,16 +17,15 @@ pub enum RequestIdentityError {
 }
 
 /// Create an identity object from a certificate and key
-pub(crate) fn create_identity_from_pem(
-  cert: &str,
-  key: Option<&str>,
-  passphrase: Option<&str>,
-) -> anyhow::Result<Identity> {
-  let cert_pem = fs::read(cert)?;
+pub fn create_identity_from_pem(cert: &str, key: Option<&str>, passphrase: Option<&str>) -> anyhow::Result<Identity> {
+  let cert_pem = fs::read(cert).map_err(|err| anyhow::anyhow!("Failed to read certificate file: {}", err))?;
 
   // Get the private key pem
   let key_pem = match key {
-    Some(key) => pem::parse(fs::read(key)?)?,
+    Some(key) => {
+      let pem_file = fs::read(key).map_err(|err| anyhow::anyhow!("Failed to read key file: {}", err))?;
+      pem::parse(pem_file)?
+    }
     None => {
       // If key is not provided, find the private key in the cert pem
       parse_many(&cert_pem)?
@@ -57,7 +56,7 @@ pub(crate) fn create_identity_from_pem(
   Ok(identity)
 }
 
-pub(crate) fn create_identity_from_pkcs12(pkcs12: &str, passphrase: Option<&str>) -> anyhow::Result<Identity> {
+pub fn create_identity_from_pkcs12(pkcs12: &str, passphrase: Option<&str>) -> anyhow::Result<Identity> {
   let pkcs12 = fs::read(pkcs12)?;
 
   let Some(passphrase) = passphrase else {
