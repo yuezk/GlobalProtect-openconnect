@@ -68,7 +68,8 @@ jobs:
     - tarball
     strategy:
       matrix:
-        os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
+        # Only build gp on amd64, as the arm64 package will be built in release.yaml
+        os: [{runner: ubuntu-latest, arch: amd64}]
         package: [deb, rpm, pkg, binary]
     runs-on: ${{ matrix.os.runner }}
     name: build-gp (${{ matrix.package }}, ${{ matrix.os.arch }})
