@@ -1,4 +1,4 @@
-use std::fs;
+use std::{borrow::Cow, fs};
 
 use anyhow::bail;
 use log::warn;
@@ -17,23 +17,30 @@ pub enum RequestIdentityError {
 }
 
 /// Create an identity object from a certificate and key
-pub fn create_identity_from_pem(cert: &str, key: Option<&str>, passphrase: Option<&str>) -> anyhow::Result<Identity> {
+/// The file is expected to be the PKCS#8 PEM or PKCS#12 format
+/// When using a PKCS#12 file, the key is NOT required, but a passphrase is required
+pub fn create_identity(cert: &str, key: Option<&str>, passphrase: Option<&str>) -> anyhow::Result<Identity> {
+  if cert.ends_with(".p12") || cert.ends_with(".pfx") {
+    create_identity_from_pkcs12(cert, passphrase)
+  } else {
+    create_identity_from_pem(cert, key, passphrase)
+  }
+}
+
+fn create_identity_from_pem(cert: &str, key: Option<&str>, passphrase: Option<&str>) -> anyhow::Result<Identity> {
   let cert_pem = fs::read(cert).map_err(|err| anyhow::anyhow!("Failed to read certificate file: {}", err))?;
 
-  // Get the private key pem
-  let key_pem = match key {
-    Some(key) => {
-      let pem_file = fs::read(key).map_err(|err| anyhow::anyhow!("Failed to read key file: {}", err))?;
-      pem::parse(pem_file)?
-    }
-    None => {
-      // If key is not provided, find the private key in the cert pem
-      parse_many(&cert_pem)?
-        .into_iter()
-        .find(|pem| pem.tag().ends_with("PRIVATE KEY"))
-        .ok_or(RequestIdentityError::NoKey)?
-    }
+  // Use the certificate as the key if no key is provided
+  let key_pem_file = match key {
+    Some(key) => Cow::Owned(fs::read(key).map_err(|err| anyhow::anyhow!("Failed to read key file: {}", err))?),
+    None => Cow::Borrowed(&cert_pem),
   };
+
+  // Find the private key in the pem file
+  let key_pem = parse_many(key_pem_file.as_ref())?
+    .into_iter()
+    .find(|pem| pem.tag().ends_with("PRIVATE KEY"))
+    .ok_or(RequestIdentityError::NoKey)?;
 
   // The key pem could be encrypted, so we need to decrypt it
   let decrypted_key_pem = if key_pem.tag().ends_with("ENCRYPTED PRIVATE KEY") {
@@ -56,7 +63,7 @@ pub fn create_identity_from_pem(cert: &str, key: Option<&str>, passphrase: Optio
   Ok(identity)
 }
 
-pub fn create_identity_from_pkcs12(pkcs12: &str, passphrase: Option<&str>) -> anyhow::Result<Identity> {
+fn create_identity_from_pkcs12(pkcs12: &str, passphrase: Option<&str>) -> anyhow::Result<Identity> {
   let pkcs12 = fs::read(pkcs12)?;
 
   let Some(passphrase) = passphrase else {
@@ -86,6 +93,47 @@ mod tests {
     let passphrase = "badssl.com";
 
     let identity = create_identity_from_pem(cert, None, Some(passphrase));
+
+    assert!(identity.is_ok());
+  }
+
+  #[test]
+  fn create_identity_from_pem_unencrypted_key() {
+    let cert = "tests/files/badssl.com-client-unencrypted.pem";
+    let identity = create_identity_from_pem(cert, None, None);
+    println!("{:?}", identity);
+
+    assert!(identity.is_ok());
+  }
+
+  #[test]
+  fn create_identity_from_pem_cert_and_encrypted_key() {
+    let cert = "tests/files/badssl.com-client.pem";
+    let key = "tests/files/badssl.com-client.pem";
+    let passphrase = "badssl.com";
+
+    let identity = create_identity_from_pem(cert, Some(key), Some(passphrase));
+
+    assert!(identity.is_ok());
+  }
+
+  #[test]
+  fn create_identity_from_pem_cert_and_encrypted_key_no_passphrase() {
+    let cert = "tests/files/badssl.com-client.pem";
+    let key = "tests/files/badssl.com-client.pem";
+
+    let identity = create_identity_from_pem(cert, Some(key), None);
+
+    assert!(identity.is_err());
+    assert!(identity.unwrap_err().to_string().contains("No passphrase provided"));
+  }
+
+  #[test]
+  fn create_identity_from_pem_cert_and_unencrypted_key() {
+    let cert = "tests/files/badssl.com-client.pem";
+    let key = "tests/files/badssl.com-client-unencrypted.pem";
+
+    let identity = create_identity_from_pem(cert, Some(key), None);
 
     assert!(identity.is_ok());
   }

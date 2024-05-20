@@ -13,6 +13,7 @@ A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authenticati
 - [x] Support both SSO and non-SSO authentication
 - [x] Support the FIDO2 authentication (e.g., YubiKey)
 - [x] Support authentication using default browser
+- [x] Support client certificate authentication
 - [x] Support multiple portals
 - [x] Support gateway selection
 - [x] Support connect gateway directly
@@ -74,7 +75,7 @@ sudo apt-get install globalprotect-openconnect
 >
 > For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
 
-#### **Ubuntu 24.04**
+#### **Ubuntu 24.04 and later**
 
 The `libwebkit2gtk-4.0-37` package was [removed](https://bugs.launchpad.net/ubuntu/+source/webkit2gtk/+bug/2061914) from its repo, before [the issue](https://github.com/yuezk/GlobalProtect-openconnect/issues/351) gets resolved, you need to install them manually:
 

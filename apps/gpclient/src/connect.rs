@@ -42,9 +42,13 @@ pub(crate) struct ConnectArgs {
   )]
   hip: bool,
 
-  #[arg(short, long, help = "Use SSL client certificate file (.pem or .p12)")]
+  #[arg(
+    short,
+    long,
+    help = "Use SSL client certificate file in pkcs#8 (.pem) or pkcs#12 (.p12, .pfx) format"
+  )]
   certificate: Option<String>,
-  #[arg(short = 'k', long, help = "Use SSL private key file (.pem)")]
+  #[arg(short = 'k', long, help = "Use SSL private key file in pkcs#8 (.pem) format")]
   sslkey: Option<String>,
   #[arg(short = 'p', long, help = "The key passphrase of the private key")]
   key_password: Option<String>,
@@ -122,7 +126,7 @@ impl<'a> ConnectHandler<'a> {
 
     loop {
       let Err(err) = self.handle_impl().await else {
-        return Ok(())
+        return Ok(());
       };
 
       let Some(root_cause) = err.root_cause().downcast_ref::<RequestIdentityError>() else {
@@ -133,7 +137,7 @@ impl<'a> ConnectHandler<'a> {
         RequestIdentityError::NoKey => {
           eprintln!("ERROR: No private key found in the certificate file");
           eprintln!("ERROR: Please provide the private key file using the `-k` option");
-          return Ok(())
+          return Ok(());
         }
         RequestIdentityError::NoPassphrase(cert_type) | RequestIdentityError::DecryptError(cert_type) => {
           // Decrypt the private key error, ask for the key password

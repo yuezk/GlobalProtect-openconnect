@@ -1,13 +1,11 @@
 use std::collections::HashMap;
 
+use log::info;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{
-  utils::request::{create_identity_from_pem, create_identity_from_pkcs12},
-  GP_USER_AGENT,
-};
+use crate::{utils::request::create_identity, GP_USER_AGENT};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
 pub enum ClientOs {
@@ -255,12 +253,8 @@ impl TryFrom<&GpParams> for Client {
       .user_agent(&value.user_agent);
 
     if let Some(cert) = value.certificate.as_deref() {
-      // .p12 or .pfx file
-      let identity = if cert.ends_with(".p12") || cert.ends_with(".pfx") {
-        create_identity_from_pkcs12(cert, value.key_password.as_deref())?
-      } else {
-        create_identity_from_pem(cert, value.sslkey.as_deref(), value.key_password.as_deref())?
-      };
+      info!("Using client certificate authentication...");
+      let identity = create_identity(cert, value.sslkey.as_deref(), value.key_password.as_deref())?;
       builder = builder.identity(identity);
     }
 
