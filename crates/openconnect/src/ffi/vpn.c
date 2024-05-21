@@ -16,7 +16,7 @@ static vpn_connected_callback on_vpn_connected;
 /* Validate the peer certificate */
 static int validate_peer_cert(__attribute__((unused)) void *_vpninfo, const char *reason)
 {
-    INFO("Validating peer cert: %s", reason);
+    INFO("Accepting the server certificate though %s", reason);
     return 0;
 }
 
@@ -28,12 +28,9 @@ static void print_progress(__attribute__((unused)) void *_vpninfo, int level, co
     char *message = format_message(format, args);
     va_end(args);
 
-    if (message == NULL)
-    {
+    if (message == NULL) {
         ERROR("Failed to format log message");
-    }
-    else
-    {
+    } else {
         LOG(level, message);
         free(message);
     }
@@ -63,16 +60,13 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     INFO("OS: %s", options->os);
     INFO("CSD_USER: %d", options->csd_uid);
     INFO("CSD_WRAPPER: %s", options->csd_wrapper);
-    INFO("CERTIFICATE: %s", options->certificate);
-    INFO("SSLKEY: %s", options->sslkey);
     INFO("RECONNECT_TIMEOUT: %d", options->reconnect_timeout);
     INFO("MTU: %d", options->mtu);
     INFO("DISABLE_IPV6: %d", options->disable_ipv6);
 
     vpninfo = openconnect_vpninfo_new(options->user_agent, validate_peer_cert, NULL, NULL, print_progress, NULL);
 
-    if (!vpninfo)
-    {
+    if (!vpninfo) {
         ERROR("openconnect_vpninfo_new failed");
         return 1;
     }
@@ -82,25 +76,18 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     openconnect_set_protocol(vpninfo, "gp");
     openconnect_set_hostname(vpninfo, options->server);
     openconnect_set_cookie(vpninfo, options->cookie);
-    openconnect_set_client_cert(vpninfo, options->certificate, options->sslkey);
-
-    if (options->key_password) {
-      openconnect_set_key_password(vpninfo, options->key_password);
-    }
 
     if (options->os) {
         openconnect_set_reported_os(vpninfo, options->os);
     }
 
-    if (options->certificate)
-    {
+    if (options->certificate) {
         INFO("Setting client certificate: %s", options->certificate);
-        openconnect_set_client_cert(vpninfo, options->certificate, NULL);
+        openconnect_set_client_cert(vpninfo, options->certificate, options->sslkey);
     }
 
-    if (options->servercert) {
-        INFO("Setting server certificate: %s", options->servercert);
-        openconnect_set_system_trust(vpninfo, 0);
+    if (options->key_password) {
+        openconnect_set_key_password(vpninfo, options->key_password);
     }
 
     if (options->csd_wrapper) {
@@ -117,38 +104,32 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     }
 
     g_cmd_pipe_fd = openconnect_setup_cmd_pipe(vpninfo);
-    if (g_cmd_pipe_fd < 0)
-    {
+    if (g_cmd_pipe_fd < 0) {
         ERROR("openconnect_setup_cmd_pipe failed");
         return 1;
     }
 
-    if (!uname(&utsbuf))
-    {
+    if (!uname(&utsbuf)) {
         openconnect_set_localname(vpninfo, utsbuf.nodename);
     }
 
     // Essential step
-    if (openconnect_make_cstp_connection(vpninfo) != 0)
-    {
+    if (openconnect_make_cstp_connection(vpninfo) != 0) {
         ERROR("openconnect_make_cstp_connection failed");
         return 1;
     }
 
-    if (openconnect_setup_dtls(vpninfo, 60) != 0)
-    {
+    if (openconnect_setup_dtls(vpninfo, 60) != 0) {
         openconnect_disable_dtls(vpninfo);
     }
 
     // Essential step
     openconnect_set_setup_tun_handler(vpninfo, setup_tun_handler);
 
-    while (1)
-    {
+    while (1) {
         int ret = openconnect_mainloop(vpninfo, options->reconnect_timeout, 10);
 
-        if (ret)
-        {
+        if (ret) {
             INFO("openconnect_mainloop returned %d, exiting", ret);
             openconnect_vpninfo_free(vpninfo);
             return ret;
@@ -165,8 +146,7 @@ void vpn_disconnect()
 
     INFO("Stopping VPN connection: %d", g_cmd_pipe_fd);
 
-    if (write(g_cmd_pipe_fd, &cmd, 1) < 0)
-    {
+    if (write(g_cmd_pipe_fd, &cmd, 1) < 0) {
         ERROR("Failed to write to command pipe, VPN connection may not be stopped");
     }
 }
