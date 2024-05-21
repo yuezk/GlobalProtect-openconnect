@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.1 - 2024-05-21
+
+- Fix the `--sslkey` option not working
+
 ## 2.3.0 - 2024-05-20
 
 - Support client certificate authentication (fix [#363](https://github.com/yuezk/GlobalProtect-openconnect/issues/363))
