@@ -1,4 +1,7 @@
-use std::{env::temp_dir, io::Write};
+use std::{env::temp_dir, fs, io::Write, os::unix::fs::PermissionsExt};
+
+use anyhow::bail;
+use log::warn;
 
 pub struct BrowserAuthenticator<'a> {
   auth_request: &'a str,
@@ -14,21 +17,23 @@ impl BrowserAuthenticator<'_> {
       open::that_detached(self.auth_request)?;
     } else {
       let html_file = temp_dir().join("gpauth.html");
-      let mut file = std::fs::File::create(&html_file)?;
 
+      // Remove the file and error if permission denied
+      if let Err(err) = fs::remove_file(&html_file) {
+        if err.kind() != std::io::ErrorKind::NotFound {
+          warn!("Failed to remove the temporary file: {}", err);
+          bail!("Please remove the file manually: {:?}", html_file);
+        }
+      }
+
+      let mut file = fs::File::create(&html_file)?;
+
+      file.set_permissions(fs::Permissions::from_mode(0o600))?;
       file.write_all(self.auth_request.as_bytes())?;
 
       open::that_detached(html_file)?;
     }
 
     Ok(())
-  }
-}
-
-impl Drop for BrowserAuthenticator<'_> {
-  fn drop(&mut self) {
-    // Cleanup the temporary file
-    let html_file = temp_dir().join("gpauth.html");
-    let _ = std::fs::remove_file(html_file);
   }
 }

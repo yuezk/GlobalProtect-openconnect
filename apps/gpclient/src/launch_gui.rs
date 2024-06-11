@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, env::temp_dir, fs, path::PathBuf};
 
 use clap::Args;
 use directories::ProjectDirs;
@@ -82,6 +82,11 @@ impl<'a> LaunchGuiHandler<'a> {
 
 async fn feed_auth_data(auth_data: &str) -> anyhow::Result<()> {
   let _ = tokio::join!(feed_auth_data_gui(auth_data), feed_auth_data_cli(auth_data));
+
+  // Cleanup the temporary file
+  let html_file = temp_dir().join("gpauth.html");
+  let _ = std::fs::remove_file(html_file);
+
   Ok(())
 }
 

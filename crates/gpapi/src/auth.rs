@@ -70,6 +70,7 @@ impl SamlAuthData {
 
       let auth_data: SamlAuthData = serde_urlencoded::from_str(auth_data).map_err(|e| {
         warn!("Failed to parse token auth data: {}", e);
+        warn!("Auth data: {}", auth_data);
         AuthDataParseError::Invalid
       })?;
 
