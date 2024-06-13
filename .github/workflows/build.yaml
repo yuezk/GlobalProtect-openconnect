@@ -168,22 +168,23 @@ jobs:
     steps:
     - name: Prepare workspace
       run: rm -rf gh-release && mkdir gh-release
+
+    - name: Checkout GlobalProtect-openconnect
+      uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.ref }}
+        path: gh-release/gp
+
     - name: Download all artifacts
       uses: actions/download-artifact@v3
       with:
-        path: gh-release
+        path: gh-release/gp/.build/artifacts
+
     - name: Create GH release
       env:
         GH_TOKEN: ${{ secrets.GH_PAT }}
         RELEASE_TAG: ${{ github.ref == 'refs/heads/dev' && 'snapshot' || github.ref_name }}
-        REPO: ${{ github.repository }}
-        NOTES: ${{ github.ref == 'refs/heads/dev' && '**!!! DO NOT USE THIS RELEASE IN PRODUCTION !!!**' || format('Release {0}', github.ref_name) }}
       run: |
-        gh -R "$REPO" release delete $RELEASE_TAG --yes --cleanup-tag || true
-        gh -R "$REPO" release create $RELEASE_TAG \
-          --title "$RELEASE_TAG" \
-          --notes "$NOTES" \
-          ${{ github.ref == 'refs/heads/dev' && '--target dev' || '' }} \
-          ${{ github.ref == 'refs/heads/dev' && '--prerelease' || '' }} \
-          gh-release/artifact-source/* \
-          gh-release/artifact-gpgui-*/*
+        cd gh-release/gp/scripts && ./gh-release.sh "$RELEASE_TAG"

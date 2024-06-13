@@ -1,3 +1,5 @@
+use std::borrow::{Borrow, Cow};
+
 use log::{info, warn};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -68,24 +70,29 @@ impl SamlAuthData {
     if auth_data.starts_with("cas-as") {
       info!("Got CAS auth data from globalprotectcallback");
 
-      let auth_data: SamlAuthData = serde_urlencoded::from_str(auth_data).map_err(|e| {
+      // Decode the auth data and use the original value if decoding fails
+      let auth_data = urlencoding::decode(auth_data).unwrap_or_else(|err| {
+        warn!("Failed to decode token auth data: {}", err);
+        Cow::Borrowed(auth_data)
+      });
+
+      let auth_data: SamlAuthData = serde_urlencoded::from_str(auth_data.borrow()).map_err(|e| {
         warn!("Failed to parse token auth data: {}", e);
         warn!("Auth data: {}", auth_data);
         AuthDataParseError::Invalid
       })?;
 
-      Ok(auth_data)
-    } else {
-      info!("Parsing SAML auth data...");
-
-      let auth_data = decode_to_string(auth_data).map_err(|e| {
-        warn!("Failed to decode SAML auth data: {}", e);
-        AuthDataParseError::Invalid
-      })?;
-      let auth_data = Self::from_html(&auth_data)?;
-
-      Ok(auth_data)
+      return Ok(auth_data);
     }
+
+    info!("Parsing SAML auth data...");
+    let auth_data = decode_to_string(auth_data).map_err(|e| {
+      warn!("Failed to decode SAML auth data: {}", e);
+      AuthDataParseError::Invalid
+    })?;
+    let auth_data = Self::from_html(&auth_data)?;
+
+    Ok(auth_data)
   }
 
   pub fn username(&self) -> &str {
@@ -136,6 +143,16 @@ mod tests {
   #[test]
   fn auth_data_from_gpcallback_cas() {
     let auth_data = "globalprotectcallback:cas-as=1&un=xyz@email.com&token=very_long_string";
+
+    let auth_data = SamlAuthData::from_gpcallback(auth_data).unwrap();
+
+    assert_eq!(auth_data.username(), "xyz@email.com");
+    assert_eq!(auth_data.token(), Some("very_long_string"));
+  }
+
+  #[test]
+  fn auth_data_from_gpcallback_cas_urlencoded() {
+    let auth_data = "globalprotectcallback:cas-as%3D1%26un%3Dxyz%40email.com%26token%3Dvery_long_string";
 
     let auth_data = SamlAuthData::from_gpcallback(auth_data).unwrap();
 
