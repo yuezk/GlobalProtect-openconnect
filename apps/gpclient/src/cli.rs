@@ -19,7 +19,7 @@ pub(crate) struct SharedArgs {
 #[derive(Subcommand)]
 enum CliCommand {
   #[command(about = "Connect to a portal server")]
-  Connect(ConnectArgs),
+  Connect(Box<ConnectArgs>),
   #[command(about = "Disconnect from the server")]
   Disconnect,
   #[command(about = "Launch the GUI")]
