@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.2 - 2024-06-17
+
+- Fix the CAS callback parsing issue (fix [#372](https://github.com/yuezk/GlobalProtect-openconnect/issues/372))
+- CLI: fix the `/tmp/gpauth.html` deletion issue (fix [#366](https://github.com/yuezk/GlobalProtect-openconnect/issues/366))
+- GUI: fix the license not working after reboot (fix [#376](https://github.com/yuezk/GlobalProtect-openconnect/issues/376))
+- GUI: add the license activation management link
+
 ## 2.3.1 - 2024-05-21
 
 - Fix the `--sslkey` option not working
