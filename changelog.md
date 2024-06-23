@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.3 - 2024-06-23
+
+- GUI: add the remark field for the license activation
+- GUI: check the saved secret key length
+
 ## 2.3.2 - 2024-06-17
 
 - Fix the CAS callback parsing issue (fix [#372](https://github.com/yuezk/GlobalProtect-openconnect/issues/372))
