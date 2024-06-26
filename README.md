@@ -182,9 +182,9 @@ You can also build the client from source, steps are as follows:
 
 ### Prerequisites
 
-- [Install Rust](https://www.rust-lang.org/tools/install)
+- [Install Rust 1.75 or later](https://www.rust-lang.org/tools/install)
 - Install Tauri dependencies: https://tauri.app/v1/guides/getting-started/prerequisites/#setting-up-linux
-- Install `perl`
+- Install `perl` and `jq`
 - Install `openconnect >= 8.20` and `libopenconnect-dev` (or `openconnect-devel` on RPM-based distributions)
 - Install `pkexec`, `gnome-keyring` (or `pam_kwallet` on KDE)
 
