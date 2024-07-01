@@ -2,9 +2,17 @@ use roxmltree::Document;
 
 use super::{Gateway, PriorityRule};
 
-pub(crate) fn parse_gateways(doc: &Document) -> Option<Vec<Gateway>> {
+pub(crate) fn parse_gateways(doc: &Document, external: bool) -> Option<Vec<Gateway>> {
   let node_gateways = doc.descendants().find(|n| n.has_tag_name("gateways"))?;
-  let list_gateway = node_gateways.descendants().find(|n| n.has_tag_name("list"))?;
+
+  // if external flag is set, look for external gateways, otherwise look for internal gateways
+  let kind_gateways = if external {
+    node_gateways.descendants().find(|n| n.has_tag_name("external"))?
+  } else {
+    node_gateways.descendants().find(|n| n.has_tag_name("internal"))?
+  };
+
+  let list_gateway = kind_gateways.descendants().find(|n| n.has_tag_name("list"))?;
 
   let gateways = list_gateway
     .children()

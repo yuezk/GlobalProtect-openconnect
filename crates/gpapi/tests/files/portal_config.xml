@@ -46,7 +46,26 @@
     <use-sso>yes</use-sso>
     <ip-address></ip-address>
     <host></host>
+    <internal-host-detection>
+      <ip-address></ip-address>
+      <host></host>
+      <ipv6-address/>
+      <ipv6-host/>
+    </internal-host-detection>
     <gateways>
+        <internal>
+          <list>
+                <entry name="xxx.xxx.xxx.xxx">
+                    <priority-rule>
+                        <entry name="Any">
+                            <priority>1</priority>
+                        </entry>
+                    </priority-rule>
+                    <priority>1</priority>
+                    <description>vpn_gateway</description>
+                </entry>
+            </list>
+        </internal>
         <cutoff-time>5</cutoff-time>
         <external>
             <list>
@@ -63,6 +82,19 @@
         </external>
     </gateways>
     <gateways-v6>
+        <internal>
+            <list>
+                <entry name="vpn_gateway">
+                    <ipv4>xxx.xxx.xxx.xxx</ipv4>
+                    <priority-rule>
+                        <entry name="Any">
+                            <priority>1</priority>
+                        </entry>
+                    </priority-rule>
+                    <priority>1</priority>
+                </entry>
+            </list>
+        </internal>
         <cutoff-time>5</cutoff-time>
         <external>
             <list>

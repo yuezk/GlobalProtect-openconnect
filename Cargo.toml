@@ -17,6 +17,7 @@ base64 = "0.21"
 clap = { version = "4.4.2", features = ["derive"] }
 ctrlc = "3.4"
 directories = "5.0"
+dns-lookup = "2.0.4"
 env_logger = "0.10"
 is_executable = "1.0"
 log = "0.4"
