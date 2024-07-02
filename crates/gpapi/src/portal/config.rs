@@ -1,4 +1,5 @@
 use anyhow::bail;
+use dns_lookup::lookup_addr;
 use log::{info, warn};
 use reqwest::{Client, StatusCode};
 use roxmltree::Document;
@@ -125,7 +126,38 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
 
   let doc = Document::parse(&res_xml).map_err(|e| PortalError::ConfigError(e.to_string()))?;
 
-  let mut gateways = parse_gateways(&doc).unwrap_or_else(|| {
+  let mut external_gateway = true;
+
+  // Perform DNS lookup, set flag to internal or external, and pass it to parse_gateways
+  if let Some(_) = xml::get_child_text(&doc, "internal-host-detection") {
+    let ip_info = [
+      (xml::get_child_text(&doc, "ip-address"), xml::get_child_text(&doc, "host")),
+      (xml::get_child_text(&doc, "ipv6-address"), xml::get_child_text(&doc, "ipv6-host")),
+    ];
+
+    info!("internal-host-detection returned, performing DNS lookup");
+
+    for (ip_address, host) in ip_info.iter() {
+      if let (Some(ip_address), Some(host)) = (ip_address.as_deref(), host.as_deref()) {
+        if !ip_address.is_empty() && !host.is_empty() {
+          match ip_address.parse::<std::net::IpAddr>() {
+            Ok(ip) => match lookup_addr(&ip) {
+              Ok(host_lookup) if host_lookup == *host => {
+                external_gateway = false;
+                break;
+              }
+              Ok(_) => (),
+              Err(err) => warn!("DNS lookup failed for {}: {}", ip_address, err),
+            },
+            Err(err) => warn!("Invalid IP address {}: {}", ip_address, err),
+          }
+        }
+      }
+    }
+  }
+
+
+  let mut gateways = parse_gateways(&doc, external_gateway).unwrap_or_else(|| {
     info!("No gateways found in portal config");
     vec![]
   });
