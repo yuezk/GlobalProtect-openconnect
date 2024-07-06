@@ -214,6 +214,14 @@ The CLI version is always free, while the GUI version is paid. There are two tri
 1. 10-day trial: You can use the GUI stable release for 10 days after the installation.
 2. 14-day trial: Each beta release has a fresh trial period (at most 14 days) after released.
 
-## [License](./LICENSE)
+## License
+
+- crate [gpapi](./crates/gpapi): [MIT](./crates/gpapi/LICENSE)
+- crate [openconnect](./crates/openconnect): [GPL-3.0](./crates/openconnect/LICENSE)
+- crate [common](./crates/common): [GPL-3.0](./crates/common/LICENSE)
+- app [gpservice](./apps/gpservice): [GPL-3.0](./apps/gpservice/LICENSE)
+- app [gpclient](./apps/gpclient): [GPL-3.0](./apps/gpclient/LICENSE)
+- app [gpauth](./apps/gpauth): [GPL-3.0](./apps/gpauth/LICENSE)
+- app [gpgui-helper](./apps/gpgui-helper): [GPL-3.0](./apps/gpgui-helper/LICENSE)
 
 GPLv3
