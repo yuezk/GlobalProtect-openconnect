@@ -2,7 +2,7 @@ use anyhow::bail;
 use dns_lookup::lookup_addr;
 use log::{info, warn};
 use reqwest::{Client, StatusCode};
-use roxmltree::Document;
+use roxmltree::{Document, Node};
 use serde::Serialize;
 use specta::Type;
 
@@ -11,7 +11,7 @@ use crate::{
   error::PortalError,
   gateway::{parse_gateways, Gateway},
   gp_params::GpParams,
-  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml},
+  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::NodeExt},
 };
 
 #[derive(Debug, Serialize, Type)]
@@ -125,46 +125,22 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   }
 
   let doc = Document::parse(&res_xml).map_err(|e| PortalError::ConfigError(e.to_string()))?;
+  let root = doc.root();
 
-  let mut external_gateway = true;
-
+  let mut use_internal_gateways = false;
   // Perform DNS lookup, set flag to internal or external, and pass it to parse_gateways
-  if let Some(_) = xml::get_child_text(&doc, "internal-host-detection") {
-    let ip_info = [
-      (xml::get_child_text(&doc, "ip-address"), xml::get_child_text(&doc, "host")),
-      (xml::get_child_text(&doc, "ipv6-address"), xml::get_child_text(&doc, "ipv6-host")),
-    ];
-
-    info!("internal-host-detection returned, performing DNS lookup");
-
-    for (ip_address, host) in ip_info.iter() {
-      if let (Some(ip_address), Some(host)) = (ip_address.as_deref(), host.as_deref()) {
-        if !ip_address.is_empty() && !host.is_empty() {
-          match ip_address.parse::<std::net::IpAddr>() {
-            Ok(ip) => match lookup_addr(&ip) {
-              Ok(host_lookup) if host_lookup == *host => {
-                external_gateway = false;
-                break;
-              }
-              Ok(_) => (),
-              Err(err) => warn!("DNS lookup failed for {}: {}", ip_address, err),
-            },
-            Err(err) => warn!("Invalid IP address {}: {}", ip_address, err),
-          }
-        }
-      }
-    }
+  if let Some(ihd_node) = root.find_child("internal-host-detection") {
+    use_internal_gateways = internal_host_detect(&ihd_node)
   }
 
-
-  let mut gateways = parse_gateways(&doc, external_gateway).unwrap_or_else(|| {
+  let mut gateways = parse_gateways(&root, use_internal_gateways).unwrap_or_else(|| {
     info!("No gateways found in portal config");
     vec![]
   });
 
-  let user_auth_cookie = xml::get_child_text(&doc, "portal-userauthcookie").unwrap_or_default();
-  let prelogon_user_auth_cookie = xml::get_child_text(&doc, "portal-prelogonuserauthcookie").unwrap_or_default();
-  let config_digest = xml::get_child_text(&doc, "config-digest");
+  let user_auth_cookie = root.child_text("portal-userauthcookie").unwrap_or_default();
+  let prelogon_user_auth_cookie = root.child_text("portal-prelogonuserauthcookie").unwrap_or_default();
+  let config_digest = root.child_text("config-digest");
 
   if gateways.is_empty() {
     gateways.push(Gateway::new(server.to_string(), server.to_string()));
@@ -172,9 +148,40 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
 
   Ok(PortalConfig {
     portal: server.to_string(),
-    auth_cookie: AuthCookieCredential::new(cred.username(), &user_auth_cookie, &prelogon_user_auth_cookie),
+    auth_cookie: AuthCookieCredential::new(cred.username(), user_auth_cookie, prelogon_user_auth_cookie),
     config_cred: cred.clone(),
     gateways,
-    config_digest,
+    config_digest: config_digest.map(|s| s.to_string()),
   })
+}
+
+fn internal_host_detect(node: &Node) -> bool {
+  let ip_info = [
+    (node.child_text("ip-address"), node.child_text("host")),
+    (node.child_text("ipv6-address"), node.child_text("ipv6-host")),
+  ];
+
+  info!("Found internal-host-detection, performing DNS lookup");
+
+  for (ip_address, host) in ip_info.iter() {
+    if let (Some(ip_address), Some(host)) = (ip_address.as_deref(), host.as_deref()) {
+      if !ip_address.is_empty() && !host.is_empty() {
+        match ip_address.parse::<std::net::IpAddr>() {
+          Ok(ip) => match lookup_addr(&ip) {
+            Ok(host_lookup) if host_lookup == *host => return true,
+            Ok(host_lookup) => {
+              info!(
+                "rDNS lookup for {} returned {}, expected {}",
+                ip_address, host_lookup, host
+              );
+            }
+            Err(err) => warn!("DNS lookup failed for {}: {}", ip_address, err),
+          },
+          Err(err) => warn!("Invalid IP address {}: {}", ip_address, err),
+        }
+      }
+    }
+  }
+
+  false
 }

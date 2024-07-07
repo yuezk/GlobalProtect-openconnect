@@ -1,18 +1,17 @@
-use roxmltree::Document;
+use roxmltree::Node;
+
+use crate::utils::xml::NodeExt;
 
 use super::{Gateway, PriorityRule};
 
-pub(crate) fn parse_gateways(doc: &Document, external: bool) -> Option<Vec<Gateway>> {
-  let node_gateways = doc.descendants().find(|n| n.has_tag_name("gateways"))?;
+pub(crate) fn parse_gateways(node: &Node, use_internal: bool) -> Option<Vec<Gateway>> {
+  let node_gateways = node.find_child("gateways")?;
 
-  // if external flag is set, look for external gateways, otherwise look for internal gateways
-  let kind_gateways = if external {
-    node_gateways.descendants().find(|n| n.has_tag_name("external"))?
+  let list_gateway = if use_internal {
+    node_gateways.find_child("internal")?.find_child("list")?
   } else {
-    node_gateways.descendants().find(|n| n.has_tag_name("internal"))?
+    node_gateways.find_child("external")?.find_child("list")?
   };
-
-  let list_gateway = kind_gateways.descendants().find(|n| n.has_tag_name("list"))?;
 
   let gateways = list_gateway
     .children()
@@ -20,33 +19,23 @@ pub(crate) fn parse_gateways(doc: &Document, external: bool) -> Option<Vec<Gatew
       if !gateway_item.has_tag_name("entry") {
         return None;
       }
-      let address = gateway_item.attribute("name").unwrap_or("").to_string();
-      let name = gateway_item
-        .children()
-        .find(|n| n.has_tag_name("description"))
-        .and_then(|n| n.text())
-        .unwrap_or("")
-        .to_string();
+      let address = gateway_item.attribute("name").unwrap_or_default().to_string();
+      let name = gateway_item.child_text("description").unwrap_or_default().to_string();
       let priority = gateway_item
-        .children()
-        .find(|n| n.has_tag_name("priority"))
-        .and_then(|n| n.text())
+        .child_text("priority")
         .and_then(|s| s.parse().ok())
         .unwrap_or(u32::MAX);
       let priority_rules = gateway_item
-        .children()
-        .find(|n| n.has_tag_name("priority-rule"))
+        .find_child("priority-rule")
         .map(|n| {
           n.children()
             .filter_map(|n| {
               if !n.has_tag_name("entry") {
                 return None;
               }
-              let name = n.attribute("name").unwrap_or("").to_string();
+              let name = n.attribute("name").unwrap_or_default().to_string();
               let priority: u32 = n
-                .children()
-                .find(|n| n.has_tag_name("priority"))
-                .and_then(|n| n.text())
+                .child_text("priority")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(u32::MAX);
 
