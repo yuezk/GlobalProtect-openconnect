@@ -27,12 +27,19 @@ use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE, GP_CLIENT_PORT_FILE};
 pub(crate) struct ConnectArgs {
   #[arg(help = "The portal server to connect to")]
   server: String,
+
   #[arg(short, long, help = "The gateway to connect to, it will prompt if not specified")]
   gateway: Option<String>,
+
   #[arg(short, long, help = "The username to use, it will prompt if not specified")]
   user: Option<String>,
+
+  #[arg(long, help = "Read the password from standard input")]
+  passwd_on_stdin: bool,
+
   #[arg(long, short, help = "The VPNC script to use")]
   script: Option<String>,
+
   #[arg(long, help = "Connect the server as a gateway, instead of a portal")]
   as_gateway: bool,
 
@@ -48,8 +55,10 @@ pub(crate) struct ConnectArgs {
     help = "Use SSL client certificate file in pkcs#8 (.pem) or pkcs#12 (.p12, .pfx) format"
   )]
   certificate: Option<String>,
+
   #[arg(short = 'k', long, help = "Use SSL private key file in pkcs#8 (.pem) format")]
   sslkey: Option<String>,
+
   #[arg(short = 'p', long, help = "The key passphrase of the private key")]
   key_password: Option<String>,
 
@@ -61,21 +70,28 @@ pub(crate) struct ConnectArgs {
 
   #[arg(long, default_value = "300", help = "Reconnection retry timeout in seconds")]
   reconnect_timeout: u32,
+
   #[arg(short, long, help = "Request MTU from server (legacy servers only)")]
   mtu: Option<u32>,
+
   #[arg(long, help = "Do not ask for IPv6 connectivity")]
   disable_ipv6: bool,
 
   #[arg(long, default_value = GP_USER_AGENT, help = "The user agent to use")]
   user_agent: String,
+
   #[arg(long, default_value = "Linux")]
   os: Os,
+
   #[arg(long)]
   os_version: Option<String>,
+
   #[arg(long, help = "The HiDPI mode, useful for high resolution screens")]
   hidpi: bool,
+
   #[arg(long, help = "Do not reuse the remembered authentication cookie")]
   clean: bool,
+
   #[arg(long, help = "Use the default browser to authenticate")]
   default_browser: bool,
 }
@@ -339,10 +355,18 @@ impl<'a> ConnectHandler<'a> {
           || Text::new(&format!("{}:", prelogin.label_username())).prompt(),
           |user| Ok(user.to_owned()),
         )?;
-        let password = Password::new(&format!("{}:", prelogin.label_password()))
-          .without_confirmation()
-          .with_display_mode(PasswordDisplayMode::Masked)
-          .prompt()?;
+
+        let password = if self.args.passwd_on_stdin {
+          info!("Reading password from standard input");
+          let mut input = String::new();
+          std::io::stdin().read_line(&mut input)?;
+          input.trim_end().to_owned()
+        } else {
+          Password::new(&format!("{}:", prelogin.label_password()))
+            .without_confirmation()
+            .with_display_mode(PasswordDisplayMode::Masked)
+            .prompt()?
+        };
 
         let password_cred = PasswordCredential::new(&user, &password);
 
