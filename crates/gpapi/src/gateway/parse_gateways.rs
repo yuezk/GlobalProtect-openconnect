@@ -1,3 +1,4 @@
+use log::info;
 use roxmltree::Node;
 
 use crate::utils::xml::NodeExt;
@@ -6,14 +7,19 @@ use super::{Gateway, PriorityRule};
 
 pub(crate) fn parse_gateways(node: &Node, use_internal: bool) -> Option<Vec<Gateway>> {
   let node_gateways = node.find_child("gateways")?;
-
-  let list_gateway = if use_internal {
-    node_gateways.find_child("internal")?.find_child("list")?
+  let internal_gateway_list = if use_internal {
+    info!("Using internal gateways");
+    node_gateways.find_child("internal").and_then(|n| n.find_child("list"))
   } else {
-    node_gateways.find_child("external")?.find_child("list")?
+    None
   };
 
-  let gateways = list_gateway
+  let gateway_list = internal_gateway_list.or_else(|| {
+    info!("Using external gateways");
+    node_gateways.find_child("external").and_then(|n| n.find_child("list"))
+  })?;
+
+  let gateways = gateway_list
     .children()
     .filter_map(|gateway_item| {
       if !gateway_item.has_tag_name("entry") {
