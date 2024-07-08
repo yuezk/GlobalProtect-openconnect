@@ -38,7 +38,6 @@
           libsoup
           webkitgtk
           pkg-config
-          tree
         ];
 
         overrideMain = {...}: {
