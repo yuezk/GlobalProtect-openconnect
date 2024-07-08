@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.4 - 2024-07-08
+
+- Support the Internal Host Detection (fix [#377](https://github.com/yuezk/GlobalProtect-openconnect/issues/377))
+- CLI: support pass the password from stdin (fix [#381](https://github.com/yuezk/GlobalProtect-openconnect/issues/381))
+
 ## 2.3.3 - 2024-06-23
 
 - GUI: add the remark field for the license activation
