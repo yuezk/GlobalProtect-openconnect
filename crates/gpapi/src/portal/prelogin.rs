@@ -149,25 +149,25 @@ fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
   let root = doc.root();
 
   let status = root
-    .child_text("status")
+    .descendant_text("status")
     .ok_or_else(|| anyhow::anyhow!("Prelogin response does not contain status element"))?;
   // Check the status of the prelogin response
   if status.to_uppercase() != "SUCCESS" {
-    let msg = root.child_text("msg").unwrap_or("Unknown error");
+    let msg = root.descendant_text("msg").unwrap_or("Unknown error");
     bail!("{}", msg)
   }
 
   let region = root
-    .child_text("region")
+    .descendant_text("region")
     .unwrap_or_else(|| {
       info!("Prelogin response does not contain region element");
       "Unknown"
     })
     .to_string();
 
-  let saml_method = root.child_text("saml-auth-method");
-  let saml_request = root.child_text("saml-request");
-  let saml_default_browser = root.child_text("saml-default-browser");
+  let saml_method = root.descendant_text("saml-auth-method");
+  let saml_request = root.descendant_text("saml-request");
+  let saml_default_browser = root.descendant_text("saml-default-browser");
   // Check if the prelogin response is SAML
   if saml_method.is_some() && saml_request.is_some() {
     let saml_request = base64::decode_to_string(saml_request.unwrap())?;
@@ -184,14 +184,14 @@ fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
   }
 
   let label_username = root
-    .child_text("username-label")
+    .descendant_text("username-label")
     .unwrap_or_else(|| {
       info!("Username label has no value, using default");
       "Username"
     })
     .to_string();
   let label_password = root
-    .child_text("password-label")
+    .descendant_text("password-label")
     .unwrap_or_else(|| {
       info!("Password label has no value, using default");
       "Password"
@@ -199,7 +199,7 @@ fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
     .to_string();
 
   let auth_message = root
-    .child_text("authentication-message")
+    .descendant_text("authentication-message")
     .unwrap_or("Please enter the login credentials")
     .to_string();
   let standard_prelogin = StandardPrelogin {

@@ -223,5 +223,3 @@ The CLI version is always free, while the GUI version is paid. There are two tri
 - app [gpclient](./apps/gpclient): [GPL-3.0](./apps/gpclient/LICENSE)
 - app [gpauth](./apps/gpauth): [GPL-3.0](./apps/gpauth/LICENSE)
 - app [gpgui-helper](./apps/gpgui-helper): [GPL-3.0](./apps/gpgui-helper/LICENSE)
-
-GPLv3

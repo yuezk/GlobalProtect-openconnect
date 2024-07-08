@@ -1,6 +1,6 @@
 use anyhow::bail;
 use dns_lookup::lookup_addr;
-use log::{info, warn};
+use log::{debug, info, warn};
 use reqwest::{Client, StatusCode};
 use roxmltree::{Document, Node};
 use serde::Serialize;
@@ -22,6 +22,13 @@ pub struct PortalConfig {
   config_cred: Credential,
   gateways: Vec<Gateway>,
   config_digest: Option<String>,
+  /**
+   * Variants:
+   * - None: Internal host detection is not supported
+   * - Some(false): Internal host detection is supported but the user is not connected to the internal network
+   * - Some(true): Internal host detection is supported and the user is connected to the internal network
+   */
+  internal_host_detection: Option<bool>,
 }
 
 impl PortalConfig {
@@ -39,6 +46,10 @@ impl PortalConfig {
 
   pub fn config_cred(&self) -> &Credential {
     &self.config_cred
+  }
+
+  pub fn internal_host_detection(&self) -> Option<bool> {
+    self.internal_host_detection
   }
 
   /// In-place sort the gateways by region
@@ -124,23 +135,26 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     bail!(PortalError::ConfigError("Empty portal config response".to_string()))
   }
 
+  debug!("Portal config response: {}", res_xml);
+
   let doc = Document::parse(&res_xml).map_err(|e| PortalError::ConfigError(e.to_string()))?;
   let root = doc.root();
 
-  let mut use_internal_gateways = false;
-  // Perform DNS lookup, set flag to internal or external, and pass it to parse_gateways
-  if let Some(ihd_node) = root.find_child("internal-host-detection") {
-    use_internal_gateways = internal_host_detect(&ihd_node)
+  let mut ihd_enabled = false;
+  let mut prefer_internal = false;
+  if let Some(ihd_node) = root.find_descendant("internal-host-detection") {
+    ihd_enabled = true;
+    prefer_internal = internal_host_detect(&ihd_node)
   }
 
-  let mut gateways = parse_gateways(&root, use_internal_gateways).unwrap_or_else(|| {
+  let mut gateways = parse_gateways(&root, prefer_internal).unwrap_or_else(|| {
     info!("No gateways found in portal config");
     vec![]
   });
 
-  let user_auth_cookie = root.child_text("portal-userauthcookie").unwrap_or_default();
-  let prelogon_user_auth_cookie = root.child_text("portal-prelogonuserauthcookie").unwrap_or_default();
-  let config_digest = root.child_text("config-digest");
+  let user_auth_cookie = root.descendant_text("portal-userauthcookie").unwrap_or_default();
+  let prelogon_user_auth_cookie = root.descendant_text("portal-prelogonuserauthcookie").unwrap_or_default();
+  let config_digest = root.descendant_text("config-digest");
 
   if gateways.is_empty() {
     gateways.push(Gateway::new(server.to_string(), server.to_string()));
@@ -152,9 +166,11 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     config_cred: cred.clone(),
     gateways,
     config_digest: config_digest.map(|s| s.to_string()),
+    internal_host_detection: if ihd_enabled { Some(prefer_internal) } else { None },
   })
 }
 
+// Perform DNS lookup and compare the result with the expected hostname
 fn internal_host_detect(node: &Node) -> bool {
   let ip_info = [
     (node.child_text("ip-address"), node.child_text("host")),
@@ -168,14 +184,16 @@ fn internal_host_detect(node: &Node) -> bool {
       if !ip_address.is_empty() && !host.is_empty() {
         match ip_address.parse::<std::net::IpAddr>() {
           Ok(ip) => match lookup_addr(&ip) {
-            Ok(host_lookup) if host_lookup == *host => return true,
+            Ok(host_lookup) if host_lookup.to_lowercase() == host.to_lowercase() => {
+              return true;
+            }
             Ok(host_lookup) => {
               info!(
                 "rDNS lookup for {} returned {}, expected {}",
                 ip_address, host_lookup, host
               );
             }
-            Err(err) => warn!("DNS lookup failed for {}: {}", ip_address, err),
+            Err(err) => warn!("rDNS lookup failed for {}: {}", ip_address, err),
           },
           Err(err) => warn!("Invalid IP address {}: {}", ip_address, err),
         }

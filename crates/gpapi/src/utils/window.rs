@@ -1,7 +1,7 @@
 use std::{process::ExitStatus, time::Duration};
 
 use anyhow::bail;
-use log::{info, warn};
+use log::info;
 use tauri::Window;
 use tokio::process::Command;
 
@@ -33,7 +33,7 @@ pub fn raise_window(win: &Window) -> anyhow::Result<()> {
     let title = win.title()?;
     tokio::spawn(async move {
       if let Err(err) = wmctrl_raise_window(&title).await {
-        warn!("Failed to raise window: {}", err);
+        info!("Window not raised: {}", err);
       }
     });
   }
