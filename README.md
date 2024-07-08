@@ -187,6 +187,7 @@ You can also build the client from source, steps are as follows:
 - Install `perl` and `jq`
 - Install `openconnect >= 8.20` and `libopenconnect-dev` (or `openconnect-devel` on RPM-based distributions)
 - Install `pkexec`, `gnome-keyring` (or `pam_kwallet` on KDE)
+- Install `nodejs` and `pnpm` (optional only if you downloaded the source tarball from the release page and run with the `BUILD_FE=0` flag, see below)
 
 ### Build
 
