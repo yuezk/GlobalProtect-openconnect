@@ -281,9 +281,11 @@ impl<'a> ConnectHandler<'a> {
       None
     };
 
+    let os = ClientOs::from(&self.args.os).to_openconnect_os().to_string();
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
       .user_agent(self.args.user_agent.clone())
+      .os(Some(os))
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
       .key_password(self.latest_key_password.borrow().clone())
