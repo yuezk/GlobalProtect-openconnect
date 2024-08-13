@@ -24,6 +24,7 @@ pub(crate) struct ConnectOptions {
   pub reconnect_timeout: u32,
   pub mtu: u32,
   pub disable_ipv6: u32,
+  pub no_dtls: u32,
 }
 
 #[link(name = "vpn")]

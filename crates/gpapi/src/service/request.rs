@@ -41,6 +41,7 @@ pub struct ConnectArgs {
   reconnect_timeout: u32,
   mtu: u32,
   disable_ipv6: bool,
+  no_dtls: bool,
 }
 
 impl ConnectArgs {
@@ -58,6 +59,7 @@ impl ConnectArgs {
       reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,
+      no_dtls: false,
     }
   }
 
@@ -107,6 +109,10 @@ impl ConnectArgs {
 
   pub fn disable_ipv6(&self) -> bool {
     self.disable_ipv6
+  }
+
+  pub fn no_dtls(&self) -> bool {
+    self.no_dtls
   }
 }
 
@@ -176,6 +182,11 @@ impl ConnectRequest {
 
   pub fn with_disable_ipv6(mut self, disable_ipv6: bool) -> Self {
     self.args.disable_ipv6 = disable_ipv6;
+    self
+  }
+
+  pub fn with_no_dtls(mut self, no_dtls: bool) -> Self {
+    self.args.no_dtls = no_dtls;
     self
   }
 

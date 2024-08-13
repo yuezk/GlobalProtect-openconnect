@@ -63,6 +63,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     INFO("RECONNECT_TIMEOUT: %d", options->reconnect_timeout);
     INFO("MTU: %d", options->mtu);
     INFO("DISABLE_IPV6: %d", options->disable_ipv6);
+    INFO("NO_DTLS: %d", options->no_dtls);
 
     vpninfo = openconnect_vpninfo_new(options->user_agent, validate_peer_cert, NULL, NULL, print_progress, NULL);
 
@@ -119,7 +120,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
         return 1;
     }
 
-    if (openconnect_setup_dtls(vpninfo, 60) != 0) {
+    if (options->no_dtls || openconnect_setup_dtls(vpninfo, 60) != 0) {
         openconnect_disable_dtls(vpninfo);
     }
 

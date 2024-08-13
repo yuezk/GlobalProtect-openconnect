@@ -86,6 +86,9 @@ pub(crate) struct ConnectArgs {
   #[arg(long)]
   os_version: Option<String>,
 
+  #[arg(long, help="Disable DTLS and ESP")]
+  no_dtls: bool,
+
   #[arg(long, help = "The HiDPI mode, useful for high resolution screens")]
   hidpi: bool,
 
@@ -294,6 +297,7 @@ impl<'a> ConnectHandler<'a> {
       .reconnect_timeout(self.args.reconnect_timeout)
       .mtu(mtu)
       .disable_ipv6(self.args.disable_ipv6)
+      .no_dtls(self.args.no_dtls)
       .build()?;
 
     let vpn = Arc::new(vpn);

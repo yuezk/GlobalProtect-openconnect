@@ -11,6 +11,7 @@
         "distro",
         "dotenv",
         "dotenvy",
+        "dtls",
         "getconfig",
         "globalprotect",
         "globalprotectcallback",

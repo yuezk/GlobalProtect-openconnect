@@ -28,6 +28,7 @@ pub struct Vpn {
   reconnect_timeout: u32,
   mtu: u32,
   disable_ipv6: bool,
+  no_dtls: bool,
 
   callback: OnConnectedCallback,
 }
@@ -77,6 +78,7 @@ impl Vpn {
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6 as u32,
+      no_dtls: self.no_dtls as u32,
     }
   }
 
@@ -125,6 +127,7 @@ pub struct VpnBuilder {
   reconnect_timeout: u32,
   mtu: u32,
   disable_ipv6: bool,
+  no_dtls: bool,
 }
 
 impl VpnBuilder {
@@ -147,6 +150,7 @@ impl VpnBuilder {
       reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,
+      no_dtls: false,
     }
   }
 
@@ -205,6 +209,11 @@ impl VpnBuilder {
     self
   }
 
+  pub fn no_dtls(mut self, no_dtls: bool) -> Self {
+    self.no_dtls = no_dtls;
+    self
+  }
+
   pub fn build(self) -> Result<Vpn, VpnError> {
     let script = match self.script {
       Some(script) => {
@@ -239,6 +248,7 @@ impl VpnBuilder {
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6,
+      no_dtls: self.no_dtls,
 
       callback: Default::default(),
     })

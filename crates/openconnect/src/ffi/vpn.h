@@ -25,6 +25,7 @@ typedef struct vpn_options
     const int reconnect_timeout;
     const int mtu;
     const int disable_ipv6;
+    const int no_dtls;
 } vpn_options;
 
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback);

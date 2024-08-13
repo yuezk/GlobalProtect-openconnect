@@ -47,6 +47,7 @@ impl VpnTaskContext {
       .reconnect_timeout(args.reconnect_timeout())
       .mtu(args.mtu())
       .disable_ipv6(args.disable_ipv6())
+      .no_dtls(args.no_dtls())
       .build()
     {
       Ok(vpn) => vpn,
