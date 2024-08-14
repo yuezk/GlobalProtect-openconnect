@@ -86,7 +86,7 @@ pub(crate) struct ConnectArgs {
   #[arg(long)]
   os_version: Option<String>,
 
-  #[arg(long, help="Disable DTLS and ESP")]
+  #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
 
   #[arg(long, help = "The HiDPI mode, useful for high resolution screens")]
@@ -97,6 +97,12 @@ pub(crate) struct ConnectArgs {
 
   #[arg(long, help = "Use the default browser to authenticate")]
   default_browser: bool,
+
+  #[arg(
+    long,
+    help = "Use the specified browser to authenticate, e.g., firefox, chromium, chrome, or the path to the browser"
+  )]
+  external_browser: Option<String>,
 }
 
 impl ConnectArgs {
@@ -326,6 +332,11 @@ impl<'a> ConnectHandler<'a> {
     match prelogin {
       Prelogin::Saml(prelogin) => {
         let use_default_browser = prelogin.support_default_browser() && self.args.default_browser;
+        let external_browser = if prelogin.support_default_browser() {
+          self.args.external_browser.as_deref()
+        } else {
+          None
+        };
 
         let cred = SamlAuthLauncher::new(&self.args.server)
           .gateway(is_gateway)
@@ -338,6 +349,7 @@ impl<'a> ConnectHandler<'a> {
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
           .clean(self.args.clean)
           .default_browser(use_default_browser)
+          .external_browser(external_browser)
           .launch()
           .await?;
 
