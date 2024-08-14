@@ -102,7 +102,7 @@ pub(crate) struct ConnectArgs {
     long,
     help = "Use the specified browser to authenticate, e.g., firefox, chromium, chrome, or the path to the browser"
   )]
-  external_browser: Option<String>,
+  browser: Option<String>,
 }
 
 impl ConnectArgs {
@@ -332,8 +332,8 @@ impl<'a> ConnectHandler<'a> {
     match prelogin {
       Prelogin::Saml(prelogin) => {
         let use_default_browser = prelogin.support_default_browser() && self.args.default_browser;
-        let external_browser = if prelogin.support_default_browser() {
-          self.args.external_browser.as_deref()
+        let browser = if prelogin.support_default_browser() {
+          self.args.browser.as_deref()
         } else {
           None
         };
@@ -349,7 +349,7 @@ impl<'a> ConnectHandler<'a> {
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
           .clean(self.args.clean)
           .default_browser(use_default_browser)
-          .external_browser(external_browser)
+          .browser(browser)
           .launch()
           .await?;
 

@@ -41,7 +41,7 @@ struct Cli {
   #[arg(long)]
   default_browser: bool,
   #[arg(long)]
-  external_browser: Option<String>,
+  browser: Option<String>,
 }
 
 impl Cli {
@@ -61,8 +61,8 @@ impl Cli {
       None => portal_prelogin(&self.server, &gp_params).await?,
     };
 
-    let browser_auth = if let Some(external_browser) = &self.external_browser {
-      Some(BrowserAuthenticator::new_with_browser(&saml_request, external_browser))
+    let browser_auth = if let Some(browser) = &self.browser {
+      Some(BrowserAuthenticator::new_with_browser(&saml_request, browser))
     } else if self.default_browser {
       Some(BrowserAuthenticator::new(&saml_request))
     } else {

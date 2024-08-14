@@ -19,7 +19,7 @@ pub struct SamlAuthLauncher<'a> {
   ignore_tls_errors: bool,
   clean: bool,
   default_browser: bool,
-  external_browser: Option<&'a str>,
+  browser: Option<&'a str>,
 }
 
 impl<'a> SamlAuthLauncher<'a> {
@@ -36,7 +36,7 @@ impl<'a> SamlAuthLauncher<'a> {
       ignore_tls_errors: false,
       clean: false,
       default_browser: false,
-      external_browser: None,
+      browser: None,
     }
   }
 
@@ -90,8 +90,8 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
-  pub fn external_browser(mut self, external_browser: Option<&'a str>) -> Self {
-    self.external_browser = external_browser;
+  pub fn browser(mut self, browser: Option<&'a str>) -> Self {
+    self.browser = browser;
     self
   }
 
@@ -140,8 +140,8 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--default-browser");
     }
 
-    if let Some(external_browser) = self.external_browser {
-      auth_cmd.arg("--external-browser").arg(external_browser);
+    if let Some(browser) = self.browser {
+      auth_cmd.arg("--browser").arg(browser);
     }
 
     let mut non_root_cmd = auth_cmd.into_non_root()?;
