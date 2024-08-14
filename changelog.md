@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.5 - 2024-08-14
+
+- Support configure `no-dtls` option
+- GUI: fix the tray icon disk usage issue (#398)
+- CLI: support specify the browser with `--browser <browser>` option (#405, #407, #397)
+- CLI: fix the `--os` option not working
+
 ## 2.3.4 - 2024-07-08
 
 - Support the Internal Host Detection (fix [#377](https://github.com/yuezk/GlobalProtect-openconnect/issues/377))
