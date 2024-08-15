@@ -44,11 +44,19 @@ Options:
 See 'gpclient help <command>' for more information on a specific command.
 ```
 
-To use the default browser for authentication with the CLI version, you need to use the following command:
+To use the external browser for authentication with the CLI version, you need to use the following command:
 
 ```bash
-sudo -E gpclient connect --default-browser <portal>
+sudo -E gpclient connect --browser default <portal>
 ```
+
+Or you can try the following command if the above command does not work:
+
+```bash
+gpauth <portal> --browser default 2>/dev/null | sudo gpclient connect <portal> --cookie-on-stdin
+```
+
+You can specify the browser with the `--browser <browser>` option, e.g., `--browser firefox`, `--browser chrome`, etc.
 
 ### GUI
 

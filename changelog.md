@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.6 - 2024-08-15
+
+- CLI: enhance the `gpauth` command to support external browser authentication
+- CLI: add the `--cookie-on-stdin` option to support read the cookie from stdin
+- CLI: support usage: `gpauth <portal> --browser <browser> 2>/dev/null | sudo gpclient connect <portal> --cookie-on-stdin`
+- CLI: fix the `--browser <browser>` option not working
+
 ## 2.3.5 - 2024-08-14
 
 - Support configure `no-dtls` option
