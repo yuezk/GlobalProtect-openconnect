@@ -96,7 +96,7 @@ impl<'a> SamlAuthLauncher<'a> {
   }
 
   /// Launch the authenticator binary as the current user or SUDO_USER if available.
-  pub async fn launch(self) -> anyhow::Result<Option<Credential>> {
+  pub async fn launch(self) -> anyhow::Result<Credential> {
     let mut auth_cmd = Command::new(GP_AUTH_BINARY);
     auth_cmd.arg(self.server);
 
@@ -152,17 +152,10 @@ impl<'a> SamlAuthLauncher<'a> {
       .wait_with_output()
       .await?;
 
-    if self.default_browser {
-      return Ok(None);
-    }
-
     let Ok(auth_result) = serde_json::from_slice::<SamlAuthResult>(&output.stdout) else {
       bail!("Failed to parse auth data")
     };
 
-    match auth_result {
-      SamlAuthResult::Success(auth_data) => Ok(Some(Credential::from(auth_data))),
-      SamlAuthResult::Failure(msg) => bail!(msg),
-    }
+    Credential::try_from(auth_result)
   }
 }

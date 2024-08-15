@@ -116,6 +116,8 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
 
   let client = Client::try_from(gp_params)?;
 
+  info!("Perform prelogin, user_agent: {}", gp_params.user_agent());
+
   let res = client
     .post(&prelogin_url)
     .form(&params)

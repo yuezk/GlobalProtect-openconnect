@@ -19,7 +19,7 @@ impl BrowserAuthenticator<'_> {
   pub fn new_with_browser<'a>(auth_request: &'a str, browser: &'a str) -> BrowserAuthenticator<'a> {
     BrowserAuthenticator {
       auth_request,
-      browser: Some(browser),
+      browser: if browser == "default" { None } else { Some(browser) },
     }
   }
 

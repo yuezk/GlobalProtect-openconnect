@@ -109,7 +109,7 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   params.insert("server", &server);
   params.insert("host", &server);
 
-  info!("Portal config, user_agent: {}", gp_params.user_agent());
+  info!("Retrieve the portal config, user_agent: {}", gp_params.user_agent());
 
   let res = client
     .post(&url)

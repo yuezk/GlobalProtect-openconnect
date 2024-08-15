@@ -9,15 +9,13 @@ use gpapi::{
 use log::info;
 use tokio::io::AsyncWriteExt;
 
-use crate::GP_CLIENT_PORT_FILE;
-
 #[derive(Args)]
 pub(crate) struct LaunchGuiArgs {
   #[arg(
     required = false,
     help = "The authentication data, used for the default browser authentication"
   )]
-  auth_data: Option<String>,
+  pub auth_data: Option<String>,
   #[arg(long, help = "Launch the GUI minimized")]
   minimized: bool,
 }
@@ -40,6 +38,7 @@ impl<'a> LaunchGuiHandler<'a> {
 
     let auth_data = self.args.auth_data.as_deref().unwrap_or_default();
     if !auth_data.is_empty() {
+      info!("Received auth callback data");
       // Process the authentication data, its format is `globalprotectcallback:<data>`
       return feed_auth_data(auth_data).await;
     }
@@ -81,16 +80,26 @@ impl<'a> LaunchGuiHandler<'a> {
 }
 
 async fn feed_auth_data(auth_data: &str) -> anyhow::Result<()> {
-  let _ = tokio::join!(feed_auth_data_gui(auth_data), feed_auth_data_cli(auth_data));
+  let (res_gui, res_cli) = tokio::join!(feed_auth_data_gui(auth_data), feed_auth_data_cli(auth_data));
+  if let Err(err) = res_gui {
+    info!("Failed to feed auth data to the GUI: {}", err);
+  }
+
+  if let Err(err) = res_cli {
+    info!("Failed to feed auth data to the CLI: {}", err);
+  }
 
   // Cleanup the temporary file
   let html_file = temp_dir().join("gpauth.html");
-  let _ = std::fs::remove_file(html_file);
+  if let Err(err) = std::fs::remove_file(&html_file) {
+    info!("Failed to remove {}: {}", html_file.display(), err);
+  }
 
   Ok(())
 }
 
 async fn feed_auth_data_gui(auth_data: &str) -> anyhow::Result<()> {
+  info!("Feeding auth data to the GUI");
   let service_endpoint = http_endpoint().await?;
 
   reqwest::Client::default()
@@ -104,7 +113,10 @@ async fn feed_auth_data_gui(auth_data: &str) -> anyhow::Result<()> {
 }
 
 async fn feed_auth_data_cli(auth_data: &str) -> anyhow::Result<()> {
-  let port = tokio::fs::read_to_string(GP_CLIENT_PORT_FILE).await?;
+  info!("Feeding auth data to the CLI");
+
+  let port_file = temp_dir().join("gpcallback.port");
+  let port = tokio::fs::read_to_string(port_file).await?;
   let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port.trim())).await?;
 
   stream.write_all(auth_data.as_bytes()).await?;
@@ -124,7 +136,7 @@ async fn try_active_gui() -> anyhow::Result<()> {
   Ok(())
 }
 
-pub fn get_log_file() -> anyhow::Result<PathBuf> {
+fn get_log_file() -> anyhow::Result<PathBuf> {
   let dirs = ProjectDirs::from("com.yuezk", "GlobalProtect-openconnect", "gpclient")
     .ok_or_else(|| anyhow::anyhow!("Failed to get project dirs"))?;
 

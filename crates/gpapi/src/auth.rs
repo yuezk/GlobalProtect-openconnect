@@ -85,7 +85,6 @@ impl SamlAuthData {
       return Ok(auth_data);
     }
 
-    info!("Parsing SAML auth data...");
     let auth_data = decode_to_string(auth_data).map_err(|e| {
       warn!("Failed to decode SAML auth data: {}", e);
       AuthDataParseError::Invalid

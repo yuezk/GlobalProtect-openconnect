@@ -1,3 +1,5 @@
+use std::{env::temp_dir, fs::File};
+
 use clap::{Parser, Subcommand};
 use gpapi::utils::openssl;
 use log::{info, LevelFilter};
@@ -85,14 +87,29 @@ impl Cli {
   }
 }
 
-fn init_logger() {
-  env_logger::builder().filter_level(LevelFilter::Info).init();
+fn init_logger(command: &CliCommand) {
+  let mut builder = env_logger::builder();
+  builder.filter_level(LevelFilter::Info);
+
+  // Output the log messages to a file if the command is the auth callback
+  if let CliCommand::LaunchGui(args) = command {
+    let auth_data = args.auth_data.as_deref().unwrap_or_default();
+    if !auth_data.is_empty() {
+      if let Ok(log_file) = File::create(temp_dir().join("gpcallback.log")) {
+        let target = Box::new(log_file);
+        builder.target(env_logger::Target::Pipe(target));
+      }
+    }
+  }
+
+  builder.init();
 }
 
 pub(crate) async fn run() {
   let cli = Cli::parse();
 
-  init_logger();
+  init_logger(&cli.command);
+
   info!("gpclient started: {}", VERSION);
 
   if let Err(err) = cli.run().await {

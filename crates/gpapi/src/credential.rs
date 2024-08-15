@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::auth::SamlAuthData;
+use crate::auth::{SamlAuthData, SamlAuthResult};
 
 #[derive(Debug, Serialize, Deserialize, Type, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -227,6 +228,17 @@ impl From<SamlAuthData> for Credential {
     let cred = PreloginCredential::from(value);
 
     Self::Prelogin(cred)
+  }
+}
+
+impl TryFrom<SamlAuthResult> for Credential {
+  type Error = anyhow::Error;
+
+  fn try_from(value: SamlAuthResult) -> anyhow::Result<Self> {
+    match value {
+      SamlAuthResult::Success(auth_data) => Ok(Self::from(auth_data)),
+      SamlAuthResult::Failure(err) => bail!(err),
+    }
   }
 }
 

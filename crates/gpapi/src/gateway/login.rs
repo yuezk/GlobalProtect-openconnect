@@ -29,7 +29,7 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
   params.extend(extra_params);
   params.insert("server", &gateway);
 
-  info!("Gateway login, user_agent: {}", gp_params.user_agent());
+  info!("Perform gateway login, user_agent: {}", gp_params.user_agent());
 
   let res = client
     .post(&login_url)

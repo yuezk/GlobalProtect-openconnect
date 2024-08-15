@@ -1,8 +1,10 @@
 use std::{cell::RefCell, fs, sync::Arc};
 
+use anyhow::bail;
 use clap::Args;
 use common::vpn_utils::find_csd_wrapper;
 use gpapi::{
+  auth::SamlAuthResult,
   clap::args::Os,
   credential::{Credential, PasswordCredential},
   error::PortalError,
@@ -19,9 +21,8 @@ use gpapi::{
 use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::info;
 use openconnect::Vpn;
-use tokio::{io::AsyncReadExt, net::TcpListener};
 
-use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE, GP_CLIENT_PORT_FILE};
+use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE};
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -36,6 +37,9 @@ pub(crate) struct ConnectArgs {
 
   #[arg(long, help = "Read the password from standard input")]
   passwd_on_stdin: bool,
+
+  #[arg(long, help = "Read the cookie from standard input")]
+  cookie_on_stdin: bool,
 
   #[arg(long, short, help = "The VPNC script to use")]
   script: Option<String>,
@@ -89,7 +93,7 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
 
-  #[arg(long, help = "The HiDPI mode, useful for high resolution screens")]
+  #[arg(long, help = "The HiDPI mode, useful for high-resolution screens")]
   hidpi: bool,
 
   #[arg(long, help = "Do not reuse the remembered authentication cookie")]
@@ -100,7 +104,7 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use the specified browser to authenticate, e.g., firefox, chromium, chrome, or the path to the browser"
+    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, or the path to the browser executable"
   )]
   browser: Option<String>,
 }
@@ -147,6 +151,10 @@ impl<'a> ConnectHandler<'a> {
   }
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
+    if self.args.default_browser && self.args.browser.is_some() {
+      bail!("Cannot use `--default-browser` and `--browser` options at the same time");
+    }
+
     self.latest_key_password.replace(self.args.key_password.clone());
 
     loop {
@@ -327,6 +335,10 @@ impl<'a> ConnectHandler<'a> {
   }
 
   async fn obtain_credential(&self, prelogin: &Prelogin, server: &str) -> anyhow::Result<Credential> {
+    if self.args.cookie_on_stdin {
+      return read_cookie_from_stdin();
+    }
+
     let is_gateway = prelogin.is_gateway();
 
     match prelogin {
@@ -353,18 +365,9 @@ impl<'a> ConnectHandler<'a> {
           .launch()
           .await?;
 
-        if let Some(cred) = cred {
-          return Ok(cred);
-        }
-
-        if !use_default_browser {
-          // This should never happen
-          unreachable!("SAML authentication failed without using the default browser");
-        }
-
-        info!("Waiting for the browser authentication to complete...");
-        wait_credentials().await
+        Ok(cred)
       }
+
       Prelogin::Standard(prelogin) => {
         let prefix = if is_gateway { "Gateway" } else { "Portal" };
         println!("{} ({}: {})", prelogin.auth_message(), prefix, server);
@@ -394,25 +397,17 @@ impl<'a> ConnectHandler<'a> {
   }
 }
 
-async fn wait_credentials() -> anyhow::Result<Credential> {
-  // Start a local server to receive the browser authentication data
-  let listener = TcpListener::bind("127.0.0.1:0").await?;
-  let port = listener.local_addr()?.port();
+fn read_cookie_from_stdin() -> anyhow::Result<Credential> {
+  info!("Reading cookie from standard input");
 
-  // Write the port to a file
-  fs::write(GP_CLIENT_PORT_FILE, port.to_string())?;
+  let mut cookie = String::new();
+  std::io::stdin().read_line(&mut cookie)?;
 
-  info!("Listening authentication data on port {}", port);
-  let (mut socket, _) = listener.accept().await?;
+  let Ok(auth_result) = serde_json::from_str::<SamlAuthResult>(cookie.trim_end()) else {
+    bail!("Failed to parse auth data")
+  };
 
-  info!("Received the browser authentication data from the socket");
-  let mut data = String::new();
-  socket.read_to_string(&mut data).await?;
-
-  // Remove the port file
-  fs::remove_file(GP_CLIENT_PORT_FILE)?;
-
-  Credential::from_gpcallback(&data)
+  Credential::try_from(auth_result)
 }
 
 fn write_pid_file() {
