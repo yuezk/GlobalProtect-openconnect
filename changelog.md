@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.7 - 2024-08-16
+
+- Fix the Rust type inference regression [issue in 1.80](https://github.com/rust-lang/rust/issues/125319).
+
 ## 2.3.6 - 2024-08-15
 
 - CLI: enhance the `gpauth` command to support external browser authentication
