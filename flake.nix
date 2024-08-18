@@ -42,6 +42,8 @@
 
         overrideMain = {...}: {
           postPatch  = ''
+            substituteInPlace crates/common/src/vpn_utils.rs \
+              --replace-fail /etc/vpnc/vpnc-script ${pkgs.vpnc-scripts}/bin/vpnc-script
             substituteInPlace crates/gpapi/src/lib.rs \
               --replace-fail /usr/bin/gpclient $out/bin/gpclient \
               --replace-fail /usr/bin/gpservice $out/bin/gpservice \
