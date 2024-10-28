@@ -111,11 +111,11 @@ impl AuthCookieCredential {
 pub struct CachedCredential {
   username: String,
   password: Option<String>,
-  auth_cookie: AuthCookieCredential,
+  auth_cookie: Option<AuthCookieCredential>,
 }
 
 impl CachedCredential {
-  pub fn new(username: String, password: Option<String>, auth_cookie: AuthCookieCredential) -> Self {
+  pub fn new(username: String, password: Option<String>, auth_cookie: Option<AuthCookieCredential>) -> Self {
     Self {
       username,
       password,
@@ -131,12 +131,12 @@ impl CachedCredential {
     self.password.as_deref()
   }
 
-  pub fn auth_cookie(&self) -> &AuthCookieCredential {
-    &self.auth_cookie
+  pub fn auth_cookie(&self) -> Option<&AuthCookieCredential> {
+    self.auth_cookie.as_ref()
   }
 
   pub fn set_auth_cookie(&mut self, auth_cookie: AuthCookieCredential) {
-    self.auth_cookie = auth_cookie;
+    self.auth_cookie = Some(auth_cookie);
   }
 
   pub fn set_username(&mut self, username: String) {
@@ -150,11 +150,7 @@ impl CachedCredential {
 
 impl From<PasswordCredential> for CachedCredential {
   fn from(value: PasswordCredential) -> Self {
-    Self::new(
-      value.username().to_owned(),
-      Some(value.password().to_owned()),
-      AuthCookieCredential::new("", "", ""),
-    )
+    Self::new(value.username().to_owned(), Some(value.password().to_owned()), None)
   }
 }
 #[derive(Debug, Serialize, Deserialize, Type, Clone)]
@@ -198,11 +194,16 @@ impl Credential {
         Some(cred.prelogon_user_auth_cookie()),
         None,
       ),
+      // Use the empty string as the password if auth_cookie is present
       Credential::Cached(cred) => (
-        cred.password(),
+        if cred.auth_cookie.is_some() {
+          None
+        } else {
+          cred.password()
+        },
         None,
-        Some(cred.auth_cookie.user_auth_cookie()),
-        Some(cred.auth_cookie.prelogon_user_auth_cookie()),
+        cred.auth_cookie.as_ref().map(|c| c.user_auth_cookie()),
+        cred.auth_cookie.as_ref().map(|c| c.prelogon_user_auth_cookie()),
         None,
       ),
     };
