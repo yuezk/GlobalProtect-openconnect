@@ -196,11 +196,7 @@ impl Credential {
       ),
       // Use the empty string as the password if auth_cookie is present
       Credential::Cached(cred) => (
-        if cred.auth_cookie.is_some() {
-          None
-        } else {
-          cred.password()
-        },
+        cred.password(),
         None,
         cred.auth_cookie.as_ref().map(|c| c.user_auth_cookie()),
         cred.auth_cookie.as_ref().map(|c| c.prelogon_user_auth_cookie()),
