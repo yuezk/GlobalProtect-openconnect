@@ -103,6 +103,20 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   let client = Client::try_from(gp_params)?;
 
   let mut params = cred.to_params();
+  // Avoid sending the auth cookies for the portal config API if the password is cached
+  // Otherwise, the portal will return an error even if the password is correct, because
+  // the auth cookies could have been invalidated and the portal server takes precedence
+  // over the password
+  if let Credential::Cached(cache_cred) = cred {
+    info!("Using cached credentials, excluding auth cookies from the portal config request");
+
+    if cache_cred.password().is_some() {
+      params.remove("prelogin-cookie");
+      params.remove("portal-userauthcookie");
+      params.remove("portal-prelogonuserauthcookie");
+    }
+  }
+
   let extra_params = gp_params.to_params();
 
   params.extend(extra_params);
