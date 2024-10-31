@@ -52,7 +52,7 @@ impl BrowserAuthenticator<'_> {
       open::with_detached(path.as_ref(), app)?;
     } else {
       info!("Launching the default browser...");
-      open::that_detached(path.as_ref())?;
+      webbrowser::open(path.as_ref())?;
     }
 
     Ok(())
