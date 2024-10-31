@@ -35,8 +35,9 @@ which.workspace = true
 tauri = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 open = { version = "5", optional = true }
+webbrowser = { version = "1", optional = true }
 
 [features]
 tauri = ["dep:tauri"]
 clap = ["dep:clap"]
-browser-auth = ["dep:open"]
+browser-auth = ["dep:open", "dep:webbrowser"]

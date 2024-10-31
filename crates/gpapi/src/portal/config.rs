@@ -167,7 +167,9 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   });
 
   let user_auth_cookie = root.descendant_text("portal-userauthcookie").unwrap_or_default();
-  let prelogon_user_auth_cookie = root.descendant_text("portal-prelogonuserauthcookie").unwrap_or_default();
+  let prelogon_user_auth_cookie = root
+    .descendant_text("portal-prelogonuserauthcookie")
+    .unwrap_or_default();
   let config_digest = root.descendant_text("config-digest");
 
   if gateways.is_empty() {

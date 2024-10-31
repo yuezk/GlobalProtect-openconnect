@@ -17,9 +17,14 @@ impl BrowserAuthenticator<'_> {
   }
 
   pub fn new_with_browser<'a>(auth_request: &'a str, browser: &'a str) -> BrowserAuthenticator<'a> {
+    let browser = browser.trim();
     BrowserAuthenticator {
       auth_request,
-      browser: if browser == "default" { None } else { Some(browser) },
+      browser: if browser.is_empty() || browser == "default" {
+        None
+      } else {
+        Some(browser)
+      },
     }
   }
 
@@ -52,7 +57,7 @@ impl BrowserAuthenticator<'_> {
       open::with_detached(path.as_ref(), app)?;
     } else {
       info!("Launching the default browser...");
-      open::that_detached(path.as_ref())?;
+      webbrowser::open(path.as_ref())?;
     }
 
     Ok(())
