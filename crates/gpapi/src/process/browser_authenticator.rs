@@ -17,9 +17,14 @@ impl BrowserAuthenticator<'_> {
   }
 
   pub fn new_with_browser<'a>(auth_request: &'a str, browser: &'a str) -> BrowserAuthenticator<'a> {
+    let browser = browser.trim();
     BrowserAuthenticator {
       auth_request,
-      browser: if browser == "default" { None } else { Some(browser) },
+      browser: if browser.is_empty() || browser == "default" {
+        None
+      } else {
+        Some(browser)
+      },
     }
   }
 
