@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.8 - 2024-10-31
+
+- GUI: support configure the external browser to use for authentication (fix [#423](https://github.com/yuezk/GlobalProtect-openconnect/issues/423))
+- GUI: add option to remember the credential (fix [#420](https://github.com/yuezk/GlobalProtect-openconnect/issues/420))
+- GUI: fix the credential not saved issue (fix [#420](https://github.com/yuezk/GlobalProtect-openconnect/issues/420))
+- CLI: fix the default browser detection issue (fix [#416](https://github.com/yuezk/GlobalProtect-openconnect/issues/416))
+
 ## 2.3.7 - 2024-08-16
 
 - Fix the Rust type inference regression [issue in 1.80](https://github.com/rust-lang/rust/issues/125319).
