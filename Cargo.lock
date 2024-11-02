@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "2.3.8"
+version = "2.3.9"
 dependencies = [
  "is_executable",
 ]
@@ -1449,7 +1449,7 @@ dependencies = [
 
 [[package]]
 name = "gpapi"
-version = "2.3.8"
+version = "2.3.9"
 dependencies = [
  "anyhow",
  "base64 0.21.5",
@@ -1485,7 +1485,7 @@ dependencies = [
 
 [[package]]
 name = "gpauth"
-version = "2.3.8"
+version = "2.3.9"
 dependencies = [
  "anyhow",
  "clap",
@@ -1506,7 +1506,7 @@ dependencies = [
 
 [[package]]
 name = "gpclient"
-version = "2.3.8"
+version = "2.3.9"
 dependencies = [
  "anyhow",
  "clap",
@@ -1528,7 +1528,7 @@ dependencies = [
 
 [[package]]
 name = "gpgui-helper"
-version = "2.3.8"
+version = "2.3.9"
 dependencies = [
  "anyhow",
  "clap",
@@ -1546,7 +1546,7 @@ dependencies = [
 
 [[package]]
 name = "gpservice"
-version = "2.3.8"
+version = "2.3.9"
 dependencies = [
  "anyhow",
  "axum",
@@ -2625,7 +2625,7 @@ dependencies = [
 
 [[package]]
 name = "openconnect"
-version = "2.3.8"
+version = "2.3.9"
 dependencies = [
  "cc",
  "common",

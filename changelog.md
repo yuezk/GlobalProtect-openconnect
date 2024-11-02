@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.9 - 2024-11-02
+
+- Enhance the OpenSSL compatibility mode (fix [#437](https://github.com/yuezk/GlobalProtect-openconnect/issues/437))
+
 ## 2.3.8 - 2024-10-31
 
 - GUI: support configure the external browser to use for authentication (fix [#423](https://github.com/yuezk/GlobalProtect-openconnect/issues/423))
