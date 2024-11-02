@@ -76,7 +76,7 @@ jobs:
         cp packaging/deb/postrm .build/debian/postrm
 
     - name: Publish to PPA
-      uses: yuezk/publish-ppa-package@dev
+      uses: yuezk/publish-ppa-package@v2
       with:
         repository: "yuezk/globalprotect-openconnect"
         gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
@@ -85,5 +85,5 @@ jobs:
         debian_dir: publish-ppa/globalprotect-openconnect-*/.build/debian
         deb_email: "k3vinyue@gmail.com"
         deb_fullname: "Kevin Yue"
-        extra_ppa: "liushuyu-011/rust-bpo-1.75"
+        extra_ppa: "yuezk/globalprotect-openconnect liushuyu-011/rust-bpo-1.75"
         revision: ${{ inputs.revision }}

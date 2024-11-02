@@ -1,4 +1,4 @@
-name: Release Packages
+name: GH Release Packages
 
 on:
   workflow_dispatch:
