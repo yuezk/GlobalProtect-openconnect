@@ -50,7 +50,7 @@ struct Cli {
   #[command(subcommand)]
   command: CliCommand,
 
-  #[arg(long, help = "Get around the OpenSSL `unsafe legacy renegotiation` error")]
+  #[arg(long, help = "Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats.")]
   fix_openssl: bool,
   #[arg(long, help = "Ignore the TLS errors")]
   ignore_tls_errors: bool,

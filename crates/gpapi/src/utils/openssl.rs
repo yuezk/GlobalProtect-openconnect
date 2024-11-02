@@ -10,12 +10,24 @@ pub fn openssl_conf() -> String {
 
 [openssl_init]
 ssl_conf = ssl_sect
+providers = provider_sect
 
 [ssl_sect]
 system_default = system_default_sect
 
 [system_default_sect]
-Options = {}",
+Options = {}
+
+[provider_sect]
+default = default_sect
+legacy = legacy_sect
+
+[default_sect]
+activate = 1
+
+[legacy_sect]
+activate = 1
+",
     option
   )
 }
