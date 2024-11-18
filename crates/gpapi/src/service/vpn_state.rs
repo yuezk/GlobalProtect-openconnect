@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use specta::Type;
+use specta_macros::Type;
 
 use crate::gateway::Gateway;
 

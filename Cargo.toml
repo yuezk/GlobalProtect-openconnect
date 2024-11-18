@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = ["crates/*", "apps/gpclient", "apps/gpservice", "apps/gpauth", "apps/gpgui-helper/src-tauri"]
+members = ["crates/*", "apps/gpclient", "apps/gpservice"]
 
 [workspace.package]
 rust-version = "1.70"
@@ -49,10 +49,10 @@ sha256="1"
 which="6"
 
 # Tauri dependencies
-tauri = { version = "1.5" }
-specta = "=2.0.0-rc.1"
-specta-macros = "=2.0.0-rc.1"
-rspc = { version = "1.0.0-rc.5", features = ["tauri"] }
+tauri = { version = "2" }
+specta = "=2.0.0-rc.20"
+specta-macros = "=2.0.0-rc.17"
+#rspc = { version = "1.0.0-rc.5", features = ["tauri"] }
 
 [profile.release]
 opt-level = 'z'   # Optimize for size

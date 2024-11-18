@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
-use specta::Type;
+use specta_macros::Type;
 
 use crate::auth::{SamlAuthData, SamlAuthResult};
 

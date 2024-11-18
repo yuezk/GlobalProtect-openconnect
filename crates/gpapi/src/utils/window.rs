@@ -78,20 +78,20 @@ async fn wmctrl_try_raise_window(title: &str) -> anyhow::Result<ExitStatus> {
 }
 
 fn hide_menu(win: &Window) {
-  let menu_handle = win.menu_handle();
+  // let menu_handle = win.menu_handle();
 
-  tokio::spawn(async move {
-    loop {
-      let menu_visible = menu_handle.is_visible().unwrap_or(false);
+  // tokio::spawn(async move {
+  //   loop {
+  //     let menu_visible = menu_handle.is_visible().unwrap_or(false);
 
-      if !menu_visible {
-        break;
-      }
+  //     if !menu_visible {
+  //       break;
+  //     }
 
-      if menu_visible {
-        let _ = menu_handle.hide();
-        tokio::time::sleep(Duration::from_millis(10)).await;
-      }
-    }
-  });
+  //     if menu_visible {
+  //       let _ = menu_handle.hide();
+  //       tokio::time::sleep(Duration::from_millis(10)).await;
+  //     }
+  //   }
+  // });
 }

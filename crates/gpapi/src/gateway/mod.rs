@@ -6,7 +6,7 @@ pub use login::*;
 pub(crate) use parse_gateways::*;
 
 use serde::{Deserialize, Serialize};
-use specta::Type;
+use specta_macros::Type;
 
 use std::fmt::Display;
 
