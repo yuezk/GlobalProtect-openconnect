@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use log::info;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use specta_macros::Type;
+use specta::Type;
 
 use crate::{utils::request::create_identity, GP_USER_AGENT};
 

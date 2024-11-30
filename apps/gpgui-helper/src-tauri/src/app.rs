@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use gpapi::utils::window::WindowExt;
 use log::info;
-use tauri::Manager;
+use tauri::{Listener, Manager};
 
 use crate::updater::{GuiUpdater, Installer, ProgressNotifier};
 
@@ -25,15 +24,15 @@ impl App {
 
     tauri::Builder::default()
       .setup(move |app| {
-        let win = app.get_window("main").expect("no main window");
-        win.hide_menu();
+        let win = app.get_webview_window("main").expect("no main window");
+        let _ = win.hide_menu();
 
         let notifier = ProgressNotifier::new(win.clone());
         let installer = Installer::new(api_key);
         let updater = Arc::new(GuiUpdater::new(gui_version, notifier, installer));
 
         let win_clone = win.clone();
-        app.listen_global("app://update-done", move |_event| {
+        app.listen_any("app://update-done", move |_event| {
           info!("Update done");
           let _ = win_clone.close();
         });
@@ -41,11 +40,14 @@ impl App {
         // Listen for the update event
         win.listen("app://update", move |_event| {
           let updater = Arc::clone(&updater);
+          if updater.is_in_progress() {
+            info!("Update already in progress");
+            updater.notify_progress();
+            return;
+          }
+
           tokio::spawn(async move { updater.update().await });
         });
-
-        // Update the GUI on startup
-        win.trigger("app://update", None);
 
         Ok(())
       })

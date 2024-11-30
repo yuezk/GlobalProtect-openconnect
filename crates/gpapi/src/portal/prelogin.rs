@@ -3,7 +3,7 @@ use log::{info, warn};
 use reqwest::{Client, StatusCode};
 use roxmltree::Document;
 use serde::Serialize;
-use specta_macros::Type;
+use specta::Type;
 
 use crate::{
   error::PortalError,

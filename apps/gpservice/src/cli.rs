@@ -6,7 +6,7 @@ use clap::Parser;
 use gpapi::{
   process::gui_launcher::GuiLauncher,
   service::{request::WsRequest, vpn_state::VpnState},
-  utils::{crypto::generate_key, env_file, lock_file::LockFile, redact::Redaction, shutdown_signal},
+  utils::{crypto::generate_key, env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
   GP_SERVICE_LOCK_FILE,
 };
 use log::{info, warn, LevelFilter};
@@ -63,7 +63,7 @@ impl Cli {
     if no_gui {
       info!("GUI is disabled");
     } else {
-      let envs = self.env_file.as_ref().map(env_file::load_env_vars).transpose()?;
+      let envs = self.env_file.as_ref().map(env_utils::load_env_vars).transpose()?;
 
       let minimized = self.minimized;
 

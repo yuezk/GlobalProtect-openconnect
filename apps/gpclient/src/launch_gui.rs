@@ -4,7 +4,7 @@ use clap::Args;
 use directories::ProjectDirs;
 use gpapi::{
   process::service_launcher::ServiceLauncher,
-  utils::{endpoint::http_endpoint, env_file, shutdown_signal},
+  utils::{endpoint::http_endpoint, env_utils, shutdown_signal},
 };
 use log::info;
 use tokio::io::AsyncWriteExt;
@@ -62,7 +62,7 @@ impl<'a> LaunchGuiHandler<'a> {
     extra_envs.insert("GP_LOG_FILE".into(), log_file_path.clone());
 
     // Persist the environment variables to a file
-    let env_file = env_file::persist_env_vars(Some(extra_envs))?;
+    let env_file = env_utils::persist_env_vars(Some(extra_envs))?;
     let env_file = env_file.into_temp_path();
     let env_file_path = env_file.to_string_lossy().to_string();
 
