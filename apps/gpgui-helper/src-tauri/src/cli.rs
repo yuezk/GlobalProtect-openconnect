@@ -1,5 +1,5 @@
 use clap::Parser;
-use gpapi::utils::base64;
+use gpapi::utils::{base64, env_utils};
 use log::{info, LevelFilter};
 
 use crate::app::App;
@@ -21,6 +21,8 @@ impl Cli {
   fn run(&self) -> anyhow::Result<()> {
     let api_key = self.read_api_key()?;
     let app = App::new(api_key, &self.gui_version);
+
+    env_utils::patch_gui_runtime_env(false);
 
     app.run()
   }

@@ -6,7 +6,7 @@ use gpapi::{
   clap::args::Os,
   gp_params::{ClientOs, GpParams},
   process::browser_authenticator::BrowserAuthenticator,
-  utils::{normalize_server, openssl},
+  utils::{env_utils, normalize_server, openssl},
   GP_USER_AGENT,
 };
 use log::{info, LevelFilter};
@@ -138,14 +138,7 @@ impl Cli {
   }
 
   fn prepare_env(&self) -> anyhow::Result<Option<NamedTempFile>> {
-    std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-
-    if self.hidpi {
-      info!("Setting GDK_SCALE=2 and GDK_DPI_SCALE=0.5");
-
-      std::env::set_var("GDK_SCALE", "2");
-      std::env::set_var("GDK_DPI_SCALE", "0.5");
-    }
+    env_utils::patch_gui_runtime_env(self.hidpi);
 
     if self.fix_openssl {
       info!("Fixing OpenSSL environment");

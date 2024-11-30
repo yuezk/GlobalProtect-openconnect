@@ -2,7 +2,7 @@ use std::{process::ExitStatus, time::Duration};
 
 use anyhow::bail;
 use log::info;
-use tauri::Window;
+use tauri::WebviewWindow;
 use tokio::process::Command;
 
 pub trait WindowExt {
@@ -10,7 +10,7 @@ pub trait WindowExt {
   fn hide_menu(&self);
 }
 
-impl WindowExt for Window {
+impl WindowExt for WebviewWindow {
   fn raise(&self) -> anyhow::Result<()> {
     raise_window(self)
   }
@@ -20,7 +20,7 @@ impl WindowExt for Window {
   }
 }
 
-pub fn raise_window(win: &Window) -> anyhow::Result<()> {
+pub fn raise_window(win: &WebviewWindow) -> anyhow::Result<()> {
   let is_wayland = std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
 
   if is_wayland {
@@ -77,7 +77,7 @@ async fn wmctrl_try_raise_window(title: &str) -> anyhow::Result<ExitStatus> {
   Ok(exit_status)
 }
 
-fn hide_menu(win: &Window) {
+fn hide_menu(win: &WebviewWindow) {
   // let menu_handle = win.menu_handle();
 
   // tokio::spawn(async move {

@@ -3,6 +3,7 @@ use std::env;
 use std::io::Write;
 use std::path::Path;
 
+use log::info;
 use tempfile::NamedTempFile;
 
 pub fn persist_env_vars(extra: Option<HashMap<String, String>>) -> anyhow::Result<NamedTempFile> {
@@ -34,4 +35,21 @@ pub fn load_env_vars<T: AsRef<Path>>(env_file: T) -> anyhow::Result<HashMap<Stri
   }
 
   Ok(env_vars)
+}
+
+pub fn patch_gui_runtime_env(hidpi: bool) {
+  // This is to avoid blank screen on some systems
+  std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+
+  // Workaround for https://github.com/tauri-apps/tao/issues/929
+  let desktop = env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_lowercase();
+  if desktop.contains("gnome") {
+    env::set_var("GDK_BACKEND", "x11");
+  }
+
+  if hidpi {
+    info!("Setting GDK_SCALE=2 and GDK_DPI_SCALE=0.5");
+    std::env::set_var("GDK_SCALE", "2");
+    std::env::set_var("GDK_DPI_SCALE", "0.5");
+  }
 }

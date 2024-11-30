@@ -6,11 +6,12 @@ edition.workspace = true
 license.workspace = true
 
 [build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 gpapi = { path = "../../../crates/gpapi", features = ["tauri"] }
-tauri = { workspace = true, features = ["window-start-dragging"] }
+tauri.workspace = true
+
 tokio.workspace = true
 anyhow.workspace = true
 log.workspace = true

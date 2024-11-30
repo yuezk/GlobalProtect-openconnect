@@ -1,9 +1,11 @@
 import { Box, Button, CssBaseline, LinearProgress, Typography } from "@mui/material";
-import { appWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import logo from "../../assets/icon.svg";
 import { useEffect, useState } from "react";
 
 import "./styles.css";
+
+const appWindow = getCurrentWindow();
 
 function useUpdateProgress() {
   const [progress, setProgress] = useState<number | null>(null);
@@ -25,6 +27,8 @@ export default function App() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    appWindow.emit("app://update");
+
     const unlisten = appWindow.listen("app://update-error", () => {
       setError(true);
     });
