@@ -4,7 +4,7 @@ use log::{debug, info, warn};
 use reqwest::{Client, StatusCode};
 use roxmltree::{Document, Node};
 use serde::Serialize;
-use specta_macros::Type;
+use specta::Type;
 
 use crate::{
   credential::{AuthCookieCredential, Credential},
