@@ -110,7 +110,7 @@ sudo apt install --fix-broken globalprotect-openconnect_*.deb
 
 Install from AUR: [globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)
 
-```
+```bash
 yay -S globalprotect-openconnect-git
 ```
 
@@ -128,7 +128,7 @@ sudo pacman -U globalprotect-openconnect-*.pkg.tar.zst
 
 The package is available on [COPR](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/) for various RPM-based distributions. You can install it with the following commands:
 
-```
+```bash
 sudo dnf copr enable yuezk/globalprotect-openconnect
 sudo dnf install globalprotect-openconnect
 ```
@@ -148,30 +148,16 @@ Download the latest RPM package from [releases](https://github.com/yuezk/GlobalP
 ```bash
 sudo rpm -i globalprotect-openconnect-*.rpm
 ```
+
 ### Gentoo
 
-Install from the ```rios``` or ```slonko``` overlays.  Example using rios:
+It is available via `guru` and `lamdness` overlays.
 
-#### 1. Enable the overlay
+```bash
+sudo eselect repository enable guru
+sudo emerge -r guru sync
+sudo emerge -av net-vpn/globalprotect-openconnect
 ```
-sudo eselect repository enable rios
-```
-
-#### 2. Sync with the repository
-
-  - If you have eix installed, use it:
-```
-sudo eix-sync
-```
-  - Otherwise, use:
-```
-sudo emerge --sync
-```
-
-#### 3. Install
-
-```sudo emerge globalprotect-openconnect```
-
 
 ### Other distributions
 
