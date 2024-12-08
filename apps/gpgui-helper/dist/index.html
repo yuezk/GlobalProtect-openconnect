@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GlobalProtect</title>
+    <script type="module" crossorigin src="/assets/main-c159dd55.js"></script>
+    <link rel="stylesheet" href="/assets/index-11e7064a.css">
+  </head>
+  <body>
+    <script>
+      /* workaround to webview font size auto scaling */
+      var htmlFontSize = getComputedStyle(document.documentElement).fontSize;
+      var ratio = parseInt(htmlFontSize, 10) / 16;
+      document.documentElement.style.fontSize = 16 / ratio + "px";
+    </script>
+    <div id="root" data-tauri-drag-region></div>
+    
+  </body>
+</html>
