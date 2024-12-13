@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = ["crates/*", "apps/gpclient", "apps/gpservice", "apps/gpgui-helper/src-tauri"]
+members = ["crates/*", "apps/gpclient", "apps/gpservice", "apps/gpauth", "apps/gpgui-helper/src-tauri"]
 
 [workspace.package]
 rust-version = "1.70"

@@ -5,6 +5,7 @@ use directories::ProjectDirs;
 use gpapi::{
   process::service_launcher::ServiceLauncher,
   utils::{endpoint::http_endpoint, env_utils, shutdown_signal},
+  GP_CALLBACK_PORT_FILENAME,
 };
 use log::info;
 use tokio::io::AsyncWriteExt;
@@ -115,7 +116,7 @@ async fn feed_auth_data_gui(auth_data: &str) -> anyhow::Result<()> {
 async fn feed_auth_data_cli(auth_data: &str) -> anyhow::Result<()> {
   info!("Feeding auth data to the CLI");
 
-  let port_file = temp_dir().join("gpcallback.port");
+  let port_file = temp_dir().join(GP_CALLBACK_PORT_FILENAME);
   let port = tokio::fs::read_to_string(port_file).await?;
   let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port.trim())).await?;
 
