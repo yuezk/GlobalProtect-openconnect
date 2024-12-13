@@ -36,7 +36,7 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
     .form(&params)
     .send()
     .await
-    .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e.to_string())))?;
+    .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e)))?;
 
   let res = parse_gp_response(res).await.map_err(|err| {
     warn!("{err}");

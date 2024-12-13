@@ -154,6 +154,7 @@ init-debian: clean-debian tarball
 	cp -f packaging/deb/control.in .build/deb/$(PKG)/debian/control
 	cp -f packaging/deb/rules.in .build/deb/$(PKG)/debian/rules
 	cp -f packaging/deb/postrm .build/deb/$(PKG)/debian/postrm
+	cp -f packaging/deb/compat .build/deb/$(PKG)/debian/compat
 
 	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/deb/$(PKG)/debian/rules
 
@@ -174,7 +175,7 @@ check-ppa:
 
 # Usage: make ppa SERIES=focal OFFLINE=1 PUBLISH=1
 ppa: check-ppa init-debian
-	sed -i "s/@RUST@/rust-all(>=1.70)/g" .build/deb/$(PKG)/debian/control
+	sed -i "s/@RUST@/rust-all(>=1.80)/g" .build/deb/$(PKG)/debian/control
 
 	$(eval SERIES_VER = $(shell distro-info --series $(SERIES) -r | cut -d' ' -f1))
 	@echo "Building for $(SERIES) $(SERIES_VER)"

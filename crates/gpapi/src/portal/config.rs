@@ -116,7 +116,7 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     .form(&params)
     .send()
     .await
-    .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e.to_string())))?;
+    .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e)))?;
 
   let res_xml = parse_gp_response(res).await.or_else(|err| {
     if err.status == StatusCode::NOT_FOUND {

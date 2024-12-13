@@ -116,14 +116,12 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
 
   let client = Client::try_from(gp_params)?;
 
-  info!("Perform prelogin, user_agent: {}", gp_params.user_agent());
-
   let res = client
     .post(&prelogin_url)
     .form(&params)
     .send()
     .await
-    .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e.to_string())))?;
+    .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e)))?;
 
   let res_xml = parse_gp_response(res).await.or_else(|err| {
     if err.status == StatusCode::NOT_FOUND {

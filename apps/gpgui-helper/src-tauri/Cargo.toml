@@ -1,5 +1,6 @@
 [package]
 name = "gpgui-helper"
+rust-version.workspace = true
 authors.workspace = true
 version.workspace = true
 edition.workspace = true

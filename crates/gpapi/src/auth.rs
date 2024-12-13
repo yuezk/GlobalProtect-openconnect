@@ -1,10 +1,13 @@
 use std::borrow::{Borrow, Cow};
 
+use anyhow::bail;
 use log::{info, warn};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::{error::AuthDataParseError, utils::base64::decode_to_string};
+
+pub type AuthDataParseResult = anyhow::Result<SamlAuthData, AuthDataParseError>;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,33 +36,51 @@ impl SamlAuthResult {
 }
 
 impl SamlAuthData {
-  pub fn new(username: String, prelogin_cookie: Option<String>, portal_userauthcookie: Option<String>) -> Self {
-    Self {
-      username,
-      prelogin_cookie,
-      portal_userauthcookie,
-      token: None,
+  pub fn new(
+    username: Option<String>,
+    prelogin_cookie: Option<String>,
+    portal_userauthcookie: Option<String>,
+  ) -> anyhow::Result<Self> {
+    let username = username.unwrap_or_default();
+    if username.is_empty() {
+      bail!("Invalid username: <empty>");
     }
+
+    let prelogin_cookie = prelogin_cookie.unwrap_or_default();
+    let portal_userauthcookie = portal_userauthcookie.unwrap_or_default();
+
+    if prelogin_cookie.len() <= 5 && portal_userauthcookie.len() <= 5 {
+      bail!(
+        "Invalid prelogin-cookie: {}, portal-userauthcookie: {}",
+        prelogin_cookie,
+        portal_userauthcookie
+      );
+    }
+
+    Ok(Self {
+      username,
+      prelogin_cookie: Some(prelogin_cookie),
+      portal_userauthcookie: Some(portal_userauthcookie),
+      token: None,
+    })
   }
 
-  pub fn from_html(html: &str) -> anyhow::Result<SamlAuthData, AuthDataParseError> {
+  pub fn from_html(html: &str) -> AuthDataParseResult {
     match parse_xml_tag(html, "saml-auth-status") {
-      Some(saml_status) if saml_status == "1" => {
+      Some(status) if status == "1" => {
         let username = parse_xml_tag(html, "saml-username");
         let prelogin_cookie = parse_xml_tag(html, "prelogin-cookie");
         let portal_userauthcookie = parse_xml_tag(html, "portal-userauthcookie");
 
-        if SamlAuthData::check(&username, &prelogin_cookie, &portal_userauthcookie) {
-          Ok(SamlAuthData::new(
-            username.unwrap(),
-            prelogin_cookie,
-            portal_userauthcookie,
-          ))
-        } else {
-          Err(AuthDataParseError::Invalid)
-        }
+        SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie).map_err(|e| {
+          warn!("Failed to parse auth data: {}", e);
+          AuthDataParseError::Invalid
+        })
       }
-      Some(_) => Err(AuthDataParseError::Invalid),
+      Some(status) => {
+        warn!("Found invalid auth status: {}", status);
+        Err(AuthDataParseError::Invalid)
+      }
       None => Err(AuthDataParseError::NotFound),
     }
   }
@@ -104,27 +125,6 @@ impl SamlAuthData {
 
   pub fn token(&self) -> Option<&str> {
     self.token.as_deref()
-  }
-
-  pub fn check(
-    username: &Option<String>,
-    prelogin_cookie: &Option<String>,
-    portal_userauthcookie: &Option<String>,
-  ) -> bool {
-    let username_valid = username.as_ref().is_some_and(|username| !username.is_empty());
-    let prelogin_cookie_valid = prelogin_cookie.as_ref().is_some_and(|val| val.len() > 5);
-    let portal_userauthcookie_valid = portal_userauthcookie.as_ref().is_some_and(|val| val.len() > 5);
-
-    let is_valid = username_valid && (prelogin_cookie_valid || portal_userauthcookie_valid);
-
-    if !is_valid {
-      warn!(
-        "Invalid SAML auth data: username: {:?}, prelogin-cookie: {:?}, portal-userauthcookie: {:?}",
-        username, prelogin_cookie, portal_userauthcookie
-      );
-    }
-
-    is_valid
   }
 }
 

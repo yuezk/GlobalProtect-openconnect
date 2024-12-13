@@ -1,12 +1,13 @@
 [package]
 name = "gpauth"
+rust-version.workspace = true
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 gpapi = { path = "../../crates/gpapi", features = [
@@ -14,6 +15,9 @@ gpapi = { path = "../../crates/gpapi", features = [
   "clap",
   "browser-auth",
 ] }
+
+tauri = { workspace = true }
+
 anyhow.workspace = true
 clap.workspace = true
 env_logger.workspace = true
@@ -24,6 +28,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 tempfile.workspace = true
 html-escape = "0.2.13"
-webkit2gtk = "0.18.2"
-tauri = { workspace = true, features = ["http-all"] }
 compile-time.workspace = true
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+webkit2gtk = "2"
