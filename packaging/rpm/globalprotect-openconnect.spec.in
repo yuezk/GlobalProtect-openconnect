@@ -19,11 +19,11 @@ BuildRequires:  wget
 BuildRequires:  file
 BuildRequires:  perl
 
-BuildRequires:  (webkit2gtk4.0-devel or webkit2gtk3-soup2-devel)
+BuildRequires:  (webkit2gtk4.1-devel or webkit2gtk3-soup2-devel)
 BuildRequires:  (libappindicator-gtk3-devel or libappindicator3-1)
 BuildRequires:  (librsvg2-devel or librsvg-devel)
 
-Requires:       openconnect >= 8.20, (libayatana-appindicator or libappindicator-gtk3)
+Requires:       openconnect >= 8.20, (libappindicator-gtk3 or libayatana-appindicator)
 Conflicts:      globalprotect-openconnect-snapshot
 
 %global debug_package %{nil}

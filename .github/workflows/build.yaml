@@ -89,13 +89,13 @@ jobs:
       run: |
         docker run --rm \
           -v $(pwd)/build-gp-${{ matrix.package }}:/${{ matrix.package }} \
-          yuezk/gpdev:${{ matrix.package }}-builder
+          yuezk/gpdev:${{ matrix.package }}-builder-tauri2
     - name: Install ${{ matrix.package }} package in Docker
       run: |
         docker run --rm \
           -e GPGUI_INSTALLED=0 \
           -v $(pwd)/build-gp-${{ matrix.package }}:/${{ matrix.package }} \
-          yuezk/gpdev:${{ matrix.package }}-builder \
+          yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \
           bash install.sh
     - name: Upload ${{ matrix.package }} package
       uses: actions/upload-artifact@v3
@@ -141,12 +141,12 @@ jobs:
       run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
     - name: Build gpgui in Docker
       run: |
-        docker run --rm -v $(pwd)/gpgui-source:/gpgui yuezk/gpdev:gpgui-builder
+        docker run --rm -v $(pwd)/gpgui-source:/gpgui yuezk/gpdev:gpgui-builder-tauri2
     - name: Install gpgui in Docker
       run: |
         cd gpgui-source
         tar -xJf *.bin.tar.xz
-        docker run --rm -v $(pwd):/gpgui yuezk/gpdev:gpgui-builder \
+        docker run --rm -v $(pwd):/gpgui yuezk/gpdev:gpgui-builder-tauri2 \
           bash -c "cd /gpgui/gpgui_*/ && ./gpgui --version"
     - name: Upload gpgui
       uses: actions/upload-artifact@v3
