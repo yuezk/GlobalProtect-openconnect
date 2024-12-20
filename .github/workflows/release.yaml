@@ -112,13 +112,13 @@ jobs:
         docker run --rm \
           -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} \
           -e INCLUDE_GUI=1 \
-          yuezk/gpdev:${{ matrix.package }}-builder
+          yuezk/gpdev:${{ matrix.package }}-builder-tauri2
 
     - name: Install ${{ matrix.package }} package in Docker
       run: |
         docker run --rm \
           -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} \
-          yuezk/gpdev:${{ matrix.package }}-builder \
+          yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \
           bash install.sh
 
     - name: Upload ${{ matrix.package }} package
