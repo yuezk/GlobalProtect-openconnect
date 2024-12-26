@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.0 - 2024-12-26
+
+- Upgrade to Tauri 2.0
+- Support Ubuntu 22.04 and later
+
 ## 2.3.9 - 2024-11-02
 
 - Enhance the OpenSSL compatibility mode (fix [#437](https://github.com/yuezk/GlobalProtect-openconnect/issues/437))

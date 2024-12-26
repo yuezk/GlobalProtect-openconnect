@@ -1,5 +1,6 @@
 [package]
 name = "gpclient"
+rust-version.workspace = true
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
@@ -9,10 +10,11 @@ license.workspace = true
 common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap"] }
 openconnect = { path = "../../crates/openconnect" }
+
 anyhow.workspace = true
 clap.workspace = true
 env_logger.workspace = true
-inquire = "0.6.2"
+inquire = "0.7"
 log.workspace = true
 tokio.workspace = true
 sysinfo.workspace = true
@@ -22,3 +24,7 @@ tempfile.workspace = true
 reqwest.workspace = true
 directories = "5.0"
 compile-time.workspace = true
+
+[features]
+default = ["webview-auth"]
+webview-auth = ["gpapi/webview-auth"]

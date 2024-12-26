@@ -47,9 +47,9 @@ jobs:
     if: ${{ inputs.ppa }}
     runs-on: ubuntu-latest
     steps:
-    - uses: pnpm/action-setup@v2
+    - uses: pnpm/action-setup@v4
       with:
-        version: 8
+        version: 9
     - name: Prepare workspace
       run: rm -rf publish-ppa && mkdir publish-ppa
     - name: Download ${{ inputs.tag }} source code
@@ -71,12 +71,20 @@ jobs:
 
         # Prepare the debian directory with custom files
         mkdir -p .build/debian
-        sed 's/@RUST@/rust-all(>=1.70)/g' packaging/deb/control.in > .build/debian/control
-        sed 's/@OFFLINE@/1/g' packaging/deb/rules.in > .build/debian/rules
-        cp packaging/deb/postrm .build/debian/postrm
+
+        cp -v packaging/deb/control.in .build/debian/control
+        cp -v packaging/deb/rules.in .build/debian/rules
+        cp -v packaging/deb/compat .build/debian/compat
+        cp -v packaging/deb/postrm .build/debian/postrm
+
+        sed -i "s/@RUST@/cargo-1.80/g" .build/debian/control
+
+        sed -i "s/@OFFLINE@/1/g" .build/debian/rules
+        sed -i "s/@BUILD_GUI@/1/g" .build/deb/debian/rules
+        sed -i "s/@RUST_VERSION@/1.80/g" .build/deb/debian/rules
 
     - name: Publish to PPA
-      uses: yuezk/publish-ppa-package@v2
+      uses: yuezk/publish-ppa-package@gp
       with:
         repository: "yuezk/globalprotect-openconnect"
         gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
@@ -85,5 +93,7 @@ jobs:
         debian_dir: publish-ppa/globalprotect-openconnect-*/.build/debian
         deb_email: "k3vinyue@gmail.com"
         deb_fullname: "Kevin Yue"
-        extra_ppa: "yuezk/globalprotect-openconnect liushuyu-011/rust-bpo-1.75"
+        extra_ppa: "yuezk/globalprotect-openconnect liushuyu-011/rust-updates-1.80"
+        # Ubuntu 18.04 and 20.04 are excluded because tauri2 no longer supports them
+        excluded_series: "bionic focal"
         revision: ${{ inputs.revision }}

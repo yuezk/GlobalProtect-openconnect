@@ -93,12 +93,15 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
 
+  #[cfg(feature = "webview-auth")]
   #[arg(long, help = "The HiDPI mode, useful for high-resolution screens")]
   hidpi: bool,
 
+  #[cfg(feature = "webview-auth")]
   #[arg(long, help = "Do not reuse the remembered authentication cookie")]
   clean: bool,
 
+  #[cfg(feature = "webview-auth")]
   #[arg(long, help = "Use the default browser to authenticate")]
   default_browser: bool,
 
@@ -151,6 +154,7 @@ impl<'a> ConnectHandler<'a> {
   }
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
+    #[cfg(feature = "webview-auth")]
     if self.args.default_browser && self.args.browser.is_some() {
       bail!("Cannot use `--default-browser` and `--browser` options at the same time");
     }
@@ -343,28 +347,34 @@ impl<'a> ConnectHandler<'a> {
 
     match prelogin {
       Prelogin::Saml(prelogin) => {
-        let use_default_browser = prelogin.support_default_browser() && self.args.default_browser;
         let browser = if prelogin.support_default_browser() {
           self.args.browser.as_deref()
+        } else if !cfg!(feature = "webview-auth") {
+          bail!("The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature");
         } else {
           None
         };
 
-        let cred = SamlAuthLauncher::new(&self.args.server)
+        let os_version = self.args.os_version();
+        let auth_launcher = SamlAuthLauncher::new(&self.args.server)
           .gateway(is_gateway)
           .saml_request(prelogin.saml_request())
           .user_agent(&self.args.user_agent)
           .os(self.args.os.as_str())
-          .os_version(Some(&self.args.os_version()))
-          .hidpi(self.args.hidpi)
+          .os_version(Some(&os_version))
           .fix_openssl(self.shared_args.fix_openssl)
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
-          .clean(self.args.clean)
-          .default_browser(use_default_browser)
-          .browser(browser)
-          .launch()
-          .await?;
+          .browser(browser);
 
+        #[cfg(feature = "webview-auth")]
+        let use_default_browser = prelogin.support_default_browser() && self.args.default_browser;
+        #[cfg(feature = "webview-auth")]
+        let auth_launcher = auth_launcher
+          .hidpi(self.args.hidpi)
+          .clean(self.args.clean)
+          .default_browser(use_default_browser);
+
+        let cred = auth_launcher.launch().await?;
         Ok(cred)
       }
 

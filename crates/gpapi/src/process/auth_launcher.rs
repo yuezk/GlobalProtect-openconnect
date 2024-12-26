@@ -14,10 +14,13 @@ pub struct SamlAuthLauncher<'a> {
   user_agent: Option<&'a str>,
   os: Option<&'a str>,
   os_version: Option<&'a str>,
-  hidpi: bool,
   fix_openssl: bool,
   ignore_tls_errors: bool,
+  #[cfg(feature = "webview-auth")]
+  hidpi: bool,
+  #[cfg(feature = "webview-auth")]
   clean: bool,
+  #[cfg(feature = "webview-auth")]
   default_browser: bool,
   browser: Option<&'a str>,
 }
@@ -31,10 +34,13 @@ impl<'a> SamlAuthLauncher<'a> {
       user_agent: None,
       os: None,
       os_version: None,
-      hidpi: false,
       fix_openssl: false,
       ignore_tls_errors: false,
+      #[cfg(feature = "webview-auth")]
+      hidpi: false,
+      #[cfg(feature = "webview-auth")]
       clean: false,
+      #[cfg(feature = "webview-auth")]
       default_browser: false,
       browser: None,
     }
@@ -65,11 +71,6 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
-  pub fn hidpi(mut self, hidpi: bool) -> Self {
-    self.hidpi = hidpi;
-    self
-  }
-
   pub fn fix_openssl(mut self, fix_openssl: bool) -> Self {
     self.fix_openssl = fix_openssl;
     self
@@ -80,11 +81,19 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  #[cfg(feature = "webview-auth")]
+  pub fn hidpi(mut self, hidpi: bool) -> Self {
+    self.hidpi = hidpi;
+    self
+  }
+
+  #[cfg(feature = "webview-auth")]
   pub fn clean(mut self, clean: bool) -> Self {
     self.clean = clean;
     self
   }
 
+  #[cfg(feature = "webview-auth")]
   pub fn default_browser(mut self, default_browser: bool) -> Self {
     self.default_browser = default_browser;
     self
@@ -120,10 +129,6 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--os-version").arg(os_version);
     }
 
-    if self.hidpi {
-      auth_cmd.arg("--hidpi");
-    }
-
     if self.fix_openssl {
       auth_cmd.arg("--fix-openssl");
     }
@@ -132,12 +137,19 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--ignore-tls-errors");
     }
 
-    if self.clean {
-      auth_cmd.arg("--clean");
-    }
+    #[cfg(feature = "webview-auth")]
+    {
+      if self.hidpi {
+        auth_cmd.arg("--hidpi");
+      }
 
-    if self.default_browser {
-      auth_cmd.arg("--default-browser");
+      if self.clean {
+        auth_cmd.arg("--clean");
+      }
+
+      if self.default_browser {
+        auth_cmd.arg("--default-browser");
+      }
     }
 
     if let Some(browser) = self.browser {

@@ -2,25 +2,20 @@ use std::{process::ExitStatus, time::Duration};
 
 use anyhow::bail;
 use log::info;
-use tauri::Window;
+use tauri::WebviewWindow;
 use tokio::process::Command;
 
 pub trait WindowExt {
   fn raise(&self) -> anyhow::Result<()>;
-  fn hide_menu(&self);
 }
 
-impl WindowExt for Window {
+impl WindowExt for WebviewWindow {
   fn raise(&self) -> anyhow::Result<()> {
     raise_window(self)
   }
-
-  fn hide_menu(&self) {
-    hide_menu(self);
-  }
 }
 
-pub fn raise_window(win: &Window) -> anyhow::Result<()> {
+pub fn raise_window(win: &WebviewWindow) -> anyhow::Result<()> {
   let is_wayland = std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
 
   if is_wayland {
@@ -40,7 +35,7 @@ pub fn raise_window(win: &Window) -> anyhow::Result<()> {
 
   // Calling window.show() on Windows will cause the menu to be shown.
   // We need to hide it again.
-  hide_menu(win);
+  win.hide_menu()?;
 
   Ok(())
 }
@@ -75,23 +70,4 @@ async fn wmctrl_try_raise_window(title: &str) -> anyhow::Result<ExitStatus> {
     .await?;
 
   Ok(exit_status)
-}
-
-fn hide_menu(win: &Window) {
-  let menu_handle = win.menu_handle();
-
-  tokio::spawn(async move {
-    loop {
-      let menu_visible = menu_handle.is_visible().unwrap_or(false);
-
-      if !menu_visible {
-        break;
-      }
-
-      if menu_visible {
-        let _ = menu_handle.hide();
-        tokio::time::sleep(Duration::from_millis(10)).await;
-      }
-    }
-  });
 }

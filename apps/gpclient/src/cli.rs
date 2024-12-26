@@ -1,7 +1,10 @@
 use std::{env::temp_dir, fs::File};
 
 use clap::{Parser, Subcommand};
-use gpapi::utils::openssl;
+use gpapi::{
+  clap::{handle_error, Args},
+  utils::openssl,
+};
 use log::{info, LevelFilter};
 use tempfile::NamedTempFile;
 
@@ -50,10 +53,23 @@ struct Cli {
   #[command(subcommand)]
   command: CliCommand,
 
-  #[arg(long, help = "Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats.")]
+  #[arg(
+    long,
+    help = "Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats."
+  )]
   fix_openssl: bool,
   #[arg(long, help = "Ignore the TLS errors")]
   ignore_tls_errors: bool,
+}
+
+impl Args for Cli {
+  fn fix_openssl(&self) -> bool {
+    self.fix_openssl
+  }
+
+  fn ignore_tls_errors(&self) -> bool {
+    self.ignore_tls_errors
+  }
 }
 
 impl Cli {
@@ -113,24 +129,7 @@ pub(crate) async fn run() {
   info!("gpclient started: {}", VERSION);
 
   if let Err(err) = cli.run().await {
-    eprintln!("\nError: {}", err);
-
-    let err = err.to_string();
-
-    if err.contains("unsafe legacy renegotiation") && !cli.fix_openssl {
-      eprintln!("\nRe-run it with the `--fix-openssl` option to work around this issue, e.g.:\n");
-      // Print the command
-      let args = std::env::args().collect::<Vec<_>>();
-      eprintln!("{} --fix-openssl {}\n", args[0], args[1..].join(" "));
-    }
-
-    if err.contains("certificate verify failed") && !cli.ignore_tls_errors {
-      eprintln!("\nRe-run it with the `--ignore-tls-errors` option to ignore the certificate error, e.g.:\n");
-      // Print the command
-      let args = std::env::args().collect::<Vec<_>>();
-      eprintln!("{} --ignore-tls-errors {}\n", args[0], args[1..].join(" "));
-    }
-
+    handle_error(err, &cli);
     std::process::exit(1);
   }
 }

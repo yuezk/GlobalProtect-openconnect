@@ -1,5 +1,6 @@
 [package]
 name = "gpapi"
+rust-version.workspace = true
 version.workspace = true
 edition.workspace = true
 license = "MIT"
@@ -14,8 +15,7 @@ openssl.workspace = true
 pem.workspace = true
 roxmltree.workspace = true
 serde.workspace = true
-specta.workspace = true
-specta-macros.workspace = true
+specta = { workspace = true, features = ["derive"] }
 urlencoding.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
@@ -30,14 +30,11 @@ uzers.workspace = true
 serde_urlencoded.workspace = true
 md5.workspace = true
 sha256.workspace = true
-which.workspace = true
 
 tauri = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
-open = { version = "5", optional = true }
-webbrowser = { version = "1", optional = true }
 
 [features]
 tauri = ["dep:tauri"]
 clap = ["dep:clap"]
-browser-auth = ["dep:open", "dep:webbrowser"]
+webview-auth = []

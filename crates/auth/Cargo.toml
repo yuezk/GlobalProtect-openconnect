@@ -1,0 +1,49 @@
+[package]
+name = "auth"
+rust-version.workspace = true
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+gpapi = { path = "../gpapi" }
+
+# Shared dependencies
+anyhow.workspace = true
+log.workspace = true
+tokio.workspace = true
+
+# Browser auth dependencies
+webbrowser = { version = "1", optional = true }
+open = { version = "5", optional = true }
+which = { workspace = true, optional = true }
+tiny_http = { version = "0.12", optional = true }
+uuid = { version = "1", optional = true, features = ["v4"] }
+
+# Webview auth dependencies
+tauri = { workspace = true, optional = true }
+regex = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
+html-escape = { version = "0.2.13", optional = true }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+webkit2gtk = { version = "2", optional = true }
+
+[features]
+browser-auth = [
+  "dep:webbrowser",
+  "dep:open",
+  "dep:which",
+  "dep:tiny_http",
+  "dep:uuid",
+]
+webview-auth = [
+  "dep:tauri",
+  "dep:regex",
+  "dep:tokio-util",
+  "dep:html-escape",
+  "dep:webkit2gtk",
+  "gpapi/tauri",
+]

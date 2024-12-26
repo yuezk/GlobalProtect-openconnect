@@ -1,47 +1,16 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/gh/tauri-apps/tauri@tauri-v1.5.0/tooling/cli/schema.json",
+  "$schema": "https://cdn.jsdelivr.net/gh/tauri-apps/tauri@tauri-v2.1.1/crates/tauri-cli/config.schema.json",
   "build": {
-    "distDir": [
-      "index.html"
-    ],
-    "devPath": [
-      "index.html"
-    ],
+    "frontendDist": ["index.html"],
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
-    "withGlobalTauri": false
+    "beforeBuildCommand": ""
   },
-  "package": {
-    "productName": "gpauth",
-    "version": "0.0.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "http": {
-        "all": true,
-        "request": true,
-        "scope": [
-          "http://*",
-          "https://*"
-        ]
-      }
-    },
-    "bundle": {
-      "active": true,
-      "targets": "deb",
-      "identifier": "com.yuezk.gpauth",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ]
-    },
+  "identifier": "com.yuezk.gpauth",
+  "productName": "gpauth",
+  "app": {
+    "withGlobalTauri": false,
     "security": {
       "csp": null
-    },
-    "windows": []
+    }
   }
 }

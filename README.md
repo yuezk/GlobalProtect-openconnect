@@ -70,12 +70,10 @@ The GUI version is also available after you installed it. You can launch it from
 
 ### Debian/Ubuntu based distributions
 
-#### Install from PPA (Ubuntu 18.04 and later, except 24.04)
+#### Install from PPA (Ubuntu > 18.04)
 
 ```
-sudo apt-get install gir1.2-gtk-3.0 gir1.2-webkit2-4.0
 sudo add-apt-repository ppa:yuezk/globalprotect-openconnect
-sudo apt-get update
 sudo apt-get install globalprotect-openconnect
 ```
 
@@ -83,18 +81,9 @@ sudo apt-get install globalprotect-openconnect
 >
 > For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
 
-#### **Ubuntu 24.04 and later**
-
-The `libwebkit2gtk-4.0-37` package was [removed](https://bugs.launchpad.net/ubuntu/+source/webkit2gtk/+bug/2061914) from its repo. You can use the [`deb-install.sh`](./scripts/deb-install.sh) script to install the package:
-
-```bash
-curl -o- https://raw.githubusercontent.com/yuezk/GlobalProtect-openconnect/main/scripts/deb-install.sh \
-  | bash -s -- 2.3.9
-```
-
 #### **Ubuntu 18.04**
 
-The latest package is not available in the PPA either, but you still needs to add the `ppa:yuezk/globalprotect-openconnect` repo beforehand to use the required `openconnect` package. Then you can follow the [Install from deb package](#install-from-deb-package) section to install the latest package.
+The latest package is not available in the PPA, but you still needs to add the `ppa:yuezk/globalprotect-openconnect` repo beforehand to use the required `openconnect` package. Then you can follow the [Install from deb package](#install-from-deb-package) section to install the latest package.
 
 #### Install from deb package
 
@@ -172,8 +161,8 @@ You can also build the client from source, steps are as follows:
 
 ### Prerequisites
 
-- [Install Rust 1.75 or later](https://www.rust-lang.org/tools/install)
-- Install Tauri dependencies: https://tauri.app/v1/guides/getting-started/prerequisites/#setting-up-linux
+- [Install Rust 1.80 or later](https://www.rust-lang.org/tools/install)
+- Install Tauri dependencies: https://tauri.app/start/prerequisites/
 - Install `perl` and `jq`
 - Install `openconnect >= 8.20` and `libopenconnect-dev` (or `openconnect-devel` on RPM-based distributions)
 - Install `pkexec`, `gnome-keyring` (or `pam_kwallet` on KDE)
@@ -210,6 +199,7 @@ The CLI version is always free, while the GUI version is paid. There are two tri
 - crate [gpapi](./crates/gpapi): [MIT](./crates/gpapi/LICENSE)
 - crate [openconnect](./crates/openconnect): [GPL-3.0](./crates/openconnect/LICENSE)
 - crate [common](./crates/common): [GPL-3.0](./crates/common/LICENSE)
+- crate [auth](./crates/auth): [GPL-3.0](./crates/auth/LICENSE)
 - app [gpservice](./apps/gpservice): [GPL-3.0](./apps/gpservice/LICENSE)
 - app [gpclient](./apps/gpclient): [GPL-3.0](./apps/gpclient/LICENSE)
 - app [gpauth](./apps/gpauth): [GPL-3.0](./apps/gpauth/LICENSE)

@@ -8,3 +8,6 @@
 .cargo
 .build
 SNAPSHOT
+
+# Tauri generated files
+gen

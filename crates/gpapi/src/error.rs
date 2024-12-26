@@ -7,7 +7,19 @@ pub enum PortalError {
   #[error("Portal config error: {0}")]
   ConfigError(String),
   #[error("Network error: {0}")]
-  NetworkError(String),
+  NetworkError(#[from] reqwest::Error),
+  #[error("TLS error")]
+  TlsError,
+}
+
+impl PortalError {
+  pub fn is_legacy_openssl_error(&self) -> bool {
+    format!("{:?}", self).contains("unsafe legacy renegotiation")
+  }
+
+  pub fn is_tls_error(&self) -> bool {
+    matches!(self, PortalError::TlsError) || format!("{:?}", self).contains("certificate verify failed")
+  }
 }
 
 #[derive(Error, Debug)]
@@ -16,4 +28,10 @@ pub enum AuthDataParseError {
   NotFound,
   #[error("Invalid auth data")]
   Invalid,
+}
+
+impl AuthDataParseError {
+  pub fn is_invalid(&self) -> bool {
+    matches!(self, AuthDataParseError::Invalid)
+  }
 }

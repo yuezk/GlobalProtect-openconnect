@@ -1,7 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod auth_window;
 mod cli;
+#[cfg(feature = "webview-auth")]
+mod webview_auth;
 
 #[tokio::main]
 async fn main() {

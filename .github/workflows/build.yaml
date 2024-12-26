@@ -24,7 +24,8 @@ jobs:
       - name: Set up matrix
         id: set-matrix
         run: |
-          if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
+          # Set the matrix to include arm64 if the ref is a tag or is the dev branch
+          if [[ "${{ github.ref }}" == "refs/tags/"* || "${{ github.ref }}" == "refs/heads/dev" ]]; then
             echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "arm64", "arch": "arm64"}]' >> $GITHUB_OUTPUT
           else
             echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}]' >> $GITHUB_OUTPUT
@@ -34,13 +35,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup-matrix]
     steps:
-    - uses: pnpm/action-setup@v2
+    - uses: pnpm/action-setup@v4
       with:
-        version: 8
+        version: 9
     - name: Prepare workspace
       run: rm -rf source && mkdir source
     - name: Checkout GlobalProtect-openconnect
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
@@ -55,7 +56,7 @@ jobs:
         fi
         make tarball
     - name: Upload tarball
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: artifact-source
         if-no-files-found: error
@@ -79,7 +80,7 @@ jobs:
         rm -rf build-gp-${{ matrix.package }}
         mkdir -p build-gp-${{ matrix.package }}
     - name: Download tarball
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: artifact-source
         path: build-gp-${{ matrix.package }}
@@ -87,18 +88,18 @@ jobs:
       run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
     - name: Build ${{ matrix.package }} package in Docker
       run: |
-        docker run --rm \
+        docker run --pull=always --rm \
           -v $(pwd)/build-gp-${{ matrix.package }}:/${{ matrix.package }} \
-          yuezk/gpdev:${{ matrix.package }}-builder
+          yuezk/gpdev:${{ matrix.package }}-builder-tauri2
     - name: Install ${{ matrix.package }} package in Docker
       run: |
-        docker run --rm \
+        docker run --pull=always --rm \
           -e GPGUI_INSTALLED=0 \
           -v $(pwd)/build-gp-${{ matrix.package }}:/${{ matrix.package }} \
-          yuezk/gpdev:${{ matrix.package }}-builder \
+          yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \
           bash install.sh
     - name: Upload ${{ matrix.package }} package
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: artifact-gp-${{ matrix.package }}-${{ matrix.os.arch }}
         if-no-files-found: error
@@ -114,20 +115,20 @@ jobs:
     runs-on: ${{ matrix.os.runner }}
     name: build-gpgui (${{ matrix.os.arch }})
     steps:
-    - uses: pnpm/action-setup@v2
+    - uses: pnpm/action-setup@v4
       with:
-        version: 8
+        version: 9
     - name: Prepare workspace
       run: rm -rf gpgui-source && mkdir gpgui-source
     - name: Checkout GlobalProtect-openconnect
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
         ref: ${{ github.ref }}
         path: gpgui-source/gp
     - name: Checkout gpgui@${{ github.ref_name }}
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/gpgui
@@ -141,15 +142,15 @@ jobs:
       run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
     - name: Build gpgui in Docker
       run: |
-        docker run --rm -v $(pwd)/gpgui-source:/gpgui yuezk/gpdev:gpgui-builder
+        docker run --pull=always --rm -v $(pwd)/gpgui-source:/gpgui yuezk/gpdev:gpgui-builder-tauri2
     - name: Install gpgui in Docker
       run: |
         cd gpgui-source
         tar -xJf *.bin.tar.xz
-        docker run --rm -v $(pwd):/gpgui yuezk/gpdev:gpgui-builder \
+        docker run --pull=always --rm -v $(pwd):/gpgui yuezk/gpdev:gpgui-builder-tauri2 \
           bash -c "cd /gpgui/gpgui_*/ && ./gpgui --version"
     - name: Upload gpgui
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: artifact-gpgui-${{ matrix.os.arch }}
         if-no-files-found: error
@@ -170,7 +171,7 @@ jobs:
       run: rm -rf gh-release && mkdir gh-release
 
     - name: Checkout GlobalProtect-openconnect
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
@@ -178,7 +179,7 @@ jobs:
         path: gh-release/gp
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: gh-release/gp/.build/artifacts
 

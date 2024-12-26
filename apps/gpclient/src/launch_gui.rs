@@ -4,7 +4,8 @@ use clap::Args;
 use directories::ProjectDirs;
 use gpapi::{
   process::service_launcher::ServiceLauncher,
-  utils::{endpoint::http_endpoint, env_file, shutdown_signal},
+  utils::{endpoint::http_endpoint, env_utils, shutdown_signal},
+  GP_CALLBACK_PORT_FILENAME,
 };
 use log::info;
 use tokio::io::AsyncWriteExt;
@@ -62,7 +63,7 @@ impl<'a> LaunchGuiHandler<'a> {
     extra_envs.insert("GP_LOG_FILE".into(), log_file_path.clone());
 
     // Persist the environment variables to a file
-    let env_file = env_file::persist_env_vars(Some(extra_envs))?;
+    let env_file = env_utils::persist_env_vars(Some(extra_envs))?;
     let env_file = env_file.into_temp_path();
     let env_file_path = env_file.to_string_lossy().to_string();
 
@@ -80,34 +81,9 @@ impl<'a> LaunchGuiHandler<'a> {
 }
 
 async fn feed_auth_data(auth_data: &str) -> anyhow::Result<()> {
-  let (res_gui, res_cli) = tokio::join!(feed_auth_data_gui(auth_data), feed_auth_data_cli(auth_data));
-  if let Err(err) = res_gui {
-    info!("Failed to feed auth data to the GUI: {}", err);
-  }
-
-  if let Err(err) = res_cli {
+  if let Err(err) = feed_auth_data_cli(auth_data).await {
     info!("Failed to feed auth data to the CLI: {}", err);
   }
-
-  // Cleanup the temporary file
-  let html_file = temp_dir().join("gpauth.html");
-  if let Err(err) = std::fs::remove_file(&html_file) {
-    info!("Failed to remove {}: {}", html_file.display(), err);
-  }
-
-  Ok(())
-}
-
-async fn feed_auth_data_gui(auth_data: &str) -> anyhow::Result<()> {
-  info!("Feeding auth data to the GUI");
-  let service_endpoint = http_endpoint().await?;
-
-  reqwest::Client::default()
-    .post(format!("{}/auth-data", service_endpoint))
-    .body(auth_data.to_string())
-    .send()
-    .await?
-    .error_for_status()?;
 
   Ok(())
 }
@@ -115,7 +91,7 @@ async fn feed_auth_data_gui(auth_data: &str) -> anyhow::Result<()> {
 async fn feed_auth_data_cli(auth_data: &str) -> anyhow::Result<()> {
   info!("Feeding auth data to the CLI");
 
-  let port_file = temp_dir().join("gpcallback.port");
+  let port_file = temp_dir().join(GP_CALLBACK_PORT_FILENAME);
   let port = tokio::fs::read_to_string(port_file).await?;
   let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port.trim())).await?;
 

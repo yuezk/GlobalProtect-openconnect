@@ -2,6 +2,11 @@
 
 export OFFLINE = @OFFLINE@
 export BUILD_FE = 0
+export BUILD_GUI = @BUILD_GUI@
+
+export PATH := /usr/lib/rust-@RUST_VERSION@/bin:$(PATH)
 
 %:
+	which cargo
+	which rustc
 	dh $@ --no-parallel

@@ -4,6 +4,7 @@ OFFLINE ?= 0
 BUILD_FE ?= 1
 INCLUDE_GUI ?= 0
 CARGO ?= cargo
+RUST_VERSION = 1.80
 
 VERSION = $(shell $(CARGO) metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
 REVISION ?= 1
@@ -12,6 +13,9 @@ PKG_NAME = globalprotect-openconnect
 PKG = $(PKG_NAME)-$(VERSION)
 SERIES ?= $(shell lsb_release -cs)
 PUBLISH ?= 0
+
+# Indicates whether to build the GUI components
+BUILD_GUI ?= 1
 
 export DEBEMAIL = k3vinyue@gmail.com
 export DEBFULLNAME = Kevin Yue
@@ -42,7 +46,7 @@ clean-tarball:
 
 # Create a tarball, include the cargo dependencies if OFFLINE is set to 1
 tarball: clean-tarball
-	if [ $(BUILD_FE) -eq 1 ]; then \
+	if [ $(BUILD_GUI) -eq 1 ] && [ $(BUILD_FE) -eq 1 ]; then \
 		echo "Building frontend..."; \
 		cd apps/gpgui-helper && pnpm install && pnpm build; \
 	fi
@@ -80,13 +84,13 @@ build: download-gui build-fe build-rs
 # Install and build the frontend
 # If OFFLINE is set to 1, skip it
 build-fe:
-	if [ $(OFFLINE) -eq 1 ] || [ $(BUILD_FE) -eq 0 ]; then \
-		echo "Skipping frontend build (OFFLINE=1 or BUILD_FE=0)"; \
+	if [ $(BUILD_GUI) -eq 0 ] || [ $(OFFLINE) -eq 1 ] || [ $(BUILD_FE) -eq 0 ]; then \
+		echo "Skipping frontend build (BUILD_GUI=0 or OFFLINE=1 or BUILD_FE=0)"; \
 	else \
 		cd apps/gpgui-helper && pnpm install && pnpm build; \
 	fi
 
-	if [ ! -d apps/gpgui-helper/dist ]; then \
+	if [ $(BUILD_GUI) -eq 1 ] && [ ! -d apps/gpgui-helper/dist ]; then \
 		echo "Error: frontend build failed"; \
 		exit 1; \
 	fi
@@ -96,8 +100,13 @@ build-rs:
 		tar -xJf vendor.tar.xz; \
 	fi
 
-	$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth
-	$(CARGO) build $(CARGO_BUILD_ARGS) -p gpgui-helper --features "tauri/custom-protocol"
+	# Only build the GUI components if BUILD_GUI is set to 1
+	if [ $(BUILD_GUI) -eq 1 ]; then \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth; \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpgui-helper --features "tauri/custom-protocol"; \
+	else \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth --no-default-features; \
+	fi
 
 clean:
 	$(CARGO) clean
@@ -111,7 +120,11 @@ install:
 	install -Dm755 target/release/gpclient $(DESTDIR)/usr/bin/gpclient
 	install -Dm755 target/release/gpauth $(DESTDIR)/usr/bin/gpauth
 	install -Dm755 target/release/gpservice $(DESTDIR)/usr/bin/gpservice
-	install -Dm755 target/release/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper
+
+	# Install the GUI components if BUILD_GUI is set to 1
+	if [ $(BUILD_GUI) -eq 1 ]; then \
+		install -Dm755 target/release/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper; \
+	fi
 
 	if [ -f .build/gpgui/gpgui_*/gpgui ]; then \
 		install -Dm755 .build/gpgui/gpgui_*/gpgui $(DESTDIR)/usr/bin/gpgui; \
@@ -154,13 +167,25 @@ init-debian: clean-debian tarball
 	cp -f packaging/deb/control.in .build/deb/$(PKG)/debian/control
 	cp -f packaging/deb/rules.in .build/deb/$(PKG)/debian/rules
 	cp -f packaging/deb/postrm .build/deb/$(PKG)/debian/postrm
+	cp -f packaging/deb/compat .build/deb/$(PKG)/debian/compat
 
 	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/deb/$(PKG)/debian/rules
+	sed -i "s/@BUILD_GUI@/$(BUILD_GUI)/g" .build/deb/$(PKG)/debian/rules
+	sed -i "s/@RUST_VERSION@/$(RUST_VERSION)/g" .build/deb/$(PKG)/debian/rules
+
+	# Remove the GUI dependencies if BUILD_GUI is set to 0
+	if [ $(BUILD_GUI) -eq 0 ]; then \
+		sed -i "/libxml2/d" .build/deb/$(PKG)/debian/control; \
+		sed -i "/libsecret-1-0/d" .build/deb/$(PKG)/debian/control; \
+		sed -i "/libayatana-appindicator3-1/d" .build/deb/$(PKG)/debian/control; \
+		sed -i "/gnome-keyring/d" .build/deb/$(PKG)/debian/control; \
+		sed -i "/libwebkit2gtk-4.1-dev/d" .build/deb/$(PKG)/debian/control; \
+	fi
 
 	rm -f .build/deb/$(PKG)/debian/changelog
 
 deb: init-debian
-	# Remove the rust build depdency from the control file
+	# Remove the rust build dependency from the control file
 	sed -i "s/@RUST@//g" .build/deb/$(PKG)/debian/control
 
 	cd .build/deb/$(PKG) && dch --create --distribution unstable --package $(PKG_NAME) --newversion $(VERSION)-$(REVISION) "Bugfix and improvements."
@@ -174,7 +199,7 @@ check-ppa:
 
 # Usage: make ppa SERIES=focal OFFLINE=1 PUBLISH=1
 ppa: check-ppa init-debian
-	sed -i "s/@RUST@/rust-all(>=1.70)/g" .build/deb/$(PKG)/debian/control
+	sed -i "s/@RUST@/cargo-1.80/g" .build/deb/$(PKG)/debian/control
 
 	$(eval SERIES_VER = $(shell distro-info --series $(SERIES) -r | cut -d' ' -f1))
 	@echo "Building for $(SERIES) $(SERIES_VER)"

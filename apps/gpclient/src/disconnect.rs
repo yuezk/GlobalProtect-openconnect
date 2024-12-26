@@ -1,7 +1,7 @@
 use crate::GP_CLIENT_LOCK_FILE;
 use log::{info, warn};
 use std::fs;
-use sysinfo::{Pid, ProcessExt, Signal, System, SystemExt};
+use sysinfo::{Pid, Signal, System};
 
 pub(crate) struct DisconnectHandler;
 

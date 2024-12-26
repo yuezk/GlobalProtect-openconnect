@@ -1,29 +1,32 @@
 [package]
 name = "gpauth"
+rust-version.workspace = true
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+tauri-build = { version = "2", features = [], optional = true }
 
 [dependencies]
-gpapi = { path = "../../crates/gpapi", features = [
-  "tauri",
-  "clap",
-  "browser-auth",
-] }
+gpapi = { path = "../../crates/gpapi", features = ["clap"] }
+
+auth = { path = "../../crates/auth", features = ["browser-auth"] }
+
+# Shared dependencies
 anyhow.workspace = true
 clap.workspace = true
 env_logger.workspace = true
 log.workspace = true
-regex.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
 tempfile.workspace = true
-html-escape = "0.2.13"
-webkit2gtk = "0.18.2"
-tauri = { workspace = true, features = ["http-all"] }
 compile-time.workspace = true
+
+# webview auth dependencies
+tauri = { workspace = true, optional = true }
+
+[features]
+default = ["webview-auth"]
+webview-auth = ["auth/webview-auth", "dep:tauri", "dep:tauri-build"]

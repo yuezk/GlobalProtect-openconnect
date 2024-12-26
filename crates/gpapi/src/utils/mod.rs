@@ -4,7 +4,7 @@ pub mod base64;
 pub mod checksum;
 pub mod crypto;
 pub mod endpoint;
-pub mod env_file;
+pub mod env_utils;
 pub mod lock_file;
 pub mod openssl;
 pub mod redact;

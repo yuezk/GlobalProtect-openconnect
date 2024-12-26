@@ -1,39 +1,39 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use gpapi::{
   service::request::UpdateGuiRequest,
   utils::{checksum::verify_checksum, crypto::Crypto, endpoint::http_endpoint},
 };
 use log::{info, warn};
-use tauri::{Manager, Window};
+use tauri::{Emitter, WebviewWindow};
 
 use crate::downloader::{ChecksumFetcher, FileDownloader};
 
 #[cfg(not(debug_assertions))]
 const SNAPSHOT: &str = match option_env!("SNAPSHOT") {
-    Some(val) => val,
-    None => "false"
+  Some(val) => val,
+  None => "false",
 };
 
 pub struct ProgressNotifier {
-  win: Window,
+  win: WebviewWindow,
 }
 
 impl ProgressNotifier {
-  pub fn new(win: Window) -> Self {
+  pub fn new(win: WebviewWindow) -> Self {
     Self { win }
   }
 
   fn notify(&self, progress: Option<f64>) {
-    let _ = self.win.emit_all("app://update-progress", progress);
+    let _ = self.win.emit("app://update-progress", progress);
   }
 
   fn notify_error(&self) {
-    let _ = self.win.emit_all("app://update-error", ());
+    let _ = self.win.emit("app://update-error", ());
   }
 
   fn notify_done(&self) {
-    let _ = self.win.emit_and_trigger("app://update-done", ());
+    let _ = self.win.emit("app://update-done", ());
   }
 }
 
@@ -72,6 +72,8 @@ pub struct GuiUpdater {
   version: String,
   notifier: Arc<ProgressNotifier>,
   installer: Installer,
+  in_progress: RwLock<bool>,
+  progress: Arc<RwLock<Option<f64>>>,
 }
 
 impl GuiUpdater {
@@ -80,6 +82,8 @@ impl GuiUpdater {
       version,
       notifier: Arc::new(notifier),
       installer,
+      in_progress: Default::default(),
+      progress: Default::default(),
     }
   }
 
@@ -112,15 +116,23 @@ impl GuiUpdater {
     let cf = ChecksumFetcher::new(&checksum_url);
     let notifier = Arc::clone(&self.notifier);
 
-    dl.on_progress(move |progress| notifier.notify(progress));
+    let progress_ref = Arc::clone(&self.progress);
+    dl.on_progress(move |progress| {
+      // Save progress to shared state so that it can be notified to the UI when needed
+      if let Ok(mut guard) = progress_ref.try_write() {
+        *guard = progress;
+      }
+      notifier.notify(progress);
+    });
 
+    self.set_in_progress(true);
     let res = tokio::try_join!(dl.download(), cf.fetch());
 
     let (file, checksum) = match res {
       Ok((file, checksum)) => (file, checksum),
       Err(err) => {
         warn!("Download error: {}", err);
-        self.notifier.notify_error();
+        self.notify_error();
         return;
       }
     };
@@ -130,7 +142,7 @@ impl GuiUpdater {
 
     if let Err(err) = verify_checksum(&file_path, &checksum) {
       warn!("Checksum error: {}", err);
-      self.notifier.notify_error();
+      self.notify_error();
       return;
     }
 
@@ -138,10 +150,48 @@ impl GuiUpdater {
 
     if let Err(err) = self.installer.install(&file_path, &checksum).await {
       warn!("Install error: {}", err);
-      self.notifier.notify_error();
+      self.notify_error();
     } else {
       info!("Install success");
-      self.notifier.notify_done();
+      self.notify_done();
     }
+  }
+
+  pub fn is_in_progress(&self) -> bool {
+    if let Ok(guard) = self.in_progress.try_read() {
+      *guard
+    } else {
+      info!("Failed to acquire in_progress lock");
+      false
+    }
+  }
+
+  fn set_in_progress(&self, in_progress: bool) {
+    if let Ok(mut guard) = self.in_progress.try_write() {
+      *guard = in_progress;
+    } else {
+      info!("Failed to acquire in_progress lock");
+    }
+  }
+
+  fn notify_error(&self) {
+    self.set_in_progress(false);
+    self.notifier.notify_error();
+  }
+
+  fn notify_done(&self) {
+    self.set_in_progress(false);
+    self.notifier.notify_done();
+  }
+
+  pub fn notify_progress(&self) {
+    let progress = if let Ok(guard) = self.progress.try_read() {
+      *guard
+    } else {
+      info!("Failed to acquire progress lock");
+      None
+    };
+
+    self.notifier.notify(progress);
   }
 }

@@ -39,10 +39,6 @@ pub(crate) async fn active_gui(State(ctx): State<Arc<WsServerContext>>) -> impl 
   ctx.send_event(WsEvent::ActiveGui).await;
 }
 
-pub(crate) async fn auth_data(State(ctx): State<Arc<WsServerContext>>, body: String) -> impl IntoResponse {
-  ctx.send_event(WsEvent::AuthData(body)).await;
-}
-
 pub async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) -> Result<(), StatusCode> {
   let payload = match ctx.decrypt::<UpdateGuiRequest>(body.to_vec()) {
     Ok(payload) => payload,

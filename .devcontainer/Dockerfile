@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:22.04
 
 ARG USERNAME=vscode
 ARG USER_UID=1000
@@ -7,8 +7,9 @@ ARG USER_GID=$USER_UID
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
-    RUST_VERSION=1.75.0
+    RUST_VERSION=1.80.0
 
+# Install common dependencies
 RUN set -eux; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
@@ -18,33 +19,49 @@ RUN set -eux; \
     gnupg \
     git \
     less \
-    software-properties-common \
-    # Tauri dependencies
-    libwebkit2gtk-4.0-dev build-essential wget libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev; \
-  # Install openconnect
-  add-apt-repository ppa:yuezk/globalprotect-openconnect; \
-  apt-get update; \
-  apt-get install -y openconnect libopenconnect-dev; \
-  # Create a non-root user
+    software-properties-common
+
+# Create a non-root user
+RUN set -eux; \
   groupadd --gid $USER_GID $USERNAME; \
   useradd --uid $USER_UID --gid $USER_GID -m $USERNAME; \
   echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME; \
-  chmod 0440 /etc/sudoers.d/$USERNAME; \
-  # Install Node.js
-  mkdir -p /etc/apt/keyrings; \
-  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg; \
-  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_16.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list; \
-  apt-get update; \
-  apt-get install -y nodejs; \
-  corepack enable; \
-  # Install diff-so-fancy
-  npm install -g diff-so-fancy; \
-  # Install Rust
+  chmod 0440 /etc/sudoers.d/$USERNAME
+
+# Install Rust
+RUN set -eux; \
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain $RUST_VERSION; \
   chown -R $USERNAME:$USERNAME $RUSTUP_HOME $CARGO_HOME; \
   rustup --version; \
   cargo --version; \
   rustc --version
+
+# Install Node.js
+RUN set -eux; \
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
+  apt-get install -y nodejs; \
+  corepack enable; \
+  # Install diff-so-fancy
+  npm install -g diff-so-fancy
+
+# Install openconnect
+RUN set -eux; \
+  add-apt-repository ppa:yuezk/globalprotect-openconnect; \
+  apt-get update; \
+  apt-get install -y openconnect libopenconnect-dev
+
+# Tauri dependencies
+RUN set -eux; \
+  apt-get install -y \
+    libwebkit2gtk-4.1-dev \
+    build-essential \
+    curl \
+    wget \
+    file \
+    libxdo-dev \
+    libssl-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev
 
 USER $USERNAME
 
