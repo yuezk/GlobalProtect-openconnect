@@ -80,8 +80,8 @@ jobs:
         sed -i "s/@RUST@/cargo-1.80/g" .build/debian/control
 
         sed -i "s/@OFFLINE@/1/g" .build/debian/rules
-        sed -i "s/@BUILD_GUI@/1/g" .build/deb/debian/rules
-        sed -i "s/@RUST_VERSION@/1.80/g" .build/deb/debian/rules
+        sed -i "s/@BUILD_GUI@/1/g" .build/debian/rules
+        sed -i "s/@RUST_VERSION@/1.80/g" .build/debian/rules
 
     - name: Publish to PPA
       uses: yuezk/publish-ppa-package@gp
