@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Log the detailed error message when network error occurs
+
 ## 2.4.0 - 2024-12-26
 
 - Upgrade to Tauri 2.0

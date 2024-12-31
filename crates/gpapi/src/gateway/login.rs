@@ -31,12 +31,10 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
 
   info!("Perform gateway login, user_agent: {}", gp_params.user_agent());
 
-  let res = client
-    .post(&login_url)
-    .form(&params)
-    .send()
-    .await
-    .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e)))?;
+  let res = client.post(&login_url).form(&params).send().await.map_err(|e| {
+    warn!("Network error: {:?}", e);
+    anyhow::anyhow!(PortalError::NetworkError(e))
+  })?;
 
   let res = parse_gp_response(res).await.map_err(|err| {
     warn!("{err}");

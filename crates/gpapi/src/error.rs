@@ -4,10 +4,13 @@ use thiserror::Error;
 pub enum PortalError {
   #[error("Prelogin error: {0}")]
   PreloginError(String),
+
   #[error("Portal config error: {0}")]
   ConfigError(String),
-  #[error("Network error: {0}")]
+
+  #[error(transparent)]
   NetworkError(#[from] reqwest::Error),
+
   #[error("TLS error")]
   TlsError,
 }

@@ -19,7 +19,7 @@ use gpapi::{
   GP_USER_AGENT,
 };
 use inquire::{Password, PasswordDisplayMode, Select, Text};
-use log::info;
+use log::{info, warn};
 use openconnect::Vpn;
 
 use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE};
@@ -203,7 +203,7 @@ impl<'a> ConnectHandler<'a> {
       return Ok(());
     };
 
-    info!("Failed to connect portal with prelogin: {}", err);
+    warn!("Failed to connect portal with prelogin: {}", err);
     if err.root_cause().downcast_ref::<PortalError>().is_some() {
       info!("Trying the gateway authentication workflow...");
       self.connect_gateway_with_prelogin(server).await?;
