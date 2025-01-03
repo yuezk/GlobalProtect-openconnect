@@ -76,11 +76,14 @@ impl<'a> WebviewAuthenticatorBuilder<'a> {
     event_loop: &'a EventLoop<anyhow::Result<SamlAuthData>>,
   ) -> anyhow::Result<WebviewAuthenticator<'a>> {
     let window = WindowBuilder::new()
-      .with_title("GlobalProtect Authentication")
+      .with_title("GlobalProtect Login")
       .with_focused(true)
       .build(event_loop)?;
 
     let builder = WebViewBuilder::new();
+
+    #[cfg(target_os = "macos")]
+    let webview = builder.build(&window)?;
 
     #[cfg(not(target_os = "macos"))]
     let webview = {

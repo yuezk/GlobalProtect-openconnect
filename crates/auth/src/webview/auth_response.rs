@@ -71,8 +71,9 @@ where
 {
   auth_response.get_body(|body| match body {
     Ok(body) => {
-      let html = String::from_utf8_lossy(&body);
-      cb(read_from_html(&html))
+      if let Some(html) = body {
+        cb(read_from_html(&html))
+      }
     }
     Err(err) => {
       info!("Failed to read body: {}", err);
