@@ -4,6 +4,7 @@ use log::{error, info};
 use tokio::sync::{mpsc, RwLock};
 use tokio_util::sync::CancellationToken;
 
+#[derive(Debug)]
 pub enum AuthError {
   /// Failed to load page due to TLS error
   TlsError,

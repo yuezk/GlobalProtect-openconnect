@@ -3,11 +3,13 @@ pub use authenticator::auth_prelogin;
 pub use authenticator::Authenticator;
 
 #[cfg(feature = "browser-auth")]
-mod browser_auth;
+mod browser;
+
 #[cfg(feature = "browser-auth")]
-pub use browser_auth::BrowserAuthenticator;
+pub use browser::*;
 
 #[cfg(feature = "webview-auth")]
-mod webview_auth;
+mod webview;
+
 #[cfg(feature = "webview-auth")]
-pub use webview_auth::WebviewAuthenticator;
+pub use webview::*;

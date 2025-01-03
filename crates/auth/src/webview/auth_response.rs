@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use gpapi::{
   auth::{AuthDataParseResult, SamlAuthData},
   error::AuthDataParseError,
@@ -7,35 +5,29 @@ use gpapi::{
 use log::{info, warn};
 use regex::Regex;
 
-use crate::webview_auth::auth_messenger::{AuthError, AuthMessenger};
+use crate::webview::auth_messenger::AuthError;
 
-/// Trait for handling authentication response
-pub trait AuthResponse {
-  fn get_header(&self, key: &str) -> Option<String>;
-  fn get_body<F>(&self, cb: F)
-  where
-    F: FnOnce(anyhow::Result<Vec<u8>>) + 'static;
+use super::{auth_messenger::AuthResult, platform_impl::AuthResponse};
 
-  fn url(&self) -> Option<String>;
-
-  fn is_acs_endpoint(&self) -> bool {
-    self.url().map_or(false, |url| url.ends_with("/SAML20/SP/ACS"))
-  }
+fn is_acs_endpoint(auth_response: &AuthResponse) -> bool {
+  auth_response.url().map_or(false, |url| url.ends_with("/SAML20/SP/ACS"))
 }
 
-pub fn read_auth_data(auth_response: &impl AuthResponse, auth_messenger: &Arc<AuthMessenger>) {
-  let auth_messenger = Arc::clone(auth_messenger);
-
-  match read_from_headers(auth_response) {
+pub fn read_auth_data<F>(auth_response: AuthResponse, cb: F)
+where
+  F: Fn(AuthResult) + 'static,
+{
+  match read_from_headers(&auth_response) {
     Ok(auth_data) => {
       info!("Found auth data in headers");
-      auth_messenger.send_auth_data(auth_data);
+      cb(Ok(auth_data))
     }
+
     Err(header_err) => {
       info!("Failed to read auth data from headers: {}", header_err);
 
-      let is_acs_endpoint = auth_response.is_acs_endpoint();
-      read_from_body(auth_response, move |auth_result| {
+      let is_acs_endpoint = is_acs_endpoint(&auth_response);
+      read_from_body(&auth_response, move |auth_result| {
         // If the endpoint is `/SAML20/SP/ACS` and no auth data found in body, it should be considered as invalid
         let auth_result = auth_result.map_err(move |e| {
           info!("Failed to read auth data from body: {}", e);
@@ -46,13 +38,13 @@ pub fn read_auth_data(auth_response: &impl AuthResponse, auth_messenger: &Arc<Au
           }
         });
 
-        auth_messenger.send_auth_result(auth_result);
+        cb(auth_result);
       });
     }
   }
 }
 
-fn read_from_headers(auth_response: &impl AuthResponse) -> AuthDataParseResult {
+fn read_from_headers(auth_response: &AuthResponse) -> AuthDataParseResult {
   let Some(status) = auth_response.get_header("saml-auth-status") else {
     info!("No SAML auth status found in headers");
     return Err(AuthDataParseError::NotFound);
@@ -73,7 +65,7 @@ fn read_from_headers(auth_response: &impl AuthResponse) -> AuthDataParseResult {
   })
 }
 
-fn read_from_body<F>(auth_response: &impl AuthResponse, cb: F)
+fn read_from_body<F>(auth_response: &AuthResponse, cb: F)
 where
   F: FnOnce(AuthDataParseResult) + 'static,
 {

@@ -23,7 +23,8 @@ tiny_http = { version = "0.12", optional = true }
 uuid = { version = "1", optional = true, features = ["v4"] }
 
 # Webview auth dependencies
-tauri = { workspace = true, optional = true }
+wry = { version = "0.48", optional = true }
+tao = { version = "0.31", optional = true }
 regex = { workspace = true, optional = true }
 tokio-util = { workspace = true, optional = true }
 html-escape = { version = "0.2.13", optional = true }
@@ -40,10 +41,10 @@ browser-auth = [
   "dep:uuid",
 ]
 webview-auth = [
-  "dep:tauri",
+  "dep:wry",
+  "dep:tao",
   "dep:regex",
   "dep:tokio-util",
   "dep:html-escape",
   "dep:webkit2gtk",
-  "gpapi/tauri",
 ]

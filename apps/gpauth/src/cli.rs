@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use auth::{auth_prelogin, Authenticator, BrowserAuthenticator};
+use auth::{auth_prelogin, BrowserAuthenticator};
 use clap::Parser;
 use gpapi::{
   auth::{SamlAuthData, SamlAuthResult},
@@ -119,19 +119,20 @@ impl Cli {
     };
 
     let auth_request: &'static str = Box::leak(auth_request.into_owned().into_boxed_str());
-    let authenticator = Authenticator::new(&server, gp_params).with_auth_request(&auth_request);
 
     #[cfg(feature = "webview-auth")]
     let browser = self
       .browser
       .as_deref()
-      .or_else(|| self.default_browser.then_some("default"));
+      .or_else(|| self.default_browser.then(|| "default"));
 
     #[cfg(not(feature = "webview-auth"))]
     let browser = self.browser.as_deref().or(Some("default"));
 
-    if browser.is_some() {
-      let auth_result = authenticator.browser_authenticate(browser).await;
+    if let Some(browser) = browser {
+      let authenticator = BrowserAuthenticator::new(auth_request, browser);
+      let auth_result = authenticator.authenticate().await;
+
       print_auth_result(auth_result);
 
       // explicitly drop openssl_conf to avoid the unused variable warning
@@ -140,7 +141,13 @@ impl Cli {
     }
 
     #[cfg(feature = "webview-auth")]
-    crate::webview_auth::authenticate(&self, authenticator, openssl_conf)?;
+    {
+      let builder = auth::WebviewAuthenticator::builder(server, gp_params)
+        .auth_request(auth_request)
+        .clean(self.clean);
+      crate::webview_auth::authenticate(builder, openssl_conf).await?;
+    }
+    // crate::webview_auth::authenticate(self, openssl_conf).await?;
 
     Ok(())
   }

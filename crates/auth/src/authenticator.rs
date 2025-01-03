@@ -6,10 +6,19 @@ use gpapi::{
   portal::{prelogin, Prelogin},
 };
 
+#[cfg(feature = "webview-auth")]
+pub trait ResponseReader {
+}
+
 pub struct Authenticator<'a> {
   server: &'a str,
   auth_request: Option<&'a str>,
   pub(crate) gp_params: &'a GpParams,
+
+  #[cfg(feature = "webview-auth")]
+  pub(crate) window: Option<tao::window::Window>,
+  // #[cfg(feature = "webview-auth")]
+  // pub(crate) response_reader: Option<Box<dyn ResponseReader>>,
 
   #[cfg(feature = "webview-auth")]
   pub(crate) clean: bool,
@@ -23,6 +32,11 @@ impl<'a> Authenticator<'a> {
       server,
       gp_params,
       auth_request: None,
+
+      #[cfg(feature = "webview-auth")]
+      window: None,
+      // #[cfg(feature = "webview-auth")]
+      // response_reader: None,
 
       #[cfg(feature = "webview-auth")]
       clean: false,

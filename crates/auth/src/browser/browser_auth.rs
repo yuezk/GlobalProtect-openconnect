@@ -4,30 +4,45 @@ use gpapi::{auth::SamlAuthData, GP_CALLBACK_PORT_FILENAME};
 use log::info;
 use tokio::{io::AsyncReadExt, net::TcpListener};
 
-use super::auth_server::AuthServer;
+use crate::browser::auth_server::AuthServer;
 
-pub(super) struct BrowserAuthenticatorImpl<'a> {
-  auth_request: &'a str,
-  browser: Option<&'a str>,
+pub enum Browser<'a> {
+  Default,
+  Chrome,
+  Firefox,
+  Other(&'a str),
 }
 
-impl BrowserAuthenticatorImpl<'_> {
-  pub fn new(auth_request: &str) -> BrowserAuthenticatorImpl {
-    BrowserAuthenticatorImpl {
-      auth_request,
-      browser: None,
+impl<'a> Browser<'a> {
+  pub fn from_str(browser: &'a str) -> Self {
+    match browser.to_lowercase().as_str() {
+      "default" => Browser::Default,
+      "chrome" => Browser::Chrome,
+      "firefox" => Browser::Firefox,
+      _ => Browser::Other(browser),
     }
   }
 
-  pub fn new_with_browser<'a>(auth_request: &'a str, browser: &'a str) -> BrowserAuthenticatorImpl<'a> {
-    let browser = browser.trim();
-    BrowserAuthenticatorImpl {
+  fn as_str(&self) -> &str {
+    match self {
+      Browser::Default => "default",
+      Browser::Chrome => "chrome",
+      Browser::Firefox => "firefox",
+      Browser::Other(browser) => browser,
+    }
+  }
+}
+
+pub struct BrowserAuthenticator<'a> {
+  auth_request: &'a str,
+  browser: Browser<'a>,
+}
+
+impl<'a> BrowserAuthenticator<'a> {
+  pub fn new(auth_request: &'a str, browser: &'a str) -> Self {
+    Self {
       auth_request,
-      browser: if browser.is_empty() || browser == "default" {
-        None
-      } else {
-        Some(browser)
-      },
+      browser: Browser::from_str(browser),
     }
   }
 
@@ -40,14 +55,17 @@ impl BrowserAuthenticatorImpl<'_> {
       auth_server.serve_request(&auth_request);
     });
 
-    if let Some(browser) = self.browser {
-      let app = find_browser_path(browser);
+    match self.browser {
+      Browser::Default => {
+        info!("Launching the default browser...");
+        webbrowser::open(&auth_url)?;
+      }
+      _ => {
+        let app = find_browser_path(&self.browser);
 
-      info!("Launching browser: {}", app);
-      open::with_detached(auth_url, app)?;
-    } else {
-      info!("Launching the default browser...");
-      webbrowser::open(&auth_url)?;
+        info!("Launching browser: {}", app);
+        open::with_detached(auth_url, app)?;
+      }
     }
 
     info!("Please continue the authentication process in the default browser");
@@ -55,15 +73,18 @@ impl BrowserAuthenticatorImpl<'_> {
   }
 }
 
-fn find_browser_path(browser: &str) -> String {
-  if browser == "chrome" {
-    which::which("google-chrome-stable")
-      .or_else(|_| which::which("google-chrome"))
-      .or_else(|_| which::which("chromium"))
-      .map(|path| path.to_string_lossy().to_string())
-      .unwrap_or_else(|_| browser.to_string())
-  } else {
-    browser.into()
+fn find_browser_path(browser: &Browser) -> String {
+  match browser {
+    Browser::Chrome => {
+      const CHROME_VARIANTS: &[&str] = &["google-chrome-stable", "google-chrome", "chromium"];
+
+      CHROME_VARIANTS
+        .iter()
+        .find_map(|&browser_name| which::which(browser_name).ok())
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_else(|| browser.as_str().to_string())
+    }
+    _ => browser.as_str().to_string(),
   }
 }
 

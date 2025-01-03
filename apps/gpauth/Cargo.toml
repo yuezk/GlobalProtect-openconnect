@@ -6,8 +6,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[build-dependencies]
-tauri-build = { version = "2", features = [], optional = true }
+# [build-dependencies]
+# tauri-build = { version = "2", features = [], optional = true }
 
 [dependencies]
 gpapi = { path = "../../crates/gpapi", features = ["clap"] }
@@ -25,8 +25,10 @@ tempfile.workspace = true
 compile-time.workspace = true
 
 # webview auth dependencies
-tauri = { workspace = true, optional = true }
+# tauri = { workspace = true, optional = true }
+tao = { version = "0.31", optional = true }
+
 
 [features]
 default = ["webview-auth"]
-webview-auth = ["auth/webview-auth", "dep:tauri", "dep:tauri-build"]
+webview-auth = ["auth/webview-auth", "dep:tao"]
