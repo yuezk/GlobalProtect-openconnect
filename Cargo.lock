@@ -178,9 +178,13 @@ name = "auth"
 version = "2.4.0"
 dependencies = [
  "anyhow",
+ "block2",
  "gpapi",
  "html-escape",
  "log",
+ "objc2",
+ "objc2-foundation",
+ "objc2-web-kit",
  "open",
  "regex",
  "tauri",
@@ -191,6 +195,7 @@ dependencies = [
  "webbrowser",
  "webkit2gtk",
  "which",
+ "wry",
 ]
 
 [[package]]

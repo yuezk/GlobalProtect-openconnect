@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::auth_messenger::AuthMessenger;
 
+#[derive(Debug)]
 pub struct AuthRequest<'a>(&'a str);
 
 impl<'a> AuthRequest<'a> {
@@ -18,6 +19,7 @@ impl<'a> AuthRequest<'a> {
   }
 }
 
+#[derive(Debug)]
 pub struct AuthSettings<'a> {
   pub auth_request: AuthRequest<'a>,
   pub auth_messenger: Arc<AuthMessenger>,

@@ -11,12 +11,13 @@ use crate::webview_auth::auth_messenger::{AuthError, AuthMessenger};
 
 /// Trait for handling authentication response
 pub trait AuthResponse {
+  fn url(&self) -> Option<String>;
+
   fn get_header(&self, key: &str) -> Option<String>;
+
   fn get_body<F>(&self, cb: F)
   where
     F: FnOnce(anyhow::Result<Vec<u8>>) + 'static;
-
-  fn url(&self) -> Option<String>;
 
   fn is_acs_endpoint(&self) -> bool {
     self.url().map_or(false, |url| url.ends_with("/SAML20/SP/ACS"))

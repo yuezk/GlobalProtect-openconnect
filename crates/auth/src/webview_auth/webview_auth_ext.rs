@@ -34,7 +34,7 @@ impl WebviewAuthenticator for Authenticator<'_> {
     let auth_window = WebviewWindow::builder(app_handle, "auth_window", WebviewUrl::default())
       .title("GlobalProtect Login")
       .focused(true)
-      .visible(false)
+      .visible(true)
       .center()
       .build()?;
 

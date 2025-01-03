@@ -23,6 +23,7 @@ pub enum AuthEvent {
   Close,
 }
 
+#[derive(Debug)]
 pub struct AuthMessenger {
   tx: mpsc::UnboundedSender<AuthEvent>,
   rx: RwLock<mpsc::UnboundedReceiver<AuthEvent>>,
