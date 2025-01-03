@@ -60,4 +60,10 @@
         "yuezk"
     ],
     "rust-analyzer.cargo.features": "all",
+    "files.associations": {
+        "unistd.h": "c",
+        "utsname.h": "c",
+        "vpn.h": "c",
+        "openconnect.h": "c"
+    },
 }
