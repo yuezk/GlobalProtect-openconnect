@@ -1,10 +1,8 @@
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 
 use gpapi::utils::redact::redact_uri;
 use log::warn;
-use webkit2gtk::{
-  gio::Cancellable, glib::GString, LoadEvent, URIResponseExt, WebResource, WebResourceExt, WebView, WebViewExt,
-};
+use webkit2gtk::{gio::Cancellable, glib::GString, LoadEvent, URIResponseExt, WebResource, WebResourceExt, WebViewExt};
 use wry::WebViewExtUnix;
 
 use crate::webview::auth_messenger::AuthError;
@@ -29,11 +27,16 @@ impl AuthResponse {
 
   pub fn get_body<F>(&self, cb: F)
   where
-    F: FnOnce(anyhow::Result<Vec<u8>>) + 'static,
+    F: FnOnce(anyhow::Result<Option<Cow<'_, str>>>) + 'static,
   {
     let cancellable = Cancellable::NONE;
     self.web_resource.data(cancellable, move |data| {
-      cb(data.map_err(|e| anyhow::anyhow!(e)));
+      let body = data
+        .map_err(|e| anyhow::anyhow!(e))
+        .map(|data| String::from_utf8_lossy(&data).into_owned())
+        .map(|data| Some(Cow::Owned(data)));
+
+      cb(body);
     });
   }
 }
