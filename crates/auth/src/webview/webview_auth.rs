@@ -7,7 +7,7 @@ use tao::{
 };
 use wry::WebViewBuilder;
 
-use crate::{auth_prelogin, webview::auth_response::read_auth_data};
+use crate::{auth_prelogin, webview::response_reader::read_auth_data};
 
 use super::platform_impl::connect_webview_response;
 
@@ -98,7 +98,7 @@ impl<'a> WebviewAuthenticatorBuilder<'a> {
     connect_webview_response(&webview, |response| {
       // println!("Received response: {:?}", response.unwrap().url());
       match response {
-        Ok(response) => read_auth_data(response, |auth_result| {
+        Ok(response) => read_auth_data(&response, |auth_result| {
           println!("Auth result: {:?}", auth_result);
         }),
         Err(err) => todo!(),

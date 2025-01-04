@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use gpapi::{
   auth::{AuthDataParseResult, SamlAuthData},
   error::AuthDataParseError,
@@ -7,17 +9,25 @@ use regex::Regex;
 
 use crate::webview::auth_messenger::AuthError;
 
-use super::{auth_messenger::AuthResult, platform_impl::AuthResponse};
+use super::auth_messenger::AuthResult;
 
-fn is_acs_endpoint(auth_response: &AuthResponse) -> bool {
+pub trait ResponseReader {
+  fn url(&self) -> Option<String>;
+
+  fn get_header(&self, key: &str) -> Option<String>;
+
+  fn get_body(&self, cb: Box<dyn FnOnce(anyhow::Result<Option<Cow<'_, str>>>) + 'static>);
+}
+
+fn is_acs_endpoint(auth_response: &impl ResponseReader) -> bool {
   auth_response.url().map_or(false, |url| url.ends_with("/SAML20/SP/ACS"))
 }
 
-pub fn read_auth_data<F>(auth_response: AuthResponse, cb: F)
+pub fn read_auth_data<F>(auth_response: &impl ResponseReader, cb: F)
 where
   F: Fn(AuthResult) + 'static,
 {
-  match read_from_headers(&auth_response) {
+  match read_from_headers(auth_response) {
     Ok(auth_data) => {
       info!("Found auth data in headers");
       cb(Ok(auth_data))
@@ -26,8 +36,8 @@ where
     Err(header_err) => {
       info!("Failed to read auth data from headers: {}", header_err);
 
-      let is_acs_endpoint = is_acs_endpoint(&auth_response);
-      read_from_body(&auth_response, move |auth_result| {
+      let is_acs_endpoint = is_acs_endpoint(auth_response);
+      read_from_body(auth_response, move |auth_result| {
         // If the endpoint is `/SAML20/SP/ACS` and no auth data found in body, it should be considered as invalid
         let auth_result = auth_result.map_err(move |e| {
           info!("Failed to read auth data from body: {}", e);
@@ -44,7 +54,7 @@ where
   }
 }
 
-fn read_from_headers(auth_response: &AuthResponse) -> AuthDataParseResult {
+fn read_from_headers(auth_response: &impl ResponseReader) -> AuthDataParseResult {
   let Some(status) = auth_response.get_header("saml-auth-status") else {
     info!("No SAML auth status found in headers");
     return Err(AuthDataParseError::NotFound);
@@ -65,11 +75,11 @@ fn read_from_headers(auth_response: &AuthResponse) -> AuthDataParseResult {
   })
 }
 
-fn read_from_body<F>(auth_response: &AuthResponse, cb: F)
+fn read_from_body<F>(auth_response: &impl ResponseReader, cb: F)
 where
   F: FnOnce(AuthDataParseResult) + 'static,
 {
-  auth_response.get_body(|body| match body {
+  auth_response.get_body(Box::new(|body| match body {
     Ok(body) => {
       if let Some(html) = body {
         cb(read_from_html(&html))
@@ -79,7 +89,7 @@ where
       info!("Failed to read body: {}", err);
       cb(Err(AuthDataParseError::Invalid))
     }
-  });
+  }));
 }
 
 fn read_from_html(html: &str) -> AuthDataParseResult {

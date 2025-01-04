@@ -1,5 +1,5 @@
 mod auth_messenger;
-mod auth_response;
+mod response_reader;
 mod webview_auth;
 
 #[cfg_attr(not(target_os = "macos"), path = "webview/unix.rs")]

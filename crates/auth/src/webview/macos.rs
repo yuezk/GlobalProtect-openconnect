@@ -8,32 +8,29 @@ use objc2::{
 use objc2_foundation::{NSError, NSHTTPURLResponse, NSString};
 use wry::WebViewExtMacOS;
 
-use super::{auth_messenger::AuthError, navigation_delegate::NavigationDelegate};
+use super::{auth_messenger::AuthError, navigation_delegate::NavigationDelegate, response_reader::ResponseReader};
 
 pub struct AuthResponse {
   response: Option<Retained<NSHTTPURLResponse>>,
   body: Option<String>,
 }
 
-impl AuthResponse {
-  pub fn url(&self) -> Option<String> {
+impl ResponseReader for AuthResponse {
+  fn url(&self) -> Option<String> {
     let response = self.response.as_ref()?;
     let url = unsafe { response.URL().and_then(|url| url.absoluteString()) };
 
     url.map(|u| u.to_string())
   }
 
-  pub fn get_header(&self, key: &str) -> Option<String> {
+  fn get_header(&self, key: &str) -> Option<String> {
     let response = self.response.as_ref()?;
     let value = unsafe { response.valueForHTTPHeaderField(&NSString::from_str(key)) };
 
     value.map(|v| v.to_string())
   }
 
-  pub fn get_body<F>(&self, cb: F)
-  where
-    F: FnOnce(anyhow::Result<Option<Cow<'_, str>>>) + 'static,
-  {
+  fn get_body(&self, cb: Box<dyn FnOnce(anyhow::Result<Option<Cow<'_, str>>>) + 'static>) {
     if let Some(body) = self.body.as_deref() {
       cb(Ok(Some(Cow::Borrowed(body))));
     } else {
@@ -84,7 +81,7 @@ where
   let proto_delegate = ProtocolObject::from_ref(delegate.as_ref());
   unsafe {
     wv.setNavigationDelegate(Some(proto_delegate));
-    // The UI will freeze if we don't call this method
+    // The UI will freeze if we don't call this method, but it's not clear why.
     let _ = wv.navigationDelegate();
   };
 }
