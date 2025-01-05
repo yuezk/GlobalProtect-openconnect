@@ -2,10 +2,10 @@ use std::{env::temp_dir, fs::File};
 
 use clap::{Parser, Subcommand};
 use gpapi::{
-  clap::{handle_error, Args},
+  clap::{handle_error, Args, InfoLevelVerbosity},
   utils::openssl,
 };
-use log::{info, LevelFilter};
+use log::info;
 use tempfile::NamedTempFile;
 
 use crate::{
@@ -16,9 +16,10 @@ use crate::{
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
 
-pub(crate) struct SharedArgs {
+pub(crate) struct SharedArgs<'a> {
   pub(crate) fix_openssl: bool,
   pub(crate) ignore_tls_errors: bool,
+  pub(crate) verbose: &'a InfoLevelVerbosity,
 }
 
 #[derive(Subcommand)]
@@ -60,6 +61,9 @@ struct Cli {
   fix_openssl: bool,
   #[arg(long, help = "Ignore the TLS errors")]
   ignore_tls_errors: bool,
+
+  #[command(flatten)]
+  verbose: InfoLevelVerbosity,
 }
 
 impl Args for Cli {
@@ -89,6 +93,7 @@ impl Cli {
     let shared_args = SharedArgs {
       fix_openssl: self.fix_openssl,
       ignore_tls_errors: self.ignore_tls_errors,
+      verbose: &self.verbose,
     };
 
     if self.ignore_tls_errors {
@@ -103,12 +108,12 @@ impl Cli {
   }
 }
 
-fn init_logger(command: &CliCommand) {
+fn init_logger(cli: &Cli) {
   let mut builder = env_logger::builder();
-  builder.filter_level(LevelFilter::Info);
+  builder.filter_level(cli.verbose.log_level_filter());
 
   // Output the log messages to a file if the command is the auth callback
-  if let CliCommand::LaunchGui(args) = command {
+  if let CliCommand::LaunchGui(args) = &cli.command {
     let auth_data = args.auth_data.as_deref().unwrap_or_default();
     if !auth_data.is_empty() {
       if let Ok(log_file) = File::create(temp_dir().join("gpcallback.log")) {
@@ -124,7 +129,7 @@ fn init_logger(command: &CliCommand) {
 pub(crate) async fn run() {
   let cli = Cli::parse();
 
-  init_logger(&cli.command);
+  init_logger(&cli);
 
   info!("gpclient started: {}", VERSION);
 

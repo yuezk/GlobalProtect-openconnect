@@ -5,7 +5,7 @@ use clap::Args;
 use common::vpn_utils::find_csd_wrapper;
 use gpapi::{
   auth::SamlAuthResult,
-  clap::args::Os,
+  clap::{args::Os, ToVerboseArg},
   credential::{Credential, PasswordCredential},
   error::PortalError,
   gateway::{gateway_login, GatewayLogin},
@@ -19,7 +19,7 @@ use gpapi::{
   GP_USER_AGENT,
 };
 use inquire::{Password, PasswordDisplayMode, Select, Text};
-use log::info;
+use log::{info, warn};
 use openconnect::Vpn;
 
 use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE};
@@ -128,7 +128,7 @@ impl ConnectArgs {
 
 pub(crate) struct ConnectHandler<'a> {
   args: &'a ConnectArgs,
-  shared_args: &'a SharedArgs,
+  shared_args: &'a SharedArgs<'a>,
   latest_key_password: RefCell<Option<String>>,
 }
 
@@ -203,7 +203,7 @@ impl<'a> ConnectHandler<'a> {
       return Ok(());
     };
 
-    info!("Failed to connect portal with prelogin: {}", err);
+    warn!("Failed to connect portal with prelogin: {}", err);
     if err.root_cause().downcast_ref::<PortalError>().is_some() {
       info!("Trying the gateway authentication workflow...");
       self.connect_gateway_with_prelogin(server).await?;
@@ -356,6 +356,7 @@ impl<'a> ConnectHandler<'a> {
         };
 
         let os_version = self.args.os_version();
+        let verbose = self.shared_args.verbose.to_verbose_arg();
         let auth_launcher = SamlAuthLauncher::new(&self.args.server)
           .gateway(is_gateway)
           .saml_request(prelogin.saml_request())
@@ -364,7 +365,8 @@ impl<'a> ConnectHandler<'a> {
           .os_version(Some(&os_version))
           .fix_openssl(self.shared_args.fix_openssl)
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
-          .browser(browser);
+          .browser(browser)
+          .verbose(verbose);
 
         #[cfg(feature = "webview-auth")]
         let use_default_browser = prelogin.support_default_browser() && self.args.default_browser;

@@ -10,7 +10,7 @@ license.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-gpapi = { path = "../../../crates/gpapi", features = ["tauri"] }
+gpapi = { path = "../../../crates/gpapi", features = ["tauri", "clap"] }
 tauri.workspace = true
 
 tokio.workspace = true

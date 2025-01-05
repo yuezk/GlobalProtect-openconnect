@@ -1,6 +1,6 @@
 use anyhow::bail;
 use dns_lookup::lookup_addr;
-use log::{debug, info, warn};
+use log::{info, warn};
 use reqwest::{Client, StatusCode};
 use roxmltree::{Document, Node};
 use serde::Serialize;
@@ -111,12 +111,10 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
 
   info!("Retrieve the portal config, user_agent: {}", gp_params.user_agent());
 
-  let res = client
-    .post(&url)
-    .form(&params)
-    .send()
-    .await
-    .map_err(|e| anyhow::anyhow!(PortalError::NetworkError(e)))?;
+  let res = client.post(&url).form(&params).send().await.map_err(|e| {
+    warn!("Network error: {:?}", e);
+    anyhow::anyhow!(PortalError::NetworkError(e))
+  })?;
 
   let res_xml = parse_gp_response(res).await.or_else(|err| {
     if err.status == StatusCode::NOT_FOUND {
@@ -134,8 +132,6 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   if res_xml.is_empty() {
     bail!(PortalError::ConfigError("Empty portal config response".to_string()))
   }
-
-  debug!("Portal config response: {}", res_xml);
 
   let doc = Document::parse(&res_xml).map_err(|e| PortalError::ConfigError(e.to_string()))?;
   let root = doc.root();

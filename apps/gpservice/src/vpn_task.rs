@@ -1,8 +1,11 @@
 use std::{sync::Arc, thread};
 
-use gpapi::service::{
-  request::{ConnectRequest, WsRequest},
-  vpn_state::VpnState,
+use gpapi::{
+  logger,
+  service::{
+    request::{ConnectRequest, UpdateLogLevelRequest, WsRequest},
+    vpn_state::VpnState,
+  },
 };
 use log::{info, warn};
 use openconnect::Vpn;
@@ -157,6 +160,13 @@ async fn process_ws_req(req: WsRequest, ctx: Arc<VpnTaskContext>) {
     }
     WsRequest::Disconnect(_) => {
       ctx.disconnect().await;
+    }
+    WsRequest::UpdateLogLevel(UpdateLogLevelRequest(level)) => {
+      let level = level.parse().unwrap_or_else(|_| log::Level::Info);
+      info!("Updating log level to: {}", level);
+      if let Err(err) = logger::set_max_level(level) {
+        warn!("Failed to update log level: {}", err);
+      }
     }
   }
 }

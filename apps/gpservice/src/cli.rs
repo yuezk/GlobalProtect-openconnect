@@ -3,13 +3,15 @@ use std::{collections::HashMap, io::Write};
 
 use anyhow::bail;
 use clap::Parser;
+use gpapi::clap::InfoLevelVerbosity;
+use gpapi::logger;
 use gpapi::{
   process::gui_launcher::GuiLauncher,
   service::{request::WsRequest, vpn_state::VpnState},
   utils::{crypto::generate_key, env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
   GP_SERVICE_LOCK_FILE,
 };
-use log::{info, warn, LevelFilter};
+use log::{info, warn};
 use tokio::sync::{mpsc, watch};
 
 use crate::{vpn_task::VpnTask, ws_server::WsServer};
@@ -26,10 +28,16 @@ struct Cli {
   #[cfg(debug_assertions)]
   #[clap(long)]
   no_gui: bool,
+
+  #[command(flatten)]
+  verbose: InfoLevelVerbosity,
 }
 
 impl Cli {
-  async fn run(&mut self, redaction: Arc<Redaction>) -> anyhow::Result<()> {
+  async fn run(&mut self) -> anyhow::Result<()> {
+    let redaction = self.init_logger()?;
+    info!("gpservice started: {}", VERSION);
+
     let lock_file = Arc::new(LockFile::new(GP_SERVICE_LOCK_FILE));
 
     if lock_file.check_health().await {
@@ -92,6 +100,33 @@ impl Cli {
     Ok(())
   }
 
+  fn init_logger(&self) -> anyhow::Result<Arc<Redaction>> {
+    let redaction = Arc::new(Redaction::new());
+    let redaction_clone = Arc::clone(&redaction);
+
+    let inner_logger = env_logger::builder()
+      // Set the log level to the Trace level, the logs will be filtered
+      .filter_level(log::LevelFilter::Trace)
+      .format(move |buf, record| {
+        let timestamp = buf.timestamp();
+        writeln!(
+          buf,
+          "[{} {}  {}] {}",
+          timestamp,
+          record.level(),
+          record.module_path().unwrap_or_default(),
+          redaction_clone.redact_str(&record.args().to_string())
+        )
+      })
+      .build();
+
+    let level = self.verbose.log_level_filter().to_level().unwrap_or(log::Level::Info);
+
+    logger::init_with_logger(level, inner_logger)?;
+
+    Ok(redaction)
+  }
+
   fn prepare_api_key(&self) -> Vec<u8> {
     #[cfg(debug_assertions)]
     if self.no_gui {
@@ -100,29 +135,6 @@ impl Cli {
 
     generate_key().to_vec()
   }
-}
-
-fn init_logger() -> Arc<Redaction> {
-  let redaction = Arc::new(Redaction::new());
-  let redaction_clone = Arc::clone(&redaction);
-  // let target = Box::new(File::create("log.txt").expect("Can't create file"));
-  env_logger::builder()
-    .filter_level(LevelFilter::Info)
-    .format(move |buf, record| {
-      let timestamp = buf.timestamp();
-      writeln!(
-        buf,
-        "[{} {}  {}] {}",
-        timestamp,
-        record.level(),
-        record.module_path().unwrap_or_default(),
-        redaction_clone.redact_str(&record.args().to_string())
-      )
-    })
-    // .target(env_logger::Target::Pipe(target))
-    .init();
-
-  redaction
 }
 
 async fn launch_gui(envs: Option<HashMap<String, String>>, api_key: Vec<u8>, mut minimized: bool) {
@@ -153,10 +165,7 @@ async fn launch_gui(envs: Option<HashMap<String, String>>, api_key: Vec<u8>, mut
 pub async fn run() {
   let mut cli = Cli::parse();
 
-  let redaction = init_logger();
-  info!("gpservice started: {}", VERSION);
-
-  if let Err(e) = cli.run(redaction).await {
+  if let Err(e) = cli.run().await {
     eprintln!("Error: {}", e);
     std::process::exit(1);
   }

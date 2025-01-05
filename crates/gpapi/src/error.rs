@@ -4,10 +4,13 @@ use thiserror::Error;
 pub enum PortalError {
   #[error("Prelogin error: {0}")]
   PreloginError(String),
+
   #[error("Portal config error: {0}")]
   ConfigError(String),
-  #[error("Network error: {0}")]
+
+  #[error(transparent)]
   NetworkError(#[from] reqwest::Error),
+
   #[error("TLS error")]
   TlsError,
 }
@@ -26,12 +29,12 @@ impl PortalError {
 pub enum AuthDataParseError {
   #[error("No auth data found")]
   NotFound,
-  #[error("Invalid auth data")]
-  Invalid,
+  #[error(transparent)]
+  Invalid(#[from] anyhow::Error),
 }
 
 impl AuthDataParseError {
   pub fn is_invalid(&self) -> bool {
-    matches!(self, AuthDataParseError::Invalid)
+    matches!(self, AuthDataParseError::Invalid(_))
   }
 }

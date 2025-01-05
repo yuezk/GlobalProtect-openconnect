@@ -23,8 +23,12 @@
         "gpgui",
         "gpservice",
         "hidpi",
+        "Ivars",
         "jnlp",
         "LOGNAME",
+        "NSHTTPURL",
+        "NSURL",
+        "objc",
         "oneshot",
         "openconnect",
         "pkcs",
@@ -55,9 +59,16 @@
         "Vite",
         "vpnc",
         "vpninfo",
+        "webbrowser",
         "wmctrl",
         "XAUTHORITY",
         "yuezk"
     ],
     "rust-analyzer.cargo.features": "all",
+    "files.associations": {
+        "unistd.h": "c",
+        "utsname.h": "c",
+        "vpn.h": "c",
+        "openconnect.h": "c"
+    },
 }

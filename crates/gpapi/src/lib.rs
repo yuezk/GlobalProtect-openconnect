@@ -8,6 +8,9 @@ pub mod process;
 pub mod service;
 pub mod utils;
 
+#[cfg(feature = "logger")]
+pub mod logger;
+
 #[cfg(feature = "clap")]
 pub mod clap;
 

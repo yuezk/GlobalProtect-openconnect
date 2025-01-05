@@ -12,6 +12,7 @@ dns-lookup.workspace = true
 log.workspace = true
 reqwest.workspace = true
 openssl.workspace = true
+version-compare = "0.2"
 pem.workspace = true
 roxmltree.workspace = true
 serde.workspace = true
@@ -33,8 +34,13 @@ sha256.workspace = true
 
 tauri = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
+clap-verbosity-flag = { workspace = true, optional = true }
+
+env_logger = { workspace = true, optional = true }
+log-reload = { version = "0.1", optional = true }
 
 [features]
 tauri = ["dep:tauri"]
-clap = ["dep:clap"]
+clap = ["dep:clap", "dep:clap-verbosity-flag"]
 webview-auth = []
+logger = ["dep:env_logger", "dep:log-reload"]

@@ -72,15 +72,12 @@ impl SamlAuthData {
         let prelogin_cookie = parse_xml_tag(html, "prelogin-cookie");
         let portal_userauthcookie = parse_xml_tag(html, "portal-userauthcookie");
 
-        SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie).map_err(|e| {
-          warn!("Failed to parse auth data: {}", e);
-          AuthDataParseError::Invalid
-        })
+        SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie).map_err(AuthDataParseError::Invalid)
       }
-      Some(status) => {
-        warn!("Found invalid auth status: {}", status);
-        Err(AuthDataParseError::Invalid)
-      }
+      Some(status) => Err(AuthDataParseError::Invalid(anyhow::anyhow!(
+        "SAML auth status: {}",
+        status
+      ))),
       None => Err(AuthDataParseError::NotFound),
     }
   }
@@ -100,7 +97,7 @@ impl SamlAuthData {
       let auth_data: SamlAuthData = serde_urlencoded::from_str(auth_data.borrow()).map_err(|e| {
         warn!("Failed to parse token auth data: {}", e);
         warn!("Auth data: {}", auth_data);
-        AuthDataParseError::Invalid
+        AuthDataParseError::Invalid(anyhow::anyhow!(e))
       })?;
 
       return Ok(auth_data);
@@ -108,7 +105,7 @@ impl SamlAuthData {
 
     let auth_data = decode_to_string(auth_data).map_err(|e| {
       warn!("Failed to decode SAML auth data: {}", e);
-      AuthDataParseError::Invalid
+      AuthDataParseError::Invalid(anyhow::anyhow!(e))
     })?;
     let auth_data = Self::from_html(&auth_data)?;
 
@@ -128,7 +125,7 @@ impl SamlAuthData {
   }
 }
 
-pub fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
+fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
   let re = Regex::new(&format!("<{}>(.*)</{}>", tag, tag)).unwrap();
   re.captures(html)
     .and_then(|captures| captures.get(1))

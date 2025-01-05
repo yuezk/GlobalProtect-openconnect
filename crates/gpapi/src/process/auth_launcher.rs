@@ -23,6 +23,7 @@ pub struct SamlAuthLauncher<'a> {
   #[cfg(feature = "webview-auth")]
   default_browser: bool,
   browser: Option<&'a str>,
+  verbose: Option<&'a str>,
 }
 
 impl<'a> SamlAuthLauncher<'a> {
@@ -43,6 +44,7 @@ impl<'a> SamlAuthLauncher<'a> {
       #[cfg(feature = "webview-auth")]
       default_browser: false,
       browser: None,
+      verbose: None,
     }
   }
 
@@ -104,6 +106,11 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  pub fn verbose(mut self, verbose: Option<&'a str>) -> Self {
+    self.verbose = verbose;
+    self
+  }
+
   /// Launch the authenticator binary as the current user or SUDO_USER if available.
   pub async fn launch(self) -> anyhow::Result<Credential> {
     let mut auth_cmd = Command::new(GP_AUTH_BINARY);
@@ -154,6 +161,10 @@ impl<'a> SamlAuthLauncher<'a> {
 
     if let Some(browser) = self.browser {
       auth_cmd.arg("--browser").arg(browser);
+    }
+
+    if let Some(verbose) = self.verbose {
+      auth_cmd.arg(verbose);
     }
 
     let mut non_root_cmd = auth_cmd.into_non_root()?;

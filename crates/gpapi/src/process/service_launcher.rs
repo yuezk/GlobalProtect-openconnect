@@ -10,26 +10,28 @@ use crate::GP_SERVICE_BINARY;
 
 use super::command_traits::CommandExt;
 
-pub struct ServiceLauncher {
+pub struct ServiceLauncher<'a> {
   program: PathBuf,
   minimized: bool,
   env_file: Option<String>,
   log_file: Option<String>,
+  verbose: Option<&'a str>
 }
 
-impl Default for ServiceLauncher {
+impl Default for ServiceLauncher<'_> {
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl ServiceLauncher {
+impl<'a> ServiceLauncher<'a> {
   pub fn new() -> Self {
     Self {
       program: GP_SERVICE_BINARY.into(),
       minimized: false,
       env_file: None,
       log_file: None,
+      verbose: None
     }
   }
 
@@ -48,6 +50,11 @@ impl ServiceLauncher {
     self
   }
 
+  pub fn verbose(mut self, verbose: Option<&'a str>) -> Self {
+    self.verbose = verbose;
+    self
+  }
+
   pub async fn launch(&self) -> anyhow::Result<ExitStatus> {
     let mut cmd = Command::new_pkexec(&self.program);
 
@@ -57,6 +64,10 @@ impl ServiceLauncher {
 
     if let Some(env_file) = &self.env_file {
       cmd.arg("--env-file").arg(env_file);
+    }
+
+    if let Some(verbose) = self.verbose {
+      cmd.arg(verbose);
     }
 
     if let Some(log_file) = &self.log_file {

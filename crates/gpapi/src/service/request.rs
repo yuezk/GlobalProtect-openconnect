@@ -206,11 +206,15 @@ impl ConnectRequest {
 #[derive(Debug, Deserialize, Serialize, Type)]
 pub struct DisconnectRequest;
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdateLogLevelRequest(pub String);
+
 /// Requests that can be sent to the service
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WsRequest {
   Connect(Box<ConnectRequest>),
   Disconnect(DisconnectRequest),
+  UpdateLogLevel(UpdateLogLevelRequest),
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -14,12 +14,17 @@ BuildRequires:  cargo
 BuildRequires:  jq
 BuildRequires:  pkg-config
 BuildRequires:  openconnect-devel
-BuildRequires:  openssl-devel
+BuildRequires:  (openssl-devel or libopenssl-devel)
 BuildRequires:  wget
 BuildRequires:  file
 BuildRequires:  perl
 
-BuildRequires:  (webkit2gtk4.1-devel or webkit2gtk3-soup2-devel)
+%if 0%{?suse_version}
+BuildRequires:  webkit2gtk3-devel
+%else
+BuildRequires:  webkit2gtk4.1-devel
+%endif
+
 BuildRequires:  (libappindicator-gtk3-devel or libappindicator3-1)
 BuildRequires:  (librsvg2-devel or librsvg-devel)
 

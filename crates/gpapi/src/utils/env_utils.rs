@@ -42,8 +42,8 @@ pub fn patch_gui_runtime_env(hidpi: bool) {
   std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
 
   // Workaround for https://github.com/tauri-apps/tao/issues/929
-  let desktop = env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_lowercase();
-  if desktop.contains("gnome") {
+  let is_wayland = std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
+  if is_wayland {
     env::set_var("GDK_BACKEND", "x11");
   }
 

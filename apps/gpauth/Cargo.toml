@@ -24,6 +24,9 @@ tokio.workspace = true
 tempfile.workspace = true
 compile-time.workspace = true
 
+# Pin the version of home because the latest version requires Rust 1.81
+home = "=0.5.9"
+
 # webview auth dependencies
 tauri = { workspace = true, optional = true }
 

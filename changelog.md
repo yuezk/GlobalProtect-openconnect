@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- Fix the issue with OpenSSL < 3.0.4
+- GUI: fix the Wayland compatibility issue
+- Support configure the log level
+- Log the detailed error message when network error occurs
+
 ## 2.4.0 - 2024-12-26
 
 - Upgrade to Tauri 2.0

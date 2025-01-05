@@ -2,22 +2,26 @@ use std::{io, path::Path};
 
 use is_executable::IsExecutable;
 
-const VPNC_SCRIPT_LOCATIONS: [&str; 6] = [
+const VPNC_SCRIPT_LOCATIONS: &[&str] = &[
   "/usr/local/share/vpnc-scripts/vpnc-script",
   "/usr/local/sbin/vpnc-script",
   "/usr/share/vpnc-scripts/vpnc-script",
   "/usr/sbin/vpnc-script",
   "/etc/vpnc/vpnc-script",
   "/etc/openconnect/vpnc-script",
+  #[cfg(target_os = "macos")]
+  "/opt/homebrew/etc/vpnc/vpnc-script",
 ];
 
-const CSD_WRAPPER_LOCATIONS: [&str; 3] = [
+const CSD_WRAPPER_LOCATIONS: &[&str] = &[
   #[cfg(target_arch = "x86_64")]
   "/usr/lib/x86_64-linux-gnu/openconnect/hipreport.sh",
   #[cfg(target_arch = "aarch64")]
   "/usr/lib/aarch64-linux-gnu/openconnect/hipreport.sh",
   "/usr/lib/openconnect/hipreport.sh",
   "/usr/libexec/openconnect/hipreport.sh",
+  #[cfg(target_os = "macos")]
+  "/opt/homebrew/opt/openconnect/libexec/openconnect/hipreport.sh",
 ];
 
 fn find_executable(locations: &[&str]) -> Option<String> {

@@ -31,6 +31,12 @@ html-escape = { version = "0.2.13", optional = true }
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 webkit2gtk = { version = "2", optional = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = { version = "0.5", optional = true }
+objc2 = { version = "0.5", optional = true }
+objc2-foundation = { version = "0.2", optional = true }
+objc2-web-kit = { version = "0.2", optional = true }
+
 [features]
 browser-auth = [
   "dep:webbrowser",
@@ -40,10 +46,14 @@ browser-auth = [
   "dep:uuid",
 ]
 webview-auth = [
+  "gpapi/tauri",
   "dep:tauri",
   "dep:regex",
   "dep:tokio-util",
   "dep:html-escape",
   "dep:webkit2gtk",
-  "gpapi/tauri",
+  "dep:block2",
+  "dep:objc2",
+  "dep:objc2-foundation",
+  "dep:objc2-web-kit",
 ]

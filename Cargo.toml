@@ -15,6 +15,7 @@ license = "GPL-3.0"
 anyhow = "1.0"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
+clap-verbosity-flag = "3"
 ctrlc = "3.4"
 directories = "5.0"
 dns-lookup = "2.0.4"

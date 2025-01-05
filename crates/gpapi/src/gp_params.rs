@@ -9,9 +9,10 @@ use crate::{utils::request::create_identity, GP_USER_AGENT};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
 pub enum ClientOs {
-  #[default]
+  #[cfg_attr(not(target_os = "macos"), default)]
   Linux,
   Windows,
+  #[cfg_attr(target_os = "macos", default)]
   Mac,
 }
 

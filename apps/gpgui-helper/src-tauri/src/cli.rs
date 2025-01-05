@@ -1,6 +1,9 @@
 use clap::Parser;
-use gpapi::utils::{base64, env_utils};
-use log::{info, LevelFilter};
+use gpapi::{
+  clap::InfoLevelVerbosity,
+  utils::{base64, env_utils},
+};
+use log::info;
 
 use crate::app::App;
 
@@ -15,6 +18,9 @@ struct Cli {
 
   #[arg(long, default_value = env!("CARGO_PKG_VERSION"), help = "The version of the GUI")]
   gui_version: String,
+
+  #[command(flatten)]
+  verbose: InfoLevelVerbosity,
 }
 
 impl Cli {
@@ -41,14 +47,16 @@ impl Cli {
   }
 }
 
-fn init_logger() {
-  env_logger::builder().filter_level(LevelFilter::Info).init();
+fn init_logger(cli: &Cli) {
+  env_logger::builder()
+    .filter_level(cli.verbose.log_level_filter())
+    .init();
 }
 
 pub fn run() {
   let cli = Cli::parse();
 
-  init_logger();
+  init_logger(&cli);
   info!("gpgui-helper started: {}", VERSION);
 
   if let Err(e) = cli.run() {
