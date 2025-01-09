@@ -5,7 +5,7 @@ members = ["crates/*", "apps/gpclient", "apps/gpservice", "apps/gpauth", "apps/g
 
 [workspace.package]
 rust-version = "1.80"
-version = "2.4.0"
+version = "2.4.1"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
 edition = "2021"

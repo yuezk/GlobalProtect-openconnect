@@ -35,7 +35,7 @@ struct Cli {
 
 impl Cli {
   async fn run(&mut self) -> anyhow::Result<()> {
-    let redaction = self.init_logger()?;
+    let redaction = self.init_logger();
     info!("gpservice started: {}", VERSION);
 
     let lock_file = Arc::new(LockFile::new(GP_SERVICE_LOCK_FILE));
@@ -100,7 +100,7 @@ impl Cli {
     Ok(())
   }
 
-  fn init_logger(&self) -> anyhow::Result<Arc<Redaction>> {
+  fn init_logger(&self) -> Arc<Redaction> {
     let redaction = Arc::new(Redaction::new());
     let redaction_clone = Arc::clone(&redaction);
 
@@ -122,9 +122,9 @@ impl Cli {
 
     let level = self.verbose.log_level_filter().to_level().unwrap_or(log::Level::Info);
 
-    logger::init_with_logger(level, inner_logger)?;
+    logger::init_with_logger(level, inner_logger);
 
-    Ok(redaction)
+    redaction
   }
 
   fn prepare_api_key(&self) -> Vec<u8> {

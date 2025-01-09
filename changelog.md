@@ -1,8 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## 2.4.1 - 2025-01-09
 
-- Fix the issue with OpenSSL < 3.0.4
+- Fix the network issue with OpenSSL < 3.0.4
 - GUI: fix the Wayland compatibility issue
 - Support configure the log level
 - Log the detailed error message when network error occurs
