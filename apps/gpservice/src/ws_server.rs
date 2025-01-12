@@ -113,6 +113,10 @@ impl WsServer {
     }
   }
 
+  pub fn context(&self) -> Arc<WsServerContext> {
+    Arc::clone(&self.ctx)
+  }
+
   pub fn cancel_token(&self) -> CancellationToken {
     self.cancel_token.clone()
   }
@@ -124,7 +128,7 @@ impl WsServer {
         warn!("Failed to start WS server: {}", err);
         let _ = shutdown_tx.send(()).await;
         return;
-      },
+      }
     };
 
     tokio::select! {
@@ -149,7 +153,7 @@ impl WsServer {
 
     info!("WS server listening on port: {}", port);
 
-    self.lock_file.lock(port.to_string())?;
+    self.lock_file.lock(&port.to_string())?;
 
     Ok(listener)
   }

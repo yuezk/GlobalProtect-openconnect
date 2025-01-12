@@ -1,10 +1,9 @@
-use tokio::fs;
-
-use crate::GP_SERVICE_LOCK_FILE;
+use super::lock_file::gpservice_lock_info;
 
 async fn read_port() -> anyhow::Result<String> {
-  let port = fs::read_to_string(GP_SERVICE_LOCK_FILE).await?;
-  Ok(port.trim().to_string())
+  let lock_info = gpservice_lock_info().await?;
+
+  Ok(lock_info.port.to_string())
 }
 
 pub async fn http_endpoint() -> anyhow::Result<String> {

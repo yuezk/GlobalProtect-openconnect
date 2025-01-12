@@ -18,7 +18,7 @@ roxmltree.workspace = true
 serde.workspace = true
 specta = { workspace = true, features = ["derive"] }
 urlencoding.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["process", "signal", "macros"] }
 serde_json.workspace = true
 whoami.workspace = true
 tempfile.workspace = true

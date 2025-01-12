@@ -38,7 +38,8 @@ impl Cli {
     let redaction = self.init_logger();
     info!("gpservice started: {}", VERSION);
 
-    let lock_file = Arc::new(LockFile::new(GP_SERVICE_LOCK_FILE));
+    let pid = std::process::id();
+    let lock_file = Arc::new(LockFile::new(GP_SERVICE_LOCK_FILE, pid));
 
     if lock_file.check_health().await {
       bail!("Another instance of the service is already running");
@@ -56,8 +57,16 @@ impl Cli {
 
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(4);
     let shutdown_tx_clone = shutdown_tx.clone();
-    let vpn_task_token = vpn_task.cancel_token();
+    let vpn_task_cancel_token = vpn_task.cancel_token();
     let server_token = ws_server.cancel_token();
+
+    #[cfg(unix)]
+    {
+      let vpn_ctx = vpn_task.context();
+      let ws_ctx = ws_server.context();
+
+      tokio::spawn(async move { signals::handle_signals(vpn_ctx, ws_ctx).await });
+    }
 
     let vpn_task_handle = tokio::spawn(async move { vpn_task.start(server_token).await });
     let ws_server_handle = tokio::spawn(async move { ws_server.start(shutdown_tx_clone).await });
@@ -82,15 +91,15 @@ impl Cli {
     }
 
     tokio::select! {
-        _ = shutdown_signal() => {
-            info!("Shutdown signal received");
-        }
-        _ = shutdown_rx.recv() => {
-            info!("Shutdown request received, shutting down");
-        }
+      _ = shutdown_signal() => {
+        info!("Shutdown signal received");
+      }
+      _ = shutdown_rx.recv() => {
+        info!("Shutdown request received, shutting down");
+      }
     }
 
-    vpn_task_token.cancel();
+    vpn_task_cancel_token.cancel();
     let _ = tokio::join!(vpn_task_handle, ws_server_handle);
 
     lock_file.unlock()?;
@@ -134,6 +143,54 @@ impl Cli {
     }
 
     generate_key().to_vec()
+  }
+}
+
+#[cfg(unix)]
+mod signals {
+  use std::sync::Arc;
+
+  use log::{info, warn};
+
+  use crate::vpn_task::VpnTaskContext;
+  use crate::ws_server::WsServerContext;
+
+  const DISCONNECTED_PID_FILE: &str = "/tmp/gpservice_disconnected.pid";
+
+  pub async fn handle_signals(vpn_ctx: Arc<VpnTaskContext>, ws_ctx: Arc<WsServerContext>) {
+    use gpapi::service::event::WsEvent;
+    use tokio::signal::unix::{signal, Signal, SignalKind};
+
+    let (mut user_sig1, mut user_sig2) = match || -> anyhow::Result<(Signal, Signal)> {
+      let user_sig1 = signal(SignalKind::user_defined1())?;
+      let user_sig2 = signal(SignalKind::user_defined2())?;
+      Ok((user_sig1, user_sig2))
+    }() {
+      Ok(signals) => signals,
+      Err(err) => {
+        warn!("Failed to create signal: {}", err);
+        return;
+      }
+    };
+
+    loop {
+      tokio::select! {
+        _ = user_sig1.recv() => {
+          info!("Received SIGUSR1 signal");
+          if vpn_ctx.disconnect().await {
+            // Write the PID to a dedicated file to indicate that the VPN task is disconnected via SIGUSR1
+            let pid = std::process::id();
+            if let Err(err) = tokio::fs::write(DISCONNECTED_PID_FILE, pid.to_string()).await {
+              warn!("Failed to write PID to file: {}", err);
+            }
+          }
+        }
+        _ = user_sig2.recv() => {
+          info!("Received SIGUSR2 signal");
+          ws_ctx.send_event(WsEvent::ResumeConnection).await;
+        }
+      }
+    }
   }
 }
 

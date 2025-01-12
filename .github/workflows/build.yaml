@@ -14,6 +14,11 @@ on:
       - release/*
     tags:
       - v*.*.*
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Include arm64 if ref is a tag
   setup-matrix:

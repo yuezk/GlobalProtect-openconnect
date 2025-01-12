@@ -1,0 +1,26 @@
+#!/bin/sh
+
+# Resume the VPN connection if the network comes back up
+
+set -e
+
+PIDFILE=/tmp/gpservice_disconnected.pid
+
+resume_vpn() {
+  if [ -f $PIDFILE ]; then
+    PID=$(cat $PIDFILE)
+
+    # Always remove the PID file
+    rm $PIDFILE
+
+    # Ensure the PID is a gpservice process
+    if ps -p $PID -o comm= | grep -q gpservice; then
+      # Send a USR2 signal to the gpclient process to resume the VPN connection
+      kill -USR2 $PID
+    fi
+  fi
+}
+
+if [ "$2" = "up" ]; then
+  resume_vpn
+fi
