@@ -117,6 +117,10 @@ install:
 		install -Dm755 .build/gpgui/gpgui_*/gpgui $(DESTDIR)/usr/bin/gpgui; \
 	fi
 
+	# Install the disconnect hooks
+	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
+	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
+
 	install -Dm644 packaging/files/usr/share/applications/gpgui.desktop $(DESTDIR)/usr/share/applications/gpgui.desktop
 	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
 	install -Dm644 packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
@@ -132,6 +136,9 @@ uninstall:
 	rm -f $(DESTDIR)/usr/bin/gpservice
 	rm -f $(DESTDIR)/usr/bin/gpgui-helper
 	rm -f $(DESTDIR)/usr/bin/gpgui
+
+	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
+	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
 
 	rm -f $(DESTDIR)/usr/share/applications/gpgui.desktop
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg

@@ -9,4 +9,5 @@ pub enum WsEvent {
   ActiveGui,
   /// External authentication data
   AuthData(String),
+  ResumeConnection,
 }

@@ -84,11 +84,11 @@ pub(crate) struct ConnectArgs {
   #[arg(long, default_value = GP_USER_AGENT, help = "The user agent to use")]
   user_agent: String,
 
-  #[arg(long, default_value = "Linux")]
+  #[arg(long, value_enum, default_value_t = ConnectArgs::default_os())]
   os: Os,
 
-  #[arg(long)]
-  os_version: Option<String>,
+  #[arg(long, default_value_t = ConnectArgs::default_os_version())]
+  os_version: String,
 
   #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
@@ -110,12 +110,16 @@ pub(crate) struct ConnectArgs {
 }
 
 impl ConnectArgs {
-  fn os_version(&self) -> String {
-    if let Some(os_version) = &self.os_version {
-      return os_version.to_owned();
+  fn default_os() -> Os {
+    if cfg!(target_os = "macos") {
+      Os::Mac
+    } else {
+      Os::Linux
     }
+  }
 
-    match self.os {
+  fn default_os_version() -> String {
+    match ConnectArgs::default_os() {
       Os::Linux => format!("Linux {}", whoami::distro()),
       Os::Windows => String::from("Microsoft Windows 11 Pro , 64-bit"),
       Os::Mac => String::from("Apple Mac OS X 13.4.0"),
@@ -142,7 +146,7 @@ impl<'a> ConnectHandler<'a> {
     GpParams::builder()
       .user_agent(&self.args.user_agent)
       .client_os(ClientOs::from(&self.args.os))
-      .os_version(self.args.os_version())
+      .os_version(self.args.os_version.clone())
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
@@ -355,7 +359,7 @@ impl<'a> ConnectHandler<'a> {
           .saml_request(prelogin.saml_request())
           .user_agent(&self.args.user_agent)
           .os(self.args.os.as_str())
-          .os_version(Some(&self.args.os_version()))
+          .os_version(Some(&self.args.os_version))
           .hidpi(self.args.hidpi)
           .fix_openssl(self.shared_args.fix_openssl)
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)

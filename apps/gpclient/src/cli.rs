@@ -7,7 +7,7 @@ use tempfile::NamedTempFile;
 
 use crate::{
   connect::{ConnectArgs, ConnectHandler},
-  disconnect::DisconnectHandler,
+  disconnect::{DisconnectArgs, DisconnectHandler},
   launch_gui::{LaunchGuiArgs, LaunchGuiHandler},
 };
 
@@ -23,7 +23,7 @@ enum CliCommand {
   #[command(about = "Connect to a portal server")]
   Connect(Box<ConnectArgs>),
   #[command(about = "Disconnect from the server")]
-  Disconnect,
+  Disconnect(DisconnectArgs),
   #[command(about = "Launch the GUI")]
   LaunchGui(LaunchGuiArgs),
 }
@@ -81,7 +81,7 @@ impl Cli {
 
     match &self.command {
       CliCommand::Connect(args) => ConnectHandler::new(args, &shared_args).handle().await,
-      CliCommand::Disconnect => DisconnectHandler::new().handle(),
+      CliCommand::Disconnect(args) => DisconnectHandler::new(args).handle().await,
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
     }
   }

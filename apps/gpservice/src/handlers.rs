@@ -1,5 +1,4 @@
 use std::{
-  borrow::Cow,
   fs::{File, Permissions},
   io::BufReader,
   ops::ControlFlow,
@@ -12,7 +11,7 @@ use anyhow::bail;
 use axum::{
   body::Bytes,
   extract::{
-    ws::{self, CloseFrame, Message, WebSocket},
+    ws::{self, CloseFrame, Message, Utf8Bytes, WebSocket},
     State, WebSocketUpgrade,
   },
   http::StatusCode,
@@ -137,7 +136,7 @@ async fn handle_socket(mut socket: WebSocket, ctx: Arc<WsServerContext>) {
 
     let close_msg = Message::Close(Some(CloseFrame {
       code: ws::close_code::NORMAL,
-      reason: Cow::from("Goodbye"),
+      reason: Utf8Bytes::from("Goodbye"),
     }));
 
     if let Err(err) = sender.send(close_msg).await {

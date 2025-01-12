@@ -87,7 +87,7 @@ impl VpnTaskContext {
     });
   }
 
-  pub async fn disconnect(&self) {
+  pub async fn disconnect(&self) -> bool {
     if let Some(disconnect_rx) = self.disconnect_rx.write().await.take() {
       info!("Disconnecting VPN...");
       if let Some(vpn) = self.vpn_handle.read().await.as_ref() {
@@ -98,9 +98,13 @@ impl VpnTaskContext {
       // Wait for the VPN to be disconnected
       disconnect_rx.await.ok();
       info!("VPN disconnected");
+
+      true
     } else {
       info!("VPN is not connected, skip disconnect");
       self.vpn_state_tx.send(VpnState::Disconnected).ok();
+
+      false
     }
   }
 }
@@ -141,6 +145,10 @@ impl VpnTask {
     }
 
     server_cancel_token.cancel();
+  }
+
+  pub fn context(&self) -> Arc<VpnTaskContext> {
+    return Arc::clone(&self.ctx);
   }
 
   async fn recv(&mut self) {

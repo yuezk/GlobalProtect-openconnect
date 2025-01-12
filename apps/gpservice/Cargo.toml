@@ -9,7 +9,7 @@ gpapi = { path = "../../crates/gpapi" }
 openconnect = { path = "../../crates/openconnect" }
 clap.workspace = true
 anyhow.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-util.workspace = true
 axum = { workspace = true, features = ["ws"] }
 futures.workspace = true

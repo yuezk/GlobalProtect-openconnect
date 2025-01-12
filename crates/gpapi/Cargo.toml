@@ -17,7 +17,7 @@ serde.workspace = true
 specta.workspace = true
 specta-macros.workspace = true
 urlencoding.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["process", "signal", "macros"] }
 serde_json.workspace = true
 whoami.workspace = true
 tempfile.workspace = true
@@ -31,6 +31,9 @@ serde_urlencoded.workspace = true
 md5.workspace = true
 sha256.workspace = true
 which.workspace = true
+
+# Pin the version of home because the latest version requires Rust 1.81
+home = "=0.5.9"
 
 tauri = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
