@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.10 - 2024-01-20
+
+- Disconnect the VPN when sleep (fix [#166](https://github.com/yuezk/GlobalProtect-openconnect/issues/166), [#267](https://github.com/yuezk/GlobalProtect-openconnect/issues/267))
+
 ## 2.3.9 - 2024-11-02
 
 - Enhance the OpenSSL compatibility mode (fix [#437](https://github.com/yuezk/GlobalProtect-openconnect/issues/437))
