@@ -87,8 +87,8 @@ pub(crate) struct ConnectArgs {
   #[arg(long, value_enum, default_value_t = ConnectArgs::default_os())]
   os: Os,
 
-  #[arg(long, default_value_t = ConnectArgs::default_os_version())]
-  os_version: String,
+  #[arg(long, help = "If not specified, it will be computed based on the --os option")]
+  os_version: Option<String>,
 
   #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
@@ -118,8 +118,12 @@ impl ConnectArgs {
     }
   }
 
-  fn default_os_version() -> String {
-    match ConnectArgs::default_os() {
+  fn os_version(&self) -> String {
+    if let Some(os_version) = self.os_version.as_deref() {
+      return os_version.to_string();
+    }
+
+    match self.os {
       Os::Linux => format!("Linux {}", whoami::distro()),
       Os::Windows => String::from("Microsoft Windows 11 Pro , 64-bit"),
       Os::Mac => String::from("Apple Mac OS X 13.4.0"),
@@ -146,7 +150,7 @@ impl<'a> ConnectHandler<'a> {
     GpParams::builder()
       .user_agent(&self.args.user_agent)
       .client_os(ClientOs::from(&self.args.os))
-      .os_version(self.args.os_version.clone())
+      .os_version(self.args.os_version())
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
@@ -359,7 +363,7 @@ impl<'a> ConnectHandler<'a> {
           .saml_request(prelogin.saml_request())
           .user_agent(&self.args.user_agent)
           .os(self.args.os.as_str())
-          .os_version(Some(&self.args.os_version))
+          .os_version(Some(&self.args.os_version()))
           .hidpi(self.args.hidpi)
           .fix_openssl(self.shared_args.fix_openssl)
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
