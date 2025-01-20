@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.4.3 - 2025-01-21
+
+- Do not use static default value for `--os-version` option.
+
 ## 2.4.2 - 2025-01-20
 
 - Disconnect the VPN when sleep (fix [#166](https://github.com/yuezk/GlobalProtect-openconnect/issues/166), [#267](https://github.com/yuezk/GlobalProtect-openconnect/issues/267))
