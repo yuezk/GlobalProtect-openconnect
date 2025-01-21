@@ -70,7 +70,7 @@ The GUI version is also available after you installed it. You can launch it from
 
 ### Debian/Ubuntu based distributions
 
-#### Install from PPA (Ubuntu > 18.04)
+#### Install from PPA
 
 ```
 sudo add-apt-repository ppa:yuezk/globalprotect-openconnect
@@ -80,10 +80,6 @@ sudo apt-get install globalprotect-openconnect
 > [!Note]
 >
 > For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
-
-#### **Ubuntu 18.04**
-
-The latest package is not available in the PPA, but you still needs to add the `ppa:yuezk/globalprotect-openconnect` repo beforehand to use the required `openconnect` package. Then you can follow the [Install from deb package](#install-from-deb-package) section to install the latest package.
 
 #### Install from deb package
 
