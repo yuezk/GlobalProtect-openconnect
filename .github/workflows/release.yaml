@@ -96,15 +96,16 @@ jobs:
     steps:
     - name: Prepare workspace
       run: rm -rf build-${{ matrix.package }} && mkdir -p build-${{ matrix.package }}
+
     - name: Download ${{ inputs.tag }} source code
-      uses: robinraju/release-downloader@v1.9
-      with:
-        token: ${{ secrets.GH_PAT }}
-        tag: ${{ inputs.tag }}
-        fileName: globalprotect-openconnect-*.tar.gz
-        tarBall: false
-        zipBall: false
-        out-file-path: build-${{ matrix.package }}
+      env:
+        GH_TOKEN: ${{ secrets.GH_PAT }}
+      run: |
+        gh -R yuezk/GlobalProtect-openconnect \
+          release download ${{ inputs.tag }} \
+          --pattern '*[^offline].tar.gz' \
+          --dir build-${{ matrix.package }}
+
     - name: Docker Login
       run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
     - name: Build ${{ matrix.package }} package in Docker
