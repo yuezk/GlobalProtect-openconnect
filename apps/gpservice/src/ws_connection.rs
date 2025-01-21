@@ -20,7 +20,7 @@ impl WsConnection {
 
   pub async fn send_event(&self, event: &WsEvent) -> anyhow::Result<()> {
     let encrypted = self.crypto.encrypt(event)?;
-    let msg = Message::Binary(encrypted.into());
+    let msg = Message::Binary(encrypted);
 
     self.tx.send(msg).await?;
 
@@ -29,7 +29,7 @@ impl WsConnection {
 
   pub fn recv_msg(&self, msg: Message) -> ControlFlow<(), WsRequest> {
     match msg {
-      Message::Binary(data) => match self.crypto.decrypt(data.into()) {
+      Message::Binary(data) => match self.crypto.decrypt(data) {
         Ok(ws_req) => ControlFlow::Continue(ws_req),
         Err(err) => {
           info!("Failed to decrypt message: {}", err);

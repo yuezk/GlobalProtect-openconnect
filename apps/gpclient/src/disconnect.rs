@@ -3,7 +3,7 @@ use clap::Args;
 use gpapi::utils::lock_file::gpservice_lock_info;
 use log::{info, warn};
 use std::{fs, str::FromStr, thread, time::Duration};
-use sysinfo::{Pid, ProcessExt, Signal, System, SystemExt};
+use sysinfo::{Pid, Signal, System};
 
 #[derive(Args)]
 pub struct DisconnectArgs {

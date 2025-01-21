@@ -1,4 +1,5 @@
 use std::{
+  borrow::Cow,
   fs::{File, Permissions},
   io::BufReader,
   ops::ControlFlow,
@@ -11,7 +12,7 @@ use anyhow::bail;
 use axum::{
   body::Bytes,
   extract::{
-    ws::{self, CloseFrame, Message, Utf8Bytes, WebSocket},
+    ws::{self, CloseFrame, Message, WebSocket},
     State, WebSocketUpgrade,
   },
   http::StatusCode,
@@ -42,7 +43,7 @@ pub(crate) async fn auth_data(State(ctx): State<Arc<WsServerContext>>, body: Str
   ctx.send_event(WsEvent::AuthData(body)).await;
 }
 
-pub async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) -> Result<(), StatusCode> {
+pub(crate) async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) -> Result<(), StatusCode> {
   let payload = match ctx.decrypt::<UpdateGuiRequest>(body.to_vec()) {
     Ok(payload) => payload,
     Err(err) => {
@@ -136,7 +137,7 @@ async fn handle_socket(mut socket: WebSocket, ctx: Arc<WsServerContext>) {
 
     let close_msg = Message::Close(Some(CloseFrame {
       code: ws::close_code::NORMAL,
-      reason: Utf8Bytes::from("Goodbye"),
+      reason: Cow::from("Goodbye"),
     }));
 
     if let Err(err) = sender.send(close_msg).await {

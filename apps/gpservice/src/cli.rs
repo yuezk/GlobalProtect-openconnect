@@ -145,7 +145,7 @@ mod signals {
 
   const DISCONNECTED_PID_FILE: &str = "/tmp/gpservice_disconnected.pid";
 
-  pub async fn handle_signals(vpn_ctx: Arc<VpnTaskContext>, ws_ctx: Arc<WsServerContext>) {
+  pub(crate) async fn handle_signals(vpn_ctx: Arc<VpnTaskContext>, ws_ctx: Arc<WsServerContext>) {
     use gpapi::service::event::WsEvent;
     use tokio::signal::unix::{signal, Signal, SignalKind};
 
