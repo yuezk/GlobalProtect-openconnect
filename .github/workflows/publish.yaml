@@ -52,39 +52,43 @@ jobs:
         version: 8
     - name: Prepare workspace
       run: rm -rf publish-ppa && mkdir publish-ppa
-    - name: Download ${{ inputs.tag }} source code
+    - name: Download ${{ inputs.tag }} offline source code
       uses: robinraju/release-downloader@v1.9
       with:
         token: ${{ secrets.GH_PAT }}
         tag: ${{ inputs.tag }}
-        fileName: globalprotect-openconnect-*.tar.gz
+        fileName: globalprotect-openconnect-*.offline.tar.gz
         tarBall: false
         zipBall: false
         out-file-path: publish-ppa
-    - name: Make the offline tarball
+    - name: Patch the source code
       run: |
         cd publish-ppa
-        tar -xf globalprotect-openconnect-*.tar.gz
-        cd globalprotect-openconnect-*/
 
-        make tarball OFFLINE=1
+        # Rename the source tarball without the offline suffix
+        mv *.tar.gz $(basename *.tar.gz .offline.tar.gz).tar.gz
+
+        # Extract the source tarball
+        tar -xzf *.tar.gz
 
         # Prepare the debian directory with custom files
+        cd globalprotect-openconnect-*/
+
         mkdir -p .build/debian
-        sed 's/@RUST@/rust-all(>=1.70)/g' packaging/deb/control.in > .build/debian/control
+        sed 's/@RUST@/rust-all(>=1.71)/g' packaging/deb/control.in > .build/debian/control
         sed 's/@OFFLINE@/1/g' packaging/deb/rules.in > .build/debian/rules
         cp packaging/deb/postrm .build/debian/postrm
 
     - name: Publish to PPA
-      uses: yuezk/publish-ppa-package@v2
+      uses: yuezk/publish-ppa-package@gp_2.3.x
       with:
         repository: "yuezk/globalprotect-openconnect"
         gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
         gpg_passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
-        tarball: publish-ppa/globalprotect-openconnect-*/.build/tarball/*.tar.gz
+        tarball: publish-ppa/globalprotect-openconnect-*.tar.gz
         debian_dir: publish-ppa/globalprotect-openconnect-*/.build/debian
         deb_email: "k3vinyue@gmail.com"
         deb_fullname: "Kevin Yue"
         extra_ppa: "yuezk/globalprotect-openconnect liushuyu-011/rust-bpo-1.75"
-        series: "focal"
+        series: "bionic focal"
         revision: ${{ inputs.revision }}
