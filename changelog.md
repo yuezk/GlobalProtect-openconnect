@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.11 - 2024-01-21
+
+- Update minimal Rust version to 1.71.1, so that the PPA can be built on Ubuntu 18.04.
+
 ## 2.3.10 - 2024-01-20
 
 - Disconnect the VPN when sleep (fix [#166](https://github.com/yuezk/GlobalProtect-openconnect/issues/166), [#267](https://github.com/yuezk/GlobalProtect-openconnect/issues/267))
