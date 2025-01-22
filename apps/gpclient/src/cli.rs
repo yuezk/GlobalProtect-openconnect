@@ -1,17 +1,21 @@
-use std::{env::temp_dir, fs::File};
+use std::{env::temp_dir, fs::File, str::FromStr};
 
+use anyhow::bail;
 use clap::{Parser, Subcommand};
 use gpapi::{
   clap::{handle_error, Args, InfoLevelVerbosity},
   utils::openssl,
 };
 use log::info;
+use sysinfo::{Pid, System};
 use tempfile::NamedTempFile;
+use tokio::fs;
 
 use crate::{
   connect::{ConnectArgs, ConnectHandler},
   disconnect::{DisconnectArgs, DisconnectHandler},
   launch_gui::{LaunchGuiArgs, LaunchGuiHandler},
+  GP_CLIENT_LOCK_FILE,
 };
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
@@ -77,6 +81,25 @@ impl Args for Cli {
 }
 
 impl Cli {
+  async fn is_running(&self) -> bool {
+    let Ok(c) = fs::read_to_string(GP_CLIENT_LOCK_FILE).await else {
+      return false;
+    };
+
+    let Ok(pid) = Pid::from_str(c.trim()) else {
+      return false;
+    };
+
+    let s = System::new_all();
+    let Some(p) = s.process(pid) else {
+      return false;
+    };
+
+    p.exe()
+      .map(|exe| exe.to_string_lossy().contains("gpclient"))
+      .unwrap_or(false)
+  }
+
   fn fix_openssl(&self) -> anyhow::Result<Option<NamedTempFile>> {
     if self.fix_openssl {
       let file = openssl::fix_openssl_env()?;
@@ -87,6 +110,11 @@ impl Cli {
   }
 
   async fn run(&self) -> anyhow::Result<()> {
+    // check if an instance is running
+    if self.is_running().await {
+      bail!("Another instance of the client is already running");
+    }
+
     // The temp file will be dropped automatically when the file handle is dropped
     // So, declare it here to ensure it's not dropped
     let _file = self.fix_openssl()?;
