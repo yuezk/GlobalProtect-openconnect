@@ -28,7 +28,7 @@ release_snapshot() {
 
   echo "Uploading new assets..."
   gh -R "$REPO" release upload "$TAG" \
-    "$PROJECT_DIR"/.build/artifacts/artifact-source/* \
+    "$PROJECT_DIR"/.build/artifacts/artifact-source*/* \
     "$PROJECT_DIR"/.build/artifacts/artifact-gpgui-*/*
 }
 
@@ -40,7 +40,7 @@ release_tag() {
   gh -R "$REPO" release create $TAG \
     --title "$TAG" \
     --notes "$RELEASE_NOTES" \
-    "$PROJECT_DIR"/.build/artifacts/artifact-source/* \
+    "$PROJECT_DIR"/.build/artifacts/artifact-source*/* \
     "$PROJECT_DIR"/.build/artifacts/artifact-gpgui-*/*
 }
 

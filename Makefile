@@ -8,6 +8,8 @@ RUST_VERSION = 1.80
 
 VERSION = $(shell $(CARGO) metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
 REVISION ?= 1
+RPM_SOURCE ?= %{name}.tar.gz
+
 PPA_REVISION ?= 1
 PKG_NAME = globalprotect-openconnect
 PKG = $(PKG_NAME)-$(VERSION)
@@ -234,6 +236,7 @@ init-rpm: clean-rpm
 
 	sed -i "s/@VERSION@/$(VERSION)/g" .build/rpm/globalprotect-openconnect.spec
 	sed -i "s/@REVISION@/$(REVISION)/g" .build/rpm/globalprotect-openconnect.spec
+	sed -i "s|@SOURCE@|$(RPM_SOURCE)|g" .build/rpm/globalprotect-openconnect.spec
 	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/rpm/globalprotect-openconnect.spec
 	sed -i "s/@DATE@/$(shell LC_ALL=en.US date "+%a %b %d %Y")/g" .build/rpm/globalprotect-openconnect.spec
 

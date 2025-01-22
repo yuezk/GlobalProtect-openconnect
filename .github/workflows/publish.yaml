@@ -52,22 +52,26 @@ jobs:
         version: 9
     - name: Prepare workspace
       run: rm -rf publish-ppa && mkdir publish-ppa
-    - name: Download ${{ inputs.tag }} source code
-      uses: robinraju/release-downloader@v1.9
-      with:
-        token: ${{ secrets.GH_PAT }}
-        tag: ${{ inputs.tag }}
-        fileName: globalprotect-openconnect-*.tar.gz
-        tarBall: false
-        zipBall: false
-        out-file-path: publish-ppa
-    - name: Make the offline tarball
+    - name: Download ${{ inputs.tag }} offline source code
+      env:
+        GH_TOKEN: ${{ secrets.GH_PAT }}
+      run: |
+        gh -R yuezk/GlobalProtect-openconnect \
+          release download ${{ inputs.tag }} \
+          --pattern '*.offline.tar.gz' \
+          --dir publish-ppa
+    - name: Patch the source code
       run: |
         cd publish-ppa
-        tar -xf globalprotect-openconnect-*.tar.gz
-        cd globalprotect-openconnect-*/
 
-        make tarball OFFLINE=1
+        # Rename the source tarball without the offline suffix
+        mv -v *.tar.gz $(basename *.tar.gz .offline.tar.gz).tar.gz
+
+        # Extract the source tarball
+        tar -xzf *.tar.gz
+
+        # Prepare the debian directory with custom files
+        cd globalprotect-openconnect-*/
 
         # Prepare the debian directory with custom files
         mkdir -p .build/debian
@@ -78,7 +82,6 @@ jobs:
         cp -v packaging/deb/postrm .build/debian/postrm
 
         sed -i "s/@RUST@/cargo-1.80/g" .build/debian/control
-
         sed -i "s/@OFFLINE@/1/g" .build/debian/rules
         sed -i "s/@BUILD_GUI@/1/g" .build/debian/rules
         sed -i "s/@RUST_VERSION@/1.80/g" .build/debian/rules
@@ -89,7 +92,7 @@ jobs:
         repository: "yuezk/globalprotect-openconnect"
         gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
         gpg_passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
-        tarball: publish-ppa/globalprotect-openconnect-*/.build/tarball/*.tar.gz
+        tarball: publish-ppa/globalprotect-openconnect-*.tar.gz
         debian_dir: publish-ppa/globalprotect-openconnect-*/.build/debian
         deb_email: "k3vinyue@gmail.com"
         deb_fullname: "Kevin Yue"

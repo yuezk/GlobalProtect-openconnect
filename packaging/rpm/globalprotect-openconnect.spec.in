@@ -6,7 +6,7 @@ Group:          Productivity/Networking/PPP
 
 License:        GPL-3.0
 URL:            https://github.com/yuezk/GlobalProtect-openconnect
-Source:         %{name}.tar.gz
+Source:         @SOURCE@
 
 BuildRequires:  make
 BuildRequires:  rust
