@@ -4,7 +4,10 @@ pub mod error;
 pub mod gateway;
 pub mod gp_params;
 pub mod portal;
+
+#[cfg(unix)]
 pub mod process;
+
 pub mod service;
 pub mod utils;
 

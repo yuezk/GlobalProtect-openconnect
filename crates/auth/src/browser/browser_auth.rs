@@ -1,4 +1,4 @@
-use std::{env::temp_dir, fs, os::unix::fs::PermissionsExt};
+use std::{env::temp_dir, fs};
 
 use gpapi::{auth::SamlAuthData, GP_CALLBACK_PORT_FILENAME};
 use log::info;
@@ -96,7 +96,11 @@ async fn wait_auth_data() -> anyhow::Result<SamlAuthData> {
 
   // Write the port to a file
   fs::write(&port_file, port.to_string())?;
-  fs::set_permissions(&port_file, fs::Permissions::from_mode(0o600))?;
+  #[cfg(unix)]
+  {
+    use os::unix::fs::PermissionsExt;
+    fs::set_permissions(&port_file, fs::Permissions::from_mode(0o600))?;
+  }
 
   // Remove the previous log file
   let callback_log = temp_dir().join("gpcallback.log");

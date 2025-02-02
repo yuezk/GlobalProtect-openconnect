@@ -6,15 +6,21 @@ pub async fn shutdown_signal() {
   };
 
   #[cfg(unix)]
-  let terminate = async {
-    signal::unix::signal(signal::unix::SignalKind::terminate())
-      .expect("failed to install signal handler")
-      .recv()
-      .await;
-  };
+  {
+    let terminate = async {
+      signal::unix::signal(signal::unix::SignalKind::terminate())
+        .expect("failed to install signal handler")
+        .recv()
+        .await;
+    };
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+  }
 
-  tokio::select! {
-      _ = ctrl_c => {},
-      _ = terminate => {},
+  #[cfg(not(unix))]
+  {
+    ctrl_c.await;
   }
 }

@@ -1,5 +1,7 @@
 mod login;
 mod parse_gateways;
+
+#[cfg(unix)]
 pub mod hip;
 
 pub use login::*;

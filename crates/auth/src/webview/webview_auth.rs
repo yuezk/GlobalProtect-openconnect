@@ -115,7 +115,7 @@ impl<'a> WebviewAuthenticator<'a> {
       match auth_messenger.subscribe().await? {
         AuthEvent::Close => bail!("Authentication cancelled"),
         AuthEvent::RaiseWindow => self.raise_window(&auth_window),
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         AuthEvent::Error(AuthError::TlsError) => bail!(gpapi::error::PortalError::TlsError),
         AuthEvent::Error(AuthError::NotFound(location)) => {
           info!(
@@ -261,10 +261,10 @@ impl<'a> WebviewAuthenticator<'a> {
 
     info!("Raising auth window...");
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     let result = auth_window.show();
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let result = {
       use gpapi::utils::window::WindowExt;
       auth_window.raise()

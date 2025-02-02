@@ -188,6 +188,7 @@ dependencies = [
  "objc2-web-kit",
  "open",
  "regex",
+ "serde_json",
  "tauri",
  "tiny_http",
  "tokio",
@@ -195,7 +196,10 @@ dependencies = [
  "uuid",
  "webbrowser",
  "webkit2gtk",
+ "webview2-com",
  "which",
+ "windows 0.58.0",
+ "windows-core 0.58.0",
 ]
 
 [[package]]

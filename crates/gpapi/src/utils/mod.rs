@@ -9,7 +9,7 @@ pub mod lock_file;
 pub mod openssl;
 pub mod redact;
 pub mod request;
-#[cfg(feature = "tauri")]
+#[cfg(all(feature = "tauri", not(any(target_os = "macos", target_os = "windows"))))]
 pub mod window;
 
 mod shutdown_signal;

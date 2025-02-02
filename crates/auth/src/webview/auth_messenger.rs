@@ -15,7 +15,7 @@ pub(crate) enum AuthDataLocation {
 #[derive(Debug)]
 pub(crate) enum AuthError {
   /// Failed to load page due to TLS error
-  #[cfg(not(target_os = "macos"))]
+  #[cfg(not(any(target_os = "macos", target_os = "windows")))]
   TlsError,
   /// 1. Found auth data in headers/body but it's invalid
   /// 2. Loaded an empty page, failed to load page. etc.
