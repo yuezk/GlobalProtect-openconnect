@@ -1599,6 +1599,7 @@ dependencies = [
  "clap-verbosity-flag",
  "dns-lookup",
  "env_logger",
+ "gtk",
  "log",
  "log-reload",
  "md5",
