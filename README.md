@@ -141,7 +141,7 @@ It is available via `guru` and `lamdness` overlays.
 ```bash
 sudo eselect repository enable guru
 sudo emerge -r guru sync
-sudo emerge -av net-vpn/globalprotect-openconnect
+sudo emerge -av net-vpn/GlobalProtect-openconnect
 ```
 
 ### Other distributions
