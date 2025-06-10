@@ -16,6 +16,7 @@ pub struct Vpn {
   cookie: CString,
   user_agent: CString,
   script: CString,
+  interface: Option<CString>,
   os: CString,
   certificate: Option<CString>,
   sslkey: Option<CString>,
@@ -65,6 +66,7 @@ impl Vpn {
       cookie: self.cookie.as_ptr(),
       user_agent: self.user_agent.as_ptr(),
       script: self.script.as_ptr(),
+      interface: Self::option_to_ptr(&self.interface),
       os: self.os.as_ptr(),
 
       certificate: Self::option_to_ptr(&self.certificate),
@@ -113,6 +115,7 @@ pub struct VpnBuilder {
   server: String,
   cookie: String,
   script: Option<String>,
+  interface: Option<String>,
 
   user_agent: Option<String>,
   os: Option<String>,
@@ -136,6 +139,7 @@ impl VpnBuilder {
       server: server.to_string(),
       cookie: cookie.to_string(),
       script: None,
+      interface: None,
 
       user_agent: None,
       os: None,
@@ -156,6 +160,11 @@ impl VpnBuilder {
 
   pub fn script<T: Into<Option<String>>>(mut self, script: T) -> Self {
     self.script = script.into();
+    self
+  }
+
+  pub fn interface<T: Into<Option<String>>>(mut self, interface: T) -> Self {
+    self.interface = interface.into();
     self
   }
 
@@ -235,6 +244,7 @@ impl VpnBuilder {
       cookie: Self::to_cstring(&self.cookie),
       user_agent: Self::to_cstring(&user_agent),
       script: Self::to_cstring(&script),
+      interface: self.interface.as_deref().map(Self::to_cstring),
       os: Self::to_cstring(&os),
 
       certificate: self.certificate.as_deref().map(Self::to_cstring),

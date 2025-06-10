@@ -11,6 +11,7 @@ void *g_user_data;
 
 static int g_cmd_pipe_fd;
 static const char *g_vpnc_script;
+static const char *g_vpnc_interface;
 static vpn_connected_callback on_vpn_connected;
 
 /* Validate the peer certificate */
@@ -38,7 +39,7 @@ static void print_progress(__attribute__((unused)) void *_vpninfo, int level, co
 
 static void setup_tun_handler(void *_vpninfo)
 {
-    int ret = openconnect_setup_tun_device(_vpninfo, g_vpnc_script, NULL);
+    int ret = openconnect_setup_tun_device(_vpninfo, g_vpnc_script, g_vpnc_interface);
     if (!ret) {
         on_vpn_connected(g_cmd_pipe_fd, g_user_data);
     }
@@ -53,6 +54,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 
     g_user_data = options->user_data;
     g_vpnc_script = options->script;
+    g_vpnc_interface = options->interface;
     on_vpn_connected = callback;
 
     INFO("User agent: %s", options->user_agent);
