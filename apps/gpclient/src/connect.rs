@@ -44,6 +44,9 @@ pub(crate) struct ConnectArgs {
   #[arg(long, short, help = "The VPNC script to use")]
   script: Option<String>,
 
+  #[arg(long, short, help = "The IFNAME for tunnel interface")]
+  interface: Option<String>,
+
   #[arg(long, help = "Connect the server as a gateway, instead of a portal")]
   as_gateway: bool,
 
@@ -313,6 +316,7 @@ impl<'a> ConnectHandler<'a> {
     let os = ClientOs::from(&self.args.os).to_openconnect_os().to_string();
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
+      .interface(self.args.interface.clone())
       .user_agent(self.args.user_agent.clone())
       .os(Some(os))
       .certificate(self.args.certificate.clone())
