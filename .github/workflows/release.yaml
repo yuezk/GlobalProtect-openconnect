@@ -73,9 +73,9 @@ jobs:
           const inputs = ${{ toJson(inputs) }}
           const { arch } = inputs
           const osMap = {
-            "all": ["ubuntu-latest", "arm64"],
+            "all": ["ubuntu-latest", "ubuntu-24.04-arm"],
             "x86_64": ["ubuntu-latest"],
-            "arm64": ["arm64"]
+            "arm64": ["ubuntu-24.04-arm"]
           }
 
           const package = Object.entries(inputs)

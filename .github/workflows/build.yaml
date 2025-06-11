@@ -31,7 +31,7 @@ jobs:
         run: |
           # Set the matrix to include arm64 if the ref is a tag or is the dev branch
           if [[ "${{ github.ref }}" == "refs/tags/"* || "${{ github.ref }}" == "refs/heads/dev" ]]; then
-            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "arm64", "arch": "arm64"}]' >> $GITHUB_OUTPUT
+            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "ubuntu-24.04-arm", "arch": "ubuntu-24.04-arm"}]' >> $GITHUB_OUTPUT
           else
             echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}]' >> $GITHUB_OUTPUT
           fi
