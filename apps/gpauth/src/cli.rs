@@ -122,7 +122,7 @@ impl Cli {
     let browser = self
       .browser
       .as_deref()
-      .or_else(|| self.default_browser.then(|| "default"));
+      .or_else(|| self.default_browser.then_some("default"));
 
     #[cfg(not(feature = "webview-auth"))]
     let browser = self.browser.as_deref().or(Some("default"));

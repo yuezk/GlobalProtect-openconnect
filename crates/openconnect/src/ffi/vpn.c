@@ -77,7 +77,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     openconnect_set_loglevel(vpninfo, PRG_TRACE);
     openconnect_init_ssl();
     openconnect_set_protocol(vpninfo, "gp");
-    openconnect_set_hostname(vpninfo, options->server);
+    openconnect_parse_url(vpninfo, options->server);
     openconnect_set_cookie(vpninfo, options->cookie);
 
     if (options->os) {

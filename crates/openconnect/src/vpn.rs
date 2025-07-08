@@ -36,7 +36,13 @@ pub struct Vpn {
 
 impl Vpn {
   pub fn builder(server: &str, cookie: &str) -> VpnBuilder {
-    VpnBuilder::new(server, cookie)
+    // prepend "https://" to the server if it doesn't already start with it
+    let server = if server.starts_with("https://") {
+      server.to_string()
+    } else {
+      format!("https://{}", server)
+    };
+    VpnBuilder::new(server, cookie.to_string())
   }
 
   pub fn connect(&self, on_connected: impl FnOnce() + 'static + Send + Sync) -> i32 {
@@ -134,10 +140,10 @@ pub struct VpnBuilder {
 }
 
 impl VpnBuilder {
-  fn new(server: &str, cookie: &str) -> Self {
+  fn new(server: String, cookie: String) -> Self {
     Self {
-      server: server.to_string(),
-      cookie: cookie.to_string(),
+      server,
+      cookie,
       script: None,
       interface: None,
 
