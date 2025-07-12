@@ -72,15 +72,15 @@ requirements:
     - pkexec
     - gnome-keyring
 
-test:
-  commands:
-    - gpclient --help
-    - gpservice --help
-    - gpauth --help
-    - gpgui-helper --help
+tests:
+  - script:
+      - gpclient --help
+      - gpservice --help
+      - gpauth --help
+      - gpgui-helper --help
 
 about:
-  home: https://github.com/yuezk/GlobalProtect-openconnect
+  homepage: https://github.com/yuezk/GlobalProtect-openconnect
   license: GPL-3.0
   license_file: LICENSE
   summary: A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method
@@ -89,8 +89,8 @@ about:
     that supports the SSO authentication method. It provides both CLI and GUI interfaces
     for connecting to GlobalProtect VPN servers with features like SSO authentication,
     FIDO2 support, client certificate authentication, and more.
-  doc_url: https://github.com/yuezk/GlobalProtect-openconnect/blob/main/README.md
-  dev_url: https://github.com/yuezk/GlobalProtect-openconnect
+  documentation: https://github.com/yuezk/GlobalProtect-openconnect/blob/main/README.md
+  repository: https://github.com/yuezk/GlobalProtect-openconnect
 
 extra:
   recipe-maintainers:

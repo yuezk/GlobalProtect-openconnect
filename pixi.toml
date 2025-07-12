@@ -1,7 +1,7 @@
 [project]
 name = "globalprotect-openconnect"
 version = "2.4.4"
-description = "A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method. CLI build working with pixi!"
+description = "A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method. CLI build AND packaging working with pixi!"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 channels = ["conda-forge"]
 platforms = ["linux-64", "osx-64", "osx-arm64"]
@@ -82,6 +82,18 @@ cwd = "."
 cmd = "rattler-build build --recipe recipe.yaml"
 cwd = "."
 
+[tasks.package-cli]
+cmd = "rattler-build build --recipe recipe-cli.yaml"
+cwd = "."
+
+[tasks.inspect-package]
+cmd = "cd output/linux-64 && unzip -l *.conda && echo '--- Package Contents ---' && unzip -q *.conda && tar -tf pkg-*.tar.zst"
+cwd = "."
+
+[tasks.package-info]
+cmd = "ls -lh output/linux-64/*.conda && echo 'Package successfully built!'"
+cwd = "."
+
 [tasks.dev-setup]
 cmd = "rustup component add clippy rustfmt"
 cwd = "."
@@ -149,6 +161,24 @@ cwd = "."
 # CLI build workflow - WORKING!
 [tasks.cli-workflow]
 depends-on = ["clean", "build-cli", "test-cli"]
+
+# CLI package workflow - WORKING!
+[tasks.cli-package-workflow]
+depends-on = ["clean", "build-cli", "test-cli", "package-cli", "package-info"]
+
+# Complete workflow with package inspection
+[tasks.full-cli-workflow]
+depends-on = [
+  "clean",
+  "build-cli",
+  "test-cli",
+  "package-cli",
+  "inspect-package",
+]
+
+[tasks.test-cli-comprehensive]
+cmd = "chmod +x tests/test_cli_final.sh && ./tests/test_cli_final.sh"
+cwd = "."
 
 [environments]
 # Default environment

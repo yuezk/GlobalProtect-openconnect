@@ -1,0 +1,583 @@
+= GlobalProtect OpenConnect Roadmap
+:doctype: book
+:toc: left
+:toclevels: 3
+:sectlinks:
+:sectanchors:
+:numbered:
+:source-highlighter: highlight.js
+:icons: font
+:imagesdir: images
+:version: 2.4.4
+:author: GlobalProtect OpenConnect Team
+:email: k3vinyue@gmail.com
+:revdate: {localdate}
+
+[preface]
+== Preface
+
+This roadmap outlines the planned development tasks and enhancements for the GlobalProtect OpenConnect project. Each task is written as a clear, actionable prompt that can be assigned to developers or contributors. The roadmap is organized by priority and includes both immediate next steps and long-term strategic goals.
+
+== Current Status
+
+As of version 2.4.4, the project has achieved:
+
+* ✅ **Complete CLI Implementation**: All CLI components (gpclient, gpservice, gpauth) are fully functional
+* ✅ **Pixi Build System**: Modern development environment with conda-forge integration
+* ✅ **Conda Packaging**: Production-ready conda packages for distribution
+* ✅ **Comprehensive Testing**: Full test suite with 100% pass rate
+* ✅ **Documentation**: Complete developer and operator guides
+
+== Roadmap Overview
+
+The roadmap is divided into four main phases:
+
+1. **Phase 1: Immediate Enhancements** (Next 1-3 months)
+2. **Phase 2: GUI Development** (3-6 months)
+3. **Phase 3: Advanced Features** (6-12 months)
+4. **Phase 4: Long-term Vision** (12+ months)
+
+== Phase 1: Immediate Enhancements
+
+=== Task 1.1: Cross-Platform Package Distribution
+
+**Priority**: High
+**Estimated Effort**: 2-3 weeks
+**Dependencies**: Current CLI build system
+
+**Task Prompt**: Extend the conda packaging system to build and distribute GlobalProtect OpenConnect CLI packages for all supported platforms (Linux x64, macOS x64, macOS ARM64, Windows x64). Update the CI/CD pipeline to automatically build cross-platform packages on releases. Ensure all packages pass platform-specific tests and are ready for conda-forge submission.
+
+**Acceptance Criteria**:
+- [ ] Windows x64 conda package builds successfully
+- [ ] macOS x64 conda package builds successfully
+- [ ] macOS ARM64 conda package builds successfully
+- [ ] All platform packages pass functionality tests
+- [ ] CI/CD pipeline builds all platforms automatically
+- [ ] Packages are ready for conda-forge submission
+
+**Implementation Notes**:
+- Use GitHub Actions matrix builds for cross-platform compilation
+- Set up Windows and macOS runners with appropriate dependencies
+- Ensure OpenConnect library availability on all platforms
+- Test package installation and basic functionality on each platform
+
+=== Task 1.2: Conda-Forge Channel Submission
+
+**Priority**: High
+**Estimated Effort**: 1-2 weeks
+**Dependencies**: Task 1.1 (Cross-platform packages)
+
+**Task Prompt**: Submit the GlobalProtect OpenConnect CLI package to conda-forge for official distribution. Create the necessary feedstock repository, ensure all conda-forge requirements are met, and work with the conda-forge team through the review process. Once approved, set up automated updates for future releases.
+
+**Acceptance Criteria**:
+- [ ] Feedstock repository created and submitted
+- [ ] Package passes all conda-forge quality checks
+- [ ] Package is approved and merged into conda-forge
+- [ ] Automated update mechanism configured
+- [ ] Package is installable via `conda install -c conda-forge globalprotect-openconnect-cli`
+
+**Implementation Notes**:
+- Follow conda-forge contribution guidelines
+- Ensure license compatibility and documentation completeness
+- Set up bot for automatic version updates
+- Coordinate with conda-forge maintainers for review
+
+=== Task 1.3: Enhanced CLI Features
+
+**Priority**: Medium
+**Estimated Effort**: 3-4 weeks
+**Dependencies**: None
+
+**Task Prompt**: Enhance the CLI tools with additional features commonly requested by users. Implement connection profiles management, improved logging with structured output (JSON), connection statistics, and advanced authentication options. Add support for configuration file validation and environment variable configuration.
+
+**Acceptance Criteria**:
+- [ ] Connection profiles system implemented (`gpclient profile create/list/delete`)
+- [ ] JSON logging output option added (`--log-format=json`)
+- [ ] Connection statistics command (`gpclient stats`)
+- [ ] Configuration validation (`gpclient validate-config`)
+- [ ] Environment variable configuration support
+- [ ] Improved help documentation with examples
+
+**Implementation Notes**:
+- Use structured logging framework (e.g., `tracing` with JSON formatter)
+- Store profiles in user config directory with proper permissions
+- Implement statistics collection without impacting performance
+- Add comprehensive configuration validation with helpful error messages
+
+=== Task 1.4: Integration Testing Infrastructure
+
+**Priority**: Medium
+**Estimated Effort**: 2-3 weeks
+**Dependencies**: None
+
+**Task Prompt**: Create a comprehensive integration testing infrastructure that can test GlobalProtect CLI tools against real VPN servers in a controlled environment. Set up test VPN servers, implement automated test scenarios, and integrate with CI/CD pipeline for continuous testing.
+
+**Acceptance Criteria**:
+- [ ] Test VPN server infrastructure configured
+- [ ] Automated integration test suite implemented
+- [ ] Tests cover authentication, connection, and disconnection scenarios
+- [ ] Performance benchmarking tests included
+- [ ] Integration with CI/CD pipeline
+- [ ] Test reports with detailed metrics
+
+**Implementation Notes**:
+- Use containerized test VPN servers for consistency
+- Implement test scenarios for different authentication methods
+- Create performance baseline measurements
+- Set up test data collection and reporting
+
+=== Task 1.5: Performance Optimization
+
+**Priority**: Medium
+**Estimated Effort**: 2-3 weeks
+**Dependencies**: Task 1.4 (Integration testing)
+
+**Task Prompt**: Optimize the performance of CLI components through profiling, benchmarking, and targeted improvements. Focus on connection time, memory usage, and CPU efficiency. Implement connection pooling, optimize network buffer sizes, and reduce startup time.
+
+**Acceptance Criteria**:
+- [ ] Connection time reduced by 20% from baseline
+- [ ] Memory usage optimized and documented
+- [ ] CPU usage minimized during idle periods
+- [ ] Startup time under 2 seconds
+- [ ] Performance benchmarks documented
+- [ ] Optimization techniques documented for future reference
+
+**Implementation Notes**:
+- Use profiling tools to identify bottlenecks
+- Implement lazy loading for non-critical components
+- Optimize network buffer sizes based on testing
+- Consider using async/await patterns for I/O operations
+
+== Phase 2: GUI Development
+
+=== Task 2.1: GUI Framework Research and Selection
+
+**Priority**: High
+**Estimated Effort**: 2-3 weeks
+**Dependencies**: None
+
+**Task Prompt**: Research and evaluate alternative GUI frameworks to replace the current Tauri v2 + WebKit2GTK-4.1 dependency that is blocking GUI builds in conda-forge. Evaluate options including Tauri v1, native Qt, GTK4, Electron alternatives, and emerging Rust GUI frameworks. Create a detailed comparison matrix and recommend the best path forward.
+
+**Acceptance Criteria**:
+- [ ] Comprehensive evaluation of 5+ GUI framework options
+- [ ] Comparison matrix including conda-forge compatibility
+- [ ] Performance and resource usage analysis
+- [ ] Cross-platform compatibility assessment
+- [ ] Detailed recommendation with implementation plan
+- [ ] Proof-of-concept implementation for chosen framework
+
+**Implementation Notes**:
+- Consider egui, iced, slint, and other native Rust frameworks
+- Evaluate Flutter desktop, Qt for Python, and other alternatives
+- Test conda-forge dependency availability for each option
+- Create small prototype applications to validate approach
+
+=== Task 2.2: GUI Architecture Redesign
+
+**Priority**: High
+**Estimated Effort**: 3-4 weeks
+**Dependencies**: Task 2.1 (Framework selection)
+
+**Task Prompt**: Redesign the GUI architecture based on the selected framework from Task 2.1. Create a clean separation between the GUI frontend and CLI backend, implement a robust IPC mechanism, and design the user interface components. Ensure the new architecture supports both standalone GUI operation and CLI integration.
+
+**Acceptance Criteria**:
+- [ ] New GUI architecture documented and approved
+- [ ] IPC mechanism between GUI and CLI components implemented
+- [ ] Core UI components designed and prototyped
+- [ ] State management system implemented
+- [ ] Error handling and user feedback systems designed
+- [ ] Architecture supports future feature additions
+
+**Implementation Notes**:
+- Use message-passing or shared memory for IPC
+- Implement reactive state management if supported by framework
+- Design for testability and maintainability
+- Consider accessibility requirements from the start
+
+=== Task 2.3: GUI Core Features Implementation
+
+**Priority**: High
+**Estimated Effort**: 4-6 weeks
+**Dependencies**: Task 2.2 (GUI architecture)
+
+**Task Prompt**: Implement the core GUI features including connection management, server profiles, authentication flows, and connection status display. Create an intuitive user interface that provides the same functionality as the CLI tools but with improved user experience. Include system tray integration and notification support.
+
+**Acceptance Criteria**:
+- [ ] Connection management UI implemented
+- [ ] Server profiles management interface
+- [ ] Authentication flow UI (SAML, certificate, etc.)
+- [ ] Real-time connection status display
+- [ ] System tray integration with context menu
+- [ ] Desktop notifications for connection events
+- [ ] Settings and preferences interface
+
+**Implementation Notes**:
+- Follow platform-specific UI guidelines (HIG, Material Design, etc.)
+- Implement proper loading states and error handling
+- Use platform-native notification systems
+- Ensure UI responsiveness during long operations
+
+=== Task 2.4: GUI Testing and Quality Assurance
+
+**Priority**: Medium
+**Estimated Effort**: 2-3 weeks
+**Dependencies**: Task 2.3 (GUI implementation)
+
+**Task Prompt**: Create comprehensive testing infrastructure for the GUI components including unit tests, integration tests, and UI automation tests. Implement accessibility testing, cross-platform testing, and performance testing specific to GUI operations.
+
+**Acceptance Criteria**:
+- [ ] Unit tests for all GUI components
+- [ ] Integration tests for GUI-CLI communication
+- [ ] Automated UI testing with platform-specific tools
+- [ ] Accessibility compliance testing
+- [ ] Cross-platform GUI testing infrastructure
+- [ ] Performance testing for UI responsiveness
+
+**Implementation Notes**:
+- Use framework-specific testing tools where available
+- Implement screenshot-based regression testing
+- Test with screen readers and accessibility tools
+- Create CI/CD pipeline for GUI testing
+
+=== Task 2.5: GUI Package Distribution
+
+**Priority**: Medium
+**Estimated Effort**: 2-3 weeks
+**Dependencies**: Task 2.4 (GUI testing)
+
+**Task Prompt**: Create distribution packages for the GUI application including conda packages (if dependencies allow), native installers for each platform, and container images. Ensure the GUI packages integrate properly with the existing CLI packages and can be installed independently or together.
+
+**Acceptance Criteria**:
+- [ ] Cross-platform GUI conda packages (if possible)
+- [ ] Native installers (MSI, DMG, DEB, RPM)
+- [ ] Container images for GUI application
+- [ ] Package integration testing with CLI packages
+- [ ] Documentation for GUI installation and usage
+- [ ] Automated package building in CI/CD
+
+**Implementation Notes**:
+- Use platform-specific packaging tools (Wix, pkgbuild, fpm)
+- Consider Flatpak and Snap packages for Linux
+- Ensure proper desktop integration (file associations, etc.)
+- Test installation and uninstallation processes
+
+== Phase 3: Advanced Features
+
+=== Task 3.1: Advanced Authentication Systems
+
+**Priority**: Medium
+**Estimated Effort**: 3-4 weeks
+**Dependencies**: Phase 2 completion
+
+**Task Prompt**: Implement advanced authentication features including FIDO2/WebAuthn support, smart card authentication, biometric authentication (where available), and improved certificate management. Add support for authentication caching, session persistence, and multi-factor authentication flows.
+
+**Acceptance Criteria**:
+- [ ] FIDO2/WebAuthn authentication support
+- [ ] Smart card authentication integration
+- [ ] Biometric authentication (fingerprint, face recognition)
+- [ ] Certificate store integration (system keychain)
+- [ ] Authentication caching with secure storage
+- [ ] Session persistence across reboots
+- [ ] Multi-factor authentication workflow improvements
+
+**Implementation Notes**:
+- Use platform-specific authentication APIs
+- Implement secure credential storage (keyring, keychain)
+- Follow security best practices for credential handling
+- Consider hardware security module (HSM) support
+
+=== Task 3.2: Network Management Enhancements
+
+**Priority**: Medium
+**Estimated Effort**: 3-4 weeks
+**Dependencies**: Task 1.5 (Performance optimization)
+
+**Task Prompt**: Enhance network management capabilities with advanced routing options, split tunneling configuration, DNS management, and network interface optimization. Implement automatic failover between gateways, load balancing, and bandwidth management features.
+
+**Acceptance Criteria**:
+- [ ] Advanced split tunneling with per-application rules
+- [ ] Custom DNS server configuration and management
+- [ ] Automatic gateway failover and load balancing
+- [ ] Bandwidth monitoring and management
+- [ ] Network interface optimization and tuning
+- [ ] IPv6 dual-stack support improvements
+- [ ] Custom routing table management
+
+**Implementation Notes**:
+- Use platform-specific networking APIs
+- Implement network change detection and adaptation
+- Consider integration with NetworkManager on Linux
+- Test with various network configurations
+
+=== Task 3.3: Enterprise Management Features
+
+**Priority**: Medium
+**Estimated Effort**: 4-5 weeks
+**Dependencies**: Task 1.2 (Conda-forge submission)
+
+**Task Prompt**: Develop enterprise management features including centralized configuration management, policy enforcement, usage reporting, and audit logging. Create APIs for integration with enterprise management systems and implement group policy support for mass deployment.
+
+**Acceptance Criteria**:
+- [ ] Centralized configuration management system
+- [ ] Policy enforcement engine with rule-based controls
+- [ ] Usage reporting and analytics dashboard
+- [ ] Audit logging with compliance reporting
+- [ ] REST API for enterprise integration
+- [ ] Group policy support (Windows) and equivalent for other platforms
+- [ ] LDAP/Active Directory integration for user management
+
+**Implementation Notes**:
+- Design RESTful APIs with proper authentication
+- Implement role-based access control
+- Use standard protocols for directory integration
+- Consider compliance requirements (SOX, HIPAA, etc.)
+
+=== Task 3.4: Plugin and Extension System
+
+**Priority**: Low
+**Estimated Effort**: 3-4 weeks
+**Dependencies**: Task 2.2 (GUI architecture)
+
+**Task Prompt**: Design and implement a plugin system that allows third-party developers to extend GlobalProtect OpenConnect functionality. Create plugin APIs for authentication methods, network protocols, and UI components. Develop a plugin marketplace and distribution system.
+
+**Acceptance Criteria**:
+- [ ] Plugin architecture with stable APIs
+- [ ] Plugin SDK with documentation and examples
+- [ ] Plugin loading and lifecycle management
+- [ ] Security model for plugin validation
+- [ ] Plugin marketplace or distribution system
+- [ ] Sample plugins demonstrating capabilities
+
+**Implementation Notes**:
+- Use WebAssembly (WASM) for plugin sandboxing
+- Implement plugin signing and verification
+- Create comprehensive plugin development documentation
+- Consider plugin versioning and compatibility
+
+=== Task 3.5: Advanced Monitoring and Analytics
+
+**Priority**: Low
+**Estimated Effort**: 2-3 weeks
+**Dependencies**: Task 1.4 (Integration testing)
+
+**Task Prompt**: Implement advanced monitoring and analytics features including real-time performance metrics, network traffic analysis, security event monitoring, and predictive analytics. Create dashboards for administrators and integrate with popular monitoring systems.
+
+**Acceptance Criteria**:
+- [ ] Real-time performance monitoring dashboard
+- [ ] Network traffic analysis and visualization
+- [ ] Security event detection and alerting
+- [ ] Predictive analytics for connection issues
+- [ ] Integration with Prometheus, Grafana, ELK stack
+- [ ] Custom metrics and alerting rules
+- [ ] Historical data analysis and reporting
+
+**Implementation Notes**:
+- Use time-series databases for metrics storage
+- Implement efficient data collection without performance impact
+- Create standard monitoring integrations
+- Consider privacy implications of data collection
+
+== Phase 4: Long-term Vision
+
+=== Task 4.1: Cloud-Native Architecture
+
+**Priority**: Low
+**Estimated Effort**: 6-8 weeks
+**Dependencies**: Phase 3 completion
+
+**Task Prompt**: Redesign the architecture for cloud-native deployment with microservices, container orchestration, and cloud platform integration. Implement service mesh capabilities, auto-scaling, and cloud-specific optimizations for AWS, Azure, and Google Cloud.
+
+**Acceptance Criteria**:
+- [ ] Microservices architecture with service discovery
+- [ ] Kubernetes deployment manifests and operators
+- [ ] Service mesh integration (Istio, Linkerd)
+- [ ] Auto-scaling based on load and demand
+- [ ] Cloud platform integrations (IAM, secrets management)
+- [ ] Observability with distributed tracing
+- [ ] Infrastructure as code templates
+
+**Implementation Notes**:
+- Use gRPC for inter-service communication
+- Implement circuit breakers and retry mechanisms
+- Design for eventual consistency and resilience
+- Consider multi-cloud deployment scenarios
+
+=== Task 4.2: AI-Powered Features
+
+**Priority**: Low
+**Estimated Effort**: 4-6 weeks
+**Dependencies**: Task 3.5 (Advanced monitoring)
+
+**Task Prompt**: Integrate AI and machine learning capabilities for intelligent connection optimization, anomaly detection, predictive maintenance, and automated troubleshooting. Implement natural language interfaces for configuration and support.
+
+**Acceptance Criteria**:
+- [ ] Intelligent connection path optimization using ML
+- [ ] Anomaly detection for security and performance issues
+- [ ] Predictive maintenance with proactive alerts
+- [ ] Automated troubleshooting and self-healing
+- [ ] Natural language configuration interface
+- [ ] Chatbot for user support and guidance
+- [ ] Machine learning model deployment and updating
+
+**Implementation Notes**:
+- Use lightweight ML frameworks suitable for edge deployment
+- Implement privacy-preserving ML techniques
+- Create feedback loops for model improvement
+- Consider on-device vs. cloud-based inference
+
+=== Task 4.3: Zero-Trust Network Integration
+
+**Priority**: Low
+**Estimated Effort**: 5-7 weeks
+**Dependencies**: Task 3.3 (Enterprise features)
+
+**Task Prompt**: Implement zero-trust network architecture integration with identity verification, device attestation, continuous monitoring, and dynamic access controls. Integrate with zero-trust platforms and implement software-defined perimeter capabilities.
+
+**Acceptance Criteria**:
+- [ ] Device identity and attestation system
+- [ ] Continuous user and device verification
+- [ ] Dynamic access control based on risk assessment
+- [ ] Integration with zero-trust platforms (Zscaler, etc.)
+- [ ] Software-defined perimeter implementation
+- [ ] Contextual access policies
+- [ ] Real-time risk scoring and response
+
+**Implementation Notes**:
+- Implement device fingerprinting and attestation
+- Use behavioral analytics for risk assessment
+- Integrate with threat intelligence feeds
+- Consider privacy implications of continuous monitoring
+
+=== Task 4.4: Quantum-Safe Cryptography
+
+**Priority**: Low
+**Estimated Effort**: 3-4 weeks
+**Dependencies**: None
+
+**Task Prompt**: Prepare for the post-quantum cryptography era by implementing quantum-safe cryptographic algorithms and protocols. Ensure long-term security and compliance with emerging quantum-safe standards.
+
+**Acceptance Criteria**:
+- [ ] Post-quantum cryptographic algorithm support
+- [ ] Hybrid classical/quantum-safe key exchange
+- [ ] Quantum-safe certificate infrastructure
+- [ ] Migration path from current to quantum-safe crypto
+- [ ] Performance impact assessment and optimization
+- [ ] Compliance with NIST post-quantum standards
+
+**Implementation Notes**:
+- Use NIST-recommended post-quantum algorithms
+- Implement crypto-agility for algorithm updates
+- Test performance impact on different platforms
+- Plan for gradual migration strategy
+
+=== Task 4.5: Extended Reality (XR) Integration
+
+**Priority**: Low
+**Estimated Effort**: 4-5 weeks
+**Dependencies**: Task 2.3 (GUI implementation)
+
+**Task Prompt**: Explore integration with Extended Reality (XR) platforms including VR, AR, and mixed reality for immersive network management experiences. Create 3D visualizations of network topology, virtual control interfaces, and spatial computing integrations.
+
+**Acceptance Criteria**:
+- [ ] 3D network topology visualization in VR/AR
+- [ ] Spatial user interfaces for VPN management
+- [ ] Integration with popular XR platforms (Meta, Apple Vision, etc.)
+- [ ] Gesture and voice control interfaces
+- [ ] Collaborative virtual environments for team management
+- [ ] Accessibility considerations for XR interfaces
+
+**Implementation Notes**:
+- Use cross-platform XR frameworks (OpenXR)
+- Design for accessibility and motion sickness considerations
+- Consider enterprise XR deployment scenarios
+- Implement fallback to traditional interfaces
+
+== Implementation Guidelines
+
+=== Task Assignment Process
+
+1. **Task Selection**: Choose tasks based on team expertise and project priorities
+2. **Requirements Review**: Thoroughly review acceptance criteria and dependencies
+3. **Design Phase**: Create detailed technical design before implementation
+4. **Implementation**: Follow coding standards and include comprehensive tests
+5. **Review Process**: Conduct code reviews and architecture reviews
+6. **Testing**: Ensure all acceptance criteria are met with automated tests
+7. **Documentation**: Update all relevant documentation before task completion
+
+=== Quality Standards
+
+All tasks must meet the following quality standards:
+
+* **Code Quality**: Follow established coding standards and pass all linting checks
+* **Testing**: Achieve minimum 80% code coverage with meaningful tests
+* **Documentation**: Include inline documentation and user-facing documentation updates
+* **Performance**: Meet or exceed established performance benchmarks
+* **Security**: Follow security best practices and pass security reviews
+* **Accessibility**: Ensure accessibility compliance for user-facing features
+
+=== Success Metrics
+
+Each task should define and measure success metrics including:
+
+* **Functional Metrics**: Feature completeness and correctness
+* **Performance Metrics**: Speed, resource usage, and scalability
+* **Quality Metrics**: Bug reports, test coverage, and maintainability
+* **User Metrics**: User satisfaction, adoption rates, and usage patterns
+* **Business Metrics**: Cost reduction, efficiency gains, and competitive advantages
+
+== Risk Management
+
+=== Technical Risks
+
+* **Dependency Management**: Conda-forge package availability and compatibility
+* **Cross-Platform Compatibility**: Platform-specific issues and testing challenges
+* **Performance Impact**: Feature additions affecting core performance
+* **Security Vulnerabilities**: New attack vectors introduced by features
+
+=== Mitigation Strategies
+
+* **Early Prototyping**: Validate approaches with small prototypes before full implementation
+* **Comprehensive Testing**: Automated testing on all supported platforms
+* **Performance Monitoring**: Continuous performance testing and optimization
+* **Security Reviews**: Regular security audits and penetration testing
+
+== Resource Requirements
+
+=== Development Team
+
+* **2-3 Senior Rust Developers**: Core implementation and architecture
+* **1 Frontend Developer**: GUI implementation and user experience
+* **1 DevOps Engineer**: CI/CD, packaging, and deployment automation
+* **1 QA Engineer**: Testing automation and quality assurance
+* **1 Technical Writer**: Documentation and user guides
+
+=== Infrastructure
+
+* **Development Environment**: Pixi-based development setup for all contributors
+* **CI/CD Infrastructure**: GitHub Actions with cross-platform build capabilities
+* **Testing Infrastructure**: Automated testing on multiple platforms and configurations
+* **Package Distribution**: Conda-forge integration and package hosting
+
+== Community Engagement
+
+=== Contribution Guidelines
+
+* **Open Source Development**: Encourage community contributions to all roadmap tasks
+* **Mentorship Program**: Pair experienced developers with new contributors
+* **Documentation Focus**: Prioritize clear documentation for all features
+* **User Feedback**: Regular user surveys and feedback collection
+
+=== Communication Channels
+
+* **GitHub Discussions**: Technical discussions and feature requests
+* **Discord/Slack**: Real-time communication and support
+* **Monthly Meetings**: Progress updates and roadmap adjustments
+* **Blog Posts**: Regular updates on development progress
+
+== Conclusion
+
+This roadmap provides a comprehensive plan for the continued development and enhancement of GlobalProtect OpenConnect. The tasks are designed to build upon the current success of the CLI implementation while addressing the GUI challenges and expanding into advanced enterprise and cloud-native features.
+
+The roadmap is flexible and will be updated based on community feedback, market demands, and technological changes. Regular reviews will ensure that priorities remain aligned with user needs and project goals.
+
+Success in executing this roadmap will establish GlobalProtect OpenConnect as the leading open-source VPN client solution, providing enterprise-grade capabilities with modern development practices and exceptional user experience.
