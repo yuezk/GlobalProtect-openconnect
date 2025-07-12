@@ -1,0 +1,97 @@
+package:
+  name: globalprotect-openconnect
+  version: "2.4.4"
+
+source:
+  path: .
+
+build:
+  number: 0
+  script:
+    - export CARGO_PROFILE_RELEASE_STRIP=symbols
+    - export CARGO_PROFILE_RELEASE_LTO=true
+    - cd $SRC_DIR
+    - pixi run setup
+    - pixi run build
+    - mkdir -p $PREFIX/bin
+    - cp target/release/gpclient $PREFIX/bin/
+    - cp target/release/gpservice $PREFIX/bin/
+    - cp target/release/gpauth $PREFIX/bin/
+    - cp target/release/gpgui-helper $PREFIX/bin/
+    - mkdir -p $PREFIX/share/applications
+    - cp packaging/files/usr/share/applications/gpgui.desktop $PREFIX/share/applications/
+    - mkdir -p $PREFIX/share/icons/hicolor/scalable/apps
+    - cp packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $PREFIX/share/icons/hicolor/scalable/apps/
+    - mkdir -p $PREFIX/share/icons/hicolor/32x32/apps
+    - cp packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $PREFIX/share/icons/hicolor/32x32/apps/
+    - mkdir -p $PREFIX/share/icons/hicolor/128x128/apps
+    - cp packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $PREFIX/share/icons/hicolor/128x128/apps/
+    - mkdir -p $PREFIX/share/icons/hicolor/256x256@2/apps
+    - cp packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $PREFIX/share/icons/hicolor/256x256@2/apps/
+    - mkdir -p $PREFIX/share/polkit-1/actions
+    - cp packaging/files/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $PREFIX/share/polkit-1/actions/
+
+requirements:
+  build:
+    - rust >=1.80
+    - nodejs >=20
+    - make
+    - pkg-config
+    - gcc
+    - gxx
+    - cmake
+    - ninja
+    - perl
+    - jq
+    - git
+    - pixi
+  host:
+    - openconnect >=8.20
+    - libsecret
+    - webkit2gtk
+    - libayatana-appindicator
+    - libxml2
+    - glib
+    - gtk3
+    - pango
+    - cairo
+    - gdk-pixbuf
+    - atk
+  run:
+    - openconnect >=8.20
+    - libsecret
+    - webkit2gtk
+    - libayatana-appindicator
+    - libxml2
+    - glib
+    - gtk3
+    - pango
+    - cairo
+    - gdk-pixbuf
+    - atk
+    - pkexec
+    - gnome-keyring
+
+test:
+  commands:
+    - gpclient --help
+    - gpservice --help
+    - gpauth --help
+    - gpgui-helper --help
+
+about:
+  home: https://github.com/yuezk/GlobalProtect-openconnect
+  license: GPL-3.0
+  license_file: LICENSE
+  summary: A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method
+  description: |
+    GlobalProtect-openconnect is a GUI for GlobalProtect VPN, based on OpenConnect,
+    that supports the SSO authentication method. It provides both CLI and GUI interfaces
+    for connecting to GlobalProtect VPN servers with features like SSO authentication,
+    FIDO2 support, client certificate authentication, and more.
+  doc_url: https://github.com/yuezk/GlobalProtect-openconnect/blob/main/README.md
+  dev_url: https://github.com/yuezk/GlobalProtect-openconnect
+
+extra:
+  recipe-maintainers:
+    - yuezk

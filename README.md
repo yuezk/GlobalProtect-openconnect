@@ -153,9 +153,106 @@ sudo emerge -av net-vpn/GlobalProtect-openconnect
 
 ## Build from source
 
-You can build the client from source using either a devcontainer (recommended) or a local setup.
+You can build the client from source using pixi (recommended for development), a devcontainer, or a local setup.
 
-### Option 1: Using DevContainer (Recommended)
+### Option 1: Using Pixi (Development Setup)
+
+This project includes [pixi](https://pixi.sh/) configuration for reproducible development environments with conda-forge packages. **Note**: While pixi provides excellent dependency management, the GUI components require system-level GTK libraries that may need additional configuration.
+
+#### Prerequisites
+
+- [Pixi](https://pixi.sh/latest/#installation) (cross-platform package manager)
+
+#### Build Steps
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yuezk/GlobalProtect-openconnect.git
+   cd GlobalProtect-openconnect
+   ```
+
+2. Install dependencies:
+   ```bash
+   pixi install
+   ```
+
+3. Build the project:
+   ```bash
+   # For CLI components only (most reliable)
+   pixi run build-cli
+   
+   # For full build (may require additional system dependencies)
+   pixi run build
+   ```
+
+4. The built binaries will be available in `target/release/`:
+   - `gpclient` - CLI client
+   - `gpservice` - Background service
+   - `gpauth` - Authentication helper
+   - `gpgui-helper` - GUI helper (if GUI build succeeds)
+
+#### Available Pixi Commands
+
+```bash
+# Setup development environment
+pixi run setup
+
+# Build CLI components only
+pixi run build-cli
+
+# Build frontend (Node.js components)
+pixi run build-frontend
+
+# Build Rust components
+pixi run build-rust
+
+# Test the build
+pixi run test
+
+# Clean build artifacts
+pixi run clean
+
+# Format code
+pixi run format
+
+# Run linting
+pixi run lint
+
+# Create conda package with rattler-build
+pixi run package
+```
+
+#### Pixi Environments
+
+The project supports multiple environments:
+
+- `default` - Full build with GUI support
+- `cli` - CLI-only build without GUI dependencies  
+- `dev` - Development environment with additional tools
+
+```bash
+# Use CLI environment
+pixi run -e cli build-cli
+
+# Use development environment
+pixi run -e dev build
+```
+
+#### Conda-Forge Packaging
+
+This project includes [rattler-build](https://github.com/prefix-dev/rattler-build) configuration for creating conda-forge compatible packages:
+
+```bash
+# Create conda package
+pixi run package
+
+# Or directly with rattler-build
+rattler-build build --recipe recipe.yaml
+```
+
+The generated conda package includes all binaries, desktop integration files, icons, and PolicyKit configuration.
+
+### Option 2: Using DevContainer
 
 This project includes a devcontainer configuration that provides a consistent build environment with all dependencies pre-installed.
 
@@ -203,7 +300,7 @@ This project includes a devcontainer configuration that provides a consistent bu
    make build
    ```
 
-### Option 2: Local Build
+### Option 3: Local Build
 
 #### Prerequisites
 
@@ -234,6 +331,35 @@ After building, you can test the CLI client:
 - `BUILD_GUI=0` - Disable GUI components (CLI only)
 - `BUILD_FE=0` - Skip frontend build (use pre-built assets)
 - `OFFLINE=1` - Build in offline mode using vendored dependencies
+
+### Conda-Forge Packaging
+
+This project uses [rattler-build](https://github.com/prefix-dev/rattler-build) to create conda-forge compatible packages.
+
+#### Creating a Conda Package
+
+```bash
+# Using pixi
+pixi run package
+
+# Or directly with rattler-build
+rattler-build build --recipe recipe.yaml
+```
+
+#### Package Structure
+
+The conda package includes:
+- All binary executables (`gpclient`, `gpservice`, `gpauth`, `gpgui-helper`)
+- Desktop integration files
+- Icon files
+- PolicyKit configuration
+
+#### Distribution
+
+The generated package can be:
+- Uploaded to conda-forge
+- Installed locally with `conda install`
+- Distributed via private conda channels
 
 ## FAQ
 

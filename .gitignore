@@ -11,3 +11,13 @@ SNAPSHOT
 
 # Tauri generated files
 gen
+
+# Pixi generated files
+.pixi/
+output/
+*.conda
+*.tar.bz2
+
+# Conda build artifacts
+build/
+work/

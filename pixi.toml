@@ -1,0 +1,159 @@
+[project]
+name = "globalprotect-openconnect"
+version = "2.4.4"
+description = "A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method. CLI build working with pixi!"
+authors = ["Kevin Yue <k3vinyue@gmail.com>"]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[dependencies]
+# Rust toolchain
+rust = "1.80.*"
+# Build tools
+make = "*"
+pkg-config = "*"
+# System dependencies
+openconnect = "*"
+# GUI dependencies for GTK/Cairo
+cairo = "*"
+glib = "*"
+gtk3 = "*"
+pango = "*"
+gdk-pixbuf = "*"
+atk = "*"
+libxml2 = "*"
+# WebKit and soup dependencies
+libsoup = "*"
+# Missing dependency for fontconfig
+expat = "*"
+# Node.js for frontend
+nodejs = "20.*"
+# Additional build tools
+perl = "*"
+jq = "*"
+git = "*"
+# Rattler-build for packaging
+rattler-build = "*"
+
+[build-dependencies]
+# C compiler and build tools
+c-compiler = "*"
+cxx-compiler = "*"
+
+
+[tasks]
+
+[tasks.setup]
+cmd = "corepack enable"
+cwd = "."
+
+[tasks.build-frontend]
+cmd = "cd apps/gpgui-helper && pnpm install && pnpm build"
+cwd = "."
+
+[tasks.build-rust]
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig cargo build --release"
+cwd = "."
+
+[tasks.build]
+depends-on = ["setup", "build-frontend", "build-rust"]
+
+[tasks.build-cli]
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig cargo build --release --no-default-features -p gpclient -p gpservice -p gpauth"
+cwd = "."
+
+[tasks.test-cli]
+cmd = "echo 'Testing CLI binaries...' && ./target/release/gpclient --version && ./target/release/gpservice --version && ./target/release/gpauth --version"
+cwd = "."
+
+[tasks.test]
+cmd = "./target/release/gpclient --help"
+cwd = "."
+
+[tasks.clean]
+cmd = "cargo clean && rm -rf apps/gpgui-helper/node_modules apps/gpgui-helper/dist"
+cwd = "."
+
+[tasks.check-pkgconfig]
+cmd = "echo \"PKG_CONFIG_PATH: $PKG_CONFIG_PATH\" && echo \"CONDA_PREFIX: $CONDA_PREFIX\" && ls -la $CONDA_PREFIX/lib/pkgconfig/ | head"
+cwd = "."
+
+[tasks.package]
+cmd = "rattler-build build --recipe recipe.yaml"
+cwd = "."
+
+[tasks.dev-setup]
+cmd = "rustup component add clippy rustfmt"
+cwd = "."
+
+[tasks.lint]
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig cargo clippy -- -D warnings"
+cwd = "."
+
+[tasks.format]
+cmd = "cargo fmt"
+cwd = "."
+
+[tasks.format-check]
+cmd = "cargo fmt -- --check"
+cwd = "."
+
+[tasks.debug-pkgconfig]
+cmd = "echo PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
+cwd = "."
+
+[tasks.test-pkgconfig-direct]
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists cairo && echo 'SUCCESS: cairo found' || echo 'FAILED: cairo not found'"
+cwd = "."
+
+[tasks.list-pkgconfig-files]
+cmd = "ls $CONDA_PREFIX/lib/pkgconfig/"
+cwd = "."
+
+[tasks.test-conda-pkgconfig]
+cmd = "$CONDA_PREFIX/bin/pkg-config --exists cairo"
+cwd = "."
+
+[tasks.check-path]
+cmd = "echo PATH: $PATH && which pkg-config"
+cwd = "."
+
+[tasks.test-pkgconfig-manual]
+cmd = "echo 'CONDA_PREFIX is:' $CONDA_PREFIX && echo 'Setting PKG_CONFIG_PATH manually' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists cairo && echo 'cairo: OK' || echo 'cairo: FAIL'"
+cwd = "."
+
+[tasks.test-env-expansion]
+cmd = "echo CONDA_PREFIX=$CONDA_PREFIX && echo Full-path=$CONDA_PREFIX/lib/pkgconfig && ls -la $CONDA_PREFIX/lib/pkgconfig/cairo.pc"
+cwd = "."
+
+[tasks.test-individual-deps]
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists zlib && echo 'zlib: OK' || echo 'zlib: FAIL'"
+cwd = "."
+
+[tasks.test-libpng-version]
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --modversion libpng"
+cwd = "."
+
+[tasks.test-freetype-version]
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --modversion freetype2"
+cwd = "."
+
+[tasks.test-cairo-deps]
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --print-requires-private cairo"
+cwd = "."
+
+[tasks.test-all-gtk-packages]
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists cairo && echo 'cairo: OK' || echo 'cairo: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists gdk-3.0 && echo 'gdk-3.0: OK' || echo 'gdk-3.0: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists pango && echo 'pango: OK' || echo 'pango: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists gdk-pixbuf-2.0 && echo 'gdk-pixbuf-2.0: OK' || echo 'gdk-pixbuf-2.0: FAIL'"
+cwd = "."
+
+# CLI build workflow - WORKING!
+[tasks.cli-workflow]
+depends-on = ["clean", "build-cli", "test-cli"]
+
+[environments]
+# Default environment
+default = { solve-group = "default" }
+# CLI-only environment
+cli = { solve-group = "cli" }
+# Development environment
+dev = { solve-group = "dev" }

@@ -11,13 +11,20 @@ impl WindowExt for WebviewWindow {
     Ok(())
   }
 
-  #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+  #[cfg(all(not(any(target_os = "macos", target_os = "windows")), feature = "gtk"))]
   fn raise(&self) -> anyhow::Result<()> {
     unix::raise_window(self)
   }
+
+  #[cfg(all(not(any(target_os = "macos", target_os = "windows")), not(feature = "gtk")))]
+  fn raise(&self) -> anyhow::Result<()> {
+    // Fallback implementation without GTK
+    self.show()?;
+    Ok(())
+  }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(all(not(any(target_os = "macos", target_os = "windows")), feature = "gtk"))]
 mod unix {
   use std::{process::ExitStatus, time::Duration};
 
