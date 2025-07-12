@@ -105,14 +105,13 @@ The CLI components require:
 
 === Network Architecture
 
-[source,monospace]
-----
+....
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   End User      │    │  Corporate      │    │  GlobalProtect  │
 │   Device        │────│  Network        │────│  Gateway        │
 │                 │    │  (Internal)     │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
+         │                      │                      │
          │ VPN Tunnel           │ Policy/Auth          │ Internet
          │ (Encrypted)          │ Server               │ Access
          │                      │                      │
@@ -121,7 +120,7 @@ The CLI components require:
 │   Resources     │    │  Provider       │    │  Resources      │
 │                 │    │  (SAML/SSO)     │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-----
+....
 
 == Installation and Deployment
 
