@@ -104,22 +104,23 @@ The CLI components require:
 * **System Libraries**: Network, security, and system integration
 
 === Network Architecture
+
 [source,text]
 ----
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   End User      │    │  Corporate      │    │  GlobalProtect  │
-│   Device        │────│  Network        │────│  Gateway        │
-│                 │    │  (Internal)     │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                      │                      │
-         │ VPN Tunnel           │ Policy/Auth          │ Internet
-         │ (Encrypted)          │ Server               │ Access
-         │                      │                      │
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Internet      │    │  Authentication │    │  Remote         │
-│   Resources     │    │  Provider       │    │  Resources      │
-│                 │    │  (SAML/SSO)     │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
++-----------------+    +-----------------+    +-----------------+
+|   End User      |    |  Corporate      |    |  GlobalProtect  |
+|   Device        |----|  Network        |----|  Gateway        |
+|                 |    |  (Internal)     |    |                 |
++-----------------+    +-----------------+    +-----------------+
+         |                      |                      |
+         | VPN Tunnel           | Policy/Auth          | Internet
+         | (Encrypted)          | Server               | Access
+         |                      |                      |
++-----------------+    +-----------------+    +-----------------+
+|   Internet      |    |  Authentication |    |  Remote         |
+|   Resources     |    |  Provider       |    |  Resources      |
+|                 |    |  (SAML/SSO)     |    |                 |
++-----------------+    +-----------------+    +-----------------+
 ----
 
 == Installation and Deployment
