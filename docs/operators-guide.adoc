@@ -185,6 +185,14 @@ Using pixi for package management and installation:
 curl -fsSL https://pixi.sh/install.sh | bash
 ----
 
+**Note**: Pixi global installation provides:
+
+- Isolated package environments
+- Reproducible installations with lock files
+- Modern conda-forge ecosystem integration
+- Cross-platform compatibility
+
+
 **Option 1: Install from conda-forge (when available)**
 
 [source,bash]
@@ -200,12 +208,6 @@ pixi global install -c conda-forge globalprotect-openconnect-cli
 # Install from local conda package file (must provide full path, relative paths are not yet supported)
 pixi global install $(pwd)/globalprotect-openconnect-cli-2.4.4-hb0f4dca_0.conda
 ----
-
-**Note**: Pixi global installation provides:
-- Isolated package environments
-- Reproducible installations with lock files
-- Modern conda-forge ecosystem integration
-- Cross-platform compatibility
 
 ==== Binary Installation
 
