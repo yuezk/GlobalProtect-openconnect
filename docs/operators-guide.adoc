@@ -26,6 +26,7 @@ GlobalProtect OpenConnect is a VPN client solution that provides secure connecti
 
 This guide is designed for:
 
+
 * **System Administrators**: Managing VPN client deployments
 * **DevOps Engineers**: Integrating VPN clients into automation workflows
 * **IT Operations**: Supporting end-user VPN connectivity
@@ -34,6 +35,7 @@ This guide is designed for:
 === Scope
 
 This guide covers:
+
 
 * Installation and deployment procedures
 * Configuration management
@@ -95,6 +97,7 @@ service --> gateway : Policy Updates
 
 The CLI components require:
 
+
 * **OpenConnect Library**: Core VPN functionality
 * **SSL/TLS Libraries**: Secure communication
 * **Authentication Libraries**: Kerberos, SAML support
@@ -102,6 +105,7 @@ The CLI components require:
 
 === Network Architecture
 
+[source,monospace]
 ----
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   End User      │    │  Corporate      │    │  GlobalProtect  │
@@ -124,6 +128,7 @@ The CLI components require:
 === System Requirements
 
 ==== Hardware Requirements
+
 
 * **CPU**: x86_64 architecture (Intel/AMD)
 * **Memory**: Minimum 512 MB RAM, Recommended 1 GB
@@ -1922,6 +1927,7 @@ gpauth --help                       # Show help
 * **Community Forum**: https://forum.globalprotect-openconnect.org
 
 ==== Additional Resources
+
 
 * **Official Documentation**: https://github.com/yuezk/GlobalProtect-openconnect/wiki
 * **API Reference**: https://api.globalprotect-openconnect.org

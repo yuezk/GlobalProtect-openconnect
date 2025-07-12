@@ -22,6 +22,7 @@ Welcome to the comprehensive documentation for GlobalProtect OpenConnect, a mode
 
 GlobalProtect OpenConnect is an open-source VPN client that supports the GlobalProtect protocol, featuring:
 
+
 * **Complete CLI Implementation**: Full-featured command-line tools for all VPN operations
 * **Modern Build System**: Pixi-based development environment with conda-forge integration
 * **Cross-Platform Support**: Linux, macOS, and Windows compatibility
@@ -31,6 +32,7 @@ GlobalProtect OpenConnect is an open-source VPN client that supports the GlobalP
 === Current Status
 
 As of version 2.4.4, the project has achieved:
+
 
 * ✅ **CLI Components Fully Functional**: gpclient, gpservice, and gpauth are production-ready
 * ✅ **Modern Development Environment**: Complete pixi conversion with conda-forge packaging
@@ -47,6 +49,7 @@ This documentation is organized into three main sections:
 **Target Audience**: Software developers, contributors, and maintainers
 
 The Developer's Guide provides comprehensive information for anyone working on the GlobalProtect OpenConnect codebase. It covers:
+
 
 * **Development Environment Setup**: Complete pixi-based development workflow
 * **Build System**: Understanding and using the modern build infrastructure
@@ -67,6 +70,7 @@ The Developer's Guide provides comprehensive information for anyone working on t
 
 The Operator's Guide focuses on production deployment, configuration, and maintenance of GlobalProtect OpenConnect in enterprise environments. It covers:
 
+
 * **Installation and Deployment**: Multiple installation methods and deployment strategies
 * **Configuration Management**: System and user configuration options
 * **Monitoring and Logging**: Comprehensive monitoring setup and troubleshooting
@@ -85,6 +89,7 @@ The Operator's Guide focuses on production deployment, configuration, and mainte
 **Target Audience**: Project stakeholders, contributors, and community members
 
 The Roadmap document outlines the planned development tasks and strategic direction for the project. It includes:
+
 
 * **Immediate Enhancements**: Near-term improvements and feature additions
 * **GUI Development**: Plans for resolving GUI build challenges
@@ -296,6 +301,7 @@ We welcome contributions from the community! Here's how to get involved:
 
 === Development Contributions
 
+
 1. **Read the Developer's Guide**: Understand the development workflow and standards
 2. **Set Up Environment**: Use pixi for consistent development experience
 3. **Choose a Task**: Select from the roadmap or open issues
@@ -303,12 +309,14 @@ We welcome contributions from the community! Here's how to get involved:
 
 === Documentation Contributions
 
+
 1. **Identify Gaps**: Find areas where documentation can be improved
 2. **Follow Standards**: Use AsciiDoc format and follow documentation guidelines
 3. **Update Multiple Guides**: Ensure consistency across all documentation
 4. **Review Process**: Submit changes through standard review process
 
 === Community Contributions
+
 
 1. **User Support**: Help other users in forums and discussions
 2. **Testing**: Test new releases and report issues
@@ -320,6 +328,7 @@ We welcome contributions from the community! Here's how to get involved:
 === Current Release: 2.4.4
 
 **Release Date**: July 12, 2025
+
 **Status**: Production Ready (CLI Components)
 
 **Key Features**:
@@ -389,5 +398,7 @@ Special thanks to the projects that make GlobalProtect OpenConnect possible:
 ---
 
 **Last Updated**: {revdate}
+
 **Documentation Version**: {version}
+
 **Project Website**: https://github.com/yuezk/GlobalProtect-openconnect

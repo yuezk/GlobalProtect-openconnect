@@ -331,6 +331,8 @@ ldd target/release/gpclient | grep .pixi/envs      # ✅ Environment isolated
 The project was successfully migrated from a devcontainer-based system to pixi:
 
 ==== Before Migration
+
+
 * Complex Docker setup required
 * System dependency management challenges
 * Manual build and packaging processes
@@ -338,6 +340,8 @@ The project was successfully migrated from a devcontainer-based system to pixi:
 * Limited automation and reproducibility
 
 ==== After Migration
+
+
 * ✅ Simple setup: `pixi install` gets everything working
 * ✅ Managed dependencies: All via conda-forge with version locking
 * ✅ Automated workflows: Build, test, and package with single commands
@@ -476,6 +480,7 @@ The project includes a comprehensive test suite located in the `tests/` director
 * **`tests/README.md`**: Complete test documentation and guidelines
 
 ==== Test Categories
+
 
 . **Environment Testing**: Verifies pixi environment configuration
 . **Build Process**: Validates clean builds and compilation
@@ -677,6 +682,7 @@ PKG_CONFIG_DEBUG=1 pixi run build-cli
 
 ==== Documentation Guidelines
 
+
 * Update AsciiDoc files for significant changes
 * Include code examples in documentation
 * Add inline comments for complex logic
@@ -699,10 +705,14 @@ All contributions must:
 **Current State**: CLI components are fully functional, GUI components face dependencies challenges.
 
 **GUI Challenges**:
+
+
 * webkit2gtk-4.1 required by Tauri v2 is not available in conda-forge
 * GTK/Cairo libraries have resolution complexities in conda environment
 
 **Potential Solutions**:
+
+
 * Research Tauri v1 compatibility
 * Explore alternative web view libraries
 * Consider hybrid approach (CLI via conda, GUI via system packages)
@@ -764,6 +774,7 @@ pixi run check-pkgconfig      # Debug environment
 
 ==== Environment Variables
 
+
 * **CONDA_PREFIX**: Pixi environment location
 * **PKG_CONFIG_PATH**: Package configuration paths
 * **RUST_LOG**: Rust logging level
@@ -773,12 +784,14 @@ pixi run check-pkgconfig      # Debug environment
 
 ==== Build Performance
 
+
 * **CLI Build Time**: ~54 seconds (full rebuild)
 * **Incremental Build**: ~5-10 seconds
 * **Clean Build**: ~60 seconds including dependencies
 * **Package Creation**: ~30 seconds
 
 ==== Binary Sizes
+
 
 * **gpclient**: 4.0 MB (release build)
 * **gpservice**: 3.9 MB (release build)
@@ -787,7 +800,10 @@ pixi run check-pkgconfig      # Debug environment
 
 ==== Dependencies
 
+
 * **Total Packages**: 18 conda-forge packages
 * **Environment Size**: ~500 MB (with development tools)
 * **Build Dependencies**: ~200 MB
 * **Runtime Dependencies**: ~100 MB
+
+```
