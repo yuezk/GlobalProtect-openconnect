@@ -38,98 +38,6 @@ The roadmap is divided into four main phases:
 3. **Phase 3: Advanced Features** (6-12 months)
 4. **Phase 4: Long-term Vision** (12+ months)
 
-== Phase 1: Immediate Enhancements
-
-Priority tasks for enhancing the existing CLI implementation and expanding distribution channels.
-
-=== Overview
-
-Phase 1 focuses on strengthening the foundation laid by the successful CLI implementation. These tasks will expand distribution options, enhance testing infrastructure, and optimize performance while maintaining the high quality standards already established.
-
-**Key Objectives:**
-
-- Cross-platform package distribution for broader accessibility
-- Official conda-forge channel submission for professional distribution
-- Enhanced CLI features for improved user experience
-- Comprehensive integration testing infrastructure
-- Performance optimization for production deployments
-
-**Success Criteria:**
-
-- Packages available on all major platforms through conda-forge
-- Enhanced CLI features increase user satisfaction
-- Automated testing covers all integration scenarios
-- Performance improvements measurable in real-world usage
-
-== Phase 2: GUI Development
-
-Strategic approach to resolving GUI build challenges and implementing a modern desktop interface.
-
-=== Overview
-
-Phase 2 addresses the current GUI development challenges by researching alternative frameworks and implementing a new architecture that is compatible with conda-forge ecosystem while providing excellent user experience.
-
-**Key Objectives:**
-
-- Research and select appropriate GUI framework alternatives
-- Design new GUI architecture compatible with conda ecosystem
-- Implement core GUI features with modern UI/UX principles
-- Establish comprehensive GUI testing procedures
-- Distribute GUI components through conda-forge
-
-**Success Criteria:**
-
-- GUI framework selected and validated for conda-forge compatibility
-- Complete GUI implementation matches CLI functionality
-- User testing shows improved experience over previous GUI versions
-- GUI packages available through conda-forge
-
-== Phase 3: Advanced Features
-
-Implementation of enterprise-grade features and advanced capabilities for professional deployments.
-
-=== Overview
-
-Phase 3 expands GlobalProtect OpenConnect with advanced features required for enterprise deployments, including enhanced authentication systems, network management capabilities, and monitoring solutions.
-
-**Key Objectives:**
-
-- Advanced authentication systems supporting enterprise requirements
-- Enhanced network management and monitoring capabilities
-- Enterprise management features for large-scale deployments
-- Plugin and extension system for customization
-- Advanced monitoring and analytics for operational insights
-
-**Success Criteria:**
-
-- Enterprise features meet security and compliance requirements
-- Network management capabilities support complex topologies
-- Plugin system enables third-party integrations
-- Monitoring provides actionable operational insights
-
-== Phase 4: Long-term Vision
-
-Future-oriented development focusing on emerging technologies and next-generation capabilities.
-
-=== Overview
-
-Phase 4 represents the long-term vision for GlobalProtect OpenConnect, incorporating emerging technologies and preparing for future networking paradigms including cloud-native architectures and advanced security frameworks.
-
-**Key Objectives:**
-
-- Cloud-native architecture for modern deployment patterns
-- AI-powered features for intelligent network optimization
-- Zero-trust network integration for enhanced security
-- Quantum-safe cryptography for future-proof security
-- Extended reality integration for immersive management experiences
-
-**Success Criteria:**
-
-- Cloud-native deployment supports major cloud platforms
-- AI features demonstrably improve network performance
-- Zero-trust integration meets modern security standards
-- Quantum-safe implementation validated by security experts
-
 == Implementation Guidelines
 
 === Task Assignment Process
@@ -241,7 +149,28 @@ The roadmap is flexible and will be updated based on community feedback, market 
 
 Success in executing this roadmap will establish GlobalProtect OpenConnect as the leading open-source VPN client solution, providing enterprise-grade capabilities with modern development practices and exceptional user experience.
 
-== Task Definitions
+== Phase 1: Immediate Enhancements
+
+Priority tasks for enhancing the existing CLI implementation and expanding distribution channels.
+
+=== Overview
+
+Phase 1 focuses on strengthening the foundation laid by the successful CLI implementation. These tasks will expand distribution options, enhance testing infrastructure, and optimize performance while maintaining the high quality standards already established.
+
+**Key Objectives:**
+
+- Cross-platform package distribution for broader accessibility
+- Official conda-forge channel submission for professional distribution
+- Enhanced CLI features for improved user experience
+- Comprehensive integration testing infrastructure
+- Performance optimization for production deployments
+
+**Success Criteria:**
+
+- Packages available on all major platforms through conda-forge
+- Enhanced CLI features increase user satisfaction
+- Automated testing covers all integration scenarios
+- Performance improvements measurable in real-world usage
 
 [[cross-platform-packages]]
 === Cross-Platform Package Distribution
@@ -263,6 +192,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Documentation updated with platform-specific installation instructions
 
 **Implementation Notes**:
+
 - Use GitHub Actions matrix builds for cross-platform compilation
 - Set up Windows and macOS runners with appropriate dependencies
 - Ensure OpenConnect library availability on all platforms
@@ -288,6 +218,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Package available for installation via `conda install -c conda-forge globalprotect-openconnect-cli`
 
 **Implementation Notes**:
+
 - Follow conda-forge contribution guidelines
 - Ensure license compatibility and documentation completeness
 - Set up bot for automatic version updates
@@ -314,6 +245,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Man pages and help documentation updated
 
 **Implementation Notes**:
+
 - Design profile system for easy management of multiple VPN configurations
 - Implement structured logging with different output formats (JSON, text)
 - Add configuration validation with helpful error messages
@@ -340,6 +272,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Documentation for running and extending integration tests
 
 **Implementation Notes**:
+
 - Set up containerized test environments with Docker
 - Create mock GlobalProtect server implementing key protocols
 - Design test scenarios covering authentication, connection, and data transfer
@@ -366,10 +299,34 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Performance regression detection and alerting
 
 **Implementation Notes**:
+
 - Use cargo flamegraph and other profiling tools for analysis
 - Optimize critical paths in authentication and connection establishment
 - Implement connection pooling and caching where appropriate
 - Establish baseline performance metrics for comparison
+
+== Phase 2: GUI Development
+
+Strategic approach to resolving GUI build challenges and implementing a modern desktop interface.
+
+=== Overview
+
+Phase 2 addresses the current GUI development challenges by researching alternative frameworks and implementing a new architecture that is compatible with conda-forge ecosystem while providing excellent user experience.
+
+**Key Objectives:**
+
+- Research and select appropriate GUI framework alternatives
+- Design new GUI architecture compatible with conda ecosystem
+- Implement core GUI features with modern UI/UX principles
+- Establish comprehensive GUI testing procedures
+- Distribute GUI components through conda-forge
+
+**Success Criteria:**
+
+- GUI framework selected and validated for conda-forge compatibility
+- Complete GUI implementation matches CLI functionality
+- User testing shows improved experience over previous GUI versions
+- GUI packages available through conda-forge
 
 [[gui-framework-research]]
 === GUI Framework Research and Selection
@@ -392,6 +349,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Risk assessment and mitigation strategies for chosen framework
 
 **Implementation Notes**:
+
 - Evaluate Tauri v1, Iced, Egui, Qt for Rust, GTK4 bindings
 - Test conda-forge package availability for each framework's dependencies
 - Create simple prototypes showing VPN connection UI for each framework
@@ -418,6 +376,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Design system and UI component library created
 
 **Implementation Notes**:
+
 - Implement Model-View-Controller or similar architectural pattern
 - Design async communication layer with CLI components
 - Create reusable UI components following design system principles
@@ -445,6 +404,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Responsive design supporting different screen sizes
 
 **Implementation Notes**:
+
 - Implement connection wizard for easy VPN setup
 - Create dashboard showing connection status and statistics
 - Design authentication flows with clear user feedback
@@ -471,6 +431,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Performance testing for GUI responsiveness and resource usage
 
 **Implementation Notes**:
+
 - Use framework-appropriate testing tools for automated UI testing
 - Implement accessibility features following WCAG guidelines
 - Create test scenarios covering common user workflows
@@ -497,10 +458,34 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Package signing and verification for security
 
 **Implementation Notes**:
+
 - Create separate conda packages for GUI components
 - Implement platform-specific packaging for native distribution
 - Set up code signing for macOS and Windows packages
 - Test package installation and integration scenarios
+
+== Phase 3: Advanced Features
+
+Implementation of enterprise-grade features and advanced capabilities for professional deployments.
+
+=== Overview
+
+Phase 3 expands GlobalProtect OpenConnect with advanced features required for enterprise deployments, including enhanced authentication systems, network management capabilities, and monitoring solutions.
+
+**Key Objectives:**
+
+- Advanced authentication systems supporting enterprise requirements
+- Enhanced network management and monitoring capabilities
+- Enterprise management features for large-scale deployments
+- Plugin and extension system for customization
+- Advanced monitoring and analytics for operational insights
+
+**Success Criteria:**
+
+- Enterprise features meet security and compliance requirements
+- Network management capabilities support complex topologies
+- Plugin system enables third-party integrations
+- Monitoring provides actionable operational insights
 
 [[advanced-authentication]]
 === Advanced Authentication Systems
@@ -523,6 +508,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Audit logging for authentication events
 
 **Implementation Notes**:
+
 - Implement PKCS#11 support for hardware tokens
 - Create secure credential storage and management
 - Design MFA flows with fallback options
@@ -549,6 +535,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - API for programmatic network management
 
 **Implementation Notes**:
+
 - Implement platform-specific networking APIs
 - Create monitoring dashboard for network metrics
 - Design CLI tools for network diagnostics
@@ -575,6 +562,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Integration with enterprise management platforms
 
 **Implementation Notes**:
+
 - Design configuration management API and database
 - Implement policy enforcement at client and server levels
 - Create web-based management interface
@@ -601,6 +589,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Example plugins demonstrating common use cases
 
 **Implementation Notes**:
+
 - Design secure plugin loading and execution environment
 - Create comprehensive API documentation and examples
 - Implement plugin discovery and installation mechanisms
@@ -627,10 +616,34 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Export capabilities for external analysis
 
 **Implementation Notes**:
+
 - Implement privacy-respecting analytics collection
 - Create Prometheus exporters for metrics
 - Design alerting rules for common issues
 - Ensure data collection follows privacy regulations
+
+== Phase 4: Long-term Vision
+
+Future-oriented development focusing on emerging technologies and next-generation capabilities.
+
+=== Overview
+
+Phase 4 represents the long-term vision for GlobalProtect OpenConnect, incorporating emerging technologies and preparing for future networking paradigms including cloud-native architectures and advanced security frameworks.
+
+**Key Objectives:**
+
+- Cloud-native architecture for modern deployment patterns
+- AI-powered features for intelligent network optimization
+- Zero-trust network integration for enhanced security
+- Quantum-safe cryptography for future-proof security
+- Extended reality integration for immersive management experiences
+
+**Success Criteria:**
+
+- Cloud-native deployment supports major cloud platforms
+- AI features demonstrably improve network performance
+- Zero-trust integration meets modern security standards
+- Quantum-safe implementation validated by security experts
 
 [[cloud-native-architecture]]
 === Cloud-Native Architecture
@@ -653,6 +666,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Monitoring and observability for containerized deployments
 
 **Implementation Notes**:
+
 - Create optimized container images with minimal attack surface
 - Implement Kubernetes custom resources for VPN configuration
 - Design service mesh policies for secure communication
@@ -679,6 +693,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Machine learning models for network optimization
 
 **Implementation Notes**:
+
 - Implement lightweight ML models for client-side optimization
 - Create data pipelines for training and model updates
 - Design privacy-preserving analytics and learning systems
@@ -705,6 +720,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Compliance reporting and audit capabilities
 
 **Implementation Notes**:
+
 - Implement device fingerprinting and attestation
 - Create policy engine for dynamic access controls
 - Design integration APIs for zero-trust platforms
@@ -731,6 +747,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Migration path documentation for quantum-safe transition
 
 **Implementation Notes**:
+
 - Evaluate NIST post-quantum cryptography standards
 - Implement hybrid key exchange maintaining current security levels
 - Test performance impact and optimize critical paths
@@ -757,6 +774,7 @@ Success in executing this roadmap will establish GlobalProtect OpenConnect as th
 - Accessibility features for XR interfaces
 
 **Implementation Notes**:
+
 - Evaluate WebXR and native XR development platforms
 - Design intuitive 3D interfaces for network concepts
 - Create realistic network visualization and simulation
