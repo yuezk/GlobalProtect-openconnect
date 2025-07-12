@@ -25,8 +25,6 @@ GlobalProtect OpenConnect is a VPN client solution that provides secure connecti
 === Target Audience
 
 This guide is designed for:
-
-
 * **System Administrators**: Managing VPN client deployments
 * **DevOps Engineers**: Integrating VPN clients into automation workflows
 * **IT Operations**: Supporting end-user VPN connectivity
@@ -35,8 +33,6 @@ This guide is designed for:
 === Scope
 
 This guide covers:
-
-
 * Installation and deployment procedures
 * Configuration management
 * User management and authentication
@@ -96,8 +92,6 @@ service --> gateway : Policy Updates
 === System Dependencies
 
 The CLI components require:
-
-
 * **OpenConnect Library**: Core VPN functionality
 * **SSL/TLS Libraries**: Secure communication
 * **Authentication Libraries**: Kerberos, SAML support
@@ -128,8 +122,6 @@ The CLI components require:
 === System Requirements
 
 ==== Hardware Requirements
-
-
 * **CPU**: x86_64 architecture (Intel/AMD)
 * **Memory**: Minimum 512 MB RAM, Recommended 1 GB
 * **Storage**: 50 MB for binaries, 200 MB for dependencies
@@ -160,6 +152,16 @@ The CLI components require:
 
 === Installation Methods
 
+In each case the installation can be verified using the following commands:
+
+[source,bash]
+----
+# Verify installation
+gpclient --version
+gpservice --version
+gpauth --version
+----
+
 ==== Conda Package Installation (Recommended)
 
 The preferred installation method uses conda packages:
@@ -171,12 +173,39 @@ conda install -c conda-forge globalprotect-openconnect-cli
 
 # Install from local package
 conda install ./globalprotect-openconnect-cli-2.4.4-hb0f4dca_0.conda
-
-# Verify installation
-gpclient --version
-gpservice --version
-gpauth --version
 ----
+
+==== Pixi Installation Method
+
+Using pixi for package management and installation:
+
+[source,bash]
+----
+# Install pixi (if not already installed)
+curl -fsSL https://pixi.sh/install.sh | bash
+----
+
+**Option 1: Install from conda-forge (when available)**
+
+[source,bash]
+----
+# Install GlobalProtect CLI globally
+pixi global install -c conda-forge globalprotect-openconnect-cli
+----
+
+**Option 2: Install from local conda package**
+
+[source,bash]
+----
+# Install from local conda package file (must provide full path, relative paths are not yet supported)
+pixi global install $(pwd)/globalprotect-openconnect-cli-2.4.4-hb0f4dca_0.conda
+----
+
+**Note**: Pixi global installation provides:
+- Isolated package environments
+- Reproducible installations with lock files
+- Modern conda-forge ecosystem integration
+- Cross-platform compatibility
 
 ==== Binary Installation
 
@@ -1927,8 +1956,6 @@ gpauth --help                       # Show help
 * **Community Forum**: https://forum.globalprotect-openconnect.org
 
 ==== Additional Resources
-
-
 * **Official Documentation**: https://github.com/yuezk/GlobalProtect-openconnect/wiki
 * **API Reference**: https://api.globalprotect-openconnect.org
 * **Best Practices Guide**: https://best-practices.globalprotect-openconnect.org
