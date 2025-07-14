@@ -1,0 +1,198 @@
+// Common section: Network Architecture
+// This section is included in both developers-guide.adoc and operators-guide.adoc
+
+= Network Architecture
+
+The GlobalProtect OpenConnect system operates within a typical enterprise VPN infrastructure, connecting end-user devices to corporate resources through secure tunnels.
+
+== Network Flow Diagram
+
+[source,text]
+----
++-----------------+    +-----------------+    +-----------------+
+|   End User      |    |  Corporate      |    |  GlobalProtect  |
+|   Device        |----|  Network        |----|  Gateway        |
+|                 |    |  (Internal)     |    |                 |
++-----------------+    +-----------------+    +-----------------+
+         |                      |                      |
+         | VPN Tunnel           | Policy/Auth          | Internet
+         | (Encrypted)          | Server               | Access
+         |                      |                      |
++-----------------+    +-----------------+    +-----------------+
+|   Internet      |    |  Authentication |    |  Remote         |
+|   Resources     |    |  Provider       |    |  Resources      |
+|                 |    |  (SAML/SSO)     |    |                 |
++-----------------+    +-----------------+    +-----------------+
+----
+
+== Component Communication Flow
+
+[plantuml]
+----
+@startuml
+!define RECTANGLE class
+
+RECTANGLE "gpclient" as client {
+  + User Interface
+  + Connection Management
+  + Configuration
+}
+
+RECTANGLE "gpservice" as service {
+  + Background Operations
+  + Policy Enforcement
+  + Monitoring
+}
+
+RECTANGLE "gpauth" as auth {
+  + Authentication
+  + SSO Integration
+  + SAML Processing
+}
+
+RECTANGLE "VPN Gateway" as gateway {
+  + GlobalProtect Server
+  + Policy Server
+  + Certificate Authority
+}
+
+RECTANGLE "Auth Provider" as idp {
+  + SAML Identity Provider
+  + Corporate SSO
+  + Multi-Factor Auth
+}
+
+client --> service : Control Commands
+service --> auth : Authentication Requests
+auth --> idp : SAML/SSO Authentication
+auth --> gateway : Authentication Tokens
+client --> gateway : VPN Tunnel Establishment
+service --> gateway : Policy Updates
+gateway --> client : Connection Status
+
+@enduml
+----
+
+== Network Protocols and Ports
+
+**Outbound Connections (Client to Gateway)**
+
+[cols="1,1,1,2", options="header"]
+|===
+|Protocol |Port |Direction |Purpose
+
+|HTTPS
+|443
+|Outbound
+|Initial portal connection, authentication
+
+|TCP
+|443
+|Outbound
+|SSL VPN tunnel (primary)
+
+|UDP
+|4501
+|Outbound
+|ESP tunnel (if supported)
+
+|TCP
+|4501
+|Outbound
+|ESP tunnel fallback
+
+|DNS
+|53
+|Outbound
+|Name resolution for VPN endpoints
+|===
+
+**Internal Communication**
+
+[cols="1,1,1,2", options="header"]
+|===
+|Component |Interface |Port |Purpose
+
+|gpservice
+|Unix Socket
+|N/A
+|Local service communication
+
+|gpgui-helper
+|TCP Localhost
+|Dynamic
+|GUI to service bridge
+
+|Authentication
+|HTTPS
+|443
+|SAML/SSO provider communication
+|===
+
+== Security Considerations
+
+**Encryption Standards**
+* **VPN Tunnel**: AES-256-GCM, ChaCha20-Poly1305
+* **Control Channel**: TLS 1.3 with Perfect Forward Secrecy
+* **Certificate Validation**: Full chain validation with OCSP
+
+**Authentication Flow**
+1. Initial portal connection (HTTPS)
+2. SAML/SSO redirection to identity provider
+3. Multi-factor authentication (if configured)
+4. Token exchange and validation
+5. VPN tunnel establishment
+6. Continuous authentication monitoring
+
+**Network Isolation**
+* Split tunneling support for selective routing
+* DNS leak prevention
+* IPv6 support and leak prevention
+* Kill switch functionality for connection failures
+
+== Firewall Configuration
+
+**Required Outbound Rules**
+
+For corporate firewalls, the following outbound rules are typically required:
+
+[source,text]
+----
+# HTTPS to VPN portal
+ALLOW TCP 443 TO vpn.company.com
+
+# SAML/SSO authentication
+ALLOW TCP 443 TO sso.company.com
+
+# VPN tunnel establishment
+ALLOW TCP 443 TO vpn-gateway.company.com
+ALLOW UDP 4501 TO vpn-gateway.company.com
+
+# DNS resolution
+ALLOW UDP 53 TO corporate-dns-servers
+----
+
+**Network Address Translation (NAT)**
+
+GlobalProtect OpenConnect handles NAT traversal automatically:
+* Automatic NAT-T detection and configuration
+* Keep-alive packets for NAT mapping maintenance
+* Dynamic port allocation for multiple simultaneous connections
+* Support for nested NAT environments
+
+== Performance Characteristics
+
+**Bandwidth Considerations**
+* Tunnel overhead: ~3-5% of total bandwidth
+* Compression: Optional per-connection
+* MTU optimization: Automatic path MTU discovery
+
+**Latency Impact**
+* Additional RTT: 5-15ms typical
+* Encryption overhead: <1ms on modern hardware
+* Connection establishment: 2-5 seconds including authentication
+
+**Scalability Metrics**
+* Concurrent connections: Limited by system resources
+* Memory usage: ~10-50MB per active connection
+* CPU usage: ~1-5% per connection on modern systems

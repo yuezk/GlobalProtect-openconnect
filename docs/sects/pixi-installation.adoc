@@ -1,0 +1,74 @@
+// Common section: Pixi Installation
+// This section is included in both developers-guide.adoc and operators-guide.adoc
+
+= Installing Pixi
+
+Pixi is a modern package and environment manager that provides reproducible environments and cross-platform compatibility. It is the recommended tool for managing dependencies and building GlobalProtect OpenConnect.
+
+== Installation Methods
+
+**Linux/macOS (Recommended)**
+
+Install pixi using the official installer:
+
+[source,bash]
+----
+curl -fsSL https://pixi.sh/install.sh | bash
+----
+
+**Windows**
+
+Install using PowerShell:
+
+[source,powershell]
+----
+iwr -useb https://pixi.sh/install.ps1 | iex
+----
+
+**Alternative Installation Methods**
+
+**Using Homebrew (macOS/Linux):**
+[source,bash]
+----
+brew install pixi
+----
+
+**Using Conda:**
+[source,bash]
+----
+conda install -c conda-forge pixi
+----
+
+**Using Cargo (Rust):**
+[source,bash]
+----
+cargo install pixi
+----
+
+== Verification
+
+After installation, verify pixi is working correctly:
+
+[source,bash]
+----
+# Check pixi version
+pixi --version
+
+# Verify pixi can access conda-forge
+pixi search rust
+----
+
+== Configuration
+
+Pixi uses conda-forge as the default package repository and requires no additional configuration for basic usage. Advanced users can customize behavior through:
+
+* **Global configuration**: `~/.pixi/config.toml`
+* **Project configuration**: `pixi.toml` (managed by the project)
+
+== Benefits of Pixi
+
+* **Reproducible Environments**: Lock files ensure consistent builds across systems
+* **Cross-Platform**: Same commands work on Linux, macOS, and Windows
+* **Modern**: Built with Rust for speed and reliability
+* **Conda Integration**: Full access to conda-forge ecosystem
+* **Task Management**: Built-in task runner for complex workflows

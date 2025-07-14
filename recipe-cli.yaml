@@ -1,10 +1,13 @@
+# tag::package-info[]
 package:
   name: globalprotect-openconnect-cli
   version: "2.4.4"
 
 source:
   path: .
+# end::package-info[]
 
+# tag::build-script[]
 build:
   number: 0
   script:
@@ -25,7 +28,9 @@ build:
     - cp target/release/gpclient $PREFIX/bin/
     - cp target/release/gpservice $PREFIX/bin/
     - cp target/release/gpauth $PREFIX/bin/
+# end::build-script[]
 
+# tag::requirements[]
 requirements:
   build:
     - rust >=1.80
@@ -46,7 +51,12 @@ requirements:
   run:
     - openconnect >=8.20
     - libxml2
+    - openssl
+    - gnutls
+    - krb5
+    - zlib
     - expat
+# end::requirements[]
 
 tests:
   - script:

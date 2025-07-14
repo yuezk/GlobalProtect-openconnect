@@ -1,10 +1,13 @@
+# tag::package-info[]
 package:
   name: globalprotect-openconnect
   version: "2.4.4"
 
 source:
   path: .
+# end::package-info[]
 
+# tag::build-script[]
 build:
   number: 0
   script:
@@ -37,7 +40,9 @@ build:
     - mkdir -p $PREFIX/share/doc/globalprotect-openconnect
     - cp packaging/README-conda.md $PREFIX/share/doc/globalprotect-openconnect/
     - cp packaging/post-install-message.sh $PREFIX/share/doc/globalprotect-openconnect/
+# end::build-script[]
 
+# tag::requirements[]
 requirements:
   build:
     - rust >=1.80
@@ -64,6 +69,11 @@ requirements:
     - cairo
     - gdk-pixbuf
     - atk
+    - expat
+    - openssl
+    - gnutls
+    - krb5
+    - zlib
   run:
     - openconnect >=8.20
     - libsecret
@@ -76,8 +86,10 @@ requirements:
     - cairo
     - gdk-pixbuf
     - atk
+    - expat
     - pkexec
     - gnome-keyring
+# end::requirements[]
 
 tests:
   - script:

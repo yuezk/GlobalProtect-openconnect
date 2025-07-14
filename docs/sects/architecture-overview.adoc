@@ -1,0 +1,70 @@
+// Common section: Architecture Overview
+// This section is included in both developers-guide.adoc and operators-guide.adoc
+
+= Architecture Overview
+
+The project consists of several key components organized into distinct layers:
+
+[plantuml]
+----
+@startuml
+package "CLI Components" {
+  [gpclient] - Main VPN client
+  [gpservice] - Service component
+  [gpauth] - Authentication component
+}
+
+package "GUI Components" {
+  [gpgui-helper] - GUI helper service
+  [Tauri App] - Desktop interface
+}
+
+package "Core Libraries" {
+  [gpapi] - Core API library
+  [auth] - Authentication library
+  [common] - Common utilities
+  [openconnect] - OpenConnect wrapper
+}
+
+[gpclient] --> [gpapi]
+[gpservice] --> [gpapi]
+[gpauth] --> [auth]
+[Tauri App] --> [gpgui-helper]
+[gpgui-helper] --> [gpapi]
+@enduml
+----
+
+== Component Descriptions
+
+**CLI Components (Production Ready)**
+
+* **gpclient**: Main VPN client providing connection management, user interface, and configuration handling
+* **gpservice**: Background service for connection monitoring, policy enforcement, and system integration
+* **gpauth**: Authentication handler with SSO integration, SAML processing, and credential management
+
+**GUI Components (Development/Beta)**
+
+* **gpgui-helper**: GUI helper service that bridges the desktop interface with core VPN functionality
+* **Tauri App**: Cross-platform desktop interface built with modern web technologies
+
+**Core Libraries**
+
+* **gpapi**: Core API library providing VPN functionality and system integration
+* **auth**: Authentication library supporting multiple protocols and SSO methods
+* **common**: Shared utilities and common functionality across components
+* **openconnect**: Wrapper around the OpenConnect VPN library
+
+== System Dependencies
+
+The CLI components require:
+
+* **OpenConnect Library**: Core VPN functionality
+* **SSL/TLS Libraries**: Secure communication
+* **Authentication Libraries**: Kerberos, SAML support
+* **System Libraries**: Network, security, and system integration
+
+GUI components additionally require:
+
+* **WebKit Development Libraries**: For the Tauri-based desktop interface
+* **GTK Development Libraries**: For native system integration
+* **Platform-specific GUI Libraries**: Varies by operating system

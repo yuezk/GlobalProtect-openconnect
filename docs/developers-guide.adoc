@@ -22,73 +22,17 @@ This developer's guide provides comprehensive documentation for building, testin
 
 The GlobalProtect OpenConnect project is a GUI and CLI implementation for GlobalProtect VPN based on OpenConnect, supporting SSO authentication methods. This guide covers the complete development workflow using pixi for dependency management and build automation.
 
-=== Project Overview
+include::sects/project-overview.adoc[leveloffset=+2]
 
-GlobalProtect OpenConnect provides:
+include::sects/architecture-overview.adoc[leveloffset=+2]
 
-* **CLI Tools**: Command-line VPN client, service, and authentication components
-* **GUI Application**: Desktop interface for VPN management (WebKit-dependent)
-* **Cross-Platform Support**: Linux, macOS, and Windows
-* **Modern Build System**: Pixi-based development environment with conda-forge integration
-
-=== Architecture
-
-The project consists of several key components:
-
-[plantuml]
-----
-@startuml
-package "CLI Components" {
-  [gpclient] - Main VPN client
-  [gpservice] - Service component
-  [gpauth] - Authentication component
-}
-
-package "GUI Components" {
-  [gpgui-helper] - GUI helper service
-  [Tauri App] - Desktop interface
-}
-
-package "Core Libraries" {
-  [gpapi] - Core API library
-  [auth] - Authentication library
-  [common] - Common utilities
-  [openconnect] - OpenConnect wrapper
-}
-
-[gpclient] --> [gpapi]
-[gpservice] --> [gpapi]
-[gpauth] --> [auth]
-[Tauri App] --> [gpgui-helper]
-[gpgui-helper] --> [gpapi]
-@enduml
-----
+include::sects/component-descriptions.adoc[leveloffset=+2]
 
 == Development Environment Setup
 
-=== Prerequisites
+include::sects/system-requirements.adoc[leveloffset=+2]
 
-Before setting up the development environment, ensure you have:
-
-* **Git**: Version control system
-* **Pixi**: Modern package and environment manager
-* **Platform Requirements**:
-  - Linux: glibc 2.17+
-  - macOS: 10.15+
-  - Windows: Windows 10+
-
-=== Installing Pixi
-
-Install pixi using the official installer:
-
-[source,bash]
-----
-# Linux/macOS
-curl -fsSL https://pixi.sh/install.sh | bash
-
-# Windows (PowerShell)
-iwr -useb https://pixi.sh/install.ps1 | iex
-----
+include::sects/pixi-installation.adoc[leveloffset=+2]
 
 === Project Setup
 
@@ -147,22 +91,22 @@ GlobalProtect-openconnect/
 
 The build system is configured through `pixi.toml`:
 
+**Project Configuration:**
 [source,toml]
 ----
-[project]
-name = "globalprotect-openconnect"
-version = "2.4.4"
-description = "A GUI for GlobalProtect VPN, based on OpenConnect"
-channels = ["conda-forge"]
-platforms = ["linux-64", "osx-64", "osx-arm64"]
+include::../pixi.toml[tag=project-config]
+----
 
-[dependencies]
-# Core dependencies
-rust = "1.80.*"
-make = "*"
-pkg-config = "*"
-openconnect = "*"
-# ... additional dependencies
+**Dependencies:**
+[source,toml]
+----
+include::../pixi.toml[tag=dependencies]
+----
+
+**Build Tasks:**
+[source,toml]
+----
+include::../pixi.toml[tag=build-tasks]
 ----
 
 === Available Environments
@@ -260,6 +204,8 @@ pixi run cli-workflow
 # Complete workflow with packaging
 pixi run cli-package-workflow
 ----
+
+include::sects/webkit-status.adoc[leveloffset=+2]
 
 == Development Workflow
 
@@ -391,44 +337,22 @@ The project uses rattler-build for professional conda packaging:
 
 ==== CLI Package Recipe
 
+**Package Information:**
 [source,yaml]
 ----
-# recipe-cli.yaml
-package:
-  name: globalprotect-openconnect-cli
-  version: "2.4.4"
+include::../recipe-cli.yaml[tag=package-info]
+----
 
-source:
-  path: ../
+**Build Script:**
+[source,yaml]
+----
+include::../recipe-cli.yaml[tag=build-script]
+----
 
-build:
-  number: 0
-  string: "{{ environ.get('BUILD_STRING', 'h' + PKG_HASH) }}_{{ PKG_BUILDNUM }}"
-
-requirements:
-  build:
-    - rust >=1.80
-    - make
-    - pkg-config
-    - {{ compiler('c') }}
-    - {{ compiler('cxx') }}
-    - git
-    - expat
-
-  host:
-    - openconnect >=8.20
-    - libxml2
-    - expat
-    - openssl
-    - gnutls
-    - krb5
-    - zlib
-
-test:
-  commands:
-    - gpclient --version
-    - gpservice --version
-    - gpauth --version
+**Requirements:**
+[source,yaml]
+----
+include::../recipe-cli.yaml[tag=requirements]
 ----
 
 ==== Package Build Process
@@ -805,5 +729,3 @@ pixi run check-pkgconfig      # Debug environment
 * **Environment Size**: ~500 MB (with development tools)
 * **Build Dependencies**: ~200 MB
 * **Runtime Dependencies**: ~100 MB
-
-```

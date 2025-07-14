@@ -161,6 +161,7 @@ impl Cli {
 mod signals {
   use std::sync::Arc;
 
+  use gpapi::utils::runtime;
   use log::{info, warn};
 
   use crate::vpn_task::VpnTaskContext;

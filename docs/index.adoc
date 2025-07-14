@@ -58,11 +58,11 @@ The Developer's Guide provides comprehensive information for anyone working on t
 * **Architecture Overview**: Understanding the project structure and design decisions
 
 **Key Topics**:
-- Pixi environment configuration and usage
-- CLI build process and packaging
-- Testing infrastructure and procedures
-- Code quality standards and practices
-- Troubleshooting development issues
+* Pixi environment configuration and usage
+* CLI build process and packaging
+* Testing infrastructure and procedures
+* Code quality standards and practices
+* Troubleshooting development issues
 
 === link:operators-guide.adoc[Operator's Guide]
 
@@ -78,11 +78,11 @@ The Operator's Guide focuses on production deployment, configuration, and mainte
 * **Performance Optimization**: Tuning for optimal performance
 
 **Key Topics**:
-- Production installation procedures
-- Enterprise configuration management
-- Monitoring and alerting setup
-- Security hardening and compliance
-- Troubleshooting and maintenance
+* Production installation procedures
+* Enterprise configuration management
+* Monitoring and alerting setup
+* Security hardening and compliance
+* Troubleshooting and maintenance
 
 === link:roadmap.adoc[Project Roadmap]
 

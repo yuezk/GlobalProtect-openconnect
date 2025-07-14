@@ -1,3 +1,4 @@
+# tag::project-config[]
 [project]
 name = "globalprotect-openconnect"
 version = "2.4.4"
@@ -5,7 +6,9 @@ description = "A GUI for GlobalProtect VPN, based on OpenConnect, supports the S
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 channels = ["conda-forge"]
 platforms = ["linux-64", "osx-64", "osx-arm64"]
+# end::project-config[]
 
+# tag::dependencies[]
 [dependencies]
 # Rust toolchain
 rust = "1.80.*"
@@ -34,6 +37,10 @@ jq = "*"
 git = "*"
 # Rattler-build for packaging
 rattler-build = "*"
+# Documentation tools
+asciidoctor = "*"
+rb-asciidoctor-pdf = "*"
+# end::dependencies[]
 
 [build-dependencies]
 # C compiler and build tools
@@ -41,6 +48,7 @@ c-compiler = "*"
 cxx-compiler = "*"
 
 
+# tag::build-tasks[]
 [tasks]
 
 [tasks.setup]
@@ -52,7 +60,7 @@ cmd = "cd apps/gpgui-helper && pnpm install && pnpm build"
 cwd = "."
 
 [tasks.build-rust]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig cargo build --release"
+cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig cargo build --release"
 cwd = "."
 
 [tasks.build]
@@ -61,6 +69,7 @@ depends-on = ["setup", "build-frontend", "build-rust"]
 [tasks.build-cli]
 cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig cargo build --release --no-default-features -p gpclient -p gpservice -p gpauth"
 cwd = "."
+# end::build-tasks[]
 
 [tasks.test-cli]
 cmd = "echo 'Testing CLI binaries...' && ./target/release/gpclient --version && ./target/release/gpservice --version && ./target/release/gpauth --version"
@@ -158,6 +167,10 @@ cwd = "."
 cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists cairo && echo 'cairo: OK' || echo 'cairo: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists gdk-3.0 && echo 'gdk-3.0: OK' || echo 'gdk-3.0: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists pango && echo 'pango: OK' || echo 'pango: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists gdk-pixbuf-2.0 && echo 'gdk-pixbuf-2.0: OK' || echo 'gdk-pixbuf-2.0: FAIL'"
 cwd = "."
 
+[tasks.check-webkit-deps]
+cmd = "echo 'Checking WebKit dependencies...' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig pkg-config --exists webkit2gtk-4.1 && echo 'webkit2gtk-4.1: OK' || echo 'webkit2gtk-4.1: MISSING' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig pkg-config --exists javascriptcoregtk-4.1 && echo 'javascriptcoregtk-4.1: OK' || echo 'javascriptcoregtk-4.1: MISSING' && echo 'If missing, see WebKit Dependencies section in docs/developers-guide.adoc'"
+cwd = "."
+
 # CLI build workflow - WORKING!
 [tasks.cli-workflow]
 depends-on = ["clean", "build-cli", "test-cli"]
@@ -178,6 +191,51 @@ depends-on = [
 
 [tasks.test-cli-comprehensive]
 cmd = "chmod +x tests/test_cli_final.sh && ./tests/test_cli_final.sh"
+cwd = "."
+
+[tasks.docs-html]
+cmd = "asciidoctor docs/developers-guide.adoc docs/operators-guide.adoc docs/index.adoc -D output/docs"
+cwd = "."
+
+[tasks.docs-pdf]
+cmd = "asciidoctor-pdf docs/developers-guide.adoc docs/operators-guide.adoc -D output/docs"
+cwd = "."
+
+[tasks.docs]
+depends-on = ["docs-html", "docs-pdf"]
+
+[tasks.docs-clean]
+cmd = "rm -rf output/docs"
+cwd = "."
+
+[tasks.view-guide-dev]
+cmd = "python -c \"import webbrowser; webbrowser.open('file://' + __import__('os').path.abspath('output/docs/developers-guide.html'))\""
+cwd = "."
+depends-on = ["docs-html"]
+
+[tasks.view-guide-ops]
+cmd = "python -c \"import webbrowser; webbrowser.open('file://' + __import__('os').path.abspath('output/docs/operators-guide.html'))\""
+cwd = "."
+depends-on = ["docs-html"]
+
+[tasks.view-docs]
+cmd = "python -c \"import webbrowser; webbrowser.open('file://' + __import__('os').path.abspath('output/docs/index.html'))\""
+cwd = "."
+depends-on = ["docs-html"]
+
+[tasks.docs-help]
+cmd = """echo "Documentation Tasks:
+  pixi run docs          - Build both HTML and PDF documentation
+  pixi run docs-html     - Build HTML documentation only
+  pixi run docs-pdf      - Build PDF documentation only
+  pixi run docs-clean    - Clean documentation output directory
+
+  pixi run view-docs     - Open main documentation index in browser
+  pixi run view-guide-dev - Open developer's guide in browser
+  pixi run view-guide-ops - Open operator's guide in browser
+
+Output directory: output/docs/"
+"""
 cwd = "."
 
 [environments]

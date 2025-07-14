@@ -1,0 +1,20 @@
+// Common section: Project Overview
+// This section is included in both developers-guide.adoc and operators-guide.adoc
+
+= Project Overview
+
+GlobalProtect OpenConnect is a modern VPN client solution that provides secure connectivity to GlobalProtect-enabled VPN servers. The project offers both command-line and graphical interfaces, supporting various authentication methods including SSO.
+
+Key features include:
+
+* **CLI Tools**: Production-ready command-line VPN client, service, and authentication components
+* **GUI Application**: Desktop interface for VPN management (requires WebKit dependencies)
+* **Cross-Platform Support**: Linux, macOS, and Windows compatibility
+* **Modern Authentication**: Support for SAML, SSO, and traditional authentication methods
+* **Modern Build System**: Pixi-based development environment with conda-forge integration
+
+The project is designed with modularity in mind, allowing users to deploy only the components they need:
+
+* **CLI-only deployments**: For server environments and automated workflows
+* **Full GUI deployments**: For desktop users requiring graphical management
+* **Hybrid deployments**: Mixed environments with both CLI and GUI components

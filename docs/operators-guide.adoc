@@ -41,116 +41,21 @@ This guide covers:
 * Security considerations
 * Performance optimization
 
-== Architecture Overview
+include::sects/project-overview.adoc[leveloffset=+2]
 
-=== Component Architecture
+include::sects/architecture-overview.adoc[leveloffset=+2]
 
-GlobalProtect OpenConnect consists of three main CLI components:
+include::sects/component-descriptions.adoc[leveloffset=+2]
 
-[plantuml]
-----
-@startuml
-!define RECTANGLE class
-
-RECTANGLE "gpclient" as client {
-  + Main VPN Client
-  + Connection Management
-  + User Interface
-  + Configuration Handling
-}
-
-RECTANGLE "gpservice" as service {
-  + Background Service
-  + Connection Monitoring
-  + Policy Enforcement
-  + System Integration
-}
-
-RECTANGLE "gpauth" as auth {
-  + Authentication Handler
-  + SSO Integration
-  + SAML Processing
-  + Credential Management
-}
-
-RECTANGLE "VPN Gateway" as gateway {
-  + GlobalProtect Server
-  + Policy Server
-  + Certificate Authority
-  + Authentication Backend
-}
-
-client --> service : Control
-service --> auth : Authentication
-auth --> gateway : SAML/SSO
-client --> gateway : VPN Tunnel
-service --> gateway : Policy Updates
-
-@enduml
-----
-
-=== System Dependencies
-
-The CLI components require:
-* **OpenConnect Library**: Core VPN functionality
-* **SSL/TLS Libraries**: Secure communication
-* **Authentication Libraries**: Kerberos, SAML support
-* **System Libraries**: Network, security, and system integration
-
-=== Network Architecture
-
-[source,text]
-----
-+-----------------+    +-----------------+    +-----------------+
-|   End User      |    |  Corporate      |    |  GlobalProtect  |
-|   Device        |----|  Network        |----|  Gateway        |
-|                 |    |  (Internal)     |    |                 |
-+-----------------+    +-----------------+    +-----------------+
-         |                      |                      |
-         | VPN Tunnel           | Policy/Auth          | Internet
-         | (Encrypted)          | Server               | Access
-         |                      |                      |
-+-----------------+    +-----------------+    +-----------------+
-|   Internet      |    |  Authentication |    |  Remote         |
-|   Resources     |    |  Provider       |    |  Resources      |
-|                 |    |  (SAML/SSO)     |    |                 |
-+-----------------+    +-----------------+    +-----------------+
-----
+include::sects/network-architecture.adoc[leveloffset=+2]
 
 == Installation and Deployment
 
-=== System Requirements
-
-==== Hardware Requirements
-* **CPU**: x86_64 architecture (Intel/AMD)
-* **Memory**: Minimum 512 MB RAM, Recommended 1 GB
-* **Storage**: 50 MB for binaries, 200 MB for dependencies
-* **Network**: Internet connectivity for VPN access
-
-==== Operating System Support
-
-[cols="1,1,1,1", options="header"]
-|===
-|Platform |Minimum Version |Recommended |Status
-
-|Linux
-|glibc 2.17+
-|Ubuntu 20.04+, RHEL 8+
-|✅ Fully Supported
-
-|macOS
-|10.15 (Catalina)
-|12.0 (Monterey)+
-|✅ Supported
-
-|Windows
-|Windows 10
-|Windows 11
-|🔄 In Development
-
-|===
+include::sects/system-requirements.adoc[leveloffset=+2]
 
 === Installation Methods
+
+NOTE: This guide focuses on CLI components which are production-ready and work on all systems. GUI components require additional WebKit dependencies not available in conda-forge. For GUI installation, see the WebKit Dependencies Status section below.
 
 In each case the installation can be verified using the following commands:
 
@@ -177,21 +82,7 @@ conda install ./globalprotect-openconnect-cli-2.4.4-hb0f4dca_0.conda
 
 ==== Pixi Installation Method
 
-Using pixi for package management and installation:
-
-[source,bash]
-----
-# Install pixi (if not already installed)
-curl -fsSL https://pixi.sh/install.sh | bash
-----
-
-**Note**: Pixi global installation provides:
-
-- Isolated package environments
-- Reproducible installations with lock files
-- Modern conda-forge ecosystem integration
-- Cross-platform compatibility
-
+include::sects/pixi-installation.adoc[leveloffset=+2]
 
 **Option 1: Install from conda-forge (when available)**
 
@@ -200,6 +91,8 @@ curl -fsSL https://pixi.sh/install.sh | bash
 # Install GlobalProtect CLI globally
 pixi global install -c conda-forge globalprotect-openconnect-cli
 ----
+
+NOTE: This installs CLI components only. For GUI support on Fedora Silverblue/Bluefin, install webkit system packages first: `sudo rpm-ostree install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-devel pango-devel`
 
 **Option 2: Install from local conda package**
 
@@ -503,6 +396,8 @@ sudo ufw allow out 4501/udp comment "GlobalProtect IPSec"
 echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 ----
+
+include::sects/webkit-status.adoc[leveloffset=+1]
 
 == Configuration Management
 

@@ -1,0 +1,93 @@
+// Common section: System Requirements
+// This section is included in both developers-guide.adoc and operators-guide.adoc
+
+= System Requirements
+
+== Hardware Requirements
+
+* **CPU**: x86_64 architecture (Intel/AMD)
+* **Memory**:
+  - Minimum: 512 MB RAM
+  - Recommended: 1 GB RAM
+  - Development: 2 GB+ RAM
+* **Storage**:
+  - CLI components: 50 MB for binaries
+  - Dependencies: 200 MB
+  - Development environment: 1 GB+
+* **Network**: Internet connectivity for VPN access and package downloads
+
+== Operating System Support
+
+[cols="1,1,1,1", options="header"]
+|===
+|Platform |Minimum Version |Recommended |Status
+
+|Linux
+|glibc 2.17+
+|Ubuntu 20.04+, RHEL 8+, Fedora 35+
+|✅ Fully Supported
+
+|macOS
+|10.15 (Catalina)
+|12.0+ (Monterey)
+|✅ Fully Supported
+
+|Windows
+|Windows 10
+|Windows 11
+|✅ Fully Supported
+
+|FreeBSD
+|12.0+
+|13.0+
+|🧪 Experimental
+|===
+
+== Platform-Specific Requirements
+
+**Linux**
+* glibc 2.17 or newer
+* systemd (for service management)
+* NetworkManager or equivalent (recommended)
+
+**macOS**
+* Xcode Command Line Tools (for development)
+* Homebrew (recommended for dependencies)
+
+**Windows**
+* Visual Studio Build Tools (for development)
+* Windows Subsystem for Linux (WSL) supported
+
+== Development Prerequisites
+
+For development environments, additional requirements include:
+
+* **Git**: Version control system
+* **Pixi**: Modern package and environment manager (≥0.19.0)
+* **Rust**: Automatically managed by pixi
+* **Node.js**: Automatically managed by pixi (for frontend components)
+
+**WebKit Requirements (GUI Components)**
+
+GUI components require WebKit development libraries that are not available in conda-forge:
+
+**Fedora/RHEL/CentOS:**
+```bash
+sudo dnf install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-devel pango-devel
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libcairo2-dev libgdk-pixbuf-2.0-dev libpango1.0-dev
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S webkit2gtk-4.1 gtk3 cairo gdk-pixbuf2 pango
+```
+
+**macOS:**
+```bash
+# WebKit is included with macOS
+# Additional dependencies managed by pixi
+```

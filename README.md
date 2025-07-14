@@ -236,11 +236,37 @@ This project uses [pixi](https://pixi.sh/) for modern, reproducible development 
    ./tests/test_cli_final.sh
    ```
 
+#### WebKit Dependencies (GUI Build)
+
+⚠️ **Note**: The full GUI build requires WebKit development packages that are not available in conda-forge. On immutable systems like Fedora Silverblue/Bluefin, you'll need to install system packages:
+
+```bash
+# Check WebKit dependencies
+pixi run check-webkit-deps
+
+# For full GUI build, install system packages first:
+sudo rpm-ostree install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-devel pango-devel
+sudo rpm-ostree apply-live  # Apply changes without reboot
+
+# Verify packages are available
+pixi run check-webkit-deps
+
+# Then build the full GUI
+pixi run build
+```
+
+For detailed solutions, see the WebKit Dependencies section in [docs/developers-guide.adoc](docs/developers-guide.adoc).
+
+**Recommended**: Use CLI-only build which works everywhere without additional dependencies.
+
 #### Available Pixi Commands
 
 ```bash
 # Setup development environment
 pixi run setup
+
+# Check WebKit dependencies (for GUI build)
+pixi run check-webkit-deps
 
 # Build CLI components only
 pixi run build-cli
