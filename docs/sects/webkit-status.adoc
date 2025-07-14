@@ -76,7 +76,7 @@ sudo rpm-ostree install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-d
 sudo rpm-ostree apply-live  # Apply changes without reboot
 
 # Verify webkit is available
-pixi run check-webkit-deps
+pixi run verify-webkit-deps
 
 # Build with GUI support
 pixi run build
@@ -92,7 +92,7 @@ NOTE: WebKit packages install to `/usr/lib64/pkgconfig/` on Fedora-based systems
 sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev libcairo2-dev libgdk-pixbuf2.0-dev libpango1.0-dev
 
 # Verify installation
-pixi run check-webkit-deps
+pixi run verify-webkit-deps
 
 # Build with GUI support
 pixi run build
@@ -106,7 +106,7 @@ pixi run build
 sudo pacman -S webkit2gtk-4.1 gtk3 cairo gdk-pixbuf2 pango
 
 # Verify installation
-pixi run check-webkit-deps
+pixi run verify-webkit-deps
 
 # Build with GUI support
 pixi run build
@@ -154,7 +154,7 @@ This covers:
 [source,bash]
 ----
 # Check webkit dependencies
-pixi run check-webkit-deps
+pixi run verify-webkit-deps
 
 # Manual verification (Fedora)
 PKG_CONFIG_PATH=/usr/lib64/pkgconfig pkg-config --exists webkit2gtk-4.1
@@ -200,6 +200,6 @@ PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig pkg-config --exists webkit2g
 If you encounter webkit-related build issues:
 
 1. Try CLI-only build first: `pixi run build-cli`
-2. Verify webkit installation: `pixi run check-webkit-deps`
+2. Verify webkit installation: `pixi run verify-webkit-deps`
 3. Check platform-specific instructions in this section
 4. Report issues with platform and pixi version details

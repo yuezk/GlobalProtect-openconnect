@@ -2,11 +2,11 @@ name: Build with Pixi
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   release:
-    types: [ published ]
+    types: [published]
 
 env:
   CARGO_TERM_COLOR: always
@@ -28,42 +28,42 @@ jobs:
             platform: win-64
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@v0.8.1
-      with:
-        pixi-version: latest
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: latest
 
-    - name: Cache Pixi environment
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.pixi
-          .pixi
-        key: ${{ runner.os }}-pixi-${{ hashFiles('**/pixi.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-pixi-
+      - name: Cache Pixi environment
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pixi
+            .pixi
+          key: ${{ runner.os }}-pixi-${{ hashFiles('**/pixi.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pixi-
 
-    - name: Install dependencies
-      run: pixi install
+      - name: Install dependencies
+        run: pixi install
 
-    - name: Build project
-      run: pixi run build
+      - name: Build project
+        run: pixi run build
 
-    - name: Run tests
-      run: pixi run test
+      - name: Run tests
+        run: pixi run test
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: binaries-${{ matrix.platform }}
-        path: |
-          target/release/gpclient*
-          target/release/gpservice*
-          target/release/gpauth*
-          target/release/gpgui-helper*
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.platform }}
+          path: |
+            target/release/gpclient*
+            target/release/gpservice*
+            target/release/gpauth*
+            target/release/gpgui-helper*
 
   build-cli:
     name: Build CLI-only on ${{ matrix.os }}
@@ -81,38 +81,38 @@ jobs:
             platform: win-64
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@v0.8.1
-      with:
-        pixi-version: latest
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: latest
 
-    - name: Cache Pixi environment
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.pixi
-          .pixi
-        key: ${{ runner.os }}-pixi-cli-${{ hashFiles('**/pixi.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-pixi-cli-
+      - name: Cache Pixi environment
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pixi
+            .pixi
+          key: ${{ runner.os }}-pixi-cli-${{ hashFiles('**/pixi.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pixi-cli-
 
-    - name: Install dependencies (CLI environment)
-      run: pixi install -e cli
+      - name: Install dependencies (CLI environment)
+        run: pixi install -e cli
 
-    - name: Build CLI project
-      run: pixi run -e cli build-cli
+      - name: Build CLI project
+        run: pixi run -e cli build-cli
 
-    - name: Upload CLI artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: cli-binaries-${{ matrix.platform }}
-        path: |
-          target/release/gpclient*
-          target/release/gpservice*
-          target/release/gpauth*
+      - name: Upload CLI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-binaries-${{ matrix.platform }}
+          path: |
+            target/release/gpclient*
+            target/release/gpservice*
+            target/release/gpauth*
 
   package:
     name: Create Conda Package
@@ -121,77 +121,77 @@ jobs:
     if: github.event_name == 'release' || github.ref == 'refs/heads/main'
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@v0.8.1
-      with:
-        pixi-version: latest
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: latest
 
-    - name: Install dependencies
-      run: pixi install
+      - name: Install dependencies
+        run: pixi install
 
-    - name: Build project
-      run: pixi run build
+      - name: Build project
+        run: pixi run build
 
-    - name: Create conda package
-      run: pixi run package
+      - name: Create conda package
+        run: pixi run package
 
-    - name: Upload package artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: conda-package
-        path: |
-          output/*.conda
-          output/*.tar.bz2
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: conda-package
+          path: |
+            output/*.conda
+            output/*.tar.bz2
 
   lint:
     name: Lint and Format Check
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@v0.8.1
-      with:
-        pixi-version: latest
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: latest
 
-    - name: Install dependencies
-      run: pixi install -e dev
+      - name: Install dependencies
+        run: pixi install -e dev
 
-    - name: Setup development environment
-      run: pixi run -e dev dev-setup
+      - name: Setup development environment
+        run: pixi run -e dev setup-dev
 
-    - name: Check formatting
-      run: pixi run -e dev format-check
+      - name: Check formatting
+        run: pixi run -e dev check-format
 
-    - name: Run clippy
-      run: pixi run -e dev lint
+      - name: Run clippy
+        run: pixi run -e dev lint
 
   security:
     name: Security Audit
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@v0.8.1
-      with:
-        pixi-version: latest
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: latest
 
-    - name: Install dependencies
-      run: pixi install -e dev
+      - name: Install dependencies
+        run: pixi install -e dev
 
-    - name: Install cargo-audit
-      run: pixi run -e dev cargo install cargo-audit
+      - name: Install cargo-audit
+        run: pixi run -e dev cargo install cargo-audit
 
-    - name: Run security audit
-      run: pixi run -e dev cargo audit
+      - name: Run security audit
+        run: pixi run -e dev cargo audit
 
   release:
     name: Release
@@ -200,35 +200,35 @@ jobs:
     if: github.event_name == 'release'
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-    - name: Display structure of downloaded files
-      run: ls -la artifacts/
+      - name: Display structure of downloaded files
+        run: ls -la artifacts/
 
-    - name: Create release archives
-      run: |
-        cd artifacts
-        for dir in binaries-*; do
-          if [ -d "$dir" ]; then
-            platform=$(echo "$dir" | sed 's/binaries-//')
-            cd "$dir"
-            tar -czf "../globalprotect-openconnect-${{ github.event.release.tag_name }}-${platform}.tar.gz" *
-            cd ..
-          fi
-        done
+      - name: Create release archives
+        run: |
+          cd artifacts
+          for dir in binaries-*; do
+            if [ -d "$dir" ]; then
+              platform=$(echo "$dir" | sed 's/binaries-//')
+              cd "$dir"
+              tar -czf "../globalprotect-openconnect-${{ github.event.release.tag_name }}-${platform}.tar.gz" *
+              cd ..
+            fi
+          done
 
-    - name: Upload release assets
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          artifacts/*.tar.gz
-          artifacts/conda-package/*.conda
-          artifacts/conda-package/*.tar.bz2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/*.tar.gz
+            artifacts/conda-package/*.conda
+            artifacts/conda-package/*.tar.bz2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

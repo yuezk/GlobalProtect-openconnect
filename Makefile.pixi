@@ -108,8 +108,8 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
 # Development tasks
-dev-setup:
-	pixi run dev-setup
+setup-dev:
+	pixi run setup-dev
 
 lint:
 	pixi run lint
@@ -117,8 +117,8 @@ lint:
 format:
 	pixi run format
 
-format-check:
-	pixi run format-check
+check-format:
+	pixi run check-format
 
 # Help
 help:
@@ -130,10 +130,10 @@ help:
 	@echo "  package     - Create conda package with rattler-build"
 	@echo "  install     - Install locally"
 	@echo "  uninstall   - Remove installed files"
-	@echo "  dev-setup   - Setup development environment"
+	@echo "  setup-dev   - Setup development environment"
 	@echo "  lint        - Run linting"
 	@echo "  format      - Format code"
-	@echo "  format-check - Check code formatting"
+	@echo "  check-format - Check code formatting"
 	@echo "  help        - Show this help"
 	@echo ""
 	@echo "Environment variables:"
@@ -142,4 +142,4 @@ help:
 	@echo "  OFFLINE     - Build offline (default: 0)"
 	@echo "  PIXI_ENV    - Pixi environment to use (default: default)"
 
-.PHONY: default init setup build-frontend build-rust build build-cli test clean package install uninstall dev-setup lint format format-check help
+.PHONY: default init setup build-frontend build-rust build build-cli test clean package install uninstall setup-dev lint format check-format help

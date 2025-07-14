@@ -194,7 +194,7 @@ pixi info
 #### Build Failures
 ```bash
 # Check dependency availability
-pixi run check-pkgconfig
+pixi run verify-pkgconfig
 
 # Clean build artifacts
 pixi run clean

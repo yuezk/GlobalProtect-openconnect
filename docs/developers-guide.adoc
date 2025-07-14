@@ -32,12 +32,14 @@ include::sects/component-descriptions.adoc[leveloffset=+2]
 
 include::sects/system-requirements.adoc[leveloffset=+2]
 
-include::sects/pixi-installation.adoc[leveloffset=+2]
+=== Installing Pixi
+
+For detailed pixi installation instructions, see: link:helper_pixi_install.adoc[Pixi Installation Guide]
 
 [source,bash]
 ----
-pixi run install-help
-pixi run cli-package-install-workflow
+pixi run show-help
+pixi run deploy-cli
 ----
 
 === Project Setup
@@ -191,7 +193,7 @@ pixi run lint
 pixi run format
 
 # Format check (CI)
-pixi run format-check
+pixi run check-format
 ----
 
 ==== Packaging Tasks
@@ -205,10 +207,10 @@ pixi run package-cli
 pixi run package
 
 # Complete CLI workflow
-pixi run cli-workflow
+pixi run dev-cli
 
 # Complete workflow with packaging
-pixi run cli-package-workflow
+pixi run ship-cli
 ----
 
 include::sects/webkit-status.adoc[leveloffset=+2]
@@ -432,7 +434,7 @@ pixi run test-cli
 pixi run test-cli-comprehensive
 
 # Individual test components
-pixi run check-pkgconfig        # Environment verification
+pixi run verify-pkgconfig       # Environment verification
 pixi run build-cli              # Build test
 
 # Direct test script execution
@@ -484,7 +486,7 @@ PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig cargo 
 pixi run format
 
 # Check formatting
-pixi run format-check
+pixi run check-format
 ----
 
 ==== Security Auditing
@@ -508,7 +510,7 @@ cargo deny check
 [source,bash]
 ----
 # Verify environment
-pixi run check-pkgconfig
+pixi run verify-pkgconfig
 
 # Manual PKG_CONFIG_PATH setting
 export PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig
@@ -571,7 +573,7 @@ pixi info
 pixi run debug-pkgconfig
 
 # Path verification
-pixi run check-path
+pixi run verify-path
 ----
 
 ==== Build Debugging
@@ -687,11 +689,11 @@ pixi run format               # Code formatting
 
 # Packaging
 pixi run package-cli          # Create conda package
-pixi run cli-workflow         # Complete workflow
+pixi run dev-cli              # Complete workflow
 
 # Debugging
 pixi info                     # Environment info
-pixi run check-pkgconfig      # Debug environment
+pixi run verify-pkgconfig     # Debug environment
 ----
 
 ==== File Locations

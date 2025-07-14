@@ -127,7 +127,7 @@ else
     echo "  pixi run build-cli     # Build CLI binaries"
     echo "  pixi run test-cli      # Test CLI functionality"
     echo "  pixi run package-cli   # Create conda package"
-    echo "  pixi run cli-workflow  # Complete workflow"
+    echo "  pixi run dev-cli       # Complete workflow"
 fi
 
 echo

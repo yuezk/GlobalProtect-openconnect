@@ -1,6 +1,3 @@
-// Common section: Pixi Installation
-// This section is included in both developers-guide.adoc and operators-guide.adoc
-
 = Installing Pixi
 
 Pixi is a modern package and environment manager that provides reproducible environments and cross-platform compatibility. It is the recommended tool for managing dependencies and building GlobalProtect OpenConnect.

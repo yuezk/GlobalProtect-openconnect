@@ -82,7 +82,7 @@ conda install ./globalprotect-openconnect-cli-2.4.4-hb0f4dca_0.conda
 
 ==== Pixi Installation Method
 
-include::sects/pixi-installation.adoc[leveloffset=+1]
+For detailed pixi installation instructions, see: link:helper_pixi_install.adoc[Pixi Installation Guide]
 
 **Install from conda-forge (when available)**
 

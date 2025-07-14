@@ -61,7 +61,7 @@ echo
 print_status "=== Test 1: Environment Check ==="
 run_test "Pixi environment activation" "pixi info"
 run_test "Conda prefix check" "test -n \"\$CONDA_PREFIX\""
-run_test "PKG_CONFIG_PATH availability" "pixi run check-pkgconfig"
+run_test "PKG_CONFIG_PATH availability" "pixi run verify-pkgconfig"
 
 # Test 2: Build Tests
 print_status "=== Test 2: Build Tests ==="
@@ -144,7 +144,7 @@ run_test "gpclient help for invalid subcommand" "! target/release/gpclient inval
 
 # Test 12: Workflow Integration Tests
 print_status "=== Test 12: Workflow Integration Tests ==="
-run_test "Complete CLI workflow" "pixi run cli-workflow"
+run_test "Complete CLI workflow" "pixi run dev-cli"
 
 # Test 13: Environment Isolation Tests
 print_status "=== Test 13: Environment Isolation Tests ==="

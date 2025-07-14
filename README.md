@@ -242,14 +242,14 @@ This project uses [pixi](https://pixi.sh/) for modern, reproducible development 
 
 ```bash
 # Check WebKit dependencies
-pixi run check-webkit-deps
+pixi run verify-webkit-deps
 
 # For full GUI build, install system packages first:
 sudo rpm-ostree install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-devel pango-devel
 sudo rpm-ostree apply-live  # Apply changes without reboot
 
 # Verify packages are available
-pixi run check-webkit-deps
+pixi run verify-webkit-deps
 
 # Then build the full GUI
 pixi run build
@@ -266,7 +266,7 @@ For detailed solutions, see the WebKit Dependencies section in [docs/developers-
 pixi run setup
 
 # Check WebKit dependencies (for GUI build)
-pixi run check-webkit-deps
+pixi run verify-webkit-deps
 
 # Build CLI components only
 pixi run build-cli
@@ -293,7 +293,7 @@ pixi run lint
 pixi run package-cli
 
 # Complete CLI workflow (build + test + package)
-pixi run cli-package-workflow
+pixi run ship-cli
 
 # Test commands
 pixi run test-cli-comprehensive  # Comprehensive test suite

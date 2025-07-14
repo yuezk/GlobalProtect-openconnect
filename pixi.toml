@@ -83,7 +83,7 @@ cwd = "."
 cmd = "cargo clean && rm -rf apps/gpgui-helper/node_modules apps/gpgui-helper/dist"
 cwd = "."
 
-[tasks.check-pkgconfig]
+[tasks.verify-pkgconfig]
 cmd = "echo \"PKG_CONFIG_PATH: $PKG_CONFIG_PATH\" && echo \"CONDA_PREFIX: $CONDA_PREFIX\" && ls -la $CONDA_PREFIX/lib/pkgconfig/ | head"
 cwd = "."
 
@@ -99,11 +99,11 @@ cwd = "."
 cmd = "cd output/linux-64 && unzip -l *.conda && echo '--- Package Contents ---' && unzip -q *.conda && tar -tf pkg-*.tar.zst"
 cwd = "."
 
-[tasks.package-info]
+[tasks.show-package-info]
 cmd = "ls -lh output/linux-64/*.conda && echo 'Package successfully built!'"
 cwd = "."
 
-[tasks.dev-setup]
+[tasks.setup-dev]
 cmd = "rustup component add clippy rustfmt"
 cwd = "."
 
@@ -115,7 +115,7 @@ cwd = "."
 cmd = "cargo fmt"
 cwd = "."
 
-[tasks.format-check]
+[tasks.check-format]
 cmd = "cargo fmt -- --check"
 cwd = "."
 
@@ -135,7 +135,7 @@ cwd = "."
 cmd = "$CONDA_PREFIX/bin/pkg-config --exists cairo"
 cwd = "."
 
-[tasks.check-path]
+[tasks.verify-path]
 cmd = "echo PATH: $PATH && which pkg-config"
 cwd = "."
 
@@ -167,20 +167,26 @@ cwd = "."
 cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists cairo && echo 'cairo: OK' || echo 'cairo: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists gdk-3.0 && echo 'gdk-3.0: OK' || echo 'gdk-3.0: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists pango && echo 'pango: OK' || echo 'pango: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists gdk-pixbuf-2.0 && echo 'gdk-pixbuf-2.0: OK' || echo 'gdk-pixbuf-2.0: FAIL'"
 cwd = "."
 
-[tasks.check-webkit-deps]
+[tasks.verify-webkit-deps]
 cmd = "echo 'Checking WebKit dependencies...' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig pkg-config --exists webkit2gtk-4.1 && echo 'webkit2gtk-4.1: OK' || echo 'webkit2gtk-4.1: MISSING' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig pkg-config --exists javascriptcoregtk-4.1 && echo 'javascriptcoregtk-4.1: OK' || echo 'javascriptcoregtk-4.1: MISSING' && echo 'If missing, see WebKit Dependencies section in docs/developers-guide.adoc'"
 cwd = "."
 
-# CLI build workflow - WORKING!
-[tasks.cli-workflow]
+# CLI development workflow - build and test - WORKING!
+[tasks.dev-cli]
 depends-on = ["clean", "build-cli", "test-cli"]
 
-# CLI package workflow - WORKING!
-[tasks.cli-package-workflow]
-depends-on = ["clean", "build-cli", "test-cli", "package-cli", "package-info"]
+# CLI shipping workflow - build, test, and package - WORKING!
+[tasks.ship-cli]
+depends-on = [
+  "clean",
+  "build-cli",
+  "test-cli",
+  "package-cli",
+  "show-package-info",
+]
 
-# Complete workflow with package inspection
-[tasks.full-cli-workflow]
+# CLI debug workflow - build, test, package, and inspect - WORKING!
+[tasks.debug-cli]
 depends-on = [
   "clean",
   "build-cli",
@@ -204,7 +210,7 @@ cwd = "."
 [tasks.docs]
 depends-on = ["docs-html", "docs-pdf"]
 
-[tasks.docs-clean]
+[tasks.clean-docs]
 cmd = "rm -rf output/docs"
 cwd = "."
 
@@ -239,7 +245,7 @@ cmd = [
 ]
 cwd = "."
 
-[tasks.install-workflow-cli]
+[tasks.deploy-cli]
 depends-on = [
   "clean",
   "build-cli",
@@ -251,13 +257,18 @@ depends-on = [
 [tasks.install-workflow]
 depends-on = ["clean", "build", "test", "package", "install-global"]
 
-[tasks.install-help]
-cmd = """echo "Installation Tasks:
+[tasks.show-help]
+cmd = """echo "CLI Workflow Tasks:
+  pixi run dev-cli                  - Development workflow: clean, build, test
+  pixi run ship-cli                 - Shipping workflow: clean, build, test, package
+  pixi run debug-cli                - Debug workflow: clean, build, test, package, inspect
+  pixi run deploy-cli               - Deployment workflow: clean, build, test, package, install globally
+
+Installation Tasks:
   pixi run package-cli              - Build CLI conda package
   pixi run package                  - Build full conda package (with GUI)
   pixi run install-global-cli       - Install CLI package to pixi global (force reinstall)
   pixi run install-global           - Install full package to pixi global (force reinstall)
-  pixi run install-workflow-cli     - Complete workflow: clean, build, test, package, and install CLI globally
   pixi run install-workflow         - Complete workflow: clean, build, test, package, and install full package globally
 
 Package location: output/linux-64/
@@ -270,12 +281,12 @@ Notes:
 """
 cwd = "."
 
-[tasks.docs-help]
+[tasks.show-docs-help]
 cmd = """echo "Documentation Tasks:
   pixi run docs          - Build both HTML and PDF documentation
   pixi run docs-html     - Build HTML documentation only
   pixi run docs-pdf      - Build PDF documentation only
-  pixi run docs-clean    - Clean documentation output directory
+  pixi run clean-docs    - Clean documentation output directory
 
   pixi run view-docs     - Open main documentation index in browser
   pixi run view-guide-dev - Open developer's guide in browser

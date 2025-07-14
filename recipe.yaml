@@ -40,6 +40,7 @@ build:
     - cp packaging/files/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $PREFIX/share/polkit-1/actions/
     - mkdir -p $PREFIX/share/doc/globalprotect-openconnect
     - cp packaging/README-conda.md $PREFIX/share/doc/globalprotect-openconnect/
+    - cp docs/helper_pixi_install.adoc $PREFIX/share/doc/globalprotect-openconnect/
     - cp packaging/post-install-message.sh $PREFIX/share/doc/globalprotect-openconnect/
     - cp output/docs/operators-guide.html $PREFIX/share/doc/globalprotect-openconnect/
     - cp output/docs/operators-guide.pdf $PREFIX/share/doc/globalprotect-openconnect/
