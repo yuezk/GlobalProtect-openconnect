@@ -338,21 +338,7 @@ gpclient --help
 gpauth --help
 ----
 
-==== Comprehensive Testing
 
-If building from source, comprehensive test suites are available:
-
-[source,bash]
-----
-# Run comprehensive CLI test suite (if available)
-if [ -f "tests/test_cli_final.sh" ]; then
-  chmod +x tests/test_cli_final.sh
-  ./tests/test_cli_final.sh
-fi
-
-# Or use pixi for development builds
-pixi run test-cli-comprehensive
-----
 
 ==== Service Verification
 
