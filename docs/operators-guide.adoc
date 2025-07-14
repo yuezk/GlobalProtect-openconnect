@@ -480,6 +480,17 @@ export GP_IGNORE_TLS_ERRORS="false"
 export GP_USE_SYSTEM_CERT_STORE="true"
 ----
 
+**Note**: If using flatpak browsers, set the browser environment variable to the full flatpak command:
+
+[source,bash]
+----
+# For flatpak Firefox
+export GP_BROWSER="flatpak run org.mozilla.firefox"
+
+# For flatpak Opera
+export GP_BROWSER="flatpak run com.opera.Opera"
+----
+
 === Configuration Templates
 
 ==== Enterprise Configuration Template
@@ -581,6 +592,26 @@ gpauth --browser=firefox vpn.company.com
 
 # Headless SAML authentication
 gpauth --browser=none --saml-file=/tmp/saml.xml vpn.company.com
+----
+
+**Note for Flatpak Browser Users**: If you have browsers installed as flatpaks (Firefox, Opera, etc.), you may need to configure permissions for localhost access:
+
+[source,bash]
+----
+# Check if browsers are flatpaks
+flatpak list | grep -i firefox
+
+# Install Flatseal for permission management
+flatpak install flathub com.github.tchx84.Flatseal
+
+# Configure flatpak browser permissions:
+# 1. Open Flatseal
+# 2. Select your browser (org.mozilla.firefox, com.opera.Opera)
+# 3. Under "Socket" section, ensure "Network" is enabled
+# 4. Under "Filesystem" section, add "host" if needed
+
+# Alternative: Use explicit flatpak command
+gpauth --browser "flatpak run org.mozilla.firefox" vpn.company.com
 ----
 
 ==== Certificate-Based Authentication
@@ -1058,6 +1089,39 @@ gpauth --browser=chromium vpn.company.com
 
 # Manual SAML handling
 gpauth --saml-file=/path/to/response.xml vpn.company.com
+----
+
+**Issue**: Browser authentication fails with flatpak browsers (Firefox, Opera)
+
+**Diagnosis**:
+[source,bash]
+----
+# Check if browsers are installed as flatpaks
+flatpak list | grep -i firefox
+flatpak list | grep -i opera
+
+# Test authentication with explicit browser
+gpauth --verbose --browser default vpn.company.com
+----
+
+**Solutions**:
+[source,bash]
+----
+# Option 1: Configure Flatseal permissions (Recommended)
+# Install Flatseal if not available
+flatpak install flathub com.github.tchx84.Flatseal
+
+# Open Flatseal and for each flatpak browser:
+# - Select the browser (org.mozilla.firefox, com.opera.Opera)
+# - Under "Socket" section, ensure "Network" is enabled
+# - Under "Filesystem" section, add "host" or "~/.local/share/" if needed
+
+# Option 2: Use explicit flatpak command
+gpauth --browser "flatpak run org.mozilla.firefox" vpn.company.com
+
+# Option 3: Install native browser
+sudo dnf install firefox  # For Fedora/RHEL
+sudo apt install firefox  # For Ubuntu/Debian
 ----
 
 ==== Performance Issues
@@ -1905,6 +1969,10 @@ gpauth --help                       # Show help
 |1010
 |Service unavailable
 |Check service status and restart if needed
+
+|1011
+|Flatpak browser authentication fails
+|Configure Flatseal permissions for network access or use native browser
 
 |===
 
