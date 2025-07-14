@@ -82,9 +82,9 @@ conda install ./globalprotect-openconnect-cli-2.4.4-hb0f4dca_0.conda
 
 ==== Pixi Installation Method
 
-include::sects/pixi-installation.adoc[leveloffset=+2]
+include::sects/pixi-installation.adoc[leveloffset=+1]
 
-**Option 1: Install from conda-forge (when available)**
+**Install from conda-forge (when available)**
 
 [source,bash]
 ----
@@ -94,7 +94,7 @@ pixi global install -c conda-forge globalprotect-openconnect-cli
 
 NOTE: This installs CLI components only. For GUI support on Fedora Silverblue/Bluefin, install webkit system packages first: `sudo rpm-ostree install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-devel pango-devel`
 
-**Option 2: Install from local conda package**
+**Install from local conda package**
 
 [source,bash]
 ----

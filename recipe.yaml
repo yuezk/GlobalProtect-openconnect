@@ -16,6 +16,7 @@ build:
     - cd $SRC_DIR
     - pixi run setup
     - pixi run build
+    - pixi run docs
     - mkdir -p $PREFIX/bin
     - cp target/release/gpclient $PREFIX/bin/
     - cp target/release/gpservice $PREFIX/bin/
@@ -40,6 +41,8 @@ build:
     - mkdir -p $PREFIX/share/doc/globalprotect-openconnect
     - cp packaging/README-conda.md $PREFIX/share/doc/globalprotect-openconnect/
     - cp packaging/post-install-message.sh $PREFIX/share/doc/globalprotect-openconnect/
+    - cp output/docs/operators-guide.html $PREFIX/share/doc/globalprotect-openconnect/
+    - cp output/docs/operators-guide.pdf $PREFIX/share/doc/globalprotect-openconnect/
 # end::build-script[]
 
 # tag::requirements[]
@@ -60,8 +63,6 @@ requirements:
   host:
     - openconnect >=8.20
     - libsecret
-    - webkit2gtk
-    - libayatana-appindicator
     - libxml2
     - glib
     - gtk3
@@ -77,8 +78,6 @@ requirements:
   run:
     - openconnect >=8.20
     - libsecret
-    - webkit2gtk
-    - libayatana-appindicator
     - libxml2
     - glib
     - gtk3

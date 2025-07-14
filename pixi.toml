@@ -223,6 +223,53 @@ cmd = "python -c \"import webbrowser; webbrowser.open('file://' + __import__('os
 cwd = "."
 depends-on = ["docs-html"]
 
+[tasks.install-global-cli]
+cmd = [
+  "bash",
+  "-c",
+  "if ls output/linux-64/globalprotect-openconnect-cli-*.conda >/dev/null 2>&1; then pixi global install --force-reinstall $(pwd)/$(ls output/linux-64/globalprotect-openconnect-cli-*.conda | head -n 1); else echo 'Error: No CLI conda package found. Run pixi run package-cli first.'; exit 1; fi",
+]
+cwd = "."
+
+[tasks.install-global]
+cmd = [
+  "bash",
+  "-c",
+  "if ls output/linux-64/globalprotect-openconnect-*.conda >/dev/null 2>&1; then pixi global install --force-reinstall $(pwd)/$(ls output/linux-64/globalprotect-openconnect-*.conda | grep -v cli | head -n 1); else echo 'Error: No conda package found. Run pixi run package first.'; exit 1; fi",
+]
+cwd = "."
+
+[tasks.install-workflow-cli]
+depends-on = [
+  "clean",
+  "build-cli",
+  "test-cli",
+  "package-cli",
+  "install-global-cli",
+]
+
+[tasks.install-workflow]
+depends-on = ["clean", "build", "test", "package", "install-global"]
+
+[tasks.install-help]
+cmd = """echo "Installation Tasks:
+  pixi run package-cli              - Build CLI conda package
+  pixi run package                  - Build full conda package (with GUI)
+  pixi run install-global-cli       - Install CLI package to pixi global (force reinstall)
+  pixi run install-global           - Install full package to pixi global (force reinstall)
+  pixi run install-workflow-cli     - Complete workflow: clean, build, test, package, and install CLI globally
+  pixi run install-workflow         - Complete workflow: clean, build, test, package, and install full package globally
+
+Package location: output/linux-64/
+After installation: CLI tools available globally as gpclient, gpservice, gpauth
+
+Notes:
+- Global install uses --force-reinstall to ensure latest package is installed
+- Full GUI package requires webkit2gtk system packages (see docs/sects/webkit-status.adoc)
+- On Fedora Silverblue/Bluefin: sudo rpm-ostree install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-devel pango-devel"
+"""
+cwd = "."
+
 [tasks.docs-help]
 cmd = """echo "Documentation Tasks:
   pixi run docs          - Build both HTML and PDF documentation

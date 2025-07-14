@@ -34,6 +34,12 @@ include::sects/system-requirements.adoc[leveloffset=+2]
 
 include::sects/pixi-installation.adoc[leveloffset=+2]
 
+[source,bash]
+----
+pixi run install-help
+pixi run cli-package-install-workflow
+----
+
 === Project Setup
 
 Clone and initialize the project:
