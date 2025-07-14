@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 
+use anyhow::Result;
 use thiserror::Error;
 use tokio::fs;
+
+use super::runtime;
 
 pub struct LockFile {
   path: PathBuf,
@@ -18,8 +21,22 @@ impl LockFile {
   }
 
   pub fn lock(&self, content: &str) -> anyhow::Result<()> {
+    // Ensure the lock file path is accessible before writing
+    runtime::ensure_lock_file_accessible(&self.path)?;
+
     let content = format!("{}:{}", self.pid, content);
-    std::fs::write(&self.path, content)?;
+    std::fs::write(&self.path, content).map_err(|e| {
+      anyhow::anyhow!(
+        "Failed to write lock file '{}': {}. {}",
+        self.path.display(),
+        e,
+        if self.path.starts_with("/var/run") && !runtime::is_running_as_root() {
+          "Try running with elevated privileges using 'sudo' or 'pkexec'."
+        } else {
+          "Check file permissions and disk space."
+        }
+      )
+    })?;
     Ok(())
   }
 
@@ -94,7 +111,9 @@ impl LockInfo {
 }
 
 pub async fn gpservice_lock_info() -> Result<LockInfo, LockFileError> {
-  LockInfo::from_file(crate::GP_SERVICE_LOCK_FILE).await
+  let lock_path = runtime::get_service_lock_path()
+    .map_err(|e| LockFileError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, e)))?;
+  LockInfo::from_file(lock_path).await
 }
 
 #[cfg(test)]

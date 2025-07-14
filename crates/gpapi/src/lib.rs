@@ -18,6 +18,7 @@ pub mod clap;
 pub const GP_API_KEY: &[u8; 32] = &[0; 32];
 
 pub const GP_USER_AGENT: &str = "PAN GlobalProtect";
+#[deprecated(note = "Use utils::runtime::get_service_lock_path() instead for proper user-specific paths")]
 pub const GP_SERVICE_LOCK_FILE: &str = "/var/run/gpservice.lock";
 pub const GP_CALLBACK_PORT_FILENAME: &str = "gpcallback.port";
 

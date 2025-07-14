@@ -20,7 +20,7 @@ clap.workspace = true
 env_logger.workspace = true
 log.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 tempfile.workspace = true
 compile-time.workspace = true
 

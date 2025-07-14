@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GlobalProtect Callback Handler
+Comment=Handler for GlobalProtect authentication callbacks
+Exec=/var/home/phreed/Projects/gpoc/target/release/gpclient launch-gui %u
+MimeType=x-scheme-handler/globalprotectcallback;
+NoDisplay=true
+StartupNotify=false
+Categories=Network;

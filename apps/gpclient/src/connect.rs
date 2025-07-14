@@ -22,7 +22,7 @@ use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::{info, warn};
 use openconnect::Vpn;
 
-use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE};
+use crate::cli::SharedArgs;
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -340,11 +340,12 @@ impl<'a> ConnectHandler<'a> {
       vpn_clone.disconnect();
     });
 
-    vpn.connect(write_pid_file);
+    let lock_file_path = self.shared_args.lock_file_path.clone();
+    vpn.connect(move || write_pid_file(&lock_file_path));
 
-    if fs::metadata(GP_CLIENT_LOCK_FILE).is_ok() {
+    if fs::metadata(&self.shared_args.lock_file_path).is_ok() {
       info!("Removing PID file");
-      fs::remove_file(GP_CLIENT_LOCK_FILE)?;
+      fs::remove_file(&self.shared_args.lock_file_path)?;
     }
 
     Ok(())
@@ -434,11 +435,21 @@ fn read_cookie_from_stdin() -> anyhow::Result<Credential> {
   Credential::try_from(auth_result)
 }
 
-fn write_pid_file() {
+fn write_pid_file(lock_file_path: &std::path::Path) {
   let pid = std::process::id();
 
-  fs::write(GP_CLIENT_LOCK_FILE, pid.to_string()).unwrap();
-  info!("Wrote PID {} to {}", pid, GP_CLIENT_LOCK_FILE);
+  match fs::write(lock_file_path, pid.to_string()) {
+    Ok(_) => {
+      info!("Wrote PID {} to {}", pid, lock_file_path.display());
+    }
+    Err(e) => {
+      panic!(
+        "Failed to write PID file '{}': {}. Check file permissions.",
+        lock_file_path.display(),
+        e
+      );
+    }
+  }
 }
 
 fn get_csd_uid(csd_user: &Option<String>) -> anyhow::Result<u32> {

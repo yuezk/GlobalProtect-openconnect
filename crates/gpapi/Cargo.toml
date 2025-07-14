@@ -31,6 +31,8 @@ uzers.workspace = true
 serde_urlencoded.workspace = true
 md5.workspace = true
 sha256.workspace = true
+dirs = "5.0"
+libc = "0.2"
 
 tauri = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }

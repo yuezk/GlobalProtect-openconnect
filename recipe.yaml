@@ -18,6 +18,10 @@ build:
     - cp target/release/gpservice $PREFIX/bin/
     - cp target/release/gpauth $PREFIX/bin/
     - cp target/release/gpgui-helper $PREFIX/bin/
+    - cp packaging/files/usr/bin/gp-setup $PREFIX/bin/
+    - chmod +x $PREFIX/bin/gp-setup
+    - cp packaging/files/usr/bin/gp-welcome $PREFIX/bin/
+    - chmod +x $PREFIX/bin/gp-welcome
     - mkdir -p $PREFIX/share/applications
     - cp packaging/files/usr/share/applications/gpgui.desktop $PREFIX/share/applications/
     - mkdir -p $PREFIX/share/icons/hicolor/scalable/apps
@@ -30,6 +34,9 @@ build:
     - cp packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $PREFIX/share/icons/hicolor/256x256@2/apps/
     - mkdir -p $PREFIX/share/polkit-1/actions
     - cp packaging/files/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $PREFIX/share/polkit-1/actions/
+    - mkdir -p $PREFIX/share/doc/globalprotect-openconnect
+    - cp packaging/README-conda.md $PREFIX/share/doc/globalprotect-openconnect/
+    - cp packaging/post-install-message.sh $PREFIX/share/doc/globalprotect-openconnect/
 
 requirements:
   build:
@@ -78,6 +85,8 @@ tests:
       - gpservice --help
       - gpauth --help
       - gpgui-helper --help
+      - gp-setup --help
+      - gp-welcome --help
 
 about:
   homepage: https://github.com/yuezk/GlobalProtect-openconnect
@@ -89,6 +98,12 @@ about:
     that supports the SSO authentication method. It provides both CLI and GUI interfaces
     for connecting to GlobalProtect VPN servers with features like SSO authentication,
     FIDO2 support, client certificate authentication, and more.
+
+    This package includes the 'gp-setup' configuration script that automatically
+    configures URL scheme handlers, runtime directories, file permissions, and
+    Flatpak browser permissions for optimal operation.
+
+    After installation, run 'gp-setup --all' to configure your system automatically.
   documentation: https://github.com/yuezk/GlobalProtect-openconnect/blob/main/README.md
   repository: https://github.com/yuezk/GlobalProtect-openconnect
 

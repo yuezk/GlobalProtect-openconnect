@@ -274,6 +274,120 @@ yay -S globalprotect-openconnect-git
 
 === Post-Installation Configuration
 
+==== Conda Package Configuration Tools
+
+For conda package installations, automated configuration tools are included to simplify setup:
+
+===== Automated Setup Script (`gp-setup`)
+
+The `gp-setup` script automates system configuration based on best practices:
+
+[source,bash]
+----
+# Complete automated setup (recommended)
+gp-setup --all
+
+# Check current configuration status
+gp-setup --check
+
+# Individual setup components
+gp-setup --url-handler     # Browser authentication setup
+gp-setup --runtime-dirs    # Runtime directory configuration
+gp-setup --permissions     # File permission fixes
+gp-setup --flatpak         # Flatpak browser configuration
+
+# System-wide setup (requires root)
+sudo gp-setup --system
+
+# Remove all configuration
+gp-setup --uninstall
+----
+
+**Key Features:**
+* **URL Scheme Handler Setup**: Configures `globalprotectcallback://` for browser authentication
+* **Runtime Directory Management**: Uses appropriate directories based on user privileges
+* **Permission Management**: Ensures proper file permissions and directory access
+* **Flatpak Browser Support**: Configures permissions for sandboxed browsers
+* **Multi-user Isolation**: Separate configurations for different users
+
+===== Welcome and Guidance (`gp-welcome`)
+
+Interactive welcome screen with setup guidance:
+
+[source,bash]
+----
+# Show complete welcome screen
+gp-welcome
+
+# Show only setup status
+gp-welcome --status
+
+# Show configuration tips
+gp-welcome --tips
+
+# Show environment information
+gp-welcome --env
+----
+
+===== Installation Verification
+
+Verify conda package installation:
+
+[source,bash]
+----
+# Basic verification - check if all commands are available
+gpclient --version
+gpservice --version
+gpauth --version
+gp-setup --help
+gp-welcome --help
+
+# Comprehensive verification (if available)
+./packaging/verify-installation.sh
+
+# Check setup status
+gp-setup --check
+----
+
+===== Configuration Workflow
+
+**For New Installations:**
+
+[source,bash]
+----
+# 1. Install package
+conda install -c conda-forge globalprotect-openconnect
+
+# 2. View welcome and setup status
+gp-welcome
+
+# 3. Run automated setup
+gp-setup --all
+
+# 4. Verify configuration
+gp-setup --check
+
+# 5. Test authentication
+gpauth --browser default your-vpn-server.com
+----
+
+**Troubleshooting Configuration Issues:**
+
+[source,bash]
+----
+# Diagnose issues
+gp-setup --check
+
+# Fix common problems
+gp-setup --permissions      # Permission errors
+gp-setup --url-handler      # Browser authentication hangs
+gp-setup --flatpak          # Flatpak browser issues
+
+# Complete reconfiguration
+gp-setup --uninstall
+gp-setup --all
+----
+
 ==== System Integration
 
 Configure system integration:
@@ -430,6 +544,11 @@ ignore-tls-errors = false
 # Logging configuration
 level = info
 file = /var/log/globalprotect.log
+
+[runtime]
+# Runtime directory configuration (automatic)
+# For root users: /var/run/
+# For non-root users: $XDG_RUNTIME_DIR or ~/.local/state/globalprotect/
 ----
 
 ==== User Configuration
@@ -489,6 +608,188 @@ export GP_BROWSER="flatpak run org.mozilla.firefox"
 
 # For flatpak Opera
 export GP_BROWSER="flatpak run com.opera.Opera"
+----
+
+=== Runtime Directory and File Permissions
+
+GlobalProtect OpenConnect automatically handles runtime directories and file permissions based on user privileges:
+
+==== Runtime Directory Selection
+
+[source,bash]
+----
+# For root users (system-wide deployment)
+/var/run/gpservice.lock       # Service lock file
+/var/run/gpclient.lock        # Client lock file
+/tmp/gpservice_disconnected.pid  # Disconnect status
+
+# For non-root users (user deployment)
+$XDG_RUNTIME_DIR/gpservice.lock              # Preferred location
+~/.local/state/globalprotect/gpservice.lock  # Fallback location
+$XDG_RUNTIME_DIR/gpservice_disconnected.pid  # Disconnect status
+----
+
+==== Permission Requirements
+
+[source,bash]
+----
+# Check current runtime configuration
+gpservice --version  # Shows runtime directory selection
+gpclient --version   # Shows runtime directory selection
+
+# Manual verification of permissions
+ls -la /var/run/gp*                          # For root deployment
+ls -la $XDG_RUNTIME_DIR/gp*                  # For user deployment
+ls -la ~/.local/state/globalprotect/         # For user fallback
+
+# Directory creation (automatic, but manual if needed)
+mkdir -p ~/.local/state/globalprotect/
+chmod 700 ~/.local/state/globalprotect/
+----
+
+==== Troubleshooting Permission Issues
+
+[source,bash]
+----
+# Common permission errors and solutions
+
+# Error: "Cannot access lock file: No write permission"
+# Solution: Ensure proper runtime directory access
+mkdir -p ~/.local/state/globalprotect/
+chmod 700 ~/.local/state/globalprotect/
+
+# Error: "Another instance is already running" (false positive)
+# Solution: Check and clean stale lock files
+rm -f ~/.local/state/globalprotect/*.lock
+rm -f $XDG_RUNTIME_DIR/gp*.lock
+
+# For system deployment with sudo
+sudo mkdir -p /var/run/
+sudo chown root:root /var/run/gp*.lock
+----
+
+**Note**: The runtime directory selection is automatic and transparent to users. Root users will use system directories (`/var/run/`), while non-root users will use user-specific directories for security and multi-user support.
+
+=== Automated Configuration Management (Conda Package)
+
+For conda package installations, automated configuration tools simplify deployment and maintenance:
+
+==== Configuration Script Overview
+
+[source,bash]
+----
+# Complete automated configuration
+gp-setup --all
+
+# Individual configuration components
+gp-setup --url-handler         # Browser authentication setup
+gp-setup --runtime-dirs        # Runtime directory configuration
+gp-setup --permissions         # File permission management
+gp-setup --flatpak             # Flatpak browser configuration
+
+# Configuration verification
+gp-setup --check               # Show current configuration status
+gp-welcome --status             # Show setup status with guidance
+----
+
+==== Configuration Automation Features
+
+**URL Scheme Handler Management:**
+[source,bash]
+----
+# Automatic desktop file creation and registration
+gp-setup --url-handler
+
+# Verifies globalprotectcallback:// URL scheme registration
+# Creates ~/.local/share/applications/gpclient-callback.desktop
+# Registers with system MIME database
+# Validates registration success
+----
+
+**Runtime Directory Automation:**
+[source,bash]
+----
+# Automatic directory selection and creation
+gp-setup --runtime-dirs
+
+# For root users: /var/run/
+# For regular users: $XDG_RUNTIME_DIR or ~/.local/state/globalprotect/
+# Sets proper permissions (700 for user dirs, 755 for system dirs)
+# Creates parent directories as needed
+----
+
+**Permission Management:**
+[source,bash]
+----
+# Automatic permission fixing and validation
+gp-setup --permissions
+
+# Validates write access before operations
+# Creates directories with proper permissions
+# Cleans stale lock files
+# Provides actionable error messages
+----
+
+**Flatpak Browser Integration:**
+[source,bash]
+----
+# Automatic Flatpak browser configuration
+gp-setup --flatpak
+
+# Detects installed Flatpak browsers
+# Grants network and filesystem permissions
+# Configures localhost access
+# Provides Flatseal guidance for advanced permissions
+----
+
+==== Deployment Workflow
+
+**Enterprise Deployment:**
+[source,bash]
+----
+# 1. Install package via conda
+conda install -c conda-forge globalprotect-openconnect
+
+# 2. Run welcome screen for status overview
+gp-welcome
+
+# 3. Automated configuration for all users
+for user_home in /home/*; do
+  sudo -u "$(basename "$user_home")" gp-setup --all
+done
+
+# 4. System-wide configuration (if needed)
+sudo gp-setup --system
+
+# 5. Verification
+gp-setup --check
+----
+
+**User Self-Service:**
+[source,bash]
+----
+# Simple user setup process
+gp-setup --all                    # Complete automated setup
+gp-welcome                        # Show status and next steps
+gpauth --browser default server   # Test authentication
+gpclient connect server           # Connect to VPN
+----
+
+==== Configuration Validation
+
+[source,bash]
+----
+# Comprehensive configuration check
+gp-setup --check
+
+# Output includes:
+# - Binary availability and versions
+# - URL scheme handler registration
+# - Runtime directory configuration
+# - Browser detection and availability
+# - Flatpak environment status
+# - Permission validation
+# - Environment information
 ----
 
 === Configuration Templates
@@ -613,6 +914,38 @@ flatpak install flathub com.github.tchx84.Flatseal
 # Alternative: Use explicit flatpak command
 gpauth --browser "flatpak run org.mozilla.firefox" vpn.company.com
 ----
+
+**URL Scheme Handler Setup**: For proper browser-based authentication, the `globalprotectcallback:` URL scheme must be registered with your desktop environment:
+
+[source,bash]
+----
+# Create URL scheme handler desktop file
+mkdir -p ~/.local/share/applications
+
+cat > ~/.local/share/applications/gpclient-callback.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=GlobalProtect Callback Handler
+Comment=Handler for GlobalProtect authentication callbacks
+Exec=/usr/bin/gpclient launch-gui %u
+MimeType=x-scheme-handler/globalprotectcallback;
+NoDisplay=true
+StartupNotify=false
+Categories=Network;
+EOF
+
+# Update desktop database and register scheme
+update-desktop-database ~/.local/share/applications/
+xdg-mime default gpclient-callback.desktop x-scheme-handler/globalprotectcallback
+
+# Verify registration
+xdg-mime query default x-scheme-handler/globalprotectcallback
+
+# For custom installation paths, update the Exec line in the desktop file:
+# Exec=/path/to/custom/gpclient launch-gui %u
+----
+
+**Note**: This setup is required for browser authentication to work properly in most desktop environments, especially when using Flatpak or other sandboxed applications.
 
 ==== Certificate-Based Authentication
 
@@ -1033,6 +1366,9 @@ receivers:
 **Diagnosis**:
 [source,bash]
 ----
+# Check system configuration (conda package)
+gp-setup --check
+
 # Check connectivity to VPN server
 nslookup vpn.company.com
 ping vpn.company.com
@@ -1048,6 +1384,9 @@ gpauth --verbose vpn.company.com
 **Solutions**:
 [source,bash]
 ----
+# Fix configuration issues (conda package)
+gp-setup --permissions
+
 # Reset network configuration
 sudo ip route flush table main
 sudo systemctl restart NetworkManager
@@ -1122,6 +1461,82 @@ gpauth --browser "flatpak run org.mozilla.firefox" vpn.company.com
 # Option 3: Install native browser
 sudo dnf install firefox  # For Fedora/RHEL
 sudo apt install firefox  # For Ubuntu/Debian
+----
+
+**Issue**: Browser authentication completes but no output is returned from gpauth
+
+**Diagnosis**:
+[source,bash]
+----
+# Check if URL scheme handler is registered
+xdg-mime query default x-scheme-handler/globalprotectcallback
+
+# Test authentication with verbose logging
+gpauth --verbose --browser default vpn.company.com
+
+# Check for callback port file
+ls -la /tmp/gpcallback*
+
+# Verify desktop file exists
+ls -la ~/.local/share/applications/*callback*
+----
+
+**Solutions**:
+[source,bash]
+----
+# Option 1: Use automated setup script (conda package)
+gp-setup --url-handler
+
+# Option 2: Manual setup - Create local desktop file for URL scheme handler
+mkdir -p ~/.local/share/applications
+
+cat > ~/.local/share/applications/gpclient-callback.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=GlobalProtect Callback Handler
+Comment=Handler for GlobalProtect authentication callbacks
+Exec=/usr/bin/gpclient launch-gui %u
+MimeType=x-scheme-handler/globalprotectcallback;
+NoDisplay=true
+StartupNotify=false
+Categories=Network;
+EOF
+
+# Update desktop database
+update-desktop-database ~/.local/share/applications/
+
+# Register the URL scheme
+xdg-mime default gpclient-callback.desktop x-scheme-handler/globalprotectcallback
+
+# Verify registration
+xdg-mime query default x-scheme-handler/globalprotectcallback
+
+# For custom installation paths, update the Exec line:
+# Exec=/path/to/gpclient launch-gui %u
+
+# Test the fix
+gpauth --browser default vpn.company.com
+----
+
+**Additional Flatpak/Sandbox Considerations**:
+[source,bash]
+----
+# Option 1: Use automated Flatpak configuration (conda package)
+gp-setup --flatpak
+
+# Option 2: Manual Flatpak configuration
+# If still having issues with sandboxed environments:
+# 1. Use Flatseal to enable additional permissions:
+#    - Network access (localhost communication)
+#    - Filesystem access to /tmp and ~/.local/share/
+#    - D-Bus session access
+#    - Socket access for network communication
+
+# 2. Alternative: Use explicit browser paths
+gpauth --browser /usr/bin/firefox vpn.company.com
+
+# 3. For AppImage or snap browsers, ensure proper permissions
+snap connect firefox:network-observe
 ----
 
 ==== Performance Issues
@@ -1345,6 +1760,40 @@ usermod -a -G vpn-users username
 # Configure sudo access
 echo "%vpn-users ALL=(root) NOPASSWD: /usr/local/bin/gpclient" > /etc/sudoers.d/globalprotect
 ----
+
+==== Runtime File Security
+
+GlobalProtect OpenConnect implements secure file handling with automatic permission management:
+
+[source,bash]
+----
+# Automatic runtime directory security (handled by application)
+# Root deployment - system-wide with proper ownership
+/var/run/gpservice.lock (root:root, 644)
+/var/run/gpclient.lock (root:root, 644)
+
+# User deployment - user-specific with restricted access
+$XDG_RUNTIME_DIR/gpservice.lock (user:user, 600)
+~/.local/state/globalprotect/ (user:user, 700)
+
+# Manual security verification
+ls -la /var/run/gp*                    # System deployment
+ls -la $XDG_RUNTIME_DIR/gp*            # User deployment
+ls -la ~/.local/state/globalprotect/   # User fallback
+
+# Security benefits:
+# - Multi-user isolation: Users cannot interfere with each other's sessions
+# - Privilege separation: Non-root users don't need system-wide write access
+# - Automatic cleanup: User runtime directories are cleaned on logout
+# - Permission validation: Applications check permissions before file operations
+----
+
+**Security Features**:
+* **Automatic privilege detection**: Uses appropriate directories based on user context
+* **Permission validation**: Checks file access before operations with clear error messages
+* **Multi-user isolation**: Each user has separate runtime directories
+* **Secure fallbacks**: Uses `~/.local/state/` when `XDG_RUNTIME_DIR` is unavailable
+* **Directory creation**: Creates required directories with proper permissions automatically
 
 ==== Network Security
 
