@@ -4,6 +4,8 @@
 
 - GUI: fix multiple tray icons issue (fix [#464](https://github.com/yuezk/GlobalProtect-openconnect/issues/464))
 - CLI: check the cli running state before running the `gpclient` command (fix [#447](https://github.com/yuezk/GlobalProtect-openconnect/issues/447))
+- CLI: fix GlobalProtect version requirement errors by adding `--client-version` option (fix [#427](https://github.com/yuezk/GlobalProtect-openconnect/issues/427))
+- CLI: enable `clientgpversion` parameter to satisfy server version checks (defaults to 6.1.4)
 
 ## 2.4.3 - 2025-01-21
 

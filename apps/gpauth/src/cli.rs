@@ -50,6 +50,13 @@ struct Cli {
   #[arg(long)]
   os_version: Option<String>,
 
+  #[arg(
+    long,
+    default_value = "6.1.4",
+    help = "GlobalProtect client version to report to server"
+  )]
+  client_version: String,
+
   #[arg(long, help = "Get around the OpenSSL `unsafe legacy renegotiation` error")]
   fix_openssl: bool,
 
@@ -149,6 +156,7 @@ impl Cli {
       .user_agent(&self.user_agent)
       .client_os(ClientOs::from(&self.os))
       .os_version(self.os_version.clone())
+      .client_version(Some(self.client_version.clone()))
       .ignore_tls_errors(self.ignore_tls_errors)
       .is_gateway(self.gateway)
       .build();

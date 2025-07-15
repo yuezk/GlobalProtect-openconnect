@@ -96,6 +96,13 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
 
+  #[arg(
+    long,
+    default_value = "6.1.4",
+    help = "GlobalProtect client version to report to server"
+  )]
+  client_version: String,
+
   #[cfg(feature = "webview-auth")]
   #[arg(long, help = "The HiDPI mode, useful for high-resolution screens")]
   hidpi: bool,
@@ -157,6 +164,7 @@ impl<'a> ConnectHandler<'a> {
       .user_agent(&self.args.user_agent)
       .client_os(ClientOs::from(&self.args.os))
       .os_version(self.args.os_version())
+      .client_version(Some(self.args.client_version.clone()))
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())

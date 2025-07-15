@@ -1532,6 +1532,36 @@ gpauth --browser /usr/bin/firefox vpn.company.com
 snap connect firefox:network-observe
 ----
 
+**Issue**: Server rejects connection with "Please ensure the compatible GlobalProtect version is: X.X.X or above"
+
+**Diagnosis**:
+[source,bash]
+----
+# Check what version is being reported
+RUST_LOG=gpapi=debug gpclient connect vpn.company.com --browser default 2>&1 | grep clientgpversion
+
+# Test with different client versions
+gpclient connect vpn.company.com --client-version 6.1.4 --browser default
+gpauth vpn.company.com --client-version 6.1.4 --browser default
+----
+
+**Solutions**:
+[source,bash]
+----
+# Use a supported GlobalProtect client version (default is 6.1.4)
+gpclient connect vpn.company.com --client-version 6.1.4 --browser default
+
+# For servers requiring newer versions
+gpclient connect vpn.company.com --client-version 6.2.0 --browser default
+
+# For servers requiring older versions
+gpclient connect vpn.company.com --client-version 5.2.0 --browser default
+
+# Configure authentication with specific version
+gpauth vpn.company.com --client-version 6.1.4 --browser default | \
+  gpclient connect vpn.company.com --cookie-on-stdin
+----
+
 ==== Performance Issues
 
 **Issue**: Slow VPN performance

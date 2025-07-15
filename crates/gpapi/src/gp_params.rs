@@ -131,10 +131,10 @@ impl GpParams {
       params.insert("os-version", os_version);
     }
 
-    // NOTE: Do not include clientgpversion for now
-    // if let Some(client_version) = &self.client_version {
-    //   params.insert("clientgpversion", client_version);
-    // }
+    // Include clientgpversion to satisfy server version requirements
+    if let Some(client_version) = &self.client_version {
+      params.insert("clientgpversion", client_version);
+    }
 
     params
   }
