@@ -50,7 +50,7 @@ jobs:
         run: pixi install
 
       - name: Build project
-        run: pixi run build
+        run: pixi run build-all
 
       - name: Run tests
         run: pixi run test
@@ -133,7 +133,7 @@ jobs:
         run: pixi install
 
       - name: Build project
-        run: pixi run build
+        run: pixi run build-all
 
       - name: Create conda package
         run: pixi run package

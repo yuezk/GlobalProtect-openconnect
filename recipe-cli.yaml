@@ -24,7 +24,7 @@ build:
       sed -i 's|/opt/homebrew/lib|'"$PREFIX/lib"'|g' crates/openconnect/build.rs
       sed -i 's|/opt/homebrew/include|'"$PREFIX/include"'|g' crates/openconnect/build.rs
     - cargo build --release --no-default-features -p gpclient -p gpservice -p gpauth
-    - pixi run docs
+    - pixi run build-docs
     - mkdir -p $PREFIX/bin
     - cp target/release/gpclient $PREFIX/bin/
     - cp target/release/gpservice $PREFIX/bin/

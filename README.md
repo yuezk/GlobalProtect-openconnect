@@ -252,7 +252,7 @@ sudo rpm-ostree apply-live  # Apply changes without reboot
 pixi run verify-webkit-deps
 
 # Then build the full GUI
-pixi run build
+pixi run build-all
 ```
 
 For detailed solutions, see the WebKit Dependencies section in [docs/developers-guide.adoc](docs/developers-guide.adoc).
@@ -263,7 +263,7 @@ For detailed solutions, see the WebKit Dependencies section in [docs/developers-
 
 ```bash
 # Setup development environment
-pixi run setup
+pixi run setup-env
 
 # Check WebKit dependencies (for GUI build)
 pixi run verify-webkit-deps

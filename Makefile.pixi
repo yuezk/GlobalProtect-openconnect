@@ -28,7 +28,7 @@ init:
 
 # Setup development environment
 setup:
-	pixi run setup
+	pixi run setup-env
 
 # Build tasks
 build-frontend:

@@ -52,7 +52,7 @@ cxx-compiler = "*"
 [tasks]
 
 # =============================================================================
-# Environment setup tasks
+# Setup Actions
 # =============================================================================
 
 [tasks.setup-corepack]
@@ -72,7 +72,7 @@ cmd = "chmod +x scripts/env/setup-pkgconfig.sh && scripts/env/setup-pkgconfig.sh
 cwd = "."
 
 # =============================================================================
-# Build tasks
+# Build Actions
 # =============================================================================
 
 [tasks.build-frontend]
@@ -101,7 +101,7 @@ cwd = "."
 # end::build-tasks[]
 
 # =============================================================================
-# Testing tasks
+# Test Actions
 # =============================================================================
 
 [tasks.test-cli]
@@ -118,7 +118,7 @@ cmd = "chmod +x tests/test-cli-final.sh && ./tests/test-cli-final.sh"
 cwd = "."
 
 # =============================================================================
-# Packaging tasks
+# Package Actions
 # =============================================================================
 
 [tasks.package-full]
@@ -139,7 +139,7 @@ cmd = "ls -lh output/linux-64/*.conda && echo 'Package successfully built!'"
 cwd = "."
 
 # =============================================================================
-# Code quality tasks
+# Quality Actions
 # =============================================================================
 
 [tasks.lint-code]
@@ -162,7 +162,7 @@ cwd = "."
 
 
 # =============================================================================
-# Maintenance tasks
+# Clean Actions
 # =============================================================================
 
 [tasks.clean-all]
@@ -171,7 +171,7 @@ cwd = "."
 
 
 # =============================================================================
-# Verification and debugging tasks
+# Verify Actions
 # =============================================================================
 
 [tasks.verify-pkgconfig]
@@ -194,6 +194,14 @@ cwd = "."
 cmd = "echo 'Environment Debug Information:' && echo 'CONDA_PREFIX:' $CONDA_PREFIX && echo 'PATH:' $PATH && echo 'PKG_CONFIG_PATH:' $PKG_CONFIG_PATH && which pkg-config"
 cwd = "."
 
+[tasks.verify-package-published]
+cmd = "chmod +x scripts/verify-published-package.sh && ./scripts/verify-published-package.sh"
+cwd = "."
+
+# =============================================================================
+# Debug Actions
+# =============================================================================
+
 [tasks.debug-build]
 cmd = [
   "bash",
@@ -202,8 +210,17 @@ cmd = [
 ]
 cwd = "."
 
+[tasks.debug-cli]
+depends-on = [
+  "clean-all",
+  "build-cli",
+  "test-cli",
+  "package-cli",
+  "view-package-contents",
+]
+
 # =============================================================================
-# CLI workflow tasks
+# Workflow Tasks
 # =============================================================================
 
 # CLI development workflow - build and test
@@ -223,14 +240,6 @@ depends-on = [
 
 
 # CLI debug workflow - build, test, package, and inspect
-[tasks.debug-cli]
-depends-on = [
-  "clean-all",
-  "build-cli",
-  "test-cli",
-  "package-cli",
-  "view-package-contents",
-]
 
 
 # CLI deployment workflow - complete build, test, package, and install
@@ -244,7 +253,7 @@ depends-on = [
 ]
 
 # =============================================================================
-# Documentation tasks
+# Show/View Actions
 # =============================================================================
 
 [tasks.build-docs-html]
@@ -281,7 +290,7 @@ cwd = "."
 depends-on = ["build-docs-html"]
 
 # =============================================================================
-# Installation tasks
+# Install Actions
 # =============================================================================
 
 [tasks.install-global-cli]
@@ -311,7 +320,7 @@ depends-on = [
 ]
 
 # =============================================================================
-# Publishing tasks
+# Publish Actions
 # =============================================================================
 
 # Setup publishing environment (interactive guide)
@@ -331,11 +340,6 @@ cwd = "."
 # Complete publish workflow - build and publish in one go
 [tasks.publish-cli-complete]
 depends-on = ["ship-cli", "publish-cli"]
-
-# Verify published package is available and installable
-[tasks.verify-package-published]
-cmd = "chmod +x scripts/verify-published-package.sh && ./scripts/verify-published-package.sh"
-cwd = "."
 
 # =============================================================================
 # Help and information tasks
@@ -468,7 +472,7 @@ Output directory: output/docs/
 cwd = "."
 
 # =============================================================================
-# Enhanced workflow tasks
+# Enhanced Workflow Tasks
 # =============================================================================
 
 [tasks.run-workflow-cli-dev]

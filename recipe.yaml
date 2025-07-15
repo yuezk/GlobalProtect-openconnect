@@ -14,9 +14,9 @@ build:
     - export CARGO_PROFILE_RELEASE_STRIP=symbols
     - export CARGO_PROFILE_RELEASE_LTO=true
     - cd $SRC_DIR
-    - pixi run setup
-    - pixi run build
-    - pixi run docs
+    - pixi run setup-env
+    - pixi run build-all
+    - pixi run build-docs
     - mkdir -p $PREFIX/bin
     - cp target/release/gpclient $PREFIX/bin/
     - cp target/release/gpservice $PREFIX/bin/
