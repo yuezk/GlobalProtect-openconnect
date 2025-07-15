@@ -96,6 +96,9 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
 
+  #[arg(long = "force-dpd", help = "Same as the '--force-dpd' option in the openconnect command")]
+  dpd_interval: Option<u32>,
+
   #[cfg(feature = "webview-auth")]
   #[arg(long, help = "The HiDPI mode, useful for high-resolution screens")]
   hidpi: bool,
@@ -328,6 +331,7 @@ impl<'a> ConnectHandler<'a> {
       .mtu(mtu)
       .disable_ipv6(self.args.disable_ipv6)
       .no_dtls(self.args.no_dtls)
+      .dpd_interval(self.args.dpd_interval.unwrap_or(0))
       .build()?;
 
     let vpn = Arc::new(vpn);

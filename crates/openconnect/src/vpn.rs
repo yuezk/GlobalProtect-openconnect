@@ -31,6 +31,8 @@ pub struct Vpn {
   disable_ipv6: bool,
   no_dtls: bool,
 
+  dpd_interval: u32,
+
   callback: OnConnectedCallback,
 }
 
@@ -81,6 +83,7 @@ impl Vpn {
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6 as u32,
       no_dtls: self.no_dtls as u32,
+      dpd_interval: self.dpd_interval,
     }
   }
 
@@ -131,6 +134,8 @@ pub struct VpnBuilder {
   mtu: u32,
   disable_ipv6: bool,
   no_dtls: bool,
+
+  dpd_interval: u32,
 }
 
 impl VpnBuilder {
@@ -155,6 +160,7 @@ impl VpnBuilder {
       mtu: 0,
       disable_ipv6: false,
       no_dtls: false,
+      dpd_interval: 0,
     }
   }
 
@@ -223,6 +229,11 @@ impl VpnBuilder {
     self
   }
 
+  pub fn dpd_interval(mut self, dpd_interval: u32) -> Self {
+    self.dpd_interval = dpd_interval;
+    self
+  }
+
   pub fn build(self) -> Result<Vpn, VpnError> {
     let script = match self.script {
       Some(script) => {
@@ -259,6 +270,7 @@ impl VpnBuilder {
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6,
       no_dtls: self.no_dtls,
+      dpd_interval: self.dpd_interval,
 
       callback: Default::default(),
     })

@@ -66,6 +66,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
     INFO("MTU: %d", options->mtu);
     INFO("DISABLE_IPV6: %d", options->disable_ipv6);
     INFO("NO_DTLS: %d", options->no_dtls);
+    INFO("DPD_INTERVAL: %d", options->dpd_interval);
 
     vpninfo = openconnect_vpninfo_new(options->user_agent, validate_peer_cert, NULL, NULL, print_progress, NULL);
 
@@ -104,6 +105,10 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 
     if (options->disable_ipv6) {
         openconnect_disable_ipv6(vpninfo);
+    }
+
+    if (options->dpd_interval > 0) {
+        openconnect_set_dpd(vpninfo, options->dpd_interval);
     }
 
     g_cmd_pipe_fd = openconnect_setup_cmd_pipe(vpninfo);
