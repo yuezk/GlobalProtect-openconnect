@@ -765,15 +765,52 @@ GlobalProtect OpenConnect supports multiple authentication methods:
 
 ==== SAML/SSO Authentication
 
-SAML-based single sign-on:
+SAML-based single sign-on with integrated workflow:
+
+===== Integrated Authentication (Recommended)
+
+The recommended approach uses `gpclient` with integrated authentication:
 
 [source,bash]
 ----
-# Configure SAML authentication
-gpauth --saml-request="<saml_request>" vpn.company.com
+# Single command - handles authentication and connection automatically
+gpclient connect vpn.company.com --browser default
 
-# Interactive SAML authentication
-gpauth --browser=firefox vpn.company.com
+# With SSL compatibility for legacy servers
+gpclient --fix-openssl connect vpn.company.com --browser default
+
+# Using specific browser
+gpclient connect vpn.company.com --browser firefox
+
+# Custom browser path
+gpclient connect vpn.company.com --browser "/path/to/browser"
+----
+
+**How Integrated Authentication Works:**
+
+1. **Portal Discovery**: `gpclient` contacts the VPN server to determine authentication requirements
+2. **Automatic Authentication**: When SAML authentication is required, `gpclient` automatically launches `gpauth`
+3. **Browser Integration**: Opens the specified browser for SSO authentication
+4. **Secure Handoff**: Authentication tokens are securely passed from `gpauth` to `gpclient`
+5. **VPN Connection**: Establishes VPN connection using the authenticated credentials
+
+**Binary Discovery**: `gpclient` automatically locates the `gpauth` binary using intelligent path resolution:
+
+* **Co-located Installation**: Checks same directory as `gpclient` (Conda, Pixi environments)
+* **System Installation**: Falls back to standard system paths (`/usr/bin/gpauth`)
+* **Clear Error Messages**: Provides informative guidance if `gpauth` is not found
+
+===== Manual Authentication Workflow
+
+For advanced use cases or debugging, authentication can be handled manually:
+
+[source,bash]
+----
+# Manual workflow - separate authentication and connection
+gpauth --browser=firefox vpn.company.com 2>/dev/null | gpclient connect vpn.company.com --cookie-on-stdin
+
+# Configure SAML authentication with specific request
+gpauth --saml-request="<saml_request>" vpn.company.com
 
 # Headless SAML authentication
 gpauth --browser=none --saml-file=/tmp/saml.xml vpn.company.com
@@ -1279,18 +1316,90 @@ sudo systemctl restart NetworkManager
 rm -rf ~/.cache/globalprotect/
 rm -rf ~/.config/globalprotect/auth/
 
+# Fix browser authentication setup
+gp-setup --url-handler
+
+# For Flatpak browsers
+gp-setup --flatpak
+
+# Test authentication separately
+gpauth --browser default vpn.company.com
+
 # Restart service
 sudo systemctl restart globalprotect
 ----
 
+**Issue**: Browser authentication hangs or fails to redirect
+
+**Diagnosis**:
+[source,bash]
+----
+# Check URL scheme handler registration
+xdg-mime query default x-scheme-handler/globalprotectcallback
+
+# Test browser accessibility
+gpauth --browser default --verbose vpn.company.com
+
+# Check for Flatpak browser issues
+flatpak list | grep -i firefox
+----
+
+**Solutions**:
+[source,bash]
+----
+# Register URL scheme handler
+gp-setup --url-handler
+
+# For Flatpak browsers, configure permissions
+gp-setup --flatpak
+
+# Use explicit browser path
+gpclient connect vpn.company.com --browser "/usr/bin/firefox"
+
+# For debugging, use manual authentication
+gpauth --browser default vpn.company.com 2>/dev/null | gpclient connect vpn.company.com --cookie-on-stdin --fix-openssl
+----
+
 ==== Authentication Issues
+
+**Issue**: "Authentication failed: The gpauth binary is not available"
+
+**Diagnosis**:
+[source,bash]
+----
+# Check if gpauth is installed and accessible
+which gpauth
+
+# Check if both binaries are in the same directory
+ls -la $(dirname $(which gpclient))/gpauth
+
+# Verify file permissions
+ls -la $(which gpauth)
+----
+
+**Solutions**:
+[source,bash]
+----
+# For Conda/Pixi environments - ensure both binaries are installed
+pixi add globalprotect-openconnect-cli
+
+# For system installations - install to same directory
+sudo cp gpclient gpauth /usr/local/bin/
+sudo chmod +x /usr/local/bin/gp*
+
+# For custom installations - ensure gpauth is in PATH or same directory as gpclient
+export PATH="/path/to/custom/bin:$PATH"
+----
 
 **Issue**: SAML authentication fails
 
 **Diagnosis**:
 [source,bash]
 ----
-# Debug SAML flow
+# Debug integrated authentication flow
+gpclient --fix-openssl connect vpn.company.com --browser=firefox -v
+
+# Debug manual SAML flow
 gpauth --verbose --browser=firefox vpn.company.com
 
 # Check browser logs
@@ -2258,6 +2367,112 @@ gpauth --help                       # Show help
 
 === Troubleshooting Reference
 
+==== Common Error Messages and Solutions
+
+===== Authentication Component Errors
+
+**Error**: `Authentication failed: The gpauth binary is not available. Please ensure GlobalProtect OpenConnect is properly installed.`
+
+**Cause**: `gpclient` cannot locate the `gpauth` binary required for authentication.
+
+**Solutions**:
+[source,bash]
+----
+# Verify both binaries are installed
+which gpclient gpauth
+
+# For Conda/Pixi environments - install complete package
+pixi add globalprotect-openconnect-cli
+conda install globalprotect-openconnect-cli
+
+# For system installations - ensure both binaries are accessible
+sudo cp gpclient gpauth /usr/local/bin/
+sudo chmod +x /usr/local/bin/gp*
+
+# For custom installations - place binaries in same directory
+cp gpclient gpauth /custom/path/
+export PATH="/custom/path:$PATH"
+
+# Verify binary discovery
+./gpclient --version
+./gpauth --version
+----
+
+**Error**: `Failed to start authentication process: Permission denied`
+
+**Cause**: Insufficient permissions to execute `gpauth` or access required resources.
+
+**Solutions**:
+[source,bash]
+----
+# Fix file permissions
+chmod +x $(which gpauth)
+chmod +x $(which gpclient)
+
+# Fix runtime directory permissions
+gp-setup --permissions
+
+# For system service issues
+sudo systemctl restart globalprotect
+----
+
+===== Browser Authentication Errors
+
+**Error**: Browser authentication hangs or doesn't redirect properly
+
+**Cause**: URL scheme handler not registered or browser permissions issues.
+
+**Solutions**:
+[source,bash]
+----
+# Register URL scheme handler
+gp-setup --url-handler
+
+# Verify registration
+xdg-mime query default x-scheme-handler/globalprotectcallback
+
+# For Flatpak browsers
+gp-setup --flatpak
+
+# Test with different browsers
+gpclient connect server.com --browser firefox
+gpclient connect server.com --browser chromium
+gpclient connect server.com --browser "/usr/bin/firefox"
+----
+
+**Error**: `No such file or directory` (legacy error)
+
+**Cause**: Older versions or misconfigurations where binary discovery fails.
+
+**Solutions**:
+[source,bash]
+----
+# Use manual authentication workflow
+gpauth --browser default server.com 2>/dev/null | gpclient connect server.com --cookie-on-stdin
+
+# Update to latest version with improved error handling
+pixi update globalprotect-openconnect-cli
+
+# Verify installation integrity
+gp-setup --check
+----
+
+===== SSL/TLS Compatibility Errors
+
+**Error**: `unsafe legacy renegotiation disabled`
+
+**Cause**: OpenSSL compatibility issues with legacy VPN servers.
+
+**Solutions**:
+[source,bash]
+----
+# Use OpenSSL compatibility mode
+gpclient --fix-openssl connect server.com --browser default
+
+# For manual authentication
+gpauth --fix-openssl --browser default server.com
+----
+
 ==== Error Codes and Solutions
 
 [cols="1,2,3", options="header"]
@@ -2270,7 +2485,7 @@ gpauth --help                       # Show help
 
 |1002
 |Authentication failed
-|Verify credentials and certificate validity
+|Verify credentials and certificate validity; check gpauth availability
 
 |1003
 |Gateway not found
@@ -2294,11 +2509,11 @@ gpauth --help                       # Show help
 
 |1008
 |TLS handshake failed
-|Check TLS version compatibility
+|Check TLS version compatibility; use --fix-openssl
 
 |1009
 |SAML authentication timeout
-|Increase authentication timeout value
+|Increase authentication timeout value; check browser accessibility
 
 |1010
 |Service unavailable
@@ -2308,7 +2523,73 @@ gpauth --help                       # Show help
 |Flatpak browser authentication fails
 |Configure Flatseal permissions for network access or use native browser
 
+|1012
+|gpauth binary not found
+|Ensure gpauth is installed and accessible in PATH or same directory as gpclient
+
+|1013
+|URL scheme handler not registered
+|Run gp-setup --url-handler to register globalprotectcallback:// scheme
+
 |===
+
+==== Deployment Environment Specific Issues
+
+===== Conda/Pixi Environments
+
+**Issue**: Components not found despite installation
+
+**Solutions**:
+[source,bash]
+----
+# Verify environment activation
+pixi shell
+which gpclient gpauth
+
+# Reinstall complete package
+pixi remove globalprotect-openconnect-cli
+pixi add globalprotect-openconnect-cli
+
+# Check binary co-location
+ls -la $(dirname $(which gpclient))/
+----
+
+===== Container/Sandbox Environments
+
+**Issue**: Browser authentication fails in containerized environments
+
+**Solutions**:
+[source,bash]
+----
+# Use manual authentication for automation
+gpauth --browser default server.com 2>/dev/null | gpclient connect server.com --cookie-on-stdin
+
+# Configure container networking for localhost access
+# (container-specific configuration required)
+
+# For headless environments, use certificate authentication
+gpclient connect server.com --certificate /path/to/cert.pem --sslkey /path/to/key.pem
+----
+
+===== Custom Installation Paths
+
+**Issue**: Binary discovery fails with custom installation paths
+
+**Solutions**:
+[source,bash]
+----
+# Ensure binaries are in same directory
+cp gpclient gpauth /custom/path/
+cd /custom/path && ./gpclient connect server.com --browser default
+
+# Update PATH to include custom location
+export PATH="/custom/path:$PATH"
+gpclient connect server.com --browser default
+
+# Create symlinks in standard locations
+sudo ln -sf /custom/path/gpclient /usr/local/bin/
+sudo ln -sf /custom/path/gpauth /usr/local/bin/
+----
 
 === Performance Benchmarks
 

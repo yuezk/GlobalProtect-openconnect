@@ -14,10 +14,26 @@ The primary command-line interface for VPN operations:
 * **Connection Management**: Establishes and maintains VPN connections
 * **User Interface**: Interactive and scripted command-line interface
 * **Configuration Handling**: Manages VPN profiles and settings
-* **Authentication Integration**: Works with gpauth for user authentication
+* **Authentication Integration**: Automatically launches and integrates with gpauth for user authentication
+* **Smart Binary Discovery**: Automatically locates gpauth binary in same directory or system paths
+* **Enhanced Error Handling**: Provides clear, actionable error messages for authentication issues
 * **Status Reporting**: Provides detailed connection status and diagnostics
 * **Binary Size**: ~3.8 MB
 * **Status**: ✅ Production Ready
+
+**Authentication Workflow**: `gpclient` automatically handles authentication by:
+
+1. **Portal Discovery**: Contacts the VPN server to determine authentication requirements
+2. **Automatic gpauth Launch**: Spawns `gpauth` process internally when SAML authentication is required
+3. **Browser Integration**: Seamlessly opens browser for SSO authentication when using `--browser` option
+4. **Credential Management**: Processes authentication tokens and manages secure handoff to VPN connection
+5. **Error Recovery**: Provides informative guidance when authentication components are missing
+
+**Usage Patterns**:
+
+* **Integrated Authentication**: `gpclient connect server.com --browser default` (recommended)
+* **Manual Authentication**: `gpauth --browser default server.com | gpclient connect server.com --cookie-on-stdin`
+* **Automated Workflows**: `gpclient --fix-openssl connect server.com --browser default` (with SSL compatibility)
 
 **gpservice - Background Service**
 
@@ -36,14 +52,31 @@ The system service component that manages VPN operations:
 
 Specialized component for handling authentication flows:
 
-* **Authentication Processing**: Handles various authentication methods
-* **SSO Integration**: Supports Single Sign-On workflows
-* **SAML Processing**: Processes SAML assertions and responses
-* **Credential Management**: Securely manages user credentials
-* **Multi-Factor Authentication**: Supports MFA workflows
-* **Session Management**: Manages authentication sessions and tokens
+* **Authentication Processing**: Handles various authentication methods (SAML, certificate, password)
+* **SSO Integration**: Supports Single Sign-On workflows with major identity providers
+* **SAML Processing**: Processes SAML assertions and responses with full browser integration
+* **Browser Management**: Launches and coordinates with system browsers for interactive authentication
+* **Credential Management**: Securely processes and outputs authentication tokens in JSON format
+* **Multi-Factor Authentication**: Supports MFA workflows including FIDO2 and TOTP
+* **Session Management**: Manages authentication sessions and secure token exchange
+* **Standalone Operation**: Can be used independently or automatically by gpclient
 * **Binary Size**: ~3.8 MB
 * **Status**: ✅ Production Ready
+
+**Integration with gpclient**:
+
+* **Automatic Discovery**: `gpclient` automatically locates `gpauth` using intelligent path resolution
+* **Seamless Execution**: Launched transparently when SAML authentication is required
+* **Secure Communication**: Authentication data passed securely via stdout/stdin pipes
+* **Error Reporting**: Provides clear feedback when authentication dependencies are missing
+* **Browser Compatibility**: Supports default browser, Firefox, Chrome, Chromium, and custom browser paths
+
+**Deployment Considerations**:
+
+* **Co-location**: Best deployed in same directory as `gpclient` for automatic discovery
+* **System Installation**: Supports traditional `/usr/bin` installation with fallback detection
+* **Containerized Environments**: Works in Conda, Pixi, and other isolated environments
+* **Permission Requirements**: Requires appropriate permissions for browser launching and URL scheme handling
 
 == GUI Components (Development/Beta)
 

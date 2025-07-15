@@ -80,16 +80,24 @@ print_quick_start() {
 
     if [[ "$setup_complete" == "false" ]]; then
         echo -e "${YELLOW}Step 1:${NC} Configure your system"
-        echo "   ${CYAN}gp-setup --all${NC}"
+        echo -e "   ${CYAN}gp-setup --all${NC}"
         echo
     fi
 
-    echo -e "${YELLOW}Step $(([[ "$setup_complete" == "false" ]] && echo 2 || echo 1)):${NC} Test authentication"
-    echo "   ${CYAN}gpauth --browser default your-vpn-server.com${NC}"
+    if [[ "$setup_complete" == "false" ]]; then
+        echo -e "${YELLOW}Step 2:${NC} Test authentication"
+    else
+        echo -e "${YELLOW}Step 1:${NC} Test authentication"
+    fi
+    echo -e "   ${CYAN}gpauth --browser default your-vpn-server.com${NC}"
     echo
 
-    echo -e "${YELLOW}Step $(([[ "$setup_complete" == "false" ]] && echo 3 || echo 2)):${NC} Connect to VPN"
-    echo "   ${CYAN}gpclient connect your-vpn-server.com${NC}"
+    if [[ "$setup_complete" == "false" ]]; then
+        echo -e "${YELLOW}Step 3:${NC} Connect to VPN"
+    else
+        echo -e "${YELLOW}Step 2:${NC} Connect to VPN"
+    fi
+    echo -e "   ${CYAN}gpclient connect your-vpn-server.com${NC}"
     echo
 }
 
@@ -109,11 +117,11 @@ print_commands() {
 print_configuration_tips() {
     echo -e "${BOLD}⚙️ CONFIGURATION TIPS${NC}"
     echo "─────────────────────────"
-    echo "• Check system status:     ${CYAN}gp-setup --check${NC}"
-    echo "• Fix permissions:         ${CYAN}gp-setup --permissions${NC}"
-    echo "• Setup URL handlers:      ${CYAN}gp-setup --url-handler${NC}"
-    echo "• Configure Flatpak:       ${CYAN}gp-setup --flatpak${NC}"
-    echo "• Enable verbose logging:  ${CYAN}gpauth --verbose [server]${NC}"
+    echo -e "• Check system status:     ${CYAN}gp-setup --check${NC}"
+    echo -e "• Fix permissions:         ${CYAN}gp-setup --permissions${NC}"
+    echo -e "• Setup URL handlers:      ${CYAN}gp-setup --url-handler${NC}"
+    echo -e "• Configure Flatpak:       ${CYAN}gp-setup --flatpak${NC}"
+    echo -e "• Enable verbose logging:  ${CYAN}gpauth --verbose [server]${NC}"
     echo
 }
 
@@ -130,7 +138,7 @@ print_troubleshooting() {
     echo
     echo -e "${YELLOW}Issue:${NC} Flatpak browser problems"
     echo -e "${BLUE}Solution:${NC} ${CYAN}gp-setup --flatpak${NC}"
-    echo "           ${CYAN}flatpak install flathub com.github.tchx84.Flatseal${NC}"
+    echo -e "           ${CYAN}flatpak install flathub com.github.tchx84.Flatseal${NC}"
     echo
     echo -e "${YELLOW}Issue:${NC} Multiple instances running"
     echo -e "${BLUE}Solution:${NC} ${CYAN}gpclient disconnect && gp-setup --permissions${NC}"
