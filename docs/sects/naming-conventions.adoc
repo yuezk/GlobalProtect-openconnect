@@ -1,0 +1,846 @@
+= Naming Conventions
+
+This document establishes strict naming conventions for the GlobalProtect OpenConnect project. ALL pixi tasks must follow the action-object or action-variant-object naming pattern without exception. No shortcuts, aliases, or legacy task names are permitted - tab completion provides all necessary convenience.
+
+== Pixi Task Naming Conventions
+
+All pixi tasks follow a consistent **action-object** or **action-variant-object** pattern to ensure predictability and ease of use.
+
+=== Components
+
+**Actions**: build, test, clean, setup, show, verify, debug, format, lint, develop, package, deploy
+
+**Objects**: all, cli, frontend, rust, code, docs, env, workflow
+
+**Variants**: html, pdf, dev, prod, ops, global
+
+
+=== Basic Pattern: Action-Object
+
+The fundamental pattern is `action-object`:
+
+* `build-cli` - Build the CLI components
+* `test-all` - Test all components
+* `format-code` - Format the source code
+* `clean-all` - Clean all build artifacts
+
+=== Extended Pattern: Action-Object-Variant
+
+For more specific tasks, use `action-object-variant`:
+
+* `build-docs-html` - Build HTML documentation
+* `build-docs-pdf` - Build PDF documentation
+* `check-code-format` - Check code formatting without modifying
+* `install-global-cli` - Install CLI package globally
+
+=== Component Definitions
+
+==== Action Components
+
+Actions describe what operation the task performs:
+
+- `build` - Compile, assemble, or construct artifacts
+- `test` - Execute validation, verification, or quality checks
+- `package` - Bundle components for distribution
+- `install` - Deploy packages to system locations
+- `publish` - Upload packages to external registries
+- `clean` - Remove generated files and artifacts
+- `setup` - Initialize, configure, or prepare environments
+- `verify` - Check status, validate configuration, or confirm state
+- `lint` - Perform static code analysis and style checking
+- `format` - Apply code formatting and style rules
+- `check` - Validate without making modifications
+- `view` - Open or display content (documentation, logs, etc.)
+- `show` - Display information or status
+- `debug` - Troubleshoot, diagnose, or provide debugging information
+- `develop` - Execute development workflows (build + test)
+- `ship` - Execute shipping workflows (build + test + package)
+- `deploy` - Execute deployment workflows (ship + install)
+- `run` - Execute complex workflows or scripts
+
+==== Object Components
+
+Objects describe what is being acted upon:
+
+- `all` - Complete project or all components
+- `cli` - Command-line interface components and tools
+- `frontend` - Web frontend components (HTML, CSS, JavaScript)
+- `rust` - Rust language components and crates
+- `code` - Source code in general
+- `docs` - Documentation files and content
+- `env` - Environment configuration and settings
+- `deps` - Dependencies and external packages
+- `pkgconfig` - Package configuration files and settings
+- `webkit` - WebKit-related dependencies and components
+- `global` - System-wide or global installations
+- `format` - Code formatting and style
+- `help` - Help information and usage instructions
+- `guides` - Documentation guides and tutorials
+- `package` - Distribution packages and bundles
+- `published` - Published packages and releases
+- `workflow` - Complex multi-step processes
+- `runner` - Task execution engines
+- `task` - Individual task operations
+- `setup` - Configuration and initialization processes
+- `logging` - Logging systems and output
+- `corepack` - Node.js corepack utility
+
+==== Variant Components
+
+Variants provide additional specificity between action and object:
+
+- `global` - System-wide scope (in `install-global-cli`)
+- `docs` - Documentation-specific (in `build-docs-html`)
+- `code` - Source code-specific (in `check-code-format`)
+- `cli` - CLI-specific in compound contexts (in `test-cli-comprehensive`)
+- `html` - HTML format specification (in `build-docs-html`)
+- `pdf` - PDF format specification (in `build-docs-pdf`)
+- `comprehensive` - Extended or thorough variant (in `test-cli-comprehensive`)
+- `complete` - Full workflow variant (in `publish-cli-complete`)
+- `quick` - Fast or abbreviated variant (in `test-task-refactoring-quick`)
+- `dev` - Development context (in `view-docs-dev`)
+- `ops` - Operations context (in `view-docs-ops`)
+- `full` - Complete or comprehensive scope (in `deploy-full`)
+- `package` - Package-related scope (in `verify-package-published`)
+- `refactoring` - Refactoring-specific context
+- `verbose` - Detailed output mode
+- `task` - Task-specific operations (in `test-task-refactoring`)
+- `runner` - Task runner specific (in `show-runner-help`, `run-runner-verbose`)
+- `workflow` - Workflow context (in `run-workflow-*` tasks)
+- `logging` - Logging-related operations (in `test-setup-logging`)
+- `all` - All or complete variants (in `view-docs-all`)
+- `full` - Full-featured variants (in `run-workflow-full-dev`)
+- `quick` - Quick or abbreviated variants (in `test-task-refactoring-quick`)
+
+=== Component Combination Patterns
+
+Understanding how actions, objects, and variants combine helps create consistent task names:
+
+==== Basic Action-Object Pattern
+
+The fundamental pattern uses action + object:
+
+[cols="1,1,2", options="header"]
+|===
+|Action |Object |Result
+|`build` |`all` |`build-all` - Build everything
+|`test` |`cli` |`test-cli` - Test CLI components
+|`clean` |`docs` |`clean-docs` - Clean documentation
+|`format` |`code` |`format-code` - Format source code
+|`verify` |`pkgconfig` |`verify-pkgconfig` - Verify pkg-config
+|`show` |`env` |`show-env` - Show environment
+|===
+
+==== Action-Variant-Object Pattern
+
+For more specificity, insert a variant between action and object:
+
+[cols="1,1,1,2", options="header"]
+|===
+|Action |Variant |Object |Result
+|`build` |`docs` |`html` |`build-docs-html` - Build HTML docs
+|`install` |`global` |`cli` |`install-global-cli` - Install CLI globally
+|`test` |`cli` |`comprehensive` |`test-cli-comprehensive` - Comprehensive CLI tests
+|`view` |`docs` |`dev` |`view-docs-dev` - View developer guide
+|`run` |`workflow` |`cli-dev` |`run-workflow-cli-dev` - Run CLI dev workflow
+|`check` |`code` |`format` |`check-code-format` - Check code formatting
+|===
+
+==== Workflow and Complex Objects
+
+Some objects represent complex operations or compound concepts:
+
+* `workflow-cli-dev` - CLI development workflow
+* `workflow-full-ship` - Full shipping workflow
+* `task-refactoring` - Task refactoring operations
+* `package-contents` - Package contents inspection
+* `runner-verbose` - Verbose task runner mode
+
+==== Guidelines for Component Selection
+
+**Choose Actions Based on Primary Operation:**
+* `build` for compilation/construction
+* `test` for validation/verification
+* `setup` for initialization/configuration
+* `view` for opening/displaying content
+* `show` for outputting information
+* `run` for executing external scripts
+
+**Choose Objects Based on Target:**
+* `cli` for command-line specific operations
+* `docs` for documentation operations
+* `all` for comprehensive operations
+* `env` for environment-related operations
+* `code` for source code operations
+
+**Use Variants for Specificity:**
+* Format specifications: `html`, `pdf`
+* Scope specifications: `global`, `full`
+* Mode specifications: `comprehensive`, `quick`
+* Target specifications: `dev`, `ops`
+
+=== Approved Component Lists
+
+==== Approved Actions (Mandatory List)
+
+All tasks must use one of these approved action verbs:
+
+* `build` - Compile, assemble, or construct artifacts
+* `clean` - Remove generated files and artifacts
+* `check` - Validate without making modifications
+* `debug` - Troubleshoot, diagnose, or provide debugging information
+* `deploy` - Execute deployment workflows (ship + install)
+* `develop` - Execute development workflows (build + test)
+* `format` - Apply code formatting and style rules
+* `install` - Deploy packages to system locations
+* `lint` - Perform static code analysis and style checking
+* `package` - Bundle components for distribution
+* `publish` - Upload packages to external registries
+* `run` - Execute scripts or external commands
+* `setup` - Initialize, configure, or prepare environments
+* `ship` - Execute shipping workflows (build + test + package)
+* `show` - Display information or status
+* `test` - Execute validation, verification, or quality checks
+* `verify` - Check status, validate configuration, or confirm state
+* `view` - Open or display content (documentation, logs, etc.)
+
+==== Approved Objects (Mandatory List)
+
+All tasks must use one of these approved object nouns:
+
+* `all` - Complete project or all components
+* `build` - Build environment and configuration
+* `cli` - Command-line interface components and tools
+* `code` - Source code in general
+* `corepack` - Node.js corepack utility
+* `contents` - Package or file contents
+* `dev` - Development-specific operations
+* `docs` - Documentation files and content
+* `env` - Environment configuration and settings
+* `frontend` - Web frontend components (HTML, CSS, JavaScript)
+* `full` - Complete or full-featured variants
+* `help` - Help information and usage instructions
+* `package` - Distribution packages and bundles
+* `pkgconfig` - Package configuration files and settings
+* `published` - Published packages and releases
+* `publishing` - Publishing and distribution setup
+* `runner` - Task runner and workflow management
+* `rust` - Rust language components and crates
+* `setup` - Setup and initialization processes
+* `status` - Status information and reporting
+* `task` - Task-related operations and testing
+* `webkit` - WebKit-
+
+Tasks are organized by action type:
+
+==== Setup Actions
+
+Configure environments and dependencies:
+
+- `setup-corepack` - Setup Node.js corepack
+- `setup-env` - Setup PKG_CONFIG_PATH environment
+- `setup-dev` - Setup development dependencies
+- `setup-publishing` - Setup publishing environment
+
+==== Build Actions
+
+Create artifacts and compile code:
+
+- `build-all` - Complete build process
+- `build-cli` - Build CLI binaries only
+- `build-frontend` - Build frontend components
+- `build-rust` - Build Rust components
+- `build-docs` - Build all documentation
+- `build-docs-html` - Build HTML documentation
+- `build-docs-pdf` - Build PDF documentation
+
+==== Test Actions
+
+Validate functionality and quality:
+
+- `test-all` - Complete test suite
+- `test-cli` - Test CLI functionality
+- `test-pkgconfig` - Test package configuration
+- `test-cli-comprehensive` - Extended CLI testing
+- `test-task-refactoring` - Test task refactoring implementation
+- `test-task-refactoring-quick` - Quick task refactoring test
+- `test-setup-logging` - Test gp-setup logging fix
+
+==== Package Actions
+
+Create distributable packages:
+
+- `package-full` - Build complete package (with GUI)
+- `package-cli` - Build CLI-only package
+
+==== Quality Actions
+
+Code quality and formatting:
+
+- `lint-code` - Run linting with clippy
+- `format-code` - Format code with rustfmt
+- `check-code-format` - Check formatting without changes
+
+==== Clean Actions
+
+Remove build artifacts:
+
+- `clean-all` - Clean all build artifacts
+- `clean-docs` - Clean documentation artifacts
+
+==== Install Actions
+
+Install packages and dependencies:
+
+- `install-global-cli` - Install CLI package globally
+- `install-global-full` - Install GUI package globally
+
+==== Debug Actions
+
+Debugging and troubleshooting:
+
+- `debug-env` - Show environment debug information
+- `debug-build` - Test build environment
+- `debug-cli` - Debug CLI workflows
+
+==== Verify Actions
+
+Validation and verification:
+
+- `verify-pkgconfig` - Verify pkg-config setup
+- `verify-webkit-deps` - Check WebKit dependencies
+- `verify-package-published` - Verify published packages
+
+==== Show/View Actions
+
+Display information or open viewers:
+
+- `show-env` - Display environment configuration
+- `show-help` - Display help information
+- `show-package-status` - Display package build status
+- `show-runner-help` - Display task runner help
+- `show-docs-help` - Show documentation tasks
+- `view-docs-all` - Open all documentation in browser
+- `view-docs-dev` - Open developer guide
+- `view-docs-ops` - Open operations guide
+- `view-package-contents` - Inspect package contents
+
+==== Publish Actions
+
+Publishing and distribution:
+
+- `publish-cli` - Upload CLI package
+- `publish-cli-complete` - Complete publish workflow
+
+=== Workflow Tasks
+
+Complex workflows combine multiple actions:
+
+- `develop-cli` - Development workflow (clean, build, test)
+- `ship-cli` - Shipping workflow (clean, build, test, package)
+- `deploy-cli` - Deployment workflow (clean, build, test, package, install)
+- `deploy-full` - Full deployment workflow including GUI components
+
+=== Enhanced Workflow Tasks
+
+Complex workflow tasks with enhanced error handling:
+
+- `run-workflow-cli-dev` - Enhanced CLI development workflow
+- `run-workflow-cli-ship` - Enhanced CLI shipping workflow
+- `run-workflow-cli-deploy` - Enhanced CLI deployment workflow
+- `run-workflow-full-dev` - Enhanced full development workflow
+- `run-workflow-full-ship` - Enhanced full shipping workflow
+- `run-workflow-docs` - Enhanced documentation workflow
+- `run-workflow-clean` - Enhanced cleanup workflow
+- `run-workflow-verify` - Enhanced environment verification
+- `run-runner-verbose` - Run task runner in verbose mode
+
+=== Complete Task Reference
+
+This table provides a comprehensive reference of all pixi tasks organized by their action-object pattern:
+
+[cols="1,3,1,2", options="header"]
+|===
+|Task Name |Description |Pattern |Category
+
+|`setup-corepack` |Setup Node.js corepack |action-object |Setup
+|`setup-dev` |Setup development dependencies |action-object |Setup
+|`setup-env` |Setup PKG_CONFIG_PATH environment |action-object |Setup
+|`setup-publishing` |Setup publishing environment |action-object |Setup
+
+|`build-all` |Complete build process |action-object |Build
+|`build-cli` |Build CLI binaries only |action-object |Build
+|`build-frontend` |Build frontend components |action-object |Build
+|`build-rust` |Build Rust components |action-object |Build
+|`build-docs` |Build all documentation |action-object |Build
+|`build-docs-html` |Build HTML documentation |action-variant-object |Build
+|`build-docs-pdf` |Build PDF documentation |action-variant-object |Build
+
+|`test-all` |Full test suite |action-object |Test
+|`test-cli` |Test CLI functionality |action-object |Test
+|`test-pkgconfig` |Test package configuration |action-object |Test
+|`test-cli-comprehensive` |Extended CLI testing |action-variant-object |Test
+|`test-task-refactoring` |Test task refactoring implementation |action-object |Test
+|`test-task-refactoring-quick` |Quick task refactoring test |action-variant-object |Test
+|`test-setup-logging` |Test gp-setup logging fix |action-object |Test
+
+|`package-full` |Build complete package (with GUI) |action-object |Package
+|`package-cli` |Build CLI-only package |action-object |Package
+
+|`lint-code` |Run linting with clippy |action-object |Quality
+|`format-code` |Format code with rustfmt |action-object |Quality
+|`check-code-format` |Check formatting without changes |action-variant-object |Quality
+
+|`clean-all` |Clean all build artifacts |action-object |Clean
+|`clean-docs` |Clean documentation artifacts |action-object |Clean
+
+|`install-global-cli` |Install CLI package globally |action-variant-object |Install
+|`install-global-full` |Install GUI package globally |action-variant-object |Install
+
+|`debug-env` |Show environment debug information |action-object |Debug
+|`debug-build` |Test build environment |action-object |Debug
+|`debug-cli` |Debug CLI workflows |action-object |Debug
+
+|`verify-pkgconfig` |Verify pkg-config setup |action-object |Verify
+|`verify-webkit-deps` |Check WebKit dependencies |action-object |Verify
+|`verify-package-published` |Verify published packages |action-variant-object |Verify
+
+|`show-env` |Display environment configuration |action-object |Show
+|`show-help` |Display help information |action-object |Show
+|`show-package-status` |Display package build status |action-variant-object |Show
+|`show-runner-help` |Display task runner help |action-variant-object |Show
+|`show-docs-help` |Show documentation tasks |action-variant-object |Show
+
+|`view-docs-all` |Open all documentation in browser |action-variant-object |View
+|`view-docs-dev` |Open developer guide |action-variant-object |View
+|`view-docs-ops` |Open operations guide |action-variant-object |View
+|`view-package-contents` |Inspect package contents |action-variant-object |View
+
+|`publish-cli` |Upload CLI package |action-object |Publish
+|`publish-cli-complete` |Complete publish workflow |action-variant-object |Publish
+
+|`develop-cli` |Development workflow (clean, build, test) |action-object |Workflow
+|`ship-cli` |Shipping workflow (clean, build, test, package) |action-object |Workflow
+|`deploy-cli` |Deployment workflow (clean, build, test, package, install) |action-object |Workflow
+|`deploy-full` |Full deployment workflow including GUI components |action-object |Workflow
+
+|`run-workflow-cli-dev` |Enhanced CLI development workflow |action-variant-object |Enhanced
+|`run-workflow-cli-ship` |Enhanced CLI shipping workflow |action-variant-object |Enhanced
+|`run-workflow-cli-deploy` |Enhanced CLI deployment workflow |action-variant-object |Enhanced
+|`run-workflow-full-dev` |Enhanced full development workflow |action-variant-object |Enhanced
+|`run-workflow-full-ship` |Enhanced full shipping workflow |action-variant-object |Enhanced
+|`run-workflow-docs` |Enhanced documentation workflow |action-variant-object |Enhanced
+|`run-workflow-clean` |Enhanced cleanup workflow |action-variant-object |Enhanced
+|`run-workflow-verify` |Enhanced environment verification |action-variant-object |Enhanced
+|`run-runner-verbose` |Run task runner in verbose mode |action-variant-object |Enhanced
+|===
+
+=== Strict Naming Requirements
+
+**MANDATORY:** Every pixi task must follow one of these patterns:
+- `action-object` (e.g., `build-cli`, `test-all`, `clean-docs`)
+- `action-variant-object` (e.g., `build-docs-html`, `install-global-cli`)
+
+**PROHIBITED:**
+
+- Short aliases or shortcuts (`build`, `test`, `clean`)
+- Legacy task names with `-legacy` suffixes
+- Single-word task names without objects
+- Abbreviations or unclear terminology
+- CamelCase or underscore notation
+
+==== Rationale for Strict Enforcement
+
+- **Tab Completion**: Modern shells provide tab completion, eliminating need for shortcuts
+- **Discoverability**: `pixi run build<TAB>` reveals all build-related tasks
+- **Consistency**: No exceptions means no confusion about naming patterns
+- **Maintainability**: Clear patterns make adding new tasks straightforward
+- **Professionalism**: Consistent naming reflects software engineering best practices
+
+==== Guidelines for Task Creation
+
+- **REQUIRED:** All tasks must follow action-object pattern
+- **REQUIRED:** Use descriptive action verbs from approved list
+- **REQUIRED:** Use clear, specific object nouns
+- **FORBIDDEN:** Create shortcuts or aliases for convenience
+- **FORBIDDEN:** Make exceptions for "common" or "frequently used" tasks
+
+=== Task Naming Guidelines
+
+When creating new tasks:
+
+1. Use lowercase with hyphens as separators
+2. Start with a clear action verb
+3. Follow with the object being acted upon
+4. Use variants for specificity when needed
+5. Avoid abbreviations unless universally understood
+6. Keep names concise but descriptive
+7. Group related tasks with consistent prefixes
+
+==== Examples of Correct Task Names
+
+- `build-frontend` (clear action + object)
+- `test-cli-comprehensive` (action + variant + object)
+- `verify-webkit-deps` (action + descriptive object)
+- `install-global-cli` (action + variant + object)
+- `view-package-contents` (action + descriptive object)
+- `run-workflow-cli-dev` (action + variant + object)
+- `show-package-status` (action + descriptive object)
+- `clean-all` (action + comprehensive object)
+
+==== Examples of PROHIBITED Task Names
+
+**Single-word tasks (missing object):**
+
+- `build` ❌ → use `build-all` ✅
+- `test` ❌ → use `test-all` ✅
+- `clean` ❌ → use `clean-all` ✅
+- `docs` ❌ → use `build-docs` ✅
+
+**Unclear or abbreviated names:**
+
+- `dev` ❌ → use `develop-cli` ✅
+- `pkg` ❌ → use `package-cli` ✅
+- `fmt` ❌ → use `format-code` ✅
+
+**Wrong notation:**
+
+- `frontendBuild` ❌ (camelCase)
+- `build_frontend` ❌ (underscores)
+- `workflow-cli-dev` ❌ (missing action verb)
+
+**Legacy patterns:**
+
+- `build-legacy` ❌ (no legacy suffixes)
+- `task-runner-help` ❌ (unclear action)
+
+=== Enforcement and Implementation
+
+==== Code Review Requirements
+
+All new pixi tasks must be reviewed for naming compliance:
+
+- **PR Reviews**: Task naming must be verified before merge
+- **Automated Checks**: Consider CI checks for task naming patterns
+- **Documentation Updates**: All new tasks must be documented with proper naming
+- **No Exceptions**: Maintainers must reject non-compliant task names
+
+==== Migration from Legacy Systems
+
+When updating existing projects:
+
+1. **Audit Existing Tasks**: Review all current task names for compliance
+2. **Remove Legacy Aliases**: Delete all shortcut and alias tasks
+3. **Update Documentation**: Ensure all references use proper task names
+4. **Team Communication**: Educate team on new naming requirements
+5. **Consistent Application**: Apply naming conventions to all new tasks
+
+==== Implementation Best Practices
+
+**Task Creation Checklist:**
+
+1. Choose appropriate action verb from approved list
+2. Identify clear, specific object noun
+3. Add variant if additional specificity needed
+4. Verify pattern follows action-object or action-variant-object
+5. Test task name with tab completion for discoverability
+6. Document task purpose and usage
+7. Update help text and reference documentation
+
+**Quality Assurance:**
+
+- All task names must be self-documenting
+- Related tasks should group together alphabetically
+- No duplicate functionality across differently-named tasks
+- Comprehensive task reference table must be maintained
+
+== AsciiDoc Conventions
+
+All documentation uses AsciiDoc format with consistent styling and structure.
+
+=== Document Structure
+
+==== File Headers
+
+Every AsciiDoc file starts with a title:
+
+```asciidoc
+= Document Title
+```
+
+==== Section Hierarchy
+
+Use consistent heading levels:
+
+```asciidoc
+= Level 1 (Document Title)
+== Level 2 (Major Section)
+=== Level 3 (Subsection)
+==== Level 4 (Sub-subsection)
+===== Level 5 (Detailed Section)
+```
+
+=== Formatting Conventions
+
+==== Code and Commands
+
+Use backticks for inline code and commands:
+
+[source,asciidoc]
+----
+Run `pixi run build-cli` to build the CLI components.
+----
+
+Use code blocks for multi-line examples:
+
+[source,asciidoc]
+----
+[source,bash]
+\----
+pixi run build-all
+pixi run test-all
+pixi run package-cli
+\----
+----
+
+==== Lists and Spacing
+
+**Always include a blank line before lists:**
+
+Correct format:
+
+[source,asciidoc]
+----
+The following tasks are available:
+
+* `build-cli` - Build CLI components
+* `test-all` - Run all tests
+* `clean-all` - Clean build artifacts
+----
+
+Incorrect format:
+
+[source,asciidoc]
+----
+The following tasks are available:
+* `build-cli` - Build CLI components
+* `test-all` - Run all tests
+----
+
+==== Emphasis and Highlighting
+
+Use appropriate emphasis:
+
+[source,asciidoc]
+----
+*Bold* for important terms
+_Italic_ for emphasis
+`Code` for technical terms
+**Bold** for stronger emphasis
+----
+
+==== Cross-References
+
+Use consistent cross-reference format:
+
+[source,asciidoc]
+----
+See <<section-name>> for details.
+Refer to <<_task_naming_guidelines>>.
+----
+
+==== Admonitions
+
+Use admonitions for important information:
+
+[source,asciidoc]
+----
+NOTE: This is important information.
+
+WARNING: This could cause issues.
+
+TIP: Here's a helpful suggestion.
+
+IMPORTANT: Pay attention to this.
+
+CAUTION: Be careful with this operation.
+----
+
+=== File Organization
+
+==== Include Structure
+
+Use includes for modular documentation:
+
+....
+\include::sects/naming-conventions.adoc[]
+\include::sects/testing-guide.adoc[]
+\include::sects/deployment.adoc[]
+....
+
+==== Attribute Usage
+
+Define attributes for reusable content:
+
+[source,asciidoc]
+----
+:project-name: GlobalProtect OpenConnect
+:version: 2.4.4
+:cli-tools: gpclient, gpservice, gpauth
+----
+
+== Documentation Organization
+
+All project documentation follows a structured approach for consistency and maintainability.
+
+=== Main Documents
+
+The project maintains several primary documentation files:
+
+==== Developer Guide (`docs/developers-guide.adoc`)
+
+Contains information for contributors and developers:
+
+* Setup and environment configuration
+* Build processes and workflows
+* Testing procedures and standards
+* Code quality guidelines
+* Task reference and usage
+* Troubleshooting common issues
+
+==== Operations Guide (`docs/operators-guide.adoc`)
+
+Contains information for system administrators and operators:
+
+* Installation procedures
+* Configuration management
+* Deployment strategies
+* Monitoring and maintenance
+* Security considerations
+* Production troubleshooting
+
+==== Project Index (`docs/index.adoc`)
+
+Provides overview and navigation:
+
+* Project introduction and overview
+* Quick start instructions
+* Links to detailed guides
+* Architecture overview
+* Feature highlights
+
+=== Section Organization
+
+Documentation sections are organized in the `docs/sects/` directory:
+
+==== Section Structure
+
+Each section focuses on a specific topic:
+
+* `naming-conventions.adoc` - Naming standards and conventions
+* `testing-guide.adoc` - Testing procedures and standards
+* `deployment.adoc` - Deployment processes and configurations
+* `troubleshooting.adoc` - Common issues and solutions
+
+==== Section Inclusion
+
+Sections are included in main documents using:
+
+....
+\include::sects/section-name.adoc[]
+....
+
+=== Documentation Standards
+
+==== Content Guidelines
+
+All documentation must:
+
+. Use AsciiDoc format exclusively
+. Include appropriate sections in main documents
+. Follow consistent formatting conventions
+. Maintain accurate and up-to-date information
+. Include practical examples and use cases
+
+==== Helper Documents
+
+In rare cases, helper documents may be created for:
+
+* API reference materials
+* Generated documentation
+* External integration guides
+* Specialized technical references
+
+These should:
+
+. Be clearly marked as helper documents
+. Include references from main documents
+. Follow the same formatting conventions
+. Be maintained with the same standards
+
+==== Review and Maintenance
+
+Documentation requires:
+
+. Regular review for accuracy
+. Updates with code changes
+. Consistent style and formatting
+. Clear examples and instructions
+. Proper cross-referencing
+
+=== File Naming
+
+Documentation files follow consistent naming:
+
+* Use lowercase with hyphens
+* Descriptive but concise names
+* `.adoc` extension for all files
+* Logical grouping in directories
+
+Examples:
+
+* `developers-guide.adoc`
+* `operators-guide.adoc`
+* `naming-conventions.adoc`
+* `testing-guide.adoc`
+
+== Implementation Guidelines
+
+=== New Task Creation
+
+When adding new pixi tasks:
+
+1. **REQUIRED:** Choose action verb from approved component list
+2. **REQUIRED:** Identify clear, specific object noun
+3. **REQUIRED:** Follow strict action-object or action-variant-object pattern
+4. **REQUIRED:** Verify no shortcuts or aliases are created
+5. **REQUIRED:** Add to appropriate help section with proper naming
+6. **REQUIRED:** Include in relevant workflows using full task names
+7. **REQUIRED:** Document purpose and usage with naming rationale
+8. **FORBIDDEN:** Create legacy aliases or shortcuts
+9. **FORBIDDEN:** Use single-word task names
+10. **FORBIDDEN:** Make exceptions for "convenience"
+
+=== Documentation Updates
+
+When modifying documentation:
+
+1. Update relevant main document sections
+2. Maintain consistent formatting
+3. Include blank lines before lists
+4. Use proper cross-references
+5. Test AsciiDoc rendering
+6. Update table of contents if needed
+
+=== Strict Enforcement
+
+The action-object naming convention is mandatory without exceptions:
+
+1. **No Legacy Support**: All tasks must follow proper naming patterns
+2. **No Shortcuts**: Tab completion eliminates need for aliases
+3. **Consistent Application**: Apply naming standards to all new tasks
+4. **Code Review Enforcement**: Reject non-compliant task names
+5. **Documentation Compliance**: Update all references to use proper names
+6. **Team Training**: Ensure all contributors understand naming requirements
+
+This strict naming convention ensures consistency, maintainability, and professional standards across the entire GlobalProtect OpenConnect project.

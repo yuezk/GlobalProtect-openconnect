@@ -160,7 +160,6 @@ pub fn ensure_lock_file_accessible<P: AsRef<Path>>(path: P) -> Result<()> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::env;
 
   #[test]
   fn test_is_running_as_root() {

@@ -25,6 +25,7 @@ GlobalProtect OpenConnect is a VPN client solution that provides secure connecti
 === Target Audience
 
 This guide is designed for:
+
 * **System Administrators**: Managing VPN client deployments
 * **DevOps Engineers**: Integrating VPN clients into automation workflows
 * **IT Operations**: Supporting end-user VPN connectivity
@@ -33,6 +34,7 @@ This guide is designed for:
 === Scope
 
 This guide covers:
+
 * Installation and deployment procedures
 * Configuration management
 * User management and authentication
@@ -197,6 +199,7 @@ gp-setup --uninstall
 ----
 
 **Key Features:**
+
 * **URL Scheme Handler Setup**: Configures `globalprotectcallback://` for browser authentication
 * **Runtime Directory Management**: Uses appropriate directories based on user privileges
 * **Permission Management**: Ensures proper file permissions and directory access
@@ -1552,9 +1555,9 @@ echo "Testing VPN connectivity..."
 timeout 30 gpclient test-connection
 
 # Run comprehensive tests if available
-if [ -f "tests/test_cli_final.sh" ]; then
+if [ -f "tests/test-cli-final.sh" ]; then
   echo "Running comprehensive CLI tests..."
-  ./tests/test_cli_final.sh
+  ./tests/test-cli-final.sh
 fi
 
 echo "Maintenance completed: $(date)"
@@ -1600,9 +1603,9 @@ gpservice --version
 gpauth --version
 
 # Run comprehensive tests if available
-if [ -f "tests/test_cli_final.sh" ]; then
+if [ -f "tests/test-cli-final.sh" ]; then
   echo "Running comprehensive CLI tests..."
-  ./tests/test_cli_final.sh
+  ./tests/test-cli-final.sh
 fi
 
 echo "Update completed successfully"
@@ -1670,6 +1673,7 @@ ls -la ~/.local/state/globalprotect/   # User fallback
 ----
 
 **Security Features**:
+
 * **Automatic privilege detection**: Uses appropriate directories based on user context
 * **Permission validation**: Checks file access before operations with clear error messages
 * **Multi-user isolation**: Each user has separate runtime directories

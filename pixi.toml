@@ -51,183 +51,238 @@ cxx-compiler = "*"
 # tag::build-tasks[]
 [tasks]
 
-[tasks.setup]
+# =============================================================================
+# Environment setup tasks
+# =============================================================================
+
+[tasks.setup-corepack]
 cmd = "corepack enable"
-cwd = "."
-
-[tasks.build-frontend]
-cmd = "cd apps/gpgui-helper && pnpm install && pnpm build"
-cwd = "."
-
-[tasks.build-rust]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig cargo build --release"
-cwd = "."
-
-[tasks.build]
-depends-on = ["setup", "build-frontend", "build-rust"]
-
-[tasks.build-cli]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig cargo build --release --no-default-features -p gpclient -p gpservice -p gpauth"
-cwd = "."
-# end::build-tasks[]
-
-[tasks.test-cli]
-cmd = "echo 'Testing CLI binaries...' && ./target/release/gpclient --version && ./target/release/gpservice --version && ./target/release/gpauth --version"
-cwd = "."
-
-[tasks.test]
-cmd = "./target/release/gpclient --help"
-cwd = "."
-
-[tasks.clean]
-cmd = "cargo clean && rm -rf apps/gpgui-helper/node_modules apps/gpgui-helper/dist"
-cwd = "."
-
-[tasks.verify-pkgconfig]
-cmd = "echo \"PKG_CONFIG_PATH: $PKG_CONFIG_PATH\" && echo \"CONDA_PREFIX: $CONDA_PREFIX\" && ls -la $CONDA_PREFIX/lib/pkgconfig/ | head"
-cwd = "."
-
-[tasks.package]
-cmd = "rattler-build build --recipe recipe.yaml"
-cwd = "."
-
-[tasks.package-cli]
-cmd = "rattler-build build --recipe recipe-cli.yaml"
-cwd = "."
-
-[tasks.inspect-package]
-cmd = "cd output/linux-64 && unzip -l *.conda && echo '--- Package Contents ---' && unzip -q *.conda && tar -tf pkg-*.tar.zst"
-cwd = "."
-
-[tasks.show-package-info]
-cmd = "ls -lh output/linux-64/*.conda && echo 'Package successfully built!'"
 cwd = "."
 
 [tasks.setup-dev]
 cmd = "rustup component add clippy rustfmt"
 cwd = "."
 
-[tasks.lint]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig cargo clippy -- -D warnings"
+[tasks.setup-env]
+cmd = "chmod +x scripts/env/setup-pkgconfig.sh && scripts/env/setup-pkgconfig.sh setup"
 cwd = "."
 
-[tasks.format]
+[tasks.show-env]
+cmd = "chmod +x scripts/env/setup-pkgconfig.sh && scripts/env/setup-pkgconfig.sh info"
+cwd = "."
+
+# =============================================================================
+# Build tasks
+# =============================================================================
+
+[tasks.build-frontend]
+cmd = "cd apps/gpgui-helper && pnpm install && pnpm build"
+cwd = "."
+
+[tasks.build-rust]
+cmd = [
+  "bash",
+  "-c",
+  "source scripts/env/setup-pkgconfig.sh && cargo build --release",
+]
+cwd = "."
+
+[tasks.build-all]
+depends-on = ["setup-corepack", "build-frontend", "build-rust"]
+
+
+[tasks.build-cli]
+cmd = [
+  "bash",
+  "-c",
+  "source scripts/env/setup-pkgconfig.sh && cargo build --release --no-default-features -p gpclient -p gpservice -p gpauth",
+]
+cwd = "."
+# end::build-tasks[]
+
+# =============================================================================
+# Testing tasks
+# =============================================================================
+
+[tasks.test-cli]
+cmd = "echo 'Testing CLI binaries...' && ./target/release/gpclient --version && ./target/release/gpservice --version && ./target/release/gpauth --version"
+cwd = "."
+
+[tasks.test-all]
+cmd = "./target/release/gpclient --help"
+cwd = "."
+
+
+[tasks.test-cli-comprehensive]
+cmd = "chmod +x tests/test-cli-final.sh && ./tests/test-cli-final.sh"
+cwd = "."
+
+# =============================================================================
+# Packaging tasks
+# =============================================================================
+
+[tasks.package-full]
+cmd = "rattler-build build --recipe recipe.yaml"
+cwd = "."
+
+
+[tasks.package-cli]
+cmd = "rattler-build build --recipe recipe-cli.yaml"
+cwd = "."
+
+[tasks.view-package-contents]
+cmd = "cd output/linux-64 && unzip -l *.conda && echo '--- Package Contents ---' && unzip -q *.conda && tar -tf pkg-*.tar.zst"
+cwd = "."
+
+[tasks.show-package-status]
+cmd = "ls -lh output/linux-64/*.conda && echo 'Package successfully built!'"
+cwd = "."
+
+# =============================================================================
+# Code quality tasks
+# =============================================================================
+
+[tasks.lint-code]
+cmd = [
+  "bash",
+  "-c",
+  "source scripts/env/setup-pkgconfig.sh && cargo clippy -- -D warnings",
+]
+cwd = "."
+
+
+[tasks.format-code]
 cmd = "cargo fmt"
 cwd = "."
 
-[tasks.check-format]
+
+[tasks.check-code-format]
 cmd = "cargo fmt -- --check"
 cwd = "."
 
-[tasks.debug-pkgconfig]
-cmd = "echo PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
+
+# =============================================================================
+# Maintenance tasks
+# =============================================================================
+
+[tasks.clean-all]
+cmd = "cargo clean && rm -rf apps/gpgui-helper/node_modules apps/gpgui-helper/dist"
 cwd = "."
 
-[tasks.test-pkgconfig-direct]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists cairo && echo 'SUCCESS: cairo found' || echo 'FAILED: cairo not found'"
+
+# =============================================================================
+# Verification and debugging tasks
+# =============================================================================
+
+[tasks.verify-pkgconfig]
+cmd = "chmod +x scripts/env/setup-pkgconfig.sh && scripts/env/setup-pkgconfig.sh info"
 cwd = "."
 
-[tasks.list-pkgconfig-files]
-cmd = "ls $CONDA_PREFIX/lib/pkgconfig/"
-cwd = "."
-
-[tasks.test-conda-pkgconfig]
-cmd = "$CONDA_PREFIX/bin/pkg-config --exists cairo"
-cwd = "."
-
-[tasks.verify-path]
-cmd = "echo PATH: $PATH && which pkg-config"
-cwd = "."
-
-[tasks.test-pkgconfig-manual]
-cmd = "echo 'CONDA_PREFIX is:' $CONDA_PREFIX && echo 'Setting PKG_CONFIG_PATH manually' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists cairo && echo 'cairo: OK' || echo 'cairo: FAIL'"
-cwd = "."
-
-[tasks.test-env-expansion]
-cmd = "echo CONDA_PREFIX=$CONDA_PREFIX && echo Full-path=$CONDA_PREFIX/lib/pkgconfig && ls -la $CONDA_PREFIX/lib/pkgconfig/cairo.pc"
-cwd = "."
-
-[tasks.test-individual-deps]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists zlib && echo 'zlib: OK' || echo 'zlib: FAIL'"
-cwd = "."
-
-[tasks.test-libpng-version]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --modversion libpng"
-cwd = "."
-
-[tasks.test-freetype-version]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --modversion freetype2"
-cwd = "."
-
-[tasks.test-cairo-deps]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --print-requires-private cairo"
-cwd = "."
-
-[tasks.test-all-gtk-packages]
-cmd = "PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists cairo && echo 'cairo: OK' || echo 'cairo: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists gdk-3.0 && echo 'gdk-3.0: OK' || echo 'gdk-3.0: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists pango && echo 'pango: OK' || echo 'pango: FAIL' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig pkg-config --exists gdk-pixbuf-2.0 && echo 'gdk-pixbuf-2.0: OK' || echo 'gdk-pixbuf-2.0: FAIL'"
+[tasks.test-pkgconfig]
+cmd = "chmod +x scripts/env/setup-pkgconfig.sh && scripts/env/setup-pkgconfig.sh test"
 cwd = "."
 
 [tasks.verify-webkit-deps]
-cmd = "echo 'Checking WebKit dependencies...' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig pkg-config --exists webkit2gtk-4.1 && echo 'webkit2gtk-4.1: OK' || echo 'webkit2gtk-4.1: MISSING' && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig pkg-config --exists javascriptcoregtk-4.1 && echo 'javascriptcoregtk-4.1: OK' || echo 'javascriptcoregtk-4.1: MISSING' && echo 'If missing, see WebKit Dependencies section in docs/developers-guide.adoc'"
+cmd = [
+  "bash",
+  "-c",
+  "source scripts/env/setup-pkgconfig.sh && echo 'Checking WebKit dependencies...' && pkg-config --exists webkit2gtk-4.1 && echo 'webkit2gtk-4.1: OK' || echo 'webkit2gtk-4.1: MISSING' && pkg-config --exists javascriptcoregtk-4.1 && echo 'javascriptcoregtk-4.1: OK' || echo 'javascriptcoregtk-4.1: MISSING' && echo 'If missing, see WebKit Dependencies section in docs/developers-guide.adoc'",
+]
 cwd = "."
 
-# CLI development workflow - build and test - WORKING!
-[tasks.dev-cli]
-depends-on = ["clean", "build-cli", "test-cli"]
+[tasks.debug-env]
+cmd = "echo 'Environment Debug Information:' && echo 'CONDA_PREFIX:' $CONDA_PREFIX && echo 'PATH:' $PATH && echo 'PKG_CONFIG_PATH:' $PKG_CONFIG_PATH && which pkg-config"
+cwd = "."
 
-# CLI shipping workflow - build, test, and package - WORKING!
+[tasks.debug-build]
+cmd = [
+  "bash",
+  "-c",
+  "source scripts/env/setup-pkgconfig.sh && echo 'Testing build environment...' && cargo check --release --no-default-features -p gpclient",
+]
+cwd = "."
+
+# =============================================================================
+# CLI workflow tasks
+# =============================================================================
+
+# CLI development workflow - build and test
+[tasks.develop-cli]
+depends-on = ["clean-all", "build-cli", "test-cli"]
+
+
+# CLI shipping workflow - build, test, and package
 [tasks.ship-cli]
 depends-on = [
-  "clean",
+  "clean-all",
   "build-cli",
   "test-cli",
   "package-cli",
-  "show-package-info",
+  "show-package-status",
 ]
 
-# CLI debug workflow - build, test, package, and inspect - WORKING!
+
+# CLI debug workflow - build, test, package, and inspect
 [tasks.debug-cli]
 depends-on = [
-  "clean",
+  "clean-all",
   "build-cli",
   "test-cli",
   "package-cli",
-  "inspect-package",
+  "view-package-contents",
 ]
 
-[tasks.test-cli-comprehensive]
-cmd = "chmod +x tests/test_cli_final.sh && ./tests/test_cli_final.sh"
-cwd = "."
 
-[tasks.docs-html]
+# CLI deployment workflow - complete build, test, package, and install
+[tasks.deploy-cli]
+depends-on = [
+  "clean-all",
+  "build-cli",
+  "test-cli",
+  "package-cli",
+  "install-global-cli",
+]
+
+# =============================================================================
+# Documentation tasks
+# =============================================================================
+
+[tasks.build-docs-html]
 cmd = "asciidoctor docs/developers-guide.adoc docs/operators-guide.adoc docs/index.adoc -D output/docs"
 cwd = "."
 
-[tasks.docs-pdf]
+
+[tasks.build-docs-pdf]
 cmd = "asciidoctor-pdf docs/developers-guide.adoc docs/operators-guide.adoc -D output/docs"
 cwd = "."
 
-[tasks.docs]
-depends-on = ["docs-html", "docs-pdf"]
+
+[tasks.build-docs]
+depends-on = ["build-docs-html", "build-docs-pdf"]
+
 
 [tasks.clean-docs]
 cmd = "rm -rf output/docs"
 cwd = "."
 
-[tasks.view-guide-dev]
+[tasks.view-docs-dev]
 cmd = "python -c \"import webbrowser; webbrowser.open('file://' + __import__('os').path.abspath('output/docs/developers-guide.html'))\""
 cwd = "."
-depends-on = ["docs-html"]
+depends-on = ["build-docs-html"]
 
-[tasks.view-guide-ops]
+[tasks.view-docs-ops]
 cmd = "python -c \"import webbrowser; webbrowser.open('file://' + __import__('os').path.abspath('output/docs/operators-guide.html'))\""
 cwd = "."
-depends-on = ["docs-html"]
+depends-on = ["build-docs-html"]
 
-[tasks.view-docs]
+[tasks.view-docs-all]
 cmd = "python -c \"import webbrowser; webbrowser.open('file://' + __import__('os').path.abspath('output/docs/index.html'))\""
 cwd = "."
-depends-on = ["docs-html"]
+depends-on = ["build-docs-html"]
+
+# =============================================================================
+# Installation tasks
+# =============================================================================
 
 [tasks.install-global-cli]
 cmd = [
@@ -237,7 +292,7 @@ cmd = [
 ]
 cwd = "."
 
-[tasks.install-global]
+[tasks.install-global-full]
 cmd = [
   "bash",
   "-c",
@@ -245,56 +300,236 @@ cmd = [
 ]
 cwd = "."
 
-[tasks.deploy-cli]
+# Complete installation workflow for full GUI package
+[tasks.deploy-full]
 depends-on = [
-  "clean",
-  "build-cli",
-  "test-cli",
-  "package-cli",
-  "install-global-cli",
+  "clean-all",
+  "build-all",
+  "test-all",
+  "package-full",
+  "install-global-full",
 ]
 
-[tasks.install-workflow]
-depends-on = ["clean", "build", "test", "package", "install-global"]
+# =============================================================================
+# Publishing tasks
+# =============================================================================
+
+# Setup publishing environment (interactive guide)
+[tasks.setup-publishing]
+cmd = "chmod +x scripts/setup-prefix-publishing.sh && ./scripts/setup-prefix-publishing.sh"
+cwd = "."
+
+# Upload CLI package to prefix.dev meso-forge channel
+[tasks.publish-cli]
+cmd = [
+  "bash",
+  "-c",
+  "if [ -z \"$RATTLER_AUTH_FILE\" ]; then echo 'Error: RATTLER_AUTH_FILE environment variable not set. Please set up rattler authentication first.'; exit 1; fi && if [ ! -f \"$RATTLER_AUTH_FILE\" ]; then echo 'Error: Auth file not found at $RATTLER_AUTH_FILE'; exit 1; fi && if ls output/linux-64/globalprotect-openconnect-cli-*.conda >/dev/null 2>&1; then rattler-build upload prefix --channel meso-forge $(ls output/linux-64/globalprotect-openconnect-cli-*.conda | head -n 1); else echo 'Error: No CLI conda package found. Run pixi run ship-cli first.'; exit 1; fi",
+]
+cwd = "."
+
+# Complete publish workflow - build and publish in one go
+[tasks.publish-cli-complete]
+depends-on = ["ship-cli", "publish-cli"]
+
+# Verify published package is available and installable
+[tasks.verify-package-published]
+cmd = "chmod +x scripts/verify-published-package.sh && ./scripts/verify-published-package.sh"
+cwd = "."
+
+# =============================================================================
+# Help and information tasks
+# =============================================================================
 
 [tasks.show-help]
-cmd = """echo "CLI Workflow Tasks:
-  pixi run dev-cli                  - Development workflow: clean, build, test
-  pixi run ship-cli                 - Shipping workflow: clean, build, test, package
-  pixi run debug-cli                - Debug workflow: clean, build, test, package, inspect
-  pixi run deploy-cli               - Deployment workflow: clean, build, test, package, install globally
+cmd = """echo "
+=============================================================================
+GlobalProtect OpenConnect - Available Tasks (Action-Object Naming)
+=============================================================================
 
-Installation Tasks:
+PREFERRED TASKS (action-object naming):
+  pixi run develop-cli              - Development: clean, build, test
+  pixi run ship-cli                 - Shipping: clean, build, test, package
+  pixi run debug-cli                - Debug: clean, build, test, package, inspect
+  pixi run deploy-cli               - Deploy: clean, build, test, package, install
+
+ENHANCED WORKFLOW TASKS (with better error handling):
+  pixi run run-workflow-cli-dev     - Enhanced CLI development workflow
+  pixi run run-workflow-cli-ship    - Enhanced CLI shipping workflow
+  pixi run run-workflow-cli-deploy  - Enhanced CLI deployment workflow
+  pixi run run-workflow-full-dev    - Enhanced full development workflow
+  pixi run run-workflow-full-ship   - Enhanced full shipping workflow
+  pixi run run-workflow-docs        - Enhanced documentation workflow
+  pixi run run-workflow-clean       - Enhanced cleanup workflow
+  pixi run run-workflow-verify      - Enhanced environment verification
+
+BUILD TASKS:
+  pixi run build-all                - Complete build process
+  pixi run build-cli                - Build CLI binaries only
+  pixi run build-frontend           - Build frontend components
+  pixi run build-rust               - Build Rust components
+
+TEST TASKS:
+  pixi run test-all                 - Full test suite
+  pixi run test-cli                 - Test CLI functionality
+  pixi run test-refactoring         - Test task refactoring implementation
+  pixi run test-refactoring-quick   - Quick task refactoring validation
+  pixi run test-gp-setup-logging    - Test gp-setup logging fix
+
+PACKAGING TASKS:
   pixi run package-cli              - Build CLI conda package
-  pixi run package                  - Build full conda package (with GUI)
-  pixi run install-global-cli       - Install CLI package to pixi global (force reinstall)
-  pixi run install-global           - Install full package to pixi global (force reinstall)
-  pixi run install-workflow         - Complete workflow: clean, build, test, package, and install full package globally
+  pixi run package-full             - Build full conda package (with GUI)
 
+INSTALLATION TASKS:
+  pixi run install-global-cli       - Install CLI package globally (force reinstall)
+  pixi run install-global-full      - Install GUI package globally (force reinstall)
+  pixi run deploy-full              - Complete workflow for GUI package
+
+PUBLISHING TASKS:
+  pixi run setup-publishing         - Setup prefix.dev publishing (interactive)
+  pixi run publish-cli              - Upload CLI package to prefix.dev
+  pixi run publish-cli-complete     - Build and publish CLI package
+  pixi run verify-package-published - Verify published package availability
+
+CODE QUALITY TASKS:
+  pixi run lint-code                - Run cargo clippy with warnings as errors
+  pixi run format-code              - Format code with rustfmt
+  pixi run check-code-format        - Check code formatting
+
+DOCUMENTATION TASKS:
+  pixi run build-docs               - Build both HTML and PDF documentation
+  pixi run build-docs-html          - Build HTML documentation only
+  pixi run build-docs-pdf           - Build PDF documentation only
+
+ENVIRONMENT TASKS:
+  pixi run setup-env                - Setup PKG_CONFIG_PATH environment
+  pixi run show-env                 - Show environment configuration
+  pixi run verify-pkgconfig         - Verify pkg-config setup
+  pixi run test-pkgconfig           - Test critical packages
+  pixi run verify-webkit-deps       - Check WebKit dependencies
+
+MAINTENANCE TASKS:
+  pixi run clean-all                - Clean all build artifacts
+
+DEBUG TASKS:
+  pixi run debug-env                - Show environment debug info
+  pixi run debug-build              - Test build environment
+
+HELP TASKS:
+  pixi run show-docs-help           - Show documentation tasks
+  pixi run show-help                - Show this help
+  pixi run show-runner-help         - Show enhanced task runner help
+
+TEST TASKS:
+  pixi run test-task-refactoring    - Test task refactoring implementation
+  pixi run test-task-refactoring-quick - Quick task refactoring test
+  pixi run test-setup-logging       - Test gp-setup logging fix
+
+TASK RUNNER FEATURES:
+  - Enhanced error handling and logging
+  - Verbose output and dry-run modes
+  - Centralized environment management
+  - Better workflow orchestration
+  - Log files in logs/ directory
+
+=============================================================================
 Package location: output/linux-64/
-After installation: CLI tools available globally as gpclient, gpservice, gpauth
-
-Notes:
-- Global install uses --force-reinstall to ensure latest package is installed
-- Full GUI package requires webkit2gtk system packages (see docs/sects/webkit-status.adoc)
-- On Fedora Silverblue/Bluefin: sudo rpm-ostree install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-devel pango-devel"
+After installation: CLI tools available as gpclient, gpservice, gpauth
+Published packages: https://prefix.dev/channels/meso-forge
+Documentation: See docs/developers-guide.adoc
+=============================================================================
+"
 """
 cwd = "."
 
 [tasks.show-docs-help]
-cmd = """echo "Documentation Tasks:
-  pixi run docs          - Build both HTML and PDF documentation
-  pixi run docs-html     - Build HTML documentation only
-  pixi run docs-pdf      - Build PDF documentation only
-  pixi run clean-docs    - Clean documentation output directory
+cmd = """echo "
+=============================================================================
+Documentation Tasks
+=============================================================================
 
-  pixi run view-docs     - Open main documentation index in browser
-  pixi run view-guide-dev - Open developer's guide in browser
-  pixi run view-guide-ops - Open operator's guide in browser
+BUILD TASKS:
+  pixi run build-docs               - Build both HTML and PDF documentation
+  pixi run build-docs-html          - Build HTML documentation only
+  pixi run build-docs-pdf           - Build PDF documentation only
 
-Output directory: output/docs/"
+VIEW TASKS:
+  pixi run view-docs-all            - Open main documentation index
+  pixi run view-docs-dev            - Open developer's guide
+  pixi run view-docs-ops            - Open operator's guide
+
+MAINTENANCE:
+  pixi run clean-docs               - Clean documentation output
+
+Output directory: output/docs/
+=============================================================================
+"
 """
 cwd = "."
+
+# =============================================================================
+# Enhanced workflow tasks
+# =============================================================================
+
+[tasks.run-workflow-cli-dev]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh cli-dev"
+cwd = "."
+
+[tasks.run-workflow-cli-ship]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh cli-ship"
+cwd = "."
+
+[tasks.run-workflow-cli-deploy]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh cli-deploy"
+cwd = "."
+
+[tasks.run-workflow-full-dev]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh full-dev"
+cwd = "."
+
+[tasks.run-workflow-full-ship]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh full-ship"
+cwd = "."
+
+[tasks.run-workflow-docs]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh docs"
+cwd = "."
+
+[tasks.run-workflow-clean]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh clean-all"
+cwd = "."
+
+[tasks.run-workflow-verify]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh verify-env"
+cwd = "."
+
+[tasks.test-task-refactoring]
+cmd = "chmod +x tests/test-task-refactoring.sh && tests/test-task-refactoring.sh"
+cwd = "."
+
+[tasks.test-task-refactoring-quick]
+cmd = "chmod +x tests/test-task-refactoring.sh && tests/test-task-refactoring.sh --quick"
+cwd = "."
+
+[tasks.test-setup-logging]
+cmd = "chmod +x tests/test-gp-setup-logging-fix.sh && tests/test-gp-setup-logging-fix.sh"
+cwd = "."
+
+# =============================================================================
+# Task runner helpers
+# =============================================================================
+
+[tasks.show-runner-help]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh --help"
+cwd = "."
+
+[tasks.run-runner-verbose]
+cmd = "chmod +x scripts/task-runner.sh && scripts/task-runner.sh --verbose"
+cwd = "."
+
+# =============================================================================
+# ENVIRONMENTS
+# =============================================================================
 
 [environments]
 # Default environment

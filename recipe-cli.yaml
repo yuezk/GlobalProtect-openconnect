@@ -30,7 +30,9 @@ build:
     - cp target/release/gpservice $PREFIX/bin/
     - cp target/release/gpauth $PREFIX/bin/
     - cp packaging/files/usr/bin/gp-setup $PREFIX/bin/
+    - cp packaging/files/usr/bin/gp-welcome $PREFIX/bin/
     - chmod +x $PREFIX/bin/gp-setup
+    - chmod +x $PREFIX/bin/gp-welcome
     - mkdir -p $PREFIX/share/doc/globalprotect-openconnect-cli
     - cp docs/helper_pixi_install.adoc $PREFIX/share/doc/globalprotect-openconnect-cli/
     - cp output/docs/operators-guide.html $PREFIX/share/doc/globalprotect-openconnect-cli/
@@ -74,6 +76,7 @@ tests:
       - gpservice --help
       - gpauth --help
       - gp-setup --help
+      - gp-welcome --help
       - gpclient --version
       - gpservice --version
       - gpauth --version
@@ -90,6 +93,7 @@ about:
     - gpservice: The service component
     - gpauth: The authentication component
     - gp-setup: System configuration script
+    - gp-welcome: User welcome and guidance script
 
     Features include SSO authentication, FIDO2 support, client certificate authentication,
     and compatibility with GlobalProtect VPN servers. Built with modern Rust toolchain

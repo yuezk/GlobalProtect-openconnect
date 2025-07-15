@@ -175,6 +175,7 @@ ALLOW UDP 53 TO corporate-dns-servers
 **Network Address Translation (NAT)**
 
 GlobalProtect OpenConnect handles NAT traversal automatically:
+
 * Automatic NAT-T detection and configuration
 * Keep-alive packets for NAT mapping maintenance
 * Dynamic port allocation for multiple simultaneous connections

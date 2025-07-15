@@ -1,6 +1,6 @@
+pub mod hip;
 mod login;
 mod parse_gateways;
-pub mod hip;
 
 pub use login::*;
 pub(crate) use parse_gateways::*;

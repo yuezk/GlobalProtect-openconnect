@@ -233,7 +233,7 @@ This project uses [pixi](https://pixi.sh/) for modern, reproducible development 
    pixi run test-cli-comprehensive
    
    # Or run test scripts directly
-   ./tests/test_cli_final.sh
+   ./tests/test-cli-final.sh
    ```
 
 #### WebKit Dependencies (GUI Build)
@@ -297,8 +297,7 @@ pixi run ship-cli
 
 # Test commands
 pixi run test-cli-comprehensive  # Comprehensive test suite
-./tests/test_cli_final.sh       # Direct test execution
-./tests/test_cli_complete.sh    # Extended tests with detailed reporting
+./tests/test-cli-final.sh       # Direct test execution
 ```
 
 #### Pixi Environments
@@ -411,7 +410,7 @@ After building, you can test the CLI client:
 pixi run test-cli-comprehensive
 
 # Direct test script execution
-./tests/test_cli_final.sh
+./tests/test-cli-final.sh
 ```
 
 ### Build Options

@@ -58,6 +58,7 @@ The Developer's Guide provides comprehensive information for anyone working on t
 * **Architecture Overview**: Understanding the project structure and design decisions
 
 **Key Topics**:
+
 * Pixi environment configuration and usage
 * CLI build process and packaging
 * Testing infrastructure and procedures
@@ -78,6 +79,7 @@ The Operator's Guide focuses on production deployment, configuration, and mainte
 * **Performance Optimization**: Tuning for optimal performance
 
 **Key Topics**:
+
 * Production installation procedures
 * Enterprise configuration management
 * Monitoring and alerting setup
@@ -97,6 +99,7 @@ The Roadmap document outlines the planned development tasks and strategic direct
 * **Strategic Vision**: Future direction and innovation opportunities
 
 **Key Topics**:
+
 - Cross-platform package distribution
 - GUI framework research and implementation
 - Enterprise and cloud-native features
@@ -258,18 +261,21 @@ package "Build System" {
 
 ==== GUI Development
 The project is actively working on resolving GUI build challenges:
+
 - Researching alternative GUI frameworks to replace WebKit2GTK-4.1 dependency
 - Evaluating Tauri v1, native frameworks, and other alternatives
 - Planning new GUI architecture with better conda-forge compatibility
 
 ==== Package Distribution
 Expanding distribution options:
+
 - Cross-platform conda packages for all supported platforms
 - Conda-forge channel submission and approval process
 - Integration with package managers and distribution channels
 
 ==== Community Growth
 Building a strong contributor community:
+
 - Clear contribution guidelines and onboarding process
 - Mentorship program for new contributors
 - Regular communication and progress updates
@@ -291,6 +297,7 @@ Building a strong contributor community:
 === Professional Support
 
 For enterprise deployments and professional support:
+
 * **Technical Consulting**: Architecture and implementation guidance
 * **Training Services**: Team training and knowledge transfer
 * **Custom Development**: Feature development and integration services
@@ -341,6 +348,7 @@ We welcome contributions from the community! Here's how to get involved:
 **Breaking Changes**: None (backward compatible)
 
 **Upgrade Path**:
+
 - From previous versions: Standard package update
 - From development builds: Clean installation recommended
 
@@ -365,6 +373,7 @@ GlobalProtect OpenConnect is released under the [LICENSE_NAME] license. See the 
 === Third-Party Dependencies
 
 The project uses various third-party components:
+
 - OpenConnect library for VPN functionality
 - Rust ecosystem crates for implementation
 - Conda-forge packages for dependencies
@@ -374,6 +383,7 @@ All dependencies are properly attributed and comply with their respective licens
 === Security Disclosure
 
 For security vulnerabilities, please follow responsible disclosure:
+
 - **Email**: security@globalprotect-openconnect.org
 - **Encryption**: Use GPG key [KEY_ID] for sensitive reports
 - **Response Time**: We aim to respond within 48 hours
@@ -383,6 +393,7 @@ For security vulnerabilities, please follow responsible disclosure:
 === Contributors
 
 Thanks to all contributors who have helped make GlobalProtect OpenConnect successful:
+
 - Original author and maintainer: Kevin Yue
 - Community contributors and testers
 - Documentation and translation contributors
@@ -390,6 +401,7 @@ Thanks to all contributors who have helped make GlobalProtect OpenConnect succes
 === Dependencies and Tools
 
 Special thanks to the projects that make GlobalProtect OpenConnect possible:
+
 - OpenConnect project for the core VPN functionality
 - Rust community for the excellent ecosystem
 - Conda-forge for dependency management

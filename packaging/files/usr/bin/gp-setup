@@ -22,10 +22,14 @@ USER_CONFIG_DIR="$HOME/.config/globalprotect"
 USER_RUNTIME_DIR="$HOME/.local/state/globalprotect"
 DESKTOP_FILE="$HOME/.local/share/applications/gpclient-callback.desktop"
 
-# Logging
-LOG_FILE="/tmp/gp-setup.log"
-exec 1> >(tee -a "$LOG_FILE")
-exec 2> >(tee -a "$LOG_FILE" >&2)
+# Determine log file location based on user context
+if [[ $EUID -eq 0 ]]; then
+    # Running as root - use system log location
+    LOG_FILE="/var/log/gp-setup.log"
+else
+    # Running as user - use user-writable location
+    LOG_FILE="/tmp/gp-setup-$USER.log"
+fi
 
 # Helper functions
 log_info() {
@@ -42,6 +46,27 @@ log_warning() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Setup logging function
+setup_logging() {
+    # Try to create log file with proper permissions
+    if [[ $EUID -eq 0 ]]; then
+        # Running as root
+        if ! touch "$LOG_FILE" 2>/dev/null; then
+            LOG_FILE="/tmp/gp-setup-root.log"
+            touch "$LOG_FILE" 2>/dev/null || LOG_FILE=""
+        fi
+    else
+        # Running as user
+        touch "$LOG_FILE" 2>/dev/null || LOG_FILE=""
+    fi
+
+    # Setup logging redirection if we have a valid log file
+    if [[ -n "$LOG_FILE" ]]; then
+        exec 1> >(tee -a "$LOG_FILE" 2>/dev/null) || LOG_FILE=""
+        exec 2> >(tee -a "$LOG_FILE" >&2 2>/dev/null) || true
+    fi
 }
 
 print_header() {
@@ -564,8 +589,15 @@ main_setup() {
     echo "4. Check configuration anytime with:"
     echo "   $SCRIPT_NAME --check"
     echo
-    echo "Log file: $LOG_FILE"
+    if [[ -n "$LOG_FILE" ]]; then
+        echo "Log file: $LOG_FILE"
+    else
+        echo "Logging disabled due to permission issues"
+    fi
 }
+
+# Initialize logging before running main function
+setup_logging
 
 # Run main function
 main_setup "$@"
