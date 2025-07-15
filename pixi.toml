@@ -46,6 +46,11 @@ rb-asciidoctor-pdf = "*"
 # C compiler and build tools
 c-compiler = "*"
 cxx-compiler = "*"
+# Autotools for building OpenConnect from source
+autoconf = "*"
+automake = "*"
+libtool = "*"
+gettext = "*"
 
 
 # tag::build-tasks[]
@@ -398,6 +403,15 @@ PUBLISHING TASKS:
 CODE QUALITY TASKS:
   pixi run lint-code                - Run cargo clippy with warnings as errors
   pixi run format-code              - Format code with rustfmt
+
+GLOBALPROTECT VERSION FIX:
+  pixi run fix-globalprotect-version - Interactive fix for GlobalProtect version requirement
+  pixi run test-globalprotect-patches - Test patch validity before building
+  pixi run build-custom-openconnect  - Build OpenConnect with GlobalProtect v6.1.4
+  pixi run build-custom-openconnect-630 - Build OpenConnect with GlobalProtect v6.3.0
+  pixi run clean-openconnect-build   - Clean custom OpenConnect build artifacts
+  pixi run verify-globalprotect-fix  - Verify GlobalProtect version fix is working
+  pixi run debug-globalprotect       - Debug GlobalProtect connection issues
   pixi run check-code-format        - Check code formatting
 
 DOCUMENTATION TASKS:
@@ -517,6 +531,18 @@ cwd = "."
 
 [tasks.test-setup-logging]
 cmd = "chmod +x tests/test-gp-setup-logging-fix.sh && tests/test-gp-setup-logging-fix.sh"
+cwd = "."
+
+# =============================================================================
+# Elegant GlobalProtect version override using LD_PRELOAD
+# =============================================================================
+
+[tasks.create-gp-version-override]
+cmd = "chmod +x scripts/create-gp-version-override.sh && scripts/create-gp-version-override.sh"
+cwd = "."
+
+[tasks.test-gp-override]
+cmd = "chmod +x scripts/test-gp-override.sh && scripts/test-gp-override.sh"
 cwd = "."
 
 # =============================================================================

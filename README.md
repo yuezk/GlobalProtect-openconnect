@@ -2,6 +2,22 @@
 
 A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method. Inspired by [gp-saml-gui](https://github.com/dlenski/gp-saml-gui).
 
+## 🚨 GlobalProtect Version Fix Available
+
+**Getting "Please ensure the compatible GlobalProtect version is: 6.1.4 or above" errors?**
+
+We have an elegant fix! See: [**Quick Start: GlobalProtect Version Fix**](QUICK-START-GLOBALPROTECT-FIX.md)
+
+```bash
+# Create elegant LD_PRELOAD override (one time):
+pixi run create-gp-version-override
+
+# Use with any version you need:
+scripts/openconnect-gp --gp-version=6.3.0 your-server.com
+```
+
+This elegant solution uses LD_PRELOAD to intercept version reporting without modifying OpenConnect source code.
+
 <p align="center">
   <img width="300" src="https://github.com/yuezk/GlobalProtect-openconnect/assets/3297602/9242df9c-217d-42ab-8c21-8f9f69cd4eb5">
 </p>
@@ -21,6 +37,12 @@ Complete documentation is now available in the [`docs/`](docs/) directory:
 - **Want to contribute?** Read the [Developer's Guide](docs/developers-guide.adoc)
 - **Deploying in production?** See the [Operator's Guide](docs/operators-guide.adoc)
 - **Planning contributions?** Check the [Project Roadmap](docs/roadmap.adoc)
+
+### GlobalProtect Version Issue?
+
+- **Quick fix:** [GlobalProtect Version Fix Guide](QUICK-START-GLOBALPROTECT-FIX.md)
+- **Detailed analysis:** [Technical Investigation](GLOBALPROTECT_VERSION_INVESTIGATION.md)
+- **Full documentation:** [Complete Fix Guide](README-GLOBALPROTECT-FIX.md)
 
 ## 🎯 Current Status (v2.4.4)
 
