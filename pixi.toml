@@ -404,14 +404,9 @@ CODE QUALITY TASKS:
   pixi run lint-code                - Run cargo clippy with warnings as errors
   pixi run format-code              - Format code with rustfmt
 
-GLOBALPROTECT VERSION FIX:
-  pixi run fix-globalprotect-version - Interactive fix for GlobalProtect version requirement
-  pixi run test-globalprotect-patches - Test patch validity before building
-  pixi run build-custom-openconnect  - Build OpenConnect with GlobalProtect v6.1.4
-  pixi run build-custom-openconnect-630 - Build OpenConnect with GlobalProtect v6.3.0
-  pixi run clean-openconnect-build   - Clean custom OpenConnect build artifacts
-  pixi run verify-globalprotect-fix  - Verify GlobalProtect version fix is working
-  pixi run debug-globalprotect       - Debug GlobalProtect connection issues
+GLOBALPROTECT VERSION FIX (Elegant LD_PRELOAD Solution):
+  pixi run create-gp-version-override - Create elegant version override (one-time setup)
+  pixi run test-gp-override          - Test and demonstrate version override system
   pixi run check-code-format        - Check code formatting
 
 DOCUMENTATION TASKS:

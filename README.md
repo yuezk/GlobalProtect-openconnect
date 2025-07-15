@@ -6,7 +6,7 @@ A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authenticati
 
 **Getting "Please ensure the compatible GlobalProtect version is: 6.1.4 or above" errors?**
 
-We have an elegant fix! See: [**Quick Start: GlobalProtect Version Fix**](QUICK-START-GLOBALPROTECT-FIX.md)
+We have an elegant fix! See the [GlobalProtect Version Fix documentation](docs/sects/globalprotect-version-fix.adoc) for complete details.
 
 ```bash
 # Create elegant LD_PRELOAD override (one time):
@@ -16,7 +16,7 @@ pixi run create-gp-version-override
 scripts/openconnect-gp --gp-version=6.3.0 your-server.com
 ```
 
-This elegant solution uses LD_PRELOAD to intercept version reporting without modifying OpenConnect source code.
+This elegant solution uses LD_PRELOAD to intercept version reporting without modifying OpenConnect source code. We've also contributed this approach upstream - see [OpenConnect Issue #807](https://gitlab.com/openconnect/openconnect/-/issues/807) and the official patch at `patches/user-configurable-globalprotect-app-version.patch`.
 
 <p align="center">
   <img width="300" src="https://github.com/yuezk/GlobalProtect-openconnect/assets/3297602/9242df9c-217d-42ab-8c21-8f9f69cd4eb5">
@@ -40,9 +40,9 @@ Complete documentation is now available in the [`docs/`](docs/) directory:
 
 ### GlobalProtect Version Issue?
 
-- **Quick fix:** [GlobalProtect Version Fix Guide](QUICK-START-GLOBALPROTECT-FIX.md)
-- **Detailed analysis:** [Technical Investigation](GLOBALPROTECT_VERSION_INVESTIGATION.md)
-- **Full documentation:** [Complete Fix Guide](README-GLOBALPROTECT-FIX.md)
+- **Complete documentation:** [GlobalProtect Version Fix Section](docs/sects/globalprotect-version-fix.adoc)
+- **Upstream contribution:** [OpenConnect Issue #807](https://gitlab.com/openconnect/openconnect/-/issues/807)
+- **Official patch:** [`patches/user-configurable-globalprotect-app-version.patch`](patches/user-configurable-globalprotect-app-version.patch)
 
 ## 🎯 Current Status (v2.4.4)
 
