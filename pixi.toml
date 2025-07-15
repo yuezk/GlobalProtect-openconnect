@@ -17,6 +17,17 @@ make = "*"
 pkg-config = "*"
 # System dependencies
 openconnect = "*"
+# OpenConnect transitive dependencies
+gnutls = "*"
+nettle = "*"
+gmp = "*"
+libxml2 = "*"
+stoken = "*"
+krb5 = "*"
+p11-kit = "*"
+libiconv = "*"
+lz4-c = "*"
+
 # GUI dependencies for GTK/Cairo
 cairo = "*"
 glib = "*"
@@ -24,7 +35,6 @@ gtk3 = "*"
 pango = "*"
 gdk-pixbuf = "*"
 atk = "*"
-libxml2 = "*"
 # WebKit and soup dependencies
 libsoup = "*"
 # Missing dependency for fontconfig
@@ -41,6 +51,10 @@ rattler-build = "*"
 asciidoctor = "*"
 rb-asciidoctor-pdf = "*"
 # end::dependencies[]
+
+# Platform-specific dependencies
+[target.linux-64.dependencies]
+pcsclite = "*"
 
 [build-dependencies]
 # C compiler and build tools
