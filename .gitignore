@@ -11,6 +11,8 @@ SNAPSHOT
 
 # Tauri generated files
 gen
+apps/gpgui-helper/dist/
+
 
 # Pixi generated files
 .pixi/

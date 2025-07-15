@@ -76,8 +76,8 @@ cwd = "."
 # =============================================================================
 
 [tasks.build-frontend]
-cmd = "cd apps/gpgui-helper && pnpm install && pnpm build"
-cwd = "."
+cmd = "pnpm install && pnpm build"
+cwd = "apps/gpgui-helper"
 
 [tasks.build-rust]
 cmd = [
@@ -131,8 +131,8 @@ cmd = "rattler-build build --recipe recipe-cli.yaml"
 cwd = "."
 
 [tasks.view-package-contents]
-cmd = "cd output/linux-64 && unzip -l *.conda && echo '--- Package Contents ---' && unzip -q *.conda && tar -tf pkg-*.tar.zst"
-cwd = "."
+cmd = "unzip -l *.conda && echo '--- Package Contents ---' && unzip -q *.conda && tar -tf pkg-*.tar.zst"
+cwd = "output/linux-64"
 
 [tasks.show-package-status]
 cmd = "ls -lh output/linux-64/*.conda && echo 'Package successfully built!'"
