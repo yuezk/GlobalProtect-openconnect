@@ -11,3 +11,17 @@ SNAPSHOT
 
 # Tauri generated files
 gen
+apps/gpgui-helper/dist/
+
+
+# Pixi generated files
+.pixi/
+output/
+*.conda
+*.tar.bz2
+
+# Conda build artifacts
+build/
+work/
+
+*.log

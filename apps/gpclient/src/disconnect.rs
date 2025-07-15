@@ -1,6 +1,5 @@
-use crate::GP_CLIENT_LOCK_FILE;
 use clap::Args;
-use gpapi::utils::lock_file::gpservice_lock_info;
+use gpapi::utils::{lock_file::gpservice_lock_info, runtime};
 use log::{info, warn};
 use std::{fs, str::FromStr, thread, time::Duration};
 use sysinfo::{Pid, Signal, System};
@@ -26,11 +25,17 @@ impl<'a> DisconnectHandler<'a> {
 
   pub async fn handle(&self) -> anyhow::Result<()> {
     // Try to disconnect the CLI client
-    if let Ok(c) = fs::read_to_string(GP_CLIENT_LOCK_FILE) {
+    if let Ok(client_lock_path) = runtime::get_client_lock_path() {
+      if let Ok(c) = fs::read_to_string(client_lock_path) {
+        send_signal(c.trim(), Signal::Interrupt).unwrap_or_else(|err| {
+          warn!("Failed to send signal to client: {}", err);
+        });
+      }
+    } else if let Ok(c) = fs::read_to_string("/var/run/gpclient.lock") {
       send_signal(c.trim(), Signal::Interrupt).unwrap_or_else(|err| {
         warn!("Failed to send signal to client: {}", err);
       });
-    };
+    }
 
     // Try to disconnect the GUI service
     if let Ok(c) = gpservice_lock_info().await {

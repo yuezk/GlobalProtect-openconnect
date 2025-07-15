@@ -1,0 +1,603 @@
+#!/bin/bash
+
+# GlobalProtect OpenConnect System Configuration Script
+# This script configures the system for optimal GlobalProtect OpenConnect operation
+# Based on findings from authentication and file permission improvements
+
+set -euo pipefail
+
+VERSION="2.4.4"
+SCRIPT_NAME="gp-setup"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Configuration variables
+GP_CONFIG_DIR="/etc/globalprotect"
+USER_CONFIG_DIR="$HOME/.config/globalprotect"
+USER_RUNTIME_DIR="$HOME/.local/state/globalprotect"
+DESKTOP_FILE="$HOME/.local/share/applications/gpclient-callback.desktop"
+
+# Determine log file location based on user context
+if [[ $EUID -eq 0 ]]; then
+    # Running as root - use system log location
+    LOG_FILE="/var/log/gp-setup.log"
+else
+    # Running as user - use user-writable location
+    LOG_FILE="/tmp/gp-setup-$USER.log"
+fi
+
+# Helper functions
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Setup logging function
+setup_logging() {
+    # Try to create log file with proper permissions
+    if [[ $EUID -eq 0 ]]; then
+        # Running as root
+        if ! touch "$LOG_FILE" 2>/dev/null; then
+            LOG_FILE="/tmp/gp-setup-root.log"
+            touch "$LOG_FILE" 2>/dev/null || LOG_FILE=""
+        fi
+    else
+        # Running as user
+        touch "$LOG_FILE" 2>/dev/null || LOG_FILE=""
+    fi
+
+    # Setup logging redirection if we have a valid log file
+    if [[ -n "$LOG_FILE" ]]; then
+        exec 1> >(tee -a "$LOG_FILE" 2>/dev/null) || LOG_FILE=""
+        exec 2> >(tee -a "$LOG_FILE" >&2 2>/dev/null) || true
+    fi
+}
+
+print_header() {
+    echo
+    echo "=================================="
+    echo "  GlobalProtect OpenConnect Setup"
+    echo "  Version: $VERSION"
+    echo "=================================="
+    echo
+}
+
+print_usage() {
+    cat << EOF
+Usage: $SCRIPT_NAME [OPTIONS]
+
+OPTIONS:
+    --user                Setup for current user only (default)
+    --system              Setup system-wide configuration (requires root)
+    --url-handler         Setup URL scheme handler for browser authentication
+    --runtime-dirs        Create and configure runtime directories
+    --permissions         Fix file permissions
+    --flatpak             Configure Flatpak browser permissions
+    --all                 Run all setup steps
+    --check               Check current configuration
+    --uninstall           Remove configuration files
+    --help                Show this help message
+
+EXAMPLES:
+    $SCRIPT_NAME --all                    # Complete setup
+    $SCRIPT_NAME --user --url-handler     # User setup with URL handler
+    $SCRIPT_NAME --check                  # Check configuration
+    $SCRIPT_NAME --system                 # System-wide setup (as root)
+
+EOF
+}
+
+# Check if running as root
+is_root() {
+    [[ $EUID -eq 0 ]]
+}
+
+# Check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Detect if we're in a Flatpak environment
+is_flatpak_env() {
+    [[ -n "${FLATPAK_ID:-}" ]] || [[ -f /.flatpak-info ]]
+}
+
+# Detect available browsers
+detect_browsers() {
+    local browsers=()
+
+    # Native browsers
+    for browser in firefox chromium google-chrome chrome opera brave; do
+        if command_exists "$browser"; then
+            browsers+=("$browser")
+        fi
+    done
+
+    # Flatpak browsers
+    if command_exists flatpak; then
+        local flatpak_browsers
+        flatpak_browsers=$(flatpak list --app 2>/dev/null | grep -E "(firefox|chromium|chrome|opera|brave)" | awk '{print $1}' || true)
+        for browser in $flatpak_browsers; do
+            browsers+=("flatpak run $browser")
+        done
+    fi
+
+    printf '%s\n' "${browsers[@]}"
+}
+
+# Setup URL scheme handler
+setup_url_handler() {
+    log_info "Setting up URL scheme handler for globalprotectcallback://"
+
+    # Create applications directory
+    mkdir -p "$(dirname "$DESKTOP_FILE")"
+
+    # Determine gpclient path
+    local gpclient_path
+    if command_exists gpclient; then
+        gpclient_path=$(which gpclient)
+    elif [[ -f "/usr/bin/gpclient" ]]; then
+        gpclient_path="/usr/bin/gpclient"
+    elif [[ -f "$CONDA_PREFIX/bin/gpclient" ]]; then
+        gpclient_path="$CONDA_PREFIX/bin/gpclient"
+    else
+        log_error "Could not find gpclient binary"
+        return 1
+    fi
+
+    # Create desktop file
+    cat > "$DESKTOP_FILE" << EOF
+[Desktop Entry]
+Type=Application
+Name=GlobalProtect Callback Handler
+Comment=Handler for GlobalProtect authentication callbacks
+Exec=$gpclient_path launch-gui %u
+MimeType=x-scheme-handler/globalprotectcallback;
+NoDisplay=true
+StartupNotify=false
+Categories=Network;
+EOF
+
+    # Update desktop database
+    if command_exists update-desktop-database; then
+        update-desktop-database "$(dirname "$DESKTOP_FILE")" 2>/dev/null || true
+    fi
+
+    # Register URL scheme
+    if command_exists xdg-mime; then
+        xdg-mime default "$(basename "$DESKTOP_FILE")" x-scheme-handler/globalprotectcallback
+        log_success "URL scheme handler registered"
+    else
+        log_warning "xdg-mime not available, URL scheme registration may not work"
+    fi
+
+    # Verify registration
+    if command_exists xdg-mime; then
+        local registered
+        registered=$(xdg-mime query default x-scheme-handler/globalprotectcallback 2>/dev/null || echo "")
+        if [[ "$registered" == "$(basename "$DESKTOP_FILE")" ]]; then
+            log_success "URL scheme verification successful"
+        else
+            log_warning "URL scheme verification failed"
+        fi
+    fi
+}
+
+# Setup runtime directories
+setup_runtime_dirs() {
+    log_info "Setting up runtime directories"
+
+    if is_root; then
+        # System-wide setup
+        log_info "Creating system-wide runtime directories"
+        mkdir -p /var/run
+
+        # Set proper permissions for system directories
+        if [[ -d /var/run ]]; then
+            chmod 755 /var/run
+            log_success "System runtime directory configured"
+        fi
+    else
+        # User-specific setup
+        log_info "Creating user-specific runtime directories"
+
+        # Create user runtime directory
+        mkdir -p "$USER_RUNTIME_DIR"
+        chmod 700 "$USER_RUNTIME_DIR"
+
+        # Create user config directory
+        mkdir -p "$USER_CONFIG_DIR"
+        chmod 700 "$USER_CONFIG_DIR"
+
+        log_success "User runtime directories created"
+        log_info "Runtime directory: $USER_RUNTIME_DIR"
+        log_info "Config directory: $USER_CONFIG_DIR"
+    fi
+}
+
+# Fix file permissions
+fix_permissions() {
+    log_info "Fixing file permissions"
+
+    if is_root; then
+        # System-wide permission fixes
+        if [[ -d "$GP_CONFIG_DIR" ]]; then
+            chmod 755 "$GP_CONFIG_DIR"
+            find "$GP_CONFIG_DIR" -name "*.conf" -exec chmod 644 {} \;
+            find "$GP_CONFIG_DIR" -name "*.key" -exec chmod 600 {} \;
+            log_success "System configuration permissions fixed"
+        fi
+
+        # Clean up stale lock files
+        rm -f /var/run/gpservice.lock /var/run/gpclient.lock
+        log_success "Cleaned stale system lock files"
+    else
+        # User permission fixes
+        if [[ -d "$USER_CONFIG_DIR" ]]; then
+            chmod 700 "$USER_CONFIG_DIR"
+            find "$USER_CONFIG_DIR" -type f -exec chmod 600 {} \;
+            log_success "User configuration permissions fixed"
+        fi
+
+        if [[ -d "$USER_RUNTIME_DIR" ]]; then
+            chmod 700 "$USER_RUNTIME_DIR"
+            log_success "User runtime directory permissions fixed"
+        fi
+
+        # Clean up stale user lock files
+        rm -f "$USER_RUNTIME_DIR"/*.lock
+        if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+            rm -f "$XDG_RUNTIME_DIR"/gp*.lock
+        fi
+        log_success "Cleaned stale user lock files"
+    fi
+}
+
+# Configure Flatpak browser permissions
+configure_flatpak() {
+    log_info "Configuring Flatpak browser permissions"
+
+    if ! command_exists flatpak; then
+        log_warning "Flatpak not installed, skipping Flatpak configuration"
+        return 0
+    fi
+
+    # List of common browser Flatpak applications
+    local browsers=(
+        "org.mozilla.firefox"
+        "com.opera.Opera"
+        "com.google.Chrome"
+        "org.chromium.Chromium"
+        "com.brave.Browser"
+    )
+
+    local found_browsers=()
+    for browser in "${browsers[@]}"; do
+        if flatpak list --app 2>/dev/null | grep -q "$browser"; then
+            found_browsers+=("$browser")
+        fi
+    done
+
+    if [[ ${#found_browsers[@]} -eq 0 ]]; then
+        log_info "No Flatpak browsers found"
+        return 0
+    fi
+
+    log_info "Found Flatpak browsers: ${found_browsers[*]}"
+
+    # Grant necessary permissions to browsers
+    for browser in "${found_browsers[@]}"; do
+        log_info "Configuring permissions for $browser"
+
+        # Allow network access
+        flatpak override --user --socket=network "$browser" 2>/dev/null || true
+
+        # Allow access to user runtime directories
+        flatpak override --user --filesystem="$USER_RUNTIME_DIR" "$browser" 2>/dev/null || true
+
+        # Allow access to tmp for callback files
+        flatpak override --user --filesystem=/tmp "$browser" 2>/dev/null || true
+
+        log_success "Configured $browser"
+    done
+
+    # Provide instructions for Flatseal
+    if ! flatpak list --app 2>/dev/null | grep -q "com.github.tchx84.Flatseal"; then
+        log_info "For advanced permission management, consider installing Flatseal:"
+        echo "  flatpak install flathub com.github.tchx84.Flatseal"
+    fi
+}
+
+# Check current configuration
+check_configuration() {
+    log_info "Checking current configuration"
+    echo
+
+    # Check binaries
+    echo "=== Binary Status ==="
+    for binary in gpclient gpservice gpauth; do
+        if command_exists "$binary"; then
+            echo "✓ $binary: $(which "$binary")"
+        else
+            echo "✗ $binary: not found"
+        fi
+    done
+    echo
+
+    # Check URL scheme handler
+    echo "=== URL Scheme Handler ==="
+    if command_exists xdg-mime; then
+        local handler
+        handler=$(xdg-mime query default x-scheme-handler/globalprotectcallback 2>/dev/null || echo "not registered")
+        echo "globalprotectcallback:// handler: $handler"
+
+        if [[ -f "$DESKTOP_FILE" ]]; then
+            echo "✓ Desktop file exists: $DESKTOP_FILE"
+        else
+            echo "✗ Desktop file missing: $DESKTOP_FILE"
+        fi
+    else
+        echo "✗ xdg-mime not available"
+    fi
+    echo
+
+    # Check runtime directories
+    echo "=== Runtime Directories ==="
+    if is_root; then
+        echo "Runtime mode: system (root)"
+        echo "Lock files location: /var/run/"
+        [[ -d /var/run ]] && echo "✓ /var/run exists" || echo "✗ /var/run missing"
+    else
+        echo "Runtime mode: user"
+        echo "XDG_RUNTIME_DIR: ${XDG_RUNTIME_DIR:-not set}"
+        echo "User runtime dir: $USER_RUNTIME_DIR"
+        [[ -d "$USER_RUNTIME_DIR" ]] && echo "✓ User runtime dir exists" || echo "✗ User runtime dir missing"
+    fi
+    echo
+
+    # Check browsers
+    echo "=== Available Browsers ==="
+    local browsers
+    mapfile -t browsers < <(detect_browsers)
+    if [[ ${#browsers[@]} -gt 0 ]]; then
+        for browser in "${browsers[@]}"; do
+            echo "✓ $browser"
+        done
+    else
+        echo "✗ No browsers detected"
+    fi
+    echo
+
+    # Check Flatpak status
+    echo "=== Flatpak Status ==="
+    if command_exists flatpak; then
+        echo "✓ Flatpak available"
+        local flatpak_browsers
+        flatpak_browsers=$(flatpak list --app 2>/dev/null | grep -E "(firefox|chromium|chrome|opera|brave)" | wc -l || echo "0")
+        echo "Flatpak browsers: $flatpak_browsers"
+
+        if is_flatpak_env; then
+            echo "✓ Running in Flatpak environment"
+        else
+            echo "Running in native environment"
+        fi
+    else
+        echo "✗ Flatpak not available"
+    fi
+    echo
+
+    # Check permissions
+    echo "=== Permissions ==="
+    if is_root; then
+        [[ -w /var/run ]] && echo "✓ Can write to /var/run" || echo "✗ Cannot write to /var/run"
+    else
+        [[ -w "$USER_RUNTIME_DIR" ]] && echo "✓ Can write to user runtime dir" || echo "✗ Cannot write to user runtime dir"
+        [[ -w "$(dirname "$DESKTOP_FILE")" ]] && echo "✓ Can write to applications dir" || echo "✗ Cannot write to applications dir"
+    fi
+    echo
+}
+
+# Uninstall configuration
+uninstall_config() {
+    log_info "Removing GlobalProtect OpenConnect configuration"
+
+    # Remove URL scheme handler
+    if [[ -f "$DESKTOP_FILE" ]]; then
+        rm -f "$DESKTOP_FILE"
+        log_success "Removed desktop file"
+    fi
+
+    # Unregister URL scheme
+    if command_exists xdg-mime; then
+        # Reset to system default (usually none for custom schemes)
+        xdg-mime default "" x-scheme-handler/globalprotectcallback 2>/dev/null || true
+        log_success "Unregistered URL scheme"
+    fi
+
+    # Remove user configuration (ask for confirmation)
+    if [[ -d "$USER_CONFIG_DIR" ]]; then
+        read -p "Remove user configuration directory $USER_CONFIG_DIR? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            rm -rf "$USER_CONFIG_DIR"
+            log_success "Removed user configuration"
+        fi
+    fi
+
+    # Clean runtime files
+    if [[ -d "$USER_RUNTIME_DIR" ]]; then
+        rm -f "$USER_RUNTIME_DIR"/*.lock
+        rm -f "$USER_RUNTIME_DIR"/*.pid
+        log_success "Cleaned runtime files"
+    fi
+
+    log_success "Uninstall complete"
+}
+
+# Main setup function
+main_setup() {
+    local setup_user=false
+    local setup_system=false
+    local setup_url_handler=false
+    local setup_runtime=false
+    local fix_perms=false
+    local config_flatpak=false
+    local check_only=false
+    local uninstall=false
+    local setup_all=false
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --user)
+                setup_user=true
+                shift
+                ;;
+            --system)
+                setup_system=true
+                shift
+                ;;
+            --url-handler)
+                setup_url_handler=true
+                shift
+                ;;
+            --runtime-dirs)
+                setup_runtime=true
+                shift
+                ;;
+            --permissions)
+                fix_perms=true
+                shift
+                ;;
+            --flatpak)
+                config_flatpak=true
+                shift
+                ;;
+            --all)
+                setup_all=true
+                shift
+                ;;
+            --check)
+                check_only=true
+                shift
+                ;;
+            --uninstall)
+                uninstall=true
+                shift
+                ;;
+            --help)
+                print_usage
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                print_usage
+                exit 1
+                ;;
+        esac
+    done
+
+    print_header
+
+    # Check for uninstall
+    if [[ "$uninstall" == true ]]; then
+        uninstall_config
+        exit 0
+    fi
+
+    # Check only mode
+    if [[ "$check_only" == true ]]; then
+        check_configuration
+        exit 0
+    fi
+
+    # Set defaults if no specific options given
+    if [[ "$setup_all" == true ]] || [[ "$setup_user" == false && "$setup_system" == false && "$setup_url_handler" == false && "$setup_runtime" == false && "$fix_perms" == false && "$config_flatpak" == false ]]; then
+        if is_root; then
+            setup_system=true
+        else
+            setup_user=true
+        fi
+        setup_url_handler=true
+        setup_runtime=true
+        fix_perms=true
+        config_flatpak=true
+    fi
+
+    # Validate root requirements
+    if [[ "$setup_system" == true ]] && ! is_root; then
+        log_error "System setup requires root privileges"
+        log_info "Run with sudo or use --user for user-only setup"
+        exit 1
+    fi
+
+    # Execute setup steps
+    if [[ "$setup_runtime" == true ]]; then
+        setup_runtime_dirs
+    fi
+
+    if [[ "$setup_url_handler" == true ]]; then
+        setup_url_handler
+    fi
+
+    if [[ "$fix_perms" == true ]]; then
+        fix_permissions
+    fi
+
+    if [[ "$config_flatpak" == true ]] && ! is_root; then
+        configure_flatpak
+    fi
+
+    echo
+    log_success "Setup completed successfully!"
+
+    # Provide next steps
+    echo
+    echo "=== Next Steps ==="
+    if ! is_root; then
+        echo "1. Test authentication:"
+        echo "   gpauth --browser default your-vpn-server.com"
+        echo
+        echo "2. Connect to VPN:"
+        echo "   gpclient connect your-vpn-server.com"
+        echo
+    fi
+
+    if [[ "$config_flatpak" == true ]]; then
+        echo "3. For Flatpak browsers, you may need to:"
+        echo "   - Install Flatseal: flatpak install flathub com.github.tchx84.Flatseal"
+        echo "   - Grant additional permissions if authentication fails"
+        echo
+    fi
+
+    echo "4. Check configuration anytime with:"
+    echo "   $SCRIPT_NAME --check"
+    echo
+    if [[ -n "$LOG_FILE" ]]; then
+        echo "Log file: $LOG_FILE"
+    else
+        echo "Logging disabled due to permission issues"
+    fi
+}
+
+# Initialize logging before running main function
+setup_logging
+
+# Run main function
+main_setup "$@"

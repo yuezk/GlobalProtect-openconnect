@@ -1,0 +1,108 @@
+# tag::package-info[]
+package:
+  name: globalprotect-openconnect-cli
+  version: "2.4.4"
+
+source:
+  path: .
+# end::package-info[]
+
+# tag::build-script[]
+build:
+  number: 0
+  script:
+    - export CARGO_PROFILE_RELEASE_STRIP=symbols
+    - export CARGO_PROFILE_RELEASE_LTO=true
+    - export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$BUILD_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
+    - export LIBRARY_PATH="$PREFIX/lib:$LIBRARY_PATH"
+    - export LD_LIBRARY_PATH="$PREFIX/lib:$LD_LIBRARY_PATH"
+    - export CPATH="$PREFIX/include:$CPATH"
+    - export RUSTFLAGS="-L $PREFIX/lib"
+    - cd $SRC_DIR
+    - |
+      # Patch build.rs to use conda paths instead of hardcoded homebrew paths
+      sed -i 's|/opt/homebrew/lib|'"$PREFIX/lib"'|g' crates/openconnect/build.rs
+      sed -i 's|/opt/homebrew/include|'"$PREFIX/include"'|g' crates/openconnect/build.rs
+    - cargo build --release --no-default-features -p gpclient -p gpservice -p gpauth
+    - pixi run build-docs
+    - mkdir -p $PREFIX/bin
+    - cp target/release/gpclient $PREFIX/bin/
+    - cp target/release/gpservice $PREFIX/bin/
+    - cp target/release/gpauth $PREFIX/bin/
+    - cp packaging/files/usr/bin/gp-setup $PREFIX/bin/
+    - cp packaging/files/usr/bin/gp-welcome $PREFIX/bin/
+    - chmod +x $PREFIX/bin/gp-setup
+    - chmod +x $PREFIX/bin/gp-welcome
+    - mkdir -p $PREFIX/share/doc/globalprotect-openconnect-cli
+    - cp docs/helper_pixi_install.adoc $PREFIX/share/doc/globalprotect-openconnect-cli/
+    - cp output/docs/operators-guide.html $PREFIX/share/doc/globalprotect-openconnect-cli/
+    - cp output/docs/operators-guide.pdf $PREFIX/share/doc/globalprotect-openconnect-cli/
+# end::build-script[]
+
+# tag::requirements[]
+requirements:
+  build:
+    - rust >=1.80
+    - make
+    - pkg-config
+    - c-compiler
+    - cxx-compiler
+    - git
+    - expat
+    - asciidoctor
+    - rb-asciidoctor-pdf
+    - pixi
+  host:
+    - openconnect >=8.20
+    - libxml2
+    - expat
+    - openssl
+    - gnutls
+    - krb5
+    - zlib
+  run:
+    - openconnect >=8.20
+    - libxml2
+    - openssl
+    - gnutls
+    - krb5
+    - zlib
+    - expat
+# end::requirements[]
+
+tests:
+  - script:
+      - gpclient --help
+      - gpservice --help
+      - gpauth --help
+      - gp-setup --help
+      - gp-welcome --help
+      - gpclient --version
+      - gpservice --version
+      - gpauth --version
+
+about:
+  homepage: https://github.com/yuezk/GlobalProtect-openconnect
+  license: GPL-3.0
+  license_file: LICENSE
+  summary: CLI tools for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method
+  description: |
+    GlobalProtect-openconnect CLI provides command-line tools for connecting to GlobalProtect VPN servers.
+    This package includes:
+    - gpclient: The main VPN client CLI
+    - gpservice: The service component
+    - gpauth: The authentication component
+    - gp-setup: System configuration script
+    - gp-welcome: User welcome and guidance script
+
+    Features include SSO authentication, FIDO2 support, client certificate authentication,
+    and compatibility with GlobalProtect VPN servers. Built with modern Rust toolchain
+    and conda-forge for reproducible, cross-platform builds.
+
+    After installation, run 'gp-setup --all' to configure your system automatically.
+  documentation: https://github.com/yuezk/GlobalProtect-openconnect/blob/main/README.md
+  repository: https://github.com/yuezk/GlobalProtect-openconnect
+
+extra:
+  recipe-maintainers:
+    - yuezk

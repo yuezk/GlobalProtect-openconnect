@@ -9,14 +9,18 @@ pub(crate) fn parse_gateways(node: &Node, prefer_internal: bool) -> Option<Vec<G
   let node_gateways = node.find_descendant("gateways")?;
   let internal_gateway_list = if prefer_internal {
     info!("Try to parse the internal gateways...");
-    node_gateways.find_descendant("internal").and_then(|n| n.find_child("list"))
+    node_gateways
+      .find_descendant("internal")
+      .and_then(|n| n.find_child("list"))
   } else {
     None
   };
 
   let gateway_list = internal_gateway_list.or_else(|| {
     info!("Try to parse the external gateways...");
-    node_gateways.find_descendant("external").and_then(|n| n.find_child("list"))
+    node_gateways
+      .find_descendant("external")
+      .and_then(|n| n.find_child("list"))
   })?;
 
   let gateways = gateway_list

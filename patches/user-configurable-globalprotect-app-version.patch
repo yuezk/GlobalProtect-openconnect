@@ -1,0 +1,70 @@
+--- a/openconnect.h
++++ b/openconnect.h
+@@ -xxx,x +xxx,x @@ struct openconnect_info {
+ 	char *csd_ticket;
+ 	char *csd_token;
+ 	char *csd_starturl;
++	char *gp_app_version;
+
+--- a/main.c
++++ b/main.c
+@@ -xxx,x +xxx,x @@ enum {
+ 	OPT_PASSTOS,
+ 	OPT_DTLS_LOCAL_PORT,
+ 	OPT_DTLS_CIPHERS,
++	OPT_GP_APP_VERSION,
+ };
+
+ static struct option long_options[] = {
+@@ -xxx,x +xxx,x @@ static struct option long_options[] = {
+ 	OPTION("client-cert", OPT_CERT),
+ 	OPTION("sslkey", OPT_SSLKEY),
+ 	OPTION("cookie", OPT_COOKIE),
++	OPTION("gp-app-version", OPT_GP_APP_VERSION),
+ 	OPTION(NULL, 0)
+ };
+
+@@ -xxx,x +xxx,x @@ static void usage(void)
+ 	printf("  --client-cert=CERT          Use SSL client certificate CERT\n");
+ 	printf("  --sslkey=KEY                Use SSL private key file KEY\n");
+ 	printf("  --cookie=COOKIE             Use WebVPN cookie COOKIE\n");
++	printf("  --gp-app-version=VERSION    Report GlobalProtect app version VERSION\n");
+ 	printf("  --key-password=PASS         Set private key password\n");
+
+@@ -xxx,x +xxx,x @@ int main(int argc, char **argv)
+ 		case OPT_COOKIE:
+ 			vpninfo->cookie = keep_config_arg();
+ 			break;
++		case OPT_GP_APP_VERSION:
++			vpninfo->gp_app_version = keep_config_arg();
++			break;
+ 		case OPT_SERVERCERT:
+ 			vpninfo->servercert = keep_config_arg();
+ 			break;
+
+--- a/gpst.c
++++ b/gpst.c
+@@ -635,7 +635,9 @@ static int gpst_get_config(struct openconnect_info *vpninfo) {
+ 	/* submit getconfig request */
+ 	buf_append(request_body, "client-type=1&protocol-version=p1&internal=no");
+-	append_opt(request_body, "app-version", vpninfo->csd_ticket ? : "6.1.2-82");
++	append_opt(request_body, "app-version",
++		   vpninfo->csd_ticket ? :
++		   (vpninfo->gp_app_version ? : "6.3.0"));
+ 	append_opt(request_body, "ipv6-support", vpninfo->disable_ipv6 ? "no" : "yes");
+ 	append_opt(request_body, "clientos", gpst_os_name(vpninfo));
+ 	append_opt(request_body, "os-version", vpninfo->platname);
+
+--- a/openconnect.8.in
++++ b/openconnect.8.in
+@@ -xxx,x +xxx,x @@
+ .B \-\-cookie=COOKIE
+ Use the specified cookie for authentication. This is primarily intended for use with the \fB\-\-authenticate\fR option.
+ .TP
++.B \-\-gp\-app\-version=VERSION
++When using GlobalProtect protocol, report the specified client app version to the server.
++Some servers require minimum versions (e.g., 6.1.4 or higher). Common values include
++6.1.4, 6.2.0, 6.3.0, and 6.3.3. Default is 6.3.0.
++.TP
+ .B \-\-key\-password=PASS
+ Provide the passphrase for the private key specified by \fB\-\-sslkey\fR or \fB\-\-userkey\fR.

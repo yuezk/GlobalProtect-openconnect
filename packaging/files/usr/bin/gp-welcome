@@ -1,0 +1,266 @@
+#!/bin/bash
+
+# GlobalProtect OpenConnect Welcome Script
+# Shows post-install instructions and setup guidance
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Check if gp-setup has been run
+check_setup_status() {
+    local setup_complete=true
+
+    # Check URL scheme handler
+    if ! xdg-mime query default x-scheme-handler/globalprotectcallback 2>/dev/null | grep -q "gpclient-callback"; then
+        setup_complete=false
+    fi
+
+    # Check runtime directory
+    if [[ ! -d "$HOME/.local/state/globalprotect" ]] && [[ $EUID -ne 0 ]]; then
+        setup_complete=false
+    fi
+
+    echo "$setup_complete"
+}
+
+# Print animated banner
+print_banner() {
+    echo
+    echo -e "${CYAN}${BOLD}"
+    echo "██████╗ ██╗      ██████╗ ██████╗  █████╗ ██╗     ██████╗ ██████╗  ██████╗ ████████╗"
+    echo "██╔════╝ ██║     ██╔═══██╗██╔══██╗██╔══██╗██║     ██╔══██╗██╔══██╗██╔═══██╗╚══██╔══╝"
+    echo "██║  ███╗██║     ██║   ██║██████╔╝███████║██║     ██████╔╝██████╔╝██║   ██║   ██║   "
+    echo "██║   ██║██║     ██║   ██║██╔══██╗██╔══██║██║     ██╔═══╝ ██╔══██╗██║   ██║   ██║   "
+    echo "╚██████╔╝███████╗╚██████╔╝██████╔╝██║  ██║███████╗██║     ██║  ██║╚██████╔╝   ██║   "
+    echo " ╚═════╝ ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝ ╚═════╝    ╚═╝   "
+    echo
+    echo " ██████╗ ██████╗ ███████╗███╗   ██╗ ██████╗ ██████╗ ███╗   ██╗███╗   ██╗███████╗ ██████╗████████╗"
+    echo "██╔═══██╗██╔══██╗██╔════╝████╗  ██║██╔════╝██╔═══██╗████╗  ██║████╗  ██║██╔════╝██╔════╝╚══██╔══╝"
+    echo "██║   ██║██████╔╝█████╗  ██╔██╗ ██║██║     ██║   ██║██╔██╗ ██║██╔██╗ ██║█████╗  ██║        ██║   "
+    echo "██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║██║     ██║   ██║██║╚██╗██║██║╚██╗██║██╔══╝  ██║        ██║   "
+    echo "╚██████╔╝██║     ███████╗██║ ╚████║╚██████╗╚██████╔╝██║ ╚████║██║ ╚████║███████╗╚██████╗   ██║   "
+    echo " ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝ ╚═════╝   ╚═╝   "
+    echo -e "${NC}"
+    echo
+    echo -e "${BOLD}${GREEN}Welcome to GlobalProtect OpenConnect!${NC}"
+    echo
+}
+
+# Print setup status
+print_setup_status() {
+    local setup_complete
+    setup_complete=$(check_setup_status)
+
+    echo -e "${BOLD}🔧 SETUP STATUS${NC}"
+    echo "─────────────────"
+
+    if [[ "$setup_complete" == "true" ]]; then
+        echo -e "${GREEN}✓ System is configured and ready to use!${NC}"
+    else
+        echo -e "${YELLOW}⚠ Setup required - run the setup script to configure your system${NC}"
+    fi
+    echo
+}
+
+# Print quick start guide
+print_quick_start() {
+    local setup_complete
+    setup_complete=$(check_setup_status)
+
+    echo -e "${BOLD}🚀 QUICK START GUIDE${NC}"
+    echo "─────────────────────"
+
+    if [[ "$setup_complete" == "false" ]]; then
+        echo -e "${YELLOW}Step 1:${NC} Configure your system"
+        echo -e "   ${CYAN}gp-setup --all${NC}"
+        echo
+    fi
+
+    if [[ "$setup_complete" == "false" ]]; then
+        echo -e "${YELLOW}Step 2:${NC} Test authentication"
+    else
+        echo -e "${YELLOW}Step 1:${NC} Test authentication"
+    fi
+    echo -e "   ${CYAN}gpauth --browser default your-vpn-server.com${NC}"
+    echo
+
+    if [[ "$setup_complete" == "false" ]]; then
+        echo -e "${YELLOW}Step 3:${NC} Connect to VPN"
+    else
+        echo -e "${YELLOW}Step 2:${NC} Connect to VPN"
+    fi
+    echo -e "   ${CYAN}gpclient connect your-vpn-server.com${NC}"
+    echo
+}
+
+# Print available commands
+print_commands() {
+    echo -e "${BOLD}📋 AVAILABLE COMMANDS${NC}"
+    echo "─────────────────────────"
+    echo -e "${GREEN}gpclient${NC}     - Main VPN client application"
+    echo -e "${GREEN}gpservice${NC}    - Background VPN service"
+    echo -e "${GREEN}gpauth${NC}       - Authentication handler (supports SAML/SSO)"
+    echo -e "${GREEN}gp-setup${NC}     - System configuration script"
+    echo -e "${GREEN}gp-welcome${NC}   - Show this welcome message"
+    echo
+}
+
+# Print configuration tips
+print_configuration_tips() {
+    echo -e "${BOLD}⚙️ CONFIGURATION TIPS${NC}"
+    echo "─────────────────────────"
+    echo -e "• Check system status:     ${CYAN}gp-setup --check${NC}"
+    echo -e "• Fix permissions:         ${CYAN}gp-setup --permissions${NC}"
+    echo -e "• Setup URL handlers:      ${CYAN}gp-setup --url-handler${NC}"
+    echo -e "• Configure Flatpak:       ${CYAN}gp-setup --flatpak${NC}"
+    echo -e "• Enable verbose logging:  ${CYAN}gpauth --verbose [server]${NC}"
+    echo
+}
+
+# Print troubleshooting guide
+print_troubleshooting() {
+    echo -e "${BOLD}🔧 COMMON ISSUES & SOLUTIONS${NC}"
+    echo "───────────────────────────────"
+    echo
+    echo -e "${YELLOW}Issue:${NC} Browser authentication hangs"
+    echo -e "${BLUE}Solution:${NC} ${CYAN}gp-setup --url-handler${NC}"
+    echo
+    echo -e "${YELLOW}Issue:${NC} Permission denied errors"
+    echo -e "${BLUE}Solution:${NC} ${CYAN}gp-setup --permissions${NC}"
+    echo
+    echo -e "${YELLOW}Issue:${NC} Flatpak browser problems"
+    echo -e "${BLUE}Solution:${NC} ${CYAN}gp-setup --flatpak${NC}"
+    echo -e "           ${CYAN}flatpak install flathub com.github.tchx84.Flatseal${NC}"
+    echo
+    echo -e "${YELLOW}Issue:${NC} Multiple instances running"
+    echo -e "${BLUE}Solution:${NC} ${CYAN}gpclient disconnect && gp-setup --permissions${NC}"
+    echo
+}
+
+# Print environment information
+print_environment() {
+    echo -e "${BOLD}🌍 ENVIRONMENT INFORMATION${NC}"
+    echo "─────────────────────────────"
+    echo "User: $(whoami)"
+    echo "Home: $HOME"
+    echo "Shell: ${SHELL:-unknown}"
+    echo "Desktop: ${XDG_CURRENT_DESKTOP:-unknown}"
+
+    if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+        echo "Runtime Dir: $XDG_RUNTIME_DIR"
+    else
+        echo "Runtime Dir: ~/.local/state/globalprotect"
+    fi
+
+    if [[ -n "${FLATPAK_ID:-}" ]] || [[ -f /.flatpak-info ]]; then
+        echo -e "Environment: ${YELLOW}Flatpak${NC}"
+    else
+        echo "Environment: Native"
+    fi
+    echo
+}
+
+# Print useful links
+print_links() {
+    echo -e "${BOLD}🔗 USEFUL LINKS${NC}"
+    echo "─────────────────"
+    echo "📚 Documentation: https://github.com/yuezk/GlobalProtect-openconnect"
+    echo "🐛 Report Issues: https://github.com/yuezk/GlobalProtect-openconnect/issues"
+    echo "💬 Discussions:   https://github.com/yuezk/GlobalProtect-openconnect/discussions"
+    echo "📦 Conda Package: https://anaconda.org/conda-forge/globalprotect-openconnect"
+    echo
+}
+
+# Print footer with next steps
+print_footer() {
+    local setup_complete
+    setup_complete=$(check_setup_status)
+
+    echo -e "${BOLD}🎯 NEXT STEPS${NC}"
+    echo "─────────────────"
+
+    if [[ "$setup_complete" == "false" ]]; then
+        echo -e "1. Run: ${GREEN}${BOLD}gp-setup --all${NC}"
+        echo -e "2. Test: ${GREEN}${BOLD}gpauth --browser default your-server.com${NC}"
+        echo -e "3. Connect: ${GREEN}${BOLD}gpclient connect your-server.com${NC}"
+    else
+        echo -e "✓ System configured! Try: ${GREEN}${BOLD}gpauth --browser default your-server.com${NC}"
+    fi
+
+    echo
+    echo -e "💡 ${YELLOW}Tip:${NC} Run ${CYAN}gp-welcome${NC} anytime to see this message again"
+    echo -e "📖 ${YELLOW}Help:${NC} Run ${CYAN}gp-setup --help${NC} for detailed setup options"
+    echo
+}
+
+# Main function
+main() {
+    # Parse arguments
+    case "${1:-}" in
+        --help|-h)
+            echo "Usage: gp-welcome [--help|--status|--tips|--env]"
+            echo
+            echo "Options:"
+            echo "  --help      Show this help message"
+            echo "  --status    Show only setup status"
+            echo "  --tips      Show only configuration tips"
+            echo "  --env       Show only environment information"
+            echo
+            echo "Without options, shows complete welcome screen."
+            exit 0
+            ;;
+        --status)
+            print_setup_status
+            exit 0
+            ;;
+        --tips)
+            print_configuration_tips
+            print_troubleshooting
+            exit 0
+            ;;
+        --env)
+            print_environment
+            exit 0
+            ;;
+        "")
+            # Full welcome screen
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Run 'gp-welcome --help' for usage information."
+            exit 1
+            ;;
+    esac
+
+    # Clear screen for better presentation
+    clear 2>/dev/null || true
+
+    # Show full welcome screen
+    print_banner
+    print_setup_status
+    print_quick_start
+    print_commands
+    print_configuration_tips
+    print_troubleshooting
+    print_environment
+    print_links
+    print_footer
+}
+
+# Check dependencies
+if ! command -v gp-setup >/dev/null 2>&1; then
+    echo -e "${RED}Error:${NC} gp-setup not found in PATH"
+    echo "Make sure GlobalProtect OpenConnect is properly installed."
+    exit 1
+fi
+
+# Run main function
+main "$@"

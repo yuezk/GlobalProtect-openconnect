@@ -8,8 +8,7 @@ use gpapi::logger;
 use gpapi::{
   process::gui_launcher::GuiLauncher,
   service::{request::WsRequest, vpn_state::VpnState},
-  utils::{crypto::generate_key, env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
-  GP_SERVICE_LOCK_FILE,
+  utils::{crypto::generate_key, env_utils, lock_file::LockFile, redact::Redaction, runtime, shutdown_signal},
 };
 use log::{info, warn};
 use tokio::sync::{mpsc, watch};
@@ -39,7 +38,19 @@ impl Cli {
     info!("gpservice started: {}", VERSION);
 
     let pid = std::process::id();
-    let lock_file = Arc::new(LockFile::new(GP_SERVICE_LOCK_FILE, pid));
+
+    // Determine appropriate lock file path based on user privileges
+    let lock_file_path =
+      runtime::get_service_lock_path().map_err(|e| anyhow::anyhow!("Failed to determine lock file path: {}", e))?;
+
+    info!("Using lock file: {}", lock_file_path.display());
+
+    // Check if we have permission to use this lock file path
+    if let Err(e) = runtime::ensure_lock_file_accessible(&lock_file_path) {
+      bail!("Cannot access lock file: {}", e);
+    }
+
+    let lock_file = Arc::new(LockFile::new(lock_file_path, pid));
 
     if lock_file.check_health().await {
       bail!("Another instance of the service is already running");
@@ -150,12 +161,15 @@ impl Cli {
 mod signals {
   use std::sync::Arc;
 
+  use gpapi::utils::runtime;
   use log::{info, warn};
 
   use crate::vpn_task::VpnTaskContext;
   use crate::ws_server::WsServerContext;
 
-  const DISCONNECTED_PID_FILE: &str = "/tmp/gpservice_disconnected.pid";
+  fn get_disconnected_pid_file() -> anyhow::Result<std::path::PathBuf> {
+    runtime::get_disconnected_pid_path()
+  }
 
   pub async fn handle_signals(vpn_ctx: Arc<VpnTaskContext>, ws_ctx: Arc<WsServerContext>) {
     use gpapi::service::event::WsEvent;
@@ -180,8 +194,20 @@ mod signals {
           if vpn_ctx.disconnect().await {
             // Write the PID to a dedicated file to indicate that the VPN task is disconnected via SIGUSR1
             let pid = std::process::id();
-            if let Err(err) = tokio::fs::write(DISCONNECTED_PID_FILE, pid.to_string()).await {
-              warn!("Failed to write PID to file: {}", err);
+            match get_disconnected_pid_file() {
+              Ok(pid_file_path) => {
+                // Ensure the directory exists and is writable
+                if let Err(e) = runtime::ensure_lock_file_accessible(&pid_file_path) {
+                  warn!("Cannot access disconnected PID file: {}", e);
+                } else if let Err(err) = tokio::fs::write(&pid_file_path, pid.to_string()).await {
+                  warn!("Failed to write PID to file '{}': {}", pid_file_path.display(), err);
+                } else {
+                  info!("Wrote disconnected PID to: {}", pid_file_path.display());
+                }
+              }
+              Err(e) => {
+                warn!("Failed to determine disconnected PID file path: {}", e);
+              }
             }
           }
         }

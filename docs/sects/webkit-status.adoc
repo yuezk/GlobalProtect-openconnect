@@ -1,0 +1,205 @@
+// Common section: WebKit Dependencies Status
+// This section is included in both developers-guide.adoc and operators-guide.adoc
+
+= WebKit Dependencies Status
+
+== Overview
+
+This section summarizes the current status of WebKit dependencies for the GlobalProtect OpenConnect project's GUI components and provides comprehensive solutions for different platforms.
+
+== Current Status
+
+[cols="1,1,2", options="header"]
+|===
+|Component |Status |Notes
+
+|CLI Build
+|✅ **Working**
+|Builds cleanly on all platforms
+
+|Frontend Build
+|✅ **Working**
+|Vite/TypeScript builds successfully
+
+|CLI Packaging
+|✅ **Working**
+|Conda packages generate correctly
+
+|Full GUI Build
+|⚠️ **Requires System WebKit**
+|Needs webkit2gtk4.1-devel
+|===
+
+== Problem Description
+
+The Tauri-based GUI application requires WebKit development libraries that are **not available in conda-forge**:
+
+* `webkit2gtk4.1-devel` or `webkit2gtk-4.1-dev`
+* `javascriptcoregtk-4.1`
+* GTK development headers (`gtk3-devel`, `cairo-devel`, etc.)
+
+This affects immutable systems like Fedora Silverblue, Bluefin, and container environments where development packages aren't layered by default.
+
+== Working Solutions
+
+**✅ Solution 1: CLI-Only Build (Recommended)**
+
+The CLI build provides full VPN functionality without GUI dependencies:
+
+[source,bash]
+----
+# Build CLI components (works everywhere)
+pixi run build-cli
+
+# Test CLI functionality
+pixi run test-cli
+
+# Package CLI version
+pixi run package-cli
+----
+
+**Benefits:**
+
+* Works on all platforms
+* No additional dependencies required
+* Production-ready and thoroughly tested
+* Full VPN functionality included
+
+**✅ Solution 2: System WebKit Installation**
+
+**Fedora Silverblue/Bluefin**
+
+[source,bash]
+----
+# Install webkit and GTK development packages
+sudo rpm-ostree install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-devel pango-devel
+sudo rpm-ostree apply-live  # Apply changes without reboot
+
+# Verify webkit is available
+pixi run verify-webkit-deps
+
+# Build with GUI support
+pixi run build-all
+----
+
+NOTE: WebKit packages install to `/usr/lib64/pkgconfig/` on Fedora-based systems.
+
+**Ubuntu/Debian**
+
+[source,bash]
+----
+# Install webkit through system package manager
+sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev libcairo2-dev libgdk-pixbuf2.0-dev libpango1.0-dev
+
+# Verify installation
+pixi run verify-webkit-deps
+
+# Build with GUI support
+pixi run build-all
+----
+
+**Arch Linux**
+
+[source,bash]
+----
+# Install through pacman
+sudo pacman -S webkit2gtk-4.1 gtk3 cairo gdk-pixbuf2 pango
+
+# Verify installation
+pixi run verify-webkit-deps
+
+# Build with GUI support
+pixi run build-all
+----
+
+**✅ Solution 3: Container-based Development**
+
+For systems where installing webkit system packages isn't feasible:
+
+[source,bash]
+----
+# Create development container
+toolbox create --distro fedora dev-container
+toolbox enter dev-container
+
+# Inside container: install webkit packages
+sudo dnf install webkit2gtk4.1-devel gtk3-devel cairo-devel gdk-pixbuf2-devel pango-devel
+
+# Install pixi and build
+curl -fsSL https://pixi.sh/install.sh | sh
+source ~/.bashrc
+pixi run build-all
+----
+
+== Technical Details
+
+**PKG_CONFIG_PATH Configuration**
+
+The build system has been configured to look for webkit packages in multiple locations:
+
+[source,bash]
+----
+PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig:$CONDA_PREFIX/share/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+----
+
+This covers:
+
+* Conda environment packages
+* Fedora system packages (`/usr/lib64/pkgconfig/`)
+* Debian/Ubuntu system packages (`/usr/lib/x86_64-linux-gnu/pkgconfig/`)
+* General system packages (`/usr/share/pkgconfig/`)
+
+**Verification Commands**
+
+[source,bash]
+----
+# Check webkit dependencies
+pixi run verify-webkit-deps
+
+# Manual verification (Fedora)
+PKG_CONFIG_PATH=/usr/lib64/pkgconfig pkg-config --exists webkit2gtk-4.1
+
+# Manual verification (Ubuntu/Debian)
+PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig pkg-config --exists webkit2gtk-4.1
+----
+
+== Why Conda-Forge Doesn't Have WebKit
+
+1. **Complexity**: WebKit is a massive, complex package with many platform-specific dependencies
+2. **System Integration**: WebKit requires deep system integration that's better handled by system package managers
+3. **Maintenance Burden**: The webkit ecosystem moves quickly and requires specialized maintenance
+4. **Platform Specificity**: WebKit implementations vary significantly across platforms
+
+== Recommendations
+
+**For End Users**
+
+* **Use CLI build**: Provides full VPN functionality without complexity
+* **System packages for GUI**: Install webkit through system package manager if GUI is needed
+
+**For Developers**
+
+* **Primary development**: Use CLI build for core VPN functionality
+* **GUI development**: Use development containers or layer webkit on immutable systems
+* **CI/CD**: Focus on CLI builds for reliable, cross-platform automation
+
+**For Distributors**
+
+* **Package CLI version**: Reliable, self-contained, works everywhere
+* **Document GUI requirements**: Point users to system package installation for GUI support
+
+== Future Considerations
+
+1. **Alternative UI Frameworks**: Consider frameworks with better conda support
+2. **Static WebKit Builds**: Investigate feasibility of statically linked webkit
+3. **Native Packaging**: Use system package managers for final GUI distribution
+4. **Containerized GUI**: Provide pre-built containers with webkit dependencies
+
+== WebKit Support
+
+If you encounter webkit-related build issues:
+
+1. Try CLI-only build first: `pixi run build-cli`
+2. Verify webkit installation: `pixi run verify-webkit-deps`
+3. Check platform-specific instructions in this section
+4. Report issues with platform and pixi version details

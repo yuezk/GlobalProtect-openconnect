@@ -3,7 +3,7 @@ use std::process::Stdio;
 use anyhow::bail;
 use tokio::process::Command;
 
-use crate::{auth::SamlAuthResult, credential::Credential, GP_AUTH_BINARY};
+use crate::{auth::SamlAuthResult, credential::Credential, resolve_gpauth_binary};
 
 use super::command_traits::CommandExt;
 
@@ -113,7 +113,7 @@ impl<'a> SamlAuthLauncher<'a> {
 
   /// Launch the authenticator binary as the current user or SUDO_USER if available.
   pub async fn launch(self) -> anyhow::Result<Credential> {
-    let mut auth_cmd = Command::new(GP_AUTH_BINARY);
+    let mut auth_cmd = Command::new(resolve_gpauth_binary());
     auth_cmd.arg(self.server);
 
     if self.gateway {
@@ -168,12 +168,21 @@ impl<'a> SamlAuthLauncher<'a> {
     }
 
     let mut non_root_cmd = auth_cmd.into_non_root()?;
-    let output = non_root_cmd
+    let child = non_root_cmd
       .kill_on_drop(true)
       .stdout(Stdio::piped())
-      .spawn()?
-      .wait_with_output()
-      .await?;
+      .spawn()
+      .map_err(|err| {
+        if err.kind() == std::io::ErrorKind::NotFound {
+          anyhow::anyhow!(
+            "Authentication failed: The gpauth binary is not available. Please ensure GlobalProtect OpenConnect is properly installed."
+          )
+        } else {
+          anyhow::anyhow!("Failed to start authentication process: {}", err)
+        }
+      })?;
+
+    let output = child.wait_with_output().await?;
 
     let Ok(auth_result) = serde_json::from_slice::<SamlAuthResult>(&output.stdout) else {
       bail!("Failed to parse auth data")

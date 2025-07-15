@@ -1,0 +1,145 @@
+.SHELLFLAGS += -e
+
+# Project configuration
+PKG_NAME = globalprotect-openconnect
+VERSION = 2.4.4
+
+# Pixi environment variables
+PIXI_ENV ?= default
+PIXI_PREFIX ?= $(shell pixi info --json | jq -r '.environments_info["$(PIXI_ENV)"].prefix')
+
+# Build configuration
+BUILD_GUI ?= 1
+BUILD_FE ?= 1
+OFFLINE ?= 0
+
+# Cargo build arguments
+CARGO_BUILD_ARGS = --release
+
+ifeq ($(OFFLINE), 1)
+	CARGO_BUILD_ARGS += --frozen
+endif
+
+default: build
+
+# Initialize pixi environment
+init:
+	pixi install
+
+# Setup development environment
+setup:
+	pixi run setup-env
+
+# Build tasks
+build-frontend:
+	if [ $(BUILD_GUI) -eq 1 ] && [ $(BUILD_FE) -eq 1 ]; then \
+		pixi run build-frontend; \
+	else \
+		echo "Skipping frontend build"; \
+	fi
+
+build-rust:
+	if [ $(BUILD_GUI) -eq 1 ]; then \
+		pixi run build-rust; \
+	else \
+		pixi run build-cli; \
+	fi
+
+# Full build
+build: init setup build-frontend build-rust
+
+# Build CLI only
+build-cli:
+	BUILD_GUI=0 pixi run build-cli
+
+# Test the build
+test:
+	pixi run test
+
+# Clean build artifacts
+clean:
+	pixi run clean
+
+# Package with rattler-build
+package:
+	pixi run package
+
+# Install locally
+install: build
+	mkdir -p $(DESTDIR)/usr/bin
+	cp target/release/gpclient $(DESTDIR)/usr/bin/
+	cp target/release/gpauth $(DESTDIR)/usr/bin/
+	cp target/release/gpservice $(DESTDIR)/usr/bin/
+
+	if [ $(BUILD_GUI) -eq 1 ]; then \
+		cp target/release/gpgui-helper $(DESTDIR)/usr/bin/; \
+	fi
+
+	# Install desktop files and icons
+	mkdir -p $(DESTDIR)/usr/share/applications
+	cp packaging/files/usr/share/applications/gpgui.desktop $(DESTDIR)/usr/share/applications/
+
+	mkdir -p $(DESTDIR)/usr/share/icons/hicolor/scalable/apps
+	cp packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/
+
+	mkdir -p $(DESTDIR)/usr/share/icons/hicolor/32x32/apps
+	cp packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/
+
+	mkdir -p $(DESTDIR)/usr/share/icons/hicolor/128x128/apps
+	cp packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/
+
+	mkdir -p $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps
+	cp packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/
+
+	mkdir -p $(DESTDIR)/usr/share/polkit-1/actions
+	cp packaging/files/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $(DESTDIR)/usr/share/polkit-1/actions/
+
+# Uninstall
+uninstall:
+	rm -f $(DESTDIR)/usr/bin/gpclient
+	rm -f $(DESTDIR)/usr/bin/gpauth
+	rm -f $(DESTDIR)/usr/bin/gpservice
+	rm -f $(DESTDIR)/usr/bin/gpgui-helper
+	rm -f $(DESTDIR)/usr/share/applications/gpgui.desktop
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
+
+# Development tasks
+setup-dev:
+	pixi run setup-dev
+
+lint:
+	pixi run lint
+
+format:
+	pixi run format
+
+check-format:
+	pixi run check-format
+
+# Help
+help:
+	@echo "Available targets:"
+	@echo "  build       - Build the project (default)"
+	@echo "  build-cli   - Build CLI components only"
+	@echo "  test        - Test the build"
+	@echo "  clean       - Clean build artifacts"
+	@echo "  package     - Create conda package with rattler-build"
+	@echo "  install     - Install locally"
+	@echo "  uninstall   - Remove installed files"
+	@echo "  setup-dev   - Setup development environment"
+	@echo "  lint        - Run linting"
+	@echo "  format      - Format code"
+	@echo "  check-format - Check code formatting"
+	@echo "  help        - Show this help"
+	@echo ""
+	@echo "Environment variables:"
+	@echo "  BUILD_GUI   - Build GUI components (default: 1)"
+	@echo "  BUILD_FE    - Build frontend (default: 1)"
+	@echo "  OFFLINE     - Build offline (default: 0)"
+	@echo "  PIXI_ENV    - Pixi environment to use (default: default)"
+
+.PHONY: default init setup build-frontend build-rust build build-cli test clean package install uninstall setup-dev lint format check-format help

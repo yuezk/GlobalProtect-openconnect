@@ -1,5 +1,5 @@
 use anyhow::bail;
-use log::{info, warn};
+use log::{debug, info, warn};
 use reqwest::Client;
 use roxmltree::Document;
 use urlencoding::encode;
@@ -30,6 +30,7 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
   params.insert("server", &gateway);
 
   info!("Perform gateway login, user_agent: {}", gp_params.user_agent());
+  debug!("Gateway login parameters: {:?}", params);
 
   let res = client.post(&login_url).form(&params).send().await.map_err(|e| {
     warn!("Network error: {:?}", e);

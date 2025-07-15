@@ -1,10 +1,10 @@
-use std::{env::temp_dir, fs::File, str::FromStr};
+use std::{env::temp_dir, fs::File, path::PathBuf, str::FromStr};
 
 use anyhow::bail;
 use clap::{Parser, Subcommand};
 use gpapi::{
   clap::{handle_error, Args, InfoLevelVerbosity},
-  utils::openssl,
+  utils::{openssl, runtime},
 };
 use log::info;
 use sysinfo::{Pid, System};
@@ -15,7 +15,6 @@ use crate::{
   connect::{ConnectArgs, ConnectHandler},
   disconnect::{DisconnectArgs, DisconnectHandler},
   launch_gui::{LaunchGuiArgs, LaunchGuiHandler},
-  GP_CLIENT_LOCK_FILE,
 };
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
@@ -24,6 +23,7 @@ pub(crate) struct SharedArgs<'a> {
   pub(crate) fix_openssl: bool,
   pub(crate) ignore_tls_errors: bool,
   pub(crate) verbose: &'a InfoLevelVerbosity,
+  pub(crate) lock_file_path: PathBuf,
 }
 
 #[derive(Subcommand)]
@@ -82,7 +82,12 @@ impl Args for Cli {
 
 impl Cli {
   async fn is_running(&self) -> bool {
-    let Ok(c) = fs::read_to_string(GP_CLIENT_LOCK_FILE).await else {
+    let lock_file_path = match runtime::get_client_lock_path() {
+      Ok(path) => path,
+      Err(_) => return false,
+    };
+
+    let Ok(c) = fs::read_to_string(&lock_file_path).await else {
       return false;
     };
 
@@ -110,6 +115,17 @@ impl Cli {
   }
 
   async fn run(&self) -> anyhow::Result<()> {
+    // Determine appropriate lock file path based on user privileges
+    let lock_file_path =
+      runtime::get_client_lock_path().map_err(|e| anyhow::anyhow!("Failed to determine lock file path: {}", e))?;
+
+    info!("Using lock file: {}", lock_file_path.display());
+
+    // Check if we have permission to use this lock file path
+    if let Err(e) = runtime::ensure_lock_file_accessible(&lock_file_path) {
+      bail!("Cannot access lock file: {}", e);
+    }
+
     // check if an instance is running
     if self.is_running().await {
       bail!("Another instance of the client is already running");
@@ -122,6 +138,7 @@ impl Cli {
       fix_openssl: self.fix_openssl,
       ignore_tls_errors: self.ignore_tls_errors,
       verbose: &self.verbose,
+      lock_file_path,
     };
 
     if self.ignore_tls_errors {

@@ -1,0 +1,124 @@
+# tag::package-info[]
+package:
+  name: globalprotect-openconnect
+  version: "2.4.4"
+
+source:
+  path: .
+# end::package-info[]
+
+# tag::build-script[]
+build:
+  number: 0
+  script:
+    - export CARGO_PROFILE_RELEASE_STRIP=symbols
+    - export CARGO_PROFILE_RELEASE_LTO=true
+    - cd $SRC_DIR
+    - pixi run setup-env
+    - pixi run build-all
+    - pixi run build-docs
+    - mkdir -p $PREFIX/bin
+    - cp target/release/gpclient $PREFIX/bin/
+    - cp target/release/gpservice $PREFIX/bin/
+    - cp target/release/gpauth $PREFIX/bin/
+    - cp target/release/gpgui-helper $PREFIX/bin/
+    - cp packaging/files/usr/bin/gp-setup $PREFIX/bin/
+    - chmod +x $PREFIX/bin/gp-setup
+    - cp packaging/files/usr/bin/gp-welcome $PREFIX/bin/
+    - chmod +x $PREFIX/bin/gp-welcome
+    - mkdir -p $PREFIX/share/applications
+    - cp packaging/files/usr/share/applications/gpgui.desktop $PREFIX/share/applications/
+    - mkdir -p $PREFIX/share/icons/hicolor/scalable/apps
+    - cp packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $PREFIX/share/icons/hicolor/scalable/apps/
+    - mkdir -p $PREFIX/share/icons/hicolor/32x32/apps
+    - cp packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $PREFIX/share/icons/hicolor/32x32/apps/
+    - mkdir -p $PREFIX/share/icons/hicolor/128x128/apps
+    - cp packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $PREFIX/share/icons/hicolor/128x128/apps/
+    - mkdir -p $PREFIX/share/icons/hicolor/256x256@2/apps
+    - cp packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $PREFIX/share/icons/hicolor/256x256@2/apps/
+    - mkdir -p $PREFIX/share/polkit-1/actions
+    - cp packaging/files/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $PREFIX/share/polkit-1/actions/
+    - mkdir -p $PREFIX/share/doc/globalprotect-openconnect
+    - cp packaging/README-conda.md $PREFIX/share/doc/globalprotect-openconnect/
+    - cp docs/helper_pixi_install.adoc $PREFIX/share/doc/globalprotect-openconnect/
+    - cp packaging/post-install-message.sh $PREFIX/share/doc/globalprotect-openconnect/
+    - cp output/docs/operators-guide.html $PREFIX/share/doc/globalprotect-openconnect/
+    - cp output/docs/operators-guide.pdf $PREFIX/share/doc/globalprotect-openconnect/
+# end::build-script[]
+
+# tag::requirements[]
+requirements:
+  build:
+    - rust >=1.80
+    - nodejs >=20
+    - make
+    - pkg-config
+    - gcc
+    - gxx
+    - cmake
+    - ninja
+    - perl
+    - jq
+    - git
+    - pixi
+  host:
+    - openconnect >=8.20
+    - libsecret
+    - libxml2
+    - glib
+    - gtk3
+    - pango
+    - cairo
+    - gdk-pixbuf
+    - atk
+    - expat
+    - openssl
+    - gnutls
+    - krb5
+    - zlib
+  run:
+    - openconnect >=8.20
+    - libsecret
+    - libxml2
+    - glib
+    - gtk3
+    - pango
+    - cairo
+    - gdk-pixbuf
+    - atk
+    - expat
+    - pkexec
+    - gnome-keyring
+# end::requirements[]
+
+tests:
+  - script:
+      - gpclient --help
+      - gpservice --help
+      - gpauth --help
+      - gpgui-helper --help
+      - gp-setup --help
+      - gp-welcome --help
+
+about:
+  homepage: https://github.com/yuezk/GlobalProtect-openconnect
+  license: GPL-3.0
+  license_file: LICENSE
+  summary: A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method
+  description: |
+    GlobalProtect-openconnect is a GUI for GlobalProtect VPN, based on OpenConnect,
+    that supports the SSO authentication method. It provides both CLI and GUI interfaces
+    for connecting to GlobalProtect VPN servers with features like SSO authentication,
+    FIDO2 support, client certificate authentication, and more.
+
+    This package includes the 'gp-setup' configuration script that automatically
+    configures URL scheme handlers, runtime directories, file permissions, and
+    Flatpak browser permissions for optimal operation.
+
+    After installation, run 'gp-setup --all' to configure your system automatically.
+  documentation: https://github.com/yuezk/GlobalProtect-openconnect/blob/main/README.md
+  repository: https://github.com/yuezk/GlobalProtect-openconnect
+
+extra:
+  recipe-maintainers:
+    - yuezk

@@ -4,18 +4,43 @@
 
 set -e
 
-PIDFILE=/tmp/gpservice_disconnected.pid
+# Check for user-specific PID file locations first, then fall back to system location
+find_pidfile() {
+  # Check XDG_RUNTIME_DIR for running user sessions
+  for runtime_dir in /run/user/*/; do
+    if [ -f "${runtime_dir}gpservice_disconnected.pid" ]; then
+      echo "${runtime_dir}gpservice_disconnected.pid"
+      return
+    fi
+  done
+
+  # Check ~/.local/state/globalprotect for user sessions
+  for home_dir in /home/*/; do
+    local_state_pid="${home_dir}.local/state/globalprotect/gpservice_disconnected.pid"
+    if [ -f "$local_state_pid" ]; then
+      echo "$local_state_pid"
+      return
+    fi
+  done
+
+  # Fall back to system-wide location
+  if [ -f "/tmp/gpservice_disconnected.pid" ]; then
+    echo "/tmp/gpservice_disconnected.pid"
+  fi
+}
+
+PIDFILE=$(find_pidfile)
 
 resume_vpn() {
-  if [ -f $PIDFILE ]; then
-    PID=$(cat $PIDFILE)
+  if [ -n "$PIDFILE" ] && [ -f "$PIDFILE" ]; then
+    PID=$(cat "$PIDFILE")
 
     # Always remove the PID file
-    rm $PIDFILE
+    rm "$PIDFILE"
 
     # Ensure the PID is a gpservice process
     if ps -p $PID -o comm= | grep -q gpservice; then
-      # Send a USR2 signal to the gpclient process to resume the VPN connection
+      # Send a USR2 signal to the gpservice process to resume the VPN connection
       kill -USR2 $PID
     fi
   fi

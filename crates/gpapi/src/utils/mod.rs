@@ -9,6 +9,7 @@ pub mod lock_file;
 pub mod openssl;
 pub mod redact;
 pub mod request;
+pub mod runtime;
 #[cfg(feature = "tauri")]
 pub mod window;
 

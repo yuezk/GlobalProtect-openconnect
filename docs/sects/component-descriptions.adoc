@@ -1,0 +1,162 @@
+// Common section: Component Descriptions
+// This section is included in both developers-guide.adoc and operators-guide.adoc
+
+= Component Descriptions
+
+The GlobalProtect OpenConnect project is organized into several distinct components, each serving specific roles in the VPN client ecosystem.
+
+== CLI Components (Production Ready)
+
+**gpclient - Main VPN Client**
+
+The primary command-line interface for VPN operations:
+
+* **Connection Management**: Establishes and maintains VPN connections
+* **User Interface**: Interactive and scripted command-line interface
+* **Configuration Handling**: Manages VPN profiles and settings
+* **Authentication Integration**: Automatically launches and integrates with gpauth for user authentication
+* **Smart Binary Discovery**: Automatically locates gpauth binary in same directory or system paths
+* **Enhanced Error Handling**: Provides clear, actionable error messages for authentication issues
+* **Status Reporting**: Provides detailed connection status and diagnostics
+* **Binary Size**: ~3.8 MB
+* **Status**: ✅ Production Ready
+
+**Authentication Workflow**: `gpclient` automatically handles authentication by:
+
+1. **Portal Discovery**: Contacts the VPN server to determine authentication requirements
+2. **Automatic gpauth Launch**: Spawns `gpauth` process internally when SAML authentication is required
+3. **Browser Integration**: Seamlessly opens browser for SSO authentication when using `--browser` option
+4. **Credential Management**: Processes authentication tokens and manages secure handoff to VPN connection
+5. **Error Recovery**: Provides informative guidance when authentication components are missing
+
+**Usage Patterns**:
+
+* **Integrated Authentication**: `gpclient connect server.com --browser default` (recommended)
+* **Manual Authentication**: `gpauth --browser default server.com | gpclient connect server.com --cookie-on-stdin`
+* **Automated Workflows**: `gpclient --fix-openssl connect server.com --browser default` (with SSL compatibility)
+
+**gpservice - Background Service**
+
+The system service component that manages VPN operations:
+
+* **Background Operations**: Runs as a system service/daemon
+* **Connection Monitoring**: Continuously monitors VPN connection health
+* **Policy Enforcement**: Implements corporate VPN policies
+* **System Integration**: Integrates with system networking and security
+* **Automatic Reconnection**: Handles connection recovery and failover
+* **Resource Management**: Manages system resources and permissions
+* **Binary Size**: ~3.9 MB
+* **Status**: ✅ Production Ready
+
+**gpauth - Authentication Handler**
+
+Specialized component for handling authentication flows:
+
+* **Authentication Processing**: Handles various authentication methods (SAML, certificate, password)
+* **SSO Integration**: Supports Single Sign-On workflows with major identity providers
+* **SAML Processing**: Processes SAML assertions and responses with full browser integration
+* **Browser Management**: Launches and coordinates with system browsers for interactive authentication
+* **Credential Management**: Securely processes and outputs authentication tokens in JSON format
+* **Multi-Factor Authentication**: Supports MFA workflows including FIDO2 and TOTP
+* **Session Management**: Manages authentication sessions and secure token exchange
+* **Standalone Operation**: Can be used independently or automatically by gpclient
+* **Binary Size**: ~3.8 MB
+* **Status**: ✅ Production Ready
+
+**Integration with gpclient**:
+
+* **Automatic Discovery**: `gpclient` automatically locates `gpauth` using intelligent path resolution
+* **Seamless Execution**: Launched transparently when SAML authentication is required
+* **Secure Communication**: Authentication data passed securely via stdout/stdin pipes
+* **Error Reporting**: Provides clear feedback when authentication dependencies are missing
+* **Browser Compatibility**: Supports default browser, Firefox, Chrome, Chromium, and custom browser paths
+
+**Deployment Considerations**:
+
+* **Co-location**: Best deployed in same directory as `gpclient` for automatic discovery
+* **System Installation**: Supports traditional `/usr/bin` installation with fallback detection
+* **Containerized Environments**: Works in Conda, Pixi, and other isolated environments
+* **Permission Requirements**: Requires appropriate permissions for browser launching and URL scheme handling
+
+== GUI Components (Development/Beta)
+
+**gpgui-helper - GUI Helper Service**
+
+Bridge service between the desktop interface and core VPN functionality:
+
+* **API Bridge**: Translates GUI requests to core API calls
+* **Event Management**: Handles GUI events and notifications
+* **State Synchronization**: Keeps GUI state synchronized with VPN status
+* **Permission Management**: Manages elevated permissions for GUI operations
+* **Cross-Platform Abstraction**: Provides consistent interface across platforms
+* **Status**: 🧪 Beta (WebKit dependency required)
+
+**Tauri Desktop Application**
+
+Modern cross-platform desktop interface:
+
+* **Web-Based UI**: Built with modern web technologies
+* **Native Integration**: Native system tray and notification support
+* **Cross-Platform**: Consistent experience across operating systems
+* **Real-Time Updates**: Live connection status and configuration updates
+* **Visual Configuration**: Graphical VPN profile management
+* **System Integration**: Native file dialogs and system notifications
+* **Requirements**: WebKit development libraries
+* **Status**: 🧪 Beta (WebKit dependency required)
+
+== Core Libraries
+
+**gpapi - Core API Library**
+
+Central library providing core VPN functionality:
+
+* **VPN Operations**: Core VPN connection and management logic
+* **Protocol Implementation**: GlobalProtect protocol implementation
+* **System Integration**: Operating system specific integrations
+* **Configuration Management**: VPN profile and settings management
+* **Network Management**: Network interface and routing management
+* **Security Operations**: Certificate and encryption handling
+
+**auth - Authentication Library**
+
+Specialized library for authentication operations:
+
+* **Protocol Support**: Multiple authentication protocol implementations
+* **SSO Integration**: Single Sign-On provider integrations
+* **Credential Storage**: Secure credential storage and retrieval
+* **Session Management**: Authentication session lifecycle management
+* **Token Handling**: OAuth, SAML, and other token-based authentication
+* **Multi-Factor Support**: MFA workflow implementations
+
+**common - Common Utilities**
+
+Shared utilities and common functionality:
+
+* **Logging Framework**: Centralized logging and diagnostics
+* **Error Handling**: Common error types and handling patterns
+* **Configuration Parsing**: Configuration file parsing and validation
+* **Utility Functions**: Common helper functions and data structures
+* **Platform Abstractions**: Cross-platform compatibility layer
+* **Type Definitions**: Shared data types and structures
+
+**openconnect - OpenConnect Wrapper**
+
+Rust wrapper around the OpenConnect VPN library:
+
+* **Library Binding**: Safe Rust bindings for OpenConnect C library
+* **Memory Management**: Safe memory handling for C interop
+* **Error Translation**: C error codes to Rust error types
+* **Connection Management**: VPN connection lifecycle management
+* **Protocol Support**: Multiple VPN protocol implementations
+* **Certificate Handling**: SSL/TLS certificate management
+
+== Build Outputs
+
+The build process produces optimized binaries with the following characteristics:
+
+* **Total CLI Package Size**: ~15 MB (all three CLI components)
+* **Build Time**: ~54 seconds for full CLI rebuild
+* **Optimization**: Release builds with LTO (Link Time Optimization)
+* **Static Linking**: Minimal runtime dependencies
+* **Cross-Compilation**: Supports building for multiple platforms
+* **Reproducible Builds**: Consistent outputs across build environments
