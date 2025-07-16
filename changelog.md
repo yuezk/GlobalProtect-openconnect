@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.5 - 2025-07-16
+
+- GUI/CLI: fix the issue that the custom port is not supported issue (fix [#404](https://github.com/yuezk/GlobalProtect-openconnect/issues/404))
+- CLI: add the `--force-dpd` option to specify the interval for DPD (Dead Peer Detection).
+- CLI: add the `-i/--interface` option to specify the interface to use.
+
 ## 2.4.4 - 2025-02-09
 
 - GUI: fix multiple tray icons issue (fix [#464](https://github.com/yuezk/GlobalProtect-openconnect/issues/464))
