@@ -81,10 +81,8 @@ jobs:
         cp -v packaging/deb/compat .build/debian/compat
         cp -v packaging/deb/postrm .build/debian/postrm
 
-        sed -i "s/@RUST@/cargo-1.80/g" .build/debian/control
         sed -i "s/@OFFLINE@/1/g" .build/debian/rules
         sed -i "s/@BUILD_GUI@/1/g" .build/debian/rules
-        sed -i "s/@RUST_VERSION@/1.80/g" .build/debian/rules
 
     - name: Publish to PPA
       uses: yuezk/publish-ppa-package@gp
@@ -96,7 +94,7 @@ jobs:
         debian_dir: publish-ppa/globalprotect-openconnect-*/.build/debian
         deb_email: "k3vinyue@gmail.com"
         deb_fullname: "Kevin Yue"
-        extra_ppa: "yuezk/globalprotect-openconnect liushuyu-011/rust-updates-1.80"
+        extra_ppa: "yuezk/globalprotect-openconnect"
         # Ubuntu 18.04 and 20.04 are excluded because tauri2 no longer supports them
         excluded_series: "bionic focal"
         revision: ${{ inputs.revision }}
