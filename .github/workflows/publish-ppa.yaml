@@ -1,4 +1,4 @@
-name: Publish Packages
+name: Publish PPA
 
 on:
   workflow_dispatch:
@@ -8,24 +8,18 @@ on:
         required: true
       revision:
         description: 'Package revision'
-        required: true
+        required: false
         default: "1"
-      ppa:
-        description: 'Publish to PPA'
-        type: boolean
+      series:
+        description: 'Ubuntu series to publish'
+        type: "string"
+        required: false
+        default: ""
+      rust:
+        description: 'Rust version to use'
+        type: "string"
         required: true
-        default: true
-      obs:
-        description: 'Publish to OBS'
-        type: boolean
-        required: true
-        default: true
-      aur:
-        description: 'Publish to AUR'
-        type: boolean
-        required: true
-        default: true
-
+        default: "1.82"
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -84,6 +78,11 @@ jobs:
         sed -i "s/@OFFLINE@/1/g" .build/debian/rules
         sed -i "s/@BUILD_GUI@/1/g" .build/debian/rules
 
+        # Update the control file with the correct Rust version
+        sed -i "s/rust-[0-9.]\+-all/rust-${{ inputs.rust }}-all/g" .build/debian/control
+        sed -i "s/rust-[0-9.]\+/rust-${{ inputs.rust }}/g" .build/debian/rules
+        sed -i "s/DISABLE_RUST_TOOLCHAIN = 0/DISABLE_RUST_TOOLCHAIN = 1/g" .build/debian/rules
+
     - name: Publish to PPA
       uses: yuezk/publish-ppa-package@gp
       with:
@@ -97,4 +96,5 @@ jobs:
         extra_ppa: "yuezk/globalprotect-openconnect"
         # Ubuntu 18.04 and 20.04 are excluded because tauri2 no longer supports them
         excluded_series: "bionic focal"
+        series: ${{ inputs.series }}
         revision: ${{ inputs.revision }}

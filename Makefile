@@ -4,6 +4,7 @@ OFFLINE ?= 0
 BUILD_FE ?= 1
 INCLUDE_GUI ?= 0
 CARGO ?= cargo
+DISABLE_RUST_TOOLCHAIN ?= 0
 
 VERSION = $(shell $(CARGO) metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
 REVISION ?= 1
@@ -99,6 +100,11 @@ build-fe:
 build-rs:
 	if [ $(OFFLINE) -eq 1 ]; then \
 		tar -xJf vendor.tar.xz; \
+	fi
+
+	# Remove the rust-toolchain.toml if DISABLE_RUST_TOOLCHAIN is set to 1
+	if [ $(DISABLE_RUST_TOOLCHAIN) -eq 1 ]; then \
+		rm -vf rust-toolchain.toml; \
 	fi
 
 	# Only build the GUI components if BUILD_GUI is set to 1
