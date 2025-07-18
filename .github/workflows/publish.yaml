@@ -15,16 +15,16 @@ on:
         type: boolean
         required: true
         default: true
-      obs:
-        description: 'Publish to OBS'
-        type: boolean
+      series:
+        description: 'Ubuntu series to publish'
+        type: "string"
         required: true
-        default: true
-      aur:
-        description: 'Publish to AUR'
-        type: boolean
+        default: ""
+      rust:
+        description: 'Rust version to use'
+        type: "string"
         required: true
-        default: true
+        default: "1.82"
 
 jobs:
   check:
@@ -81,10 +81,13 @@ jobs:
         cp -v packaging/deb/compat .build/debian/compat
         cp -v packaging/deb/postrm .build/debian/postrm
 
-        sed -i "s/@RUST@/cargo-1.80/g" .build/debian/control
+        sed -i "s/@RUST@/cargo-${{ inputs.rust }}/g" .build/debian/control
         sed -i "s/@OFFLINE@/1/g" .build/debian/rules
         sed -i "s/@BUILD_GUI@/1/g" .build/debian/rules
-        sed -i "s/@RUST_VERSION@/1.80/g" .build/debian/rules
+        sed -i "s/@RUST_VERSION@/${{ inputs.rust }}/g" .build/debian/rules
+
+        # Add a command rule.in to remove the rust-toolchain.toml file
+        sed -i "s/which rustc/rm -vf rust-toolchain.toml/g" .build/debian/rules
 
     - name: Publish to PPA
       uses: yuezk/publish-ppa-package@gp
@@ -99,4 +102,5 @@ jobs:
         extra_ppa: "yuezk/globalprotect-openconnect liushuyu-011/rust-updates-1.80"
         # Ubuntu 18.04 and 20.04 are excluded because tauri2 no longer supports them
         excluded_series: "bionic focal"
+        series: ${{ inputs.series }}
         revision: ${{ inputs.revision }}
