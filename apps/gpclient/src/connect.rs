@@ -113,7 +113,7 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, or the path to the browser executable"
+    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`, or the path to the browser executable. Use 'remote' for headless servers."
   )]
   browser: Option<String>,
 }
@@ -354,6 +354,115 @@ impl<'a> ConnectHandler<'a> {
     Ok(())
   }
 
+  fn get_server_ip() -> Option<String> {
+    use std::net::IpAddr;
+    use std::net::UdpSocket;
+
+    // Try to connect to a remote address to determine the local IP
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let local_addr = socket.local_addr().ok()?;
+
+    match local_addr.ip() {
+        IpAddr::V4(ipv4) => Some(ipv4.to_string()),
+        IpAddr::V6(_) => None, // Skip IPv6 for simplicity
+    }
+  }
+
+  async fn handle_manual_saml_auth(&self, saml_request: &str) -> anyhow::Result<Credential> {
+    use std::{env::temp_dir, fs, os::unix::fs::PermissionsExt};
+    use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpListener};
+    use gpapi::GP_CALLBACK_PORT_FILENAME;
+
+    // Create a local server similar to the browser authentication flow
+    let listener = TcpListener::bind("0.0.0.0:0").await?;
+    let port = listener.local_addr()?.port();
+    let auth_id = "auth"; // Simple auth ID since we don't have uuid crate
+
+    // Get the server's IP address for better user instructions
+    let server_ip = Self::get_server_ip().unwrap_or_else(|| "YOUR_SERVER_IP".to_string());
+    let auth_url = format!("http://{}:{}/{}", server_ip, port, auth_id);
+
+    // Write the port to a file for the callback mechanism
+    let port_file = temp_dir().join(GP_CALLBACK_PORT_FILENAME);
+    fs::write(&port_file, port.to_string())?;
+    fs::set_permissions(&port_file, fs::Permissions::from_mode(0o600))?;
+
+    // Remove the previous log file
+    let callback_log = temp_dir().join("gpcallback.log");
+    let _ = fs::remove_file(&callback_log);
+
+    println!("\n=== SAML Authentication URL ===");
+    println!();
+    println!("{}", auth_url);
+    println!();
+
+    // Start a task to serve the SAML request
+    let saml_request = saml_request.to_string();
+    tokio::spawn(async move {
+      if let Ok((mut socket, _)) = listener.accept().await {
+        // Read the HTTP request first
+        let mut buffer = [0; 1024];
+        if let Ok(n) = socket.read(&mut buffer).await {
+          let request = String::from_utf8_lossy(&buffer[..n]);
+          info!("Received request");
+
+          // Check if the request is for the correct path
+          if request.contains(&format!("/{}", auth_id)) {
+            // Send proper HTTP response
+            let response = if saml_request.starts_with("http") {
+              // If it's a URL, redirect to it
+              format!(
+                "HTTP/1.1 302 Found\r\nLocation: {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                saml_request
+              )
+            } else {
+              // If it's HTML content, serve it
+              format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                saml_request.len(),
+                saml_request
+              )
+            };
+
+            if let Err(e) = socket.write_all(response.as_bytes()).await {
+              eprintln!("Error sending response: {}", e);
+            } else {
+              println!("Paste Callback URL: ");
+            }
+          } else {
+            // Send 404 for wrong path
+            let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            let _ = socket.write_all(response.as_bytes()).await;
+          }
+        }
+
+        // Close the connection properly
+        let _ = socket.shutdown().await;
+      }
+    });
+
+    // Read the callback URL from stdin
+    let mut callback_url = String::new();
+    std::io::stdin().read_line(&mut callback_url)?;
+    let callback_url = callback_url.trim();
+
+    if callback_url.is_empty() {
+      bail!("No callback URL provided");
+    }
+
+    if !callback_url.starts_with("globalprotectcallback:") {
+      bail!("Invalid callback URL. Expected URL starting with 'globalprotectcallback:'");
+    }
+
+    // Remove the port file
+    let _ = fs::remove_file(&port_file);
+
+    // Parse the callback URL to get the credential
+    let auth_data = gpapi::auth::SamlAuthData::from_gpcallback(callback_url)?;
+    Ok(auth_data.into())
+  }
+
   async fn obtain_credential(&self, prelogin: &Prelogin, server: &str) -> anyhow::Result<Credential> {
     if self.args.cookie_on_stdin {
       return read_cookie_from_stdin();
@@ -363,8 +472,15 @@ impl<'a> ConnectHandler<'a> {
 
     match prelogin {
       Prelogin::Saml(prelogin) => {
+
+        // If --browser remote is set, print the URL and wait for manual input
+        if self.args.browser.as_deref() == Some("remote") {
+          return self.handle_manual_saml_auth(prelogin.saml_request()).await;
+        }
+
         let browser = if prelogin.support_default_browser() {
-          self.args.browser.as_deref()
+          // Don't pass "remote" to the auth launcher, it's handled above
+          self.args.browser.as_deref().filter(|&b| b != "remote")
         } else if !cfg!(feature = "webview-auth") {
           bail!("The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature");
         } else {
