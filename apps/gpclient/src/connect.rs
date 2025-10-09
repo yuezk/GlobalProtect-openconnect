@@ -472,15 +472,8 @@ impl<'a> ConnectHandler<'a> {
 
     match prelogin {
       Prelogin::Saml(prelogin) => {
-
-        // If --browser remote is set, print the URL and wait for manual input
-        if self.args.browser.as_deref() == Some("remote") {
-          return self.handle_manual_saml_auth(prelogin.saml_request()).await;
-        }
-
         let browser = if prelogin.support_default_browser() {
-          // Don't pass "remote" to the auth launcher, it's handled above
-          self.args.browser.as_deref().filter(|&b| b != "remote")
+          self.args.browser.as_deref()
         } else if !cfg!(feature = "webview-auth") {
           bail!("The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature");
         } else {
