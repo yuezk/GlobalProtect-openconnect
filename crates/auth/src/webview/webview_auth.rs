@@ -103,7 +103,8 @@ impl<'a> WebviewAuthenticator<'a> {
       .title("GlobalProtect Login")
       .inner_size(900.0, 650.0 + title_bar_height)
       .focused(true)
-      .visible(false)
+      // when clean is true, the window is expected to be shown because the cookies are cleared
+      .visible(self.clean)
       .center()
       .build()?;
 
