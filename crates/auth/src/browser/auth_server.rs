@@ -10,8 +10,8 @@ pub(super) struct AuthServer {
 }
 
 impl AuthServer {
-  pub fn new() -> anyhow::Result<Self> {
-    let server = Server::http("127.0.0.1:0").map_err(|err| anyhow::anyhow!(err))?;
+  pub fn new(addr: &str) -> anyhow::Result<Self> {
+    let server = Server::http(addr).map_err(|err| anyhow::anyhow!(err))?;
     let auth_id = Uuid::new_v4().to_string();
 
     Ok(Self { server, auth_id })

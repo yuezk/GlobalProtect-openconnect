@@ -56,7 +56,7 @@ Or you can try the following command if the above command does not work:
 gpauth <portal> --browser default 2>/dev/null | sudo gpclient connect <portal> --cookie-on-stdin
 ```
 
-You can specify the browser with the `--browser <browser>` option, e.g., `--browser firefox`, `--browser chrome`, etc.
+You can specify the browser with the `--browser <browser>` option, e.g., `--browser firefox`, `--browser chrome`, etc. Use `--browser remote` to use a remote browser for authentication, this will give you a URL you can access on a separate computer with a browser to complete authentication. Useful for headless servers.
 
 ### GUI
 
