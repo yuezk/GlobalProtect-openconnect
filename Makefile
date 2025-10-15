@@ -188,7 +188,6 @@ init-debian: clean-debian tarball
 
 	# Remove the GUI dependencies if BUILD_GUI is set to 0
 	if [ $(BUILD_GUI) -eq 0 ]; then \
-		sed -i "/libxml2/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/libsecret-1-0/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/libayatana-appindicator3-1/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/gnome-keyring/d" .build/deb/$(PKG)/debian/control; \

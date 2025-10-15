@@ -5,7 +5,7 @@ export BUILD_FE = 0
 export BUILD_GUI = @BUILD_GUI@
 export DISABLE_RUST_TOOLCHAIN = 0
 
-export PATH := /usr/lib/rust-1.82/bin:$(PATH)
+export PATH := /usr/lib/rust-1.82/bin:/usr/lib/rust-1.85/bin:$(PATH)
 
 %:
 	which cargo

@@ -134,7 +134,7 @@ jobs:
       matrix:
         # Only build gp on amd64, as the arm64 package will be built in release.yaml
         os: [{runner: ubuntu-latest, arch: amd64}]
-        package: [deb, rpm, pkg, binary]
+        package: [deb, rpm, pkg, binary, ubuntu-rolling]
     runs-on: ${{ matrix.os.runner }}
     name: build-gp (${{ matrix.package }}, ${{ matrix.os.arch }})
     steps:
@@ -153,14 +153,14 @@ jobs:
       run: |
         docker run --pull=always --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
-          -v $(pwd)/build-gp-${{ matrix.package }}:/${{ matrix.package }} \
+          -v $(pwd)/build-gp-${{ matrix.package }}:/workspace \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2
     - name: Install ${{ matrix.package }} package in Docker
       run: |
         docker run --pull=always --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -e GPGUI_INSTALLED=0 \
-          -v $(pwd)/build-gp-${{ matrix.package }}:/${{ matrix.package }} \
+          -v $(pwd)/build-gp-${{ matrix.package }}:/workspace \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \
           bash install.sh
     - name: Upload ${{ matrix.package }} package

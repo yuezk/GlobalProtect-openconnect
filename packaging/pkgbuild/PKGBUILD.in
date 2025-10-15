@@ -9,7 +9,7 @@ arch=('x86_64' 'aarch64')
 url="https://github.com/yuezk/GlobalProtect-openconnect"
 license=('GPL3')
 makedepends=('make' 'pkg-config' 'rust' 'cargo' 'jq' 'webkit2gtk-4.1' 'curl' 'wget' 'file' 'openssl' 'appmenu-gtk-module' 'libappindicator-gtk3' 'librsvg' 'openconnect' 'libsecret')
-depends=('openconnect>=8.20' webkit2gtk-4.1 libappindicator-gtk3 libsecret libxml2)
+depends=('openconnect>=8.20' webkit2gtk-4.1 libappindicator-gtk3 libsecret)
 optdepends=('wmctrl: for window management')
 
 provides=('globalprotect-openconnect' 'gpclient' 'gpservice' 'gpauth' 'gpgui')

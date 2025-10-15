@@ -79,8 +79,8 @@ jobs:
         sed -i "s/@BUILD_GUI@/1/g" .build/debian/rules
 
         # Update the control file with the correct Rust version
-        sed -i "s/rust-[0-9.]\+-all/rust-${{ inputs.rust }}-all/g" .build/debian/control
-        sed -i "s/rust-[0-9.]\+/rust-${{ inputs.rust }}/g" .build/debian/rules
+        # sed -i "s/rust-[0-9.]\+-all/rust-${{ inputs.rust }}-all/g" .build/debian/control
+        # sed -i "s/rust-[0-9.]\+/rust-${{ inputs.rust }}/g" .build/debian/rules
         sed -i "s/DISABLE_RUST_TOOLCHAIN = 0/DISABLE_RUST_TOOLCHAIN = 1/g" .build/debian/rules
 
     - name: Publish to PPA

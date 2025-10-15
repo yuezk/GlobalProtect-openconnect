@@ -8,13 +8,12 @@ Build-Depends: debhelper (>= 9),
   jq (>= 1),
   make (>= 4),
   libssl-dev,
-  libxml2,
   libsecret-1-0,
   libayatana-appindicator3-1,
   gnome-keyring,
   libwebkit2gtk-4.1-dev,
   libopenconnect-dev (>= 8.20),
-  rust-1.82-all
+  rust-1.82-all | rust-1.85-all
 Homepage: https://github.com/yuezk/GlobalProtect-openconnect
 
 Package: globalprotect-openconnect
@@ -23,7 +22,6 @@ Multi-Arch: foreign
 Depends: ${misc:Depends},
   ${shlibs:Depends},
   openconnect (>=8.20),
-  libxml2,
   libsecret-1-0,
   libayatana-appindicator3-1,
   gnome-keyring,
