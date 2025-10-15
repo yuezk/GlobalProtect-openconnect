@@ -111,7 +111,7 @@ jobs:
     - name: Build ${{ matrix.package }} package in Docker
       run: |
         docker run --pull=always --rm \
-          -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} \
+          -v $(pwd)/build-${{ matrix.package }}:/workspace \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -e INCLUDE_GUI=1 \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2
@@ -120,7 +120,7 @@ jobs:
       run: |
         docker run --pull=always --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
-          -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} \
+          -v $(pwd)/build-${{ matrix.package }}:/workspace \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \
           bash install.sh
 
