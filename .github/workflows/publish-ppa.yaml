@@ -38,7 +38,6 @@ jobs:
 
   publish-ppa:
     needs: check
-    if: ${{ inputs.ppa }}
     runs-on: ubuntu-latest
     steps:
     - uses: pnpm/action-setup@v4
