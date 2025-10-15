@@ -132,8 +132,7 @@ jobs:
     - tarball
     strategy:
       matrix:
-        # Only build gp on amd64, as the arm64 package will be built in release.yaml
-        os: [{runner: ubuntu-latest, arch: amd64}]
+        os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
         package: [deb, rpm, pkg, binary, ubuntu-rolling]
     runs-on: ${{ matrix.os.runner }}
     name: build-gp (${{ matrix.package }}, ${{ matrix.os.arch }})
@@ -163,7 +162,9 @@ jobs:
           -v $(pwd)/build-gp-${{ matrix.package }}:/workspace \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \
           bash install.sh
+    # Don't upload package for ubuntu-rolling because it's duplicate of deb package
     - name: Upload ${{ matrix.package }} package
+      if: ${{ matrix.package != 'ubuntu-rolling' }}
       uses: actions/upload-artifact@v4
       with:
         name: artifact-gp-${{ matrix.package }}-${{ matrix.os.arch }}
@@ -209,15 +210,15 @@ jobs:
       run: |
         docker run --pull=always --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
-          -v $(pwd)/gpgui-source:/gpgui yuezk/gpdev:gpgui-builder-tauri2
+          -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:gpgui-builder-tauri2
     - name: Install gpgui in Docker
       run: |
         cd gpgui-source
         tar -xJf *.bin.tar.xz
         docker run --pull=always --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
-          -v $(pwd):/gpgui yuezk/gpdev:gpgui-builder-tauri2 \
-          bash -c "cd /gpgui/gpgui_*/ && ./gpgui --version"
+          -v $(pwd):/workspace yuezk/gpdev:gpgui-builder-tauri2 \
+          bash -c "cd /workspace/gpgui_*/ && ./gpgui --version"
     - name: Upload gpgui
       uses: actions/upload-artifact@v4
       with:

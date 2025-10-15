@@ -27,9 +27,9 @@ release_snapshot() {
     | xargs -I {} gh -R "$REPO" release delete-asset "$TAG" {} --yes
 
   echo "Uploading new assets..."
+  # Upload all artifacts for snapshot release because we don't need to guarantee stability.
   gh -R "$REPO" release upload "$TAG" \
-    "$PROJECT_DIR"/.build/artifacts/artifact-source*/* \
-    "$PROJECT_DIR"/.build/artifacts/artifact-gpgui-*/*
+    "$PROJECT_DIR"/.build/artifacts/artifact-*/*
 }
 
 release_tag() {
@@ -37,6 +37,9 @@ release_tag() {
   gh -R "$REPO" release delete $TAG --yes --cleanup-tag || true
 
   echo "Creating release..."
+  # Only upload the source tarball and GUI components for tagged release.
+  # Other components will be built in `release.yml` from the standalone
+  # source tarball and uploaded. This is to ensure the source tarball is stable.
   gh -R "$REPO" release create $TAG \
     --title "$TAG" \
     --notes "$RELEASE_NOTES" \

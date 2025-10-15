@@ -14,7 +14,7 @@ openconnect = { path = "../../crates/openconnect" }
 anyhow.workspace = true
 clap.workspace = true
 env_logger.workspace = true
-inquire = "0.7"
+inquire = "0.9"
 log.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 sysinfo.workspace = true

@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-rust-version = "1.80"
+rust-version = "1.82"
 version = "2.4.5"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
@@ -23,8 +23,8 @@ base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
 clap-verbosity-flag = "3"
 ctrlc = "3.4"
-directories = "5.0"
-dns-lookup = "2.0.4"
+directories = "6.0"
+dns-lookup = "3"
 env_logger = "0.11"
 is_executable = "1.0"
 log = "0.4"
@@ -32,10 +32,10 @@ regex = "1"
 reqwest = { version = "0.12", features = ["native-tls", "json"] }
 openssl = "0.10"
 pem = "3"
-roxmltree = "0.20"
+roxmltree = "0.21"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sysinfo = "0.33"
+sysinfo = "0.36"
 tempfile = "3.8"
 tokio = { version = "1" }
 tokio-util = "0.7"
@@ -50,9 +50,9 @@ thiserror = "2"
 redact-engine = "0.1"
 compile-time = "0.2"
 serde_urlencoded = "0.7"
-md5 = "0.7"
+md5 = "0.8"
 sha256 = "1"
-which = "7"
+which = "8"
 
 # Tauri dependencies
 tauri = { version = "2" }
