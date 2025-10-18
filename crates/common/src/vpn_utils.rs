@@ -9,6 +9,7 @@ const VPNC_SCRIPT_LOCATIONS: &[&str] = &[
   "/usr/sbin/vpnc-script",
   "/etc/vpnc/vpnc-script",
   "/etc/openconnect/vpnc-script",
+  "/usr/libexec/vpnc-scripts/vpnc-script",
   #[cfg(target_os = "macos")]
   "/opt/homebrew/etc/vpnc/vpnc-script",
 ];
