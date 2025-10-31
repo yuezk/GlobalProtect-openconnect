@@ -11,3 +11,6 @@ SNAPSHOT
 
 # Tauri generated files
 gen
+
+# Nix files
+result
