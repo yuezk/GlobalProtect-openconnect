@@ -33,20 +33,50 @@
           rustc = toolchain;
         };
 
+        cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
+
+        gpgui = pkgs.fetchzip {
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/gpgui_${cpu}.bin.tar.xz";
+          hash = "sha256-dy8McFjcOAvRGEc8Al9PA7LKfxJNZycSEppE4FmqT1Q=";
+        };
+
+        _ = builtins.trace "The gpgui binary is located at: ${gpgui}" "";
       in
       {
         # For `nix build`
         packages.default = naersk'.buildPackage {
           inherit pname version;
 
-          src = ./.;
-
-          buildInputs = with pkgs; [
-            openconnect
-          ];
-
           # Must be set to true to avoid issues with the Tauri build process
           singleStep = true;
+
+          src = ./.;
+
+          buildInputs =
+            with pkgs;
+            [
+              openconnect
+            ]
+            ++ lib.optionals stdenv.isLinux [
+              glib
+              gtk3
+              libsoup_3
+              webkitgtk_4_1
+            ];
+
+          nativeBuildInputs =
+            with pkgs;
+            [ ]
+            ++ lib.optionals stdenv.isLinux [
+              autoPatchelfHook
+            ];
+
+          runtimeDependencies =
+            with pkgs;
+            [ ]
+            ++ lib.optionals stdenv.isLinux [
+              libappindicator-gtk3
+            ];
 
           overrideMain =
             { ... }:
@@ -64,6 +94,22 @@
                   --replace-fail /usr/bin/gpauth $out/bin/gpauth
               '';
             };
+
+          postInstall = ''
+            # Copy the prebuilt gpgui binary to the output bin directory
+            cp ${gpgui}/gpgui $out/bin/gpgui
+            chmod +x $out/bin/gpgui
+
+            cp -r packaging/files/usr/share $out/share
+
+            # Change the `/usr/bin/gpclient` path in the desktop file
+            substituteInPlace $out/share/applications/gpgui.desktop \
+              --replace-fail /usr/bin/gpclient $out/bin/gpclient
+
+            # Change the `/usr/bin/gpservice` path in the polkit policy file
+            substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
+              --replace-fail /usr/bin/gpservice $out/bin/gpservice
+          '';
         };
 
         # For `nix develop`: not fully set up yet
