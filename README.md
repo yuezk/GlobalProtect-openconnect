@@ -144,6 +144,45 @@ sudo emerge -r guru sync
 sudo emerge -av net-vpn/GlobalProtect-openconnect
 ```
 
+### NixOS
+
+This repo includes a flake for NixOS. You can add the following to your `flake.nix`:
+
+```nix
+{
+  inputs = {
+    # ... other inputs
+    globalprotect-openconnect.url = "github:yuezk/GlobalProtect-openconnect";
+  };
+
+  outputs = { nixpkgs, ... }@inputs: {
+    nixosConfigurations.<your-host> = nixpkgs.lib.nixosSystem {
+      specialArgs = { inherit inputs; };
+      modules = [
+        ./configuration.nix
+      ];
+    };
+  };
+}
+```
+
+Then add `globalprotect-openconnect` to your `environment.systemPackages` in `configuration.nix`:
+
+```nix
+{ config, pkgs, inputs, ... }:
+
+{
+  # ... other configurations
+  environment.systemPackages = with pkgs; [
+    # ... other packages
+  ] ++ [
+    inputs.globalprotect-openconnect.packages.${pkgs.system}.default
+  ];
+}
+```
+
+Finally, run `sudo nixos-rebuild switch` to apply the changes.
+
 ### Other distributions
 
 - Install `openconnect >= 8.20`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`.
