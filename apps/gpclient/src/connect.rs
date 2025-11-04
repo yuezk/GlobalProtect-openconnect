@@ -115,7 +115,9 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`, or the path to the browser executable. Use 'remote' for headless servers."
+    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`, or the path to the browser executable. Use 'remote' for headless servers.",
+    default_missing_value = "default",
+    num_args=0..=1
   )]
   browser: Option<String>,
 }

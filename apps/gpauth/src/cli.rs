@@ -62,7 +62,9 @@ struct Cli {
 
   #[arg(
     long,
-    help = "The browser to use for authentication, e.g., `default`, `firefox`, `chrome`, `chromium`, or the path to the browser executable"
+    help = "The browser to use for authentication, e.g., `default`, `firefox`, `chrome`, `chromium`, or the path to the browser executable",
+    default_missing_value = "default",
+    num_args=0..=1
   )]
   browser: Option<String>,
 
