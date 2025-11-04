@@ -45,6 +45,7 @@ impl VpnTaskContext {
       .certificate(args.certificate())
       .sslkey(args.sslkey())
       .key_password(args.key_password())
+      .hip(args.hip())
       .csd_uid(args.csd_uid())
       .csd_wrapper(args.csd_wrapper())
       .reconnect_timeout(args.reconnect_timeout())

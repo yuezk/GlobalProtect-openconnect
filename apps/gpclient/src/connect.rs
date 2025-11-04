@@ -312,12 +312,12 @@ impl<'a> ConnectHandler<'a> {
   async fn connect_gateway(&self, gateway: &str, cookie: &str) -> anyhow::Result<()> {
     let mtu = self.args.mtu.unwrap_or(0);
     let csd_uid = get_csd_uid(&self.args.csd_user)?;
-    let csd_wrapper = if self.args.csd_wrapper.is_some() {
-      self.args.csd_wrapper.clone()
+    let (hip, csd_wrapper) = if let Some(csd_wrapper) = &self.args.csd_wrapper {
+      (true, Some(csd_wrapper.clone()))
     } else if self.args.hip {
-      find_csd_wrapper()
+      (true, None)
     } else {
-      None
+      (false, None)
     };
 
     let os = ClientOs::from(&self.args.os).to_openconnect_os().to_string();
@@ -329,6 +329,7 @@ impl<'a> ConnectHandler<'a> {
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
       .key_password(self.latest_key_password.borrow().clone())
+      .hip(hip)
       .csd_uid(csd_uid)
       .csd_wrapper(csd_wrapper)
       .reconnect_timeout(self.args.reconnect_timeout)

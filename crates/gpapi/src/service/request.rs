@@ -36,6 +36,7 @@ pub struct ConnectArgs {
   certificate: Option<String>,
   sslkey: Option<String>,
   key_password: Option<String>,
+  hip: bool,
   csd_uid: u32,
   csd_wrapper: Option<String>,
   reconnect_timeout: u32,
@@ -54,6 +55,7 @@ impl ConnectArgs {
       certificate: None,
       sslkey: None,
       key_password: None,
+      hip: false,
       csd_uid: 0,
       csd_wrapper: None,
       reconnect_timeout: 300,
@@ -89,6 +91,10 @@ impl ConnectArgs {
 
   pub fn key_password(&self) -> Option<String> {
     self.key_password.clone()
+  }
+
+  pub fn hip(&self) -> bool {
+    self.hip
   }
 
   pub fn csd_uid(&self) -> u32 {
@@ -132,6 +138,11 @@ impl ConnectRequest {
 
   pub fn with_vpnc_script<T: Into<Option<String>>>(mut self, vpnc_script: T) -> Self {
     self.args.vpnc_script = vpnc_script.into();
+    self
+  }
+
+  pub fn with_hip(mut self, hip: bool) -> Self {
+    self.args.hip = hip;
     self
   }
 

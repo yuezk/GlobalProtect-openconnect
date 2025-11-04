@@ -127,6 +127,7 @@ pub struct VpnBuilder {
   sslkey: Option<String>,
   key_password: Option<String>,
 
+  hip: bool,
   csd_uid: u32,
   csd_wrapper: Option<String>,
 
@@ -153,6 +154,7 @@ impl VpnBuilder {
       sslkey: None,
       key_password: None,
 
+      hip: false,
       csd_uid: 0,
       csd_wrapper: None,
 
@@ -199,6 +201,11 @@ impl VpnBuilder {
     self
   }
 
+  pub fn hip(mut self, hip: bool) -> Self {
+    self.hip = hip;
+    self
+  }
+
   pub fn csd_uid(mut self, csd_uid: u32) -> Self {
     self.csd_uid = csd_uid;
     self
@@ -234,18 +241,36 @@ impl VpnBuilder {
     self
   }
 
-  pub fn build(self) -> Result<Vpn, VpnError> {
-    let script = match self.script {
+  fn determine_script(&self) -> Result<String, VpnError> {
+    match &self.script {
       Some(script) => {
-        check_executable(&script).map_err(|e| VpnError::new(e.to_string()))?;
-        script
+        check_executable(script).map_err(|e| VpnError::new(e.to_string()))?;
+        Ok(script.clone())
       }
-      None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script")))?,
-    };
-
-    if let Some(csd_wrapper) = &self.csd_wrapper {
-      check_executable(csd_wrapper).map_err(|e| VpnError::new(e.to_string()))?;
+      None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script"))),
     }
+  }
+
+  fn determine_csd_wrapper(&self) -> Result<Option<String>, VpnError> {
+    if !self.hip {
+      return Ok(None);
+    }
+
+    match &self.csd_wrapper {
+      Some(csd_wrapper) if !csd_wrapper.is_empty() => {
+        check_executable(csd_wrapper).map_err(|e| VpnError::new(e.to_string()))?;
+        Ok(Some(csd_wrapper.clone()))
+      }
+      _ => {
+        let s = find_csd_wrapper().ok_or_else(|| VpnError::new(String::from("Failed to find csd wrapper")))?;
+        Ok(Some(s))
+      }
+    }
+  }
+
+  pub fn build(self) -> Result<Vpn, VpnError> {
+    let script = self.determine_script()?;
+    let csd_wrapper = self.determine_csd_wrapper()?;
 
     let user_agent = self.user_agent.unwrap_or_default();
     let os = self.os.unwrap_or("linux".to_string());
@@ -264,7 +289,7 @@ impl VpnBuilder {
       servercert: None,
 
       csd_uid: self.csd_uid,
-      csd_wrapper: self.csd_wrapper.as_deref().map(Self::to_cstring),
+      csd_wrapper: csd_wrapper.as_deref().map(Self::to_cstring),
 
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
