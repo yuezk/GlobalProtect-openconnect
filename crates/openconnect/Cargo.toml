@@ -6,8 +6,8 @@ license.workspace = true
 links = "openconnect"
 
 [dependencies]
-common = { path = "../common" }
 log.workspace = true
+is_executable.workspace = true
 
 [build-dependencies]
 cc = "1"

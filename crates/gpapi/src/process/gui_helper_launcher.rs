@@ -1,10 +1,11 @@
 use std::{collections::HashMap, path::PathBuf, process::Stdio};
 
 use anyhow::bail;
+use common::constants::GP_GUI_HELPER_BINARY;
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::{process::command_traits::CommandExt, utils, GP_GUI_HELPER_BINARY};
+use crate::{process::command_traits::CommandExt, utils};
 
 pub struct GuiHelperLauncher<'a> {
   program: PathBuf,

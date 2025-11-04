@@ -4,10 +4,10 @@ use std::{
   sync::{Arc, RwLock},
 };
 
-use common::vpn_utils::{check_executable, find_vpnc_script};
 use log::info;
 
 use crate::ffi;
+use crate::vpn_utils::{check_executable, find_csd_wrapper, find_vpnc_script};
 
 type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce() + 'static + Send + Sync>>>>;
 

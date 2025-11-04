@@ -1,9 +1,10 @@
 use std::process::Stdio;
 
 use anyhow::bail;
+use common::constants::GP_AUTH_BINARY;
 use tokio::process::Command;
 
-use crate::{auth::SamlAuthResult, credential::Credential, GP_AUTH_BINARY};
+use crate::{auth::SamlAuthResult, credential::Credential};
 
 use super::command_traits::CommandExt;
 

@@ -48,7 +48,7 @@ pub fn find_csd_wrapper() -> Option<String> {
 pub fn check_executable(file: &str) -> Result<(), io::Error> {
   let path = Path::new(file);
 
-  if path.exists() && !path.is_executable() {
+  if !path.is_executable() {
     return Err(io::Error::new(
       io::ErrorKind::PermissionDenied,
       format!("{} is not executable", file),

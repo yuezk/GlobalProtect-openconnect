@@ -10,6 +10,7 @@ license.workspace = true
 tauri-build = { version = "2", features = [], optional = true }
 
 [dependencies]
+common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap"] }
 
 auth = { path = "../../crates/auth", features = ["browser-auth"] }

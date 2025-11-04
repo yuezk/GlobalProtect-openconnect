@@ -3,13 +3,13 @@ use std::{collections::HashMap, io::Write};
 
 use anyhow::bail;
 use clap::Parser;
+use common::constants::GP_SERVICE_LOCK_FILE;
 use gpapi::clap::InfoLevelVerbosity;
 use gpapi::logger;
 use gpapi::{
   process::gui_launcher::GuiLauncher,
   service::{request::WsRequest, vpn_state::VpnState},
   utils::{crypto::generate_key, env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
-  GP_SERVICE_LOCK_FILE,
 };
 use log::{info, warn};
 use tokio::sync::{mpsc, watch};

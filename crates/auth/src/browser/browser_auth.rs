@@ -1,6 +1,7 @@
 use std::{env::temp_dir, fs, os::unix::fs::PermissionsExt};
 
-use gpapi::{auth::SamlAuthData, GP_CALLBACK_PORT_FILENAME};
+use common::constants::GP_CALLBACK_PORT_FILENAME;
+use gpapi::auth::SamlAuthData;
 use log::info;
 use tokio::{
   io::AsyncReadExt,

@@ -1,11 +1,11 @@
 use auth::{auth_prelogin, BrowserAuthenticator};
 use clap::Parser;
+use common::constants::GP_USER_AGENT;
 use gpapi::{
   auth::{SamlAuthData, SamlAuthResult},
   clap::{args::Os, handle_error, Args, InfoLevelVerbosity},
   gp_params::{ClientOs, GpParams},
   utils::{normalize_server, openssl},
-  GP_USER_AGENT,
 };
 use log::info;
 use serde_json::json;

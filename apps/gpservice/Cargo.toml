@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap", "logger"] }
 openconnect = { path = "../../crates/openconnect" }
 clap.workspace = true

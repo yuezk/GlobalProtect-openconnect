@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
+use common::constants::GP_USER_AGENT;
 use log::info;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{utils::request::create_identity, GP_USER_AGENT};
+use crate::utils::request::create_identity;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
 pub enum ClientOs {

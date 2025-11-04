@@ -2,7 +2,7 @@ use std::{cell::RefCell, fs, sync::Arc};
 
 use anyhow::bail;
 use clap::Args;
-use common::vpn_utils::find_csd_wrapper;
+use common::constants::GP_USER_AGENT;
 use gpapi::{
   auth::SamlAuthResult,
   clap::{args::Os, ToVerboseArg},
@@ -16,7 +16,6 @@ use gpapi::{
     users::{get_non_root_user, get_user_by_name},
   },
   utils::{request::RequestIdentityError, shutdown_signal},
-  GP_USER_AGENT,
 };
 use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::{info, warn};
