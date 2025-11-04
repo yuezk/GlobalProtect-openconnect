@@ -153,9 +153,59 @@ sudo emerge -av net-vpn/GlobalProtect-openconnect
 
 ## Build from source
 
-You can also build the client from source, steps are as follows:
+You can build the client from source using either a devcontainer (recommended) or a local setup.
 
-### Prerequisites
+### Option 1: Using DevContainer (Recommended)
+
+This project includes a devcontainer configuration that provides a consistent build environment with all dependencies pre-installed.
+
+#### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [VS Code](https://code.visualstudio.com/) with [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) (optional, for IDE support)
+
+#### Build Steps
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yuezk/GlobalProtect-openconnect.git
+   cd GlobalProtect-openconnect
+   ```
+
+2. Build the devcontainer image:
+   ```bash
+   docker build -t gpoc-devcontainer .devcontainer/
+   ```
+
+3. Install `jq` in the container and build the project:
+   ```bash
+   docker run --privileged --cap-add=NET_ADMIN --device=/dev/net/tun \
+     -v "$(pwd)":/workspace -w /workspace --user root gpoc-devcontainer \
+     bash -c "apt-get update && apt-get install -y jq"
+   
+   docker run --privileged --cap-add=NET_ADMIN --device=/dev/net/tun \
+     -v "$(pwd)":/workspace -w /workspace gpoc-devcontainer \
+     bash -c "export PATH=/usr/local/cargo/bin:\$PATH && make build"
+   ```
+
+4. The built binaries will be available in `target/release/`:
+   - `gpclient` - CLI client
+   - `gpservice` - Background service
+   - `gpauth` - Authentication helper
+   - `gpgui-helper` - GUI helper
+
+#### Alternative: VS Code DevContainer
+
+1. Open the project in VS Code
+2. When prompted, click "Reopen in Container" or run the command "Dev Containers: Reopen in Container"
+3. Once the container is built and running, open a terminal in VS Code and run:
+   ```bash
+   make build
+   ```
+
+### Option 2: Local Build
+
+#### Prerequisites
 
 - [Install Rust 1.82 or later](https://www.rust-lang.org/tools/install)
 - Install Tauri dependencies: https://tauri.app/start/prerequisites/
@@ -164,12 +214,26 @@ You can also build the client from source, steps are as follows:
 - Install `pkexec`, `gnome-keyring` (or `pam_kwallet` on KDE)
 - Install `nodejs` and `pnpm` (optional only if you downloaded the source tarball from the release page and run with the `BUILD_FE=0` flag, see below)
 
-### Build
+#### Build Steps
 
 1. Download the source code tarball from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Choose `globalprotect-openconnect-${version}.tar.gz`.
 2. Extract the tarball with `tar -xzf globalprotect-openconnect-${version}.tar.gz`.
 3. Enter the source directory and run `make build BUILD_FE=0` to build the client.
-3. Run `sudo make install` to install the client. (Note, `DESTDIR` is not supported)
+4. Run `sudo make install` to install the client. (Note, `DESTDIR` is not supported)
+
+### Testing the Build
+
+After building, you can test the CLI client:
+
+```bash
+./target/release/gpclient --help
+```
+
+### Build Options
+
+- `BUILD_GUI=0` - Disable GUI components (CLI only)
+- `BUILD_FE=0` - Skip frontend build (use pre-built assets)
+- `OFFLINE=1` - Build in offline mode using vendored dependencies
 
 ## FAQ
 
