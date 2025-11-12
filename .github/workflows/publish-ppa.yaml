@@ -19,7 +19,7 @@ on:
         description: 'Rust version to use'
         type: "string"
         required: true
-        default: "1.82"
+        default: "1.85"
 jobs:
   check:
     runs-on: ubuntu-latest

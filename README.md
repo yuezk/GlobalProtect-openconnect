@@ -246,7 +246,7 @@ This project includes a devcontainer configuration that provides a consistent bu
 
 #### Prerequisites
 
-- [Install Rust 1.82 or later](https://www.rust-lang.org/tools/install)
+- [Install Rust 1.85 or later](https://www.rust-lang.org/tools/install)
 - Install Tauri dependencies: https://tauri.app/start/prerequisites/
 - Install `perl` and `jq`
 - Install `openconnect >= 8.20` and `libopenconnect-dev` (or `openconnect-devel` on RPM-based distributions)

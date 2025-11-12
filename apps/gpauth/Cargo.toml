@@ -25,7 +25,8 @@ tokio.workspace = true
 tempfile.workspace = true
 compile-time.workspace = true
 
-home = "0.5"
+# Pin to specific version due to MSRV
+home = "=0.5.11"
 
 # webview auth dependencies
 tauri = { workspace = true, optional = true }

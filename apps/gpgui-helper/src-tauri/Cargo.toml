@@ -24,4 +24,4 @@ tempfile.workspace = true
 reqwest = { workspace = true, features = ["stream"] }
 
 [features]
-custom-protocol = ["tauri/custom-protocol"]
+default = ["tauri/custom-protocol"]

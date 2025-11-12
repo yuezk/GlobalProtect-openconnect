@@ -25,22 +25,22 @@ const CSD_WRAPPER_LOCATIONS: &[&str] = &[
   "/opt/homebrew/opt/openconnect/libexec/openconnect/hipreport.sh",
 ];
 
-fn find_executable(locations: &[&str]) -> Option<String> {
+fn find_executable(locations: &[&'static str]) -> Option<&'static str> {
   for location in locations.iter() {
     let path = Path::new(location);
     if path.is_executable() {
-      return Some(location.to_string());
+      return Some(*location);
     }
   }
 
   None
 }
 
-pub fn find_vpnc_script() -> Option<String> {
+pub fn find_vpnc_script() -> Option<&'static str> {
   find_executable(&VPNC_SCRIPT_LOCATIONS)
 }
 
-pub fn find_csd_wrapper() -> Option<String> {
+pub fn find_csd_wrapper() -> Option<&'static str> {
   find_executable(&CSD_WRAPPER_LOCATIONS)
 }
 
@@ -48,7 +48,7 @@ pub fn find_csd_wrapper() -> Option<String> {
 pub fn check_executable(file: &str) -> Result<(), io::Error> {
   let path = Path::new(file);
 
-  if !path.is_executable() {
+  if path.exists() && !path.is_executable() {
     return Err(io::Error::new(
       io::ErrorKind::PermissionDenied,
       format!("{} is not executable", file),

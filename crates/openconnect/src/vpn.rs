@@ -241,17 +241,17 @@ impl VpnBuilder {
     self
   }
 
-  fn determine_script(&self) -> Result<String, VpnError> {
+  fn determine_script(&self) -> Result<&str, VpnError> {
     match &self.script {
       Some(script) => {
         check_executable(script).map_err(|e| VpnError::new(e.to_string()))?;
-        Ok(script.clone())
+        Ok(script)
       }
       None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script"))),
     }
   }
 
-  fn determine_csd_wrapper(&self) -> Result<Option<String>, VpnError> {
+  fn determine_csd_wrapper(&self) -> Result<Option<&str>, VpnError> {
     if !self.hip {
       return Ok(None);
     }
@@ -259,7 +259,7 @@ impl VpnBuilder {
     match &self.csd_wrapper {
       Some(csd_wrapper) if !csd_wrapper.is_empty() => {
         check_executable(csd_wrapper).map_err(|e| VpnError::new(e.to_string()))?;
-        Ok(Some(csd_wrapper.clone()))
+        Ok(Some(csd_wrapper))
       }
       _ => {
         let s = find_csd_wrapper().ok_or_else(|| VpnError::new(String::from("Failed to find csd wrapper")))?;
@@ -269,8 +269,8 @@ impl VpnBuilder {
   }
 
   pub fn build(self) -> Result<Vpn, VpnError> {
-    let script = self.determine_script()?;
-    let csd_wrapper = self.determine_csd_wrapper()?;
+    let script = self.determine_script()?.to_owned();
+    let csd_wrapper = self.determine_csd_wrapper()?.map(|s| s.to_owned());
 
     let user_agent = self.user_agent.unwrap_or_default();
     let os = self.os.unwrap_or("linux".to_string());

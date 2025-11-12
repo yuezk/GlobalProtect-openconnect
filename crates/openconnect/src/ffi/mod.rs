@@ -31,7 +31,7 @@ pub(crate) struct ConnectOptions {
 }
 
 #[link(name = "vpn")]
-extern "C" {
+unsafe extern "C" {
   #[link_name = "vpn_connect"]
   fn vpn_connect(options: *const ConnectOptions, callback: extern "C" fn(i32, *mut c_void)) -> c_int;
 
@@ -47,7 +47,7 @@ pub(crate) fn disconnect() {
   unsafe { vpn_disconnect() }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn on_vpn_connected(pipe_fd: i32, vpn: *mut c_void) {
   let vpn = unsafe { &*(vpn as *const Vpn) };
   vpn.on_connected(pipe_fd);
@@ -56,7 +56,7 @@ extern "C" fn on_vpn_connected(pipe_fd: i32, vpn: *mut c_void) {
 // Logger used in the C code.
 // level: 0 = error, 1 = info, 2 = debug, 3 = trace
 // map the error level log in openconnect to the warning level
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn vpn_log(level: i32, message: *const c_char) {
   let message = unsafe { std::ffi::CStr::from_ptr(message) };
   let message = message.to_str().unwrap_or("Invalid log message");

@@ -11,27 +11,27 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^7.3.4",
-    "@mui/material": "^7.3.4",
-    "@tauri-apps/api": "^2.8.0",
+    "@mui/icons-material": "^7.3.5",
+    "@mui/material": "^7.3.5",
+    "@tauri-apps/api": "^2.9.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.8.4",
-    "@types/node": "^22.18.10",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
-    "@typescript-eslint/eslint-plugin": "^8.46.1",
-    "@typescript-eslint/parser": "^8.46.1",
-    "@vitejs/plugin-react": "^5.0.4",
-    "eslint": "^9.37.0",
+    "@tauri-apps/cli": "^2.9.4",
+    "@types/node": "^22.19.1",
+    "@types/react": "^19.2.3",
+    "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.46.4",
+    "@typescript-eslint/parser": "^8.46.4",
+    "@vitejs/plugin-react": "^5.1.1",
+    "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "prettier": "3.4.2",
     "typescript": "^5.9.3",
-    "vite": "^7.1.10"
+    "vite": "^7.2.2"
   },
   "packageManager": "pnpm@9.15.1"
 }

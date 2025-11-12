@@ -61,8 +61,8 @@ impl WsServerContext {
     info!("Sending current environment to new client");
     let vpn_env = VpnEnv {
       vpn_state: self.vpn_state_rx.borrow().clone(),
-      vpnc_script: find_vpnc_script(),
-      csd_wrapper: find_csd_wrapper(),
+      vpnc_script: find_vpnc_script().map(|s| s.to_owned()),
+      csd_wrapper: find_csd_wrapper().map(|s| s.to_owned()),
       auth_executable: GP_AUTH_BINARY.to_owned(),
     };
 

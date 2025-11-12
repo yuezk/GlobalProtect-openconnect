@@ -109,10 +109,9 @@ build-rs:
 
 	# Only build the GUI components if BUILD_GUI is set to 1
 	if [ $(BUILD_GUI) -eq 1 ]; then \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth; \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpgui-helper --features "tauri/custom-protocol"; \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth -p gpgui-helper; \
 	else \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth --no-default-features; \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth; \
 	fi
 
 clean:
