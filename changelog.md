@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.7 - 2025-11-12
+
+- Support NixOS package installation
+- Fix the VPNC script location on Void Linux
+- Upgrade to Rust 1.85
+- `--browser` without argument uses the system default browser
+
 ## 2.4.6 - 2025-10-15
 
 - GUI: support the default configuration file for GUI client (fix [#492](https://github.com/yuezk/GlobalProtect-openconnect/issues/492))
