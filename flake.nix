@@ -37,7 +37,7 @@
 
         gpgui = pkgs.fetchzip {
           url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/gpgui_${cpu}.bin.tar.xz";
-          hash = "sha256-dy8McFjcOAvRGEc8Al9PA7LKfxJNZycSEppE4FmqT1Q=";
+          hash = "sha256-Cvy/ca2Q4LdxX7Z9KzuQy6t6FDMcaSyyyjF/YCnZeeM=";
         };
       in
       {
