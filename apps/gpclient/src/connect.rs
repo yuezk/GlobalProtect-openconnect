@@ -5,12 +5,12 @@ use clap::Args;
 use common::constants::GP_USER_AGENT;
 use gpapi::{
   auth::SamlAuthResult,
-  clap::{args::Os, ToVerboseArg},
+  clap::{ToVerboseArg, args::Os},
   credential::{Credential, PasswordCredential},
   error::PortalError,
-  gateway::{gateway_login, GatewayLogin},
+  gateway::{GatewayLogin, gateway_login},
   gp_params::{ClientOs, GpParams},
-  portal::{prelogin, retrieve_config, Prelogin, StandardPrelogin},
+  portal::{Prelogin, StandardPrelogin, prelogin, retrieve_config},
   process::{
     auth_launcher::SamlAuthLauncher,
     users::{get_non_root_user, get_user_by_name},
@@ -21,7 +21,7 @@ use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::{info, warn};
 use openconnect::Vpn;
 
-use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE};
+use crate::{GP_CLIENT_LOCK_FILE, cli::SharedArgs};
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -40,11 +40,14 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Read the cookie from standard input")]
   cookie_on_stdin: bool,
 
-  #[arg(long, short, help = "The VPNC script to use")]
+  #[arg(long, short, help = "The VPNC script to use", required_if_eq("script_tun", "true"))]
   script: Option<String>,
 
   #[arg(long, short, help = "The IFNAME for tunnel interface")]
   interface: Option<String>,
+
+  #[arg(long, short = 'S', help = "Pass traffic to '--script' program, not tun")]
+  script_tun: bool,
 
   #[arg(long, help = "Connect the server as a gateway, instead of a portal")]
   as_gateway: bool,
@@ -115,7 +118,7 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`, or the path to the browser executable. Use 'remote' for headless servers.",
+    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`.\nOr the path to the browser executable.\nUse 'remote' for headless servers.",
     default_missing_value = "default",
     num_args=0..=1
   )]
@@ -124,11 +127,7 @@ pub(crate) struct ConnectArgs {
 
 impl ConnectArgs {
   fn default_os() -> Os {
-    if cfg!(target_os = "macos") {
-      Os::Mac
-    } else {
-      Os::Linux
-    }
+    if cfg!(target_os = "macos") { Os::Mac } else { Os::Linux }
   }
 
   fn os_version(&self) -> String {
@@ -326,6 +325,7 @@ impl<'a> ConnectHandler<'a> {
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
       .interface(self.args.interface.clone())
+      .script_tun(self.args.script_tun)
       .user_agent(self.args.user_agent.clone())
       .os(Some(os))
       .certificate(self.args.certificate.clone())
@@ -373,7 +373,9 @@ impl<'a> ConnectHandler<'a> {
         let browser = if prelogin.support_default_browser() {
           self.args.browser.as_deref()
         } else if !cfg!(feature = "webview-auth") {
-          bail!("The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature");
+          bail!(
+            "The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature"
+          );
         } else {
           None
         };
@@ -465,8 +467,11 @@ fn read_cookie_from_stdin() -> anyhow::Result<Credential> {
 fn write_pid_file() {
   let pid = std::process::id();
 
-  fs::write(GP_CLIENT_LOCK_FILE, pid.to_string()).unwrap();
-  info!("Wrote PID {} to {}", pid, GP_CLIENT_LOCK_FILE);
+  if let Err(err) = fs::write(GP_CLIENT_LOCK_FILE, pid.to_string()) {
+    warn!("Failed to write PID file: {}", err);
+  } else {
+    info!("Wrote PID {} to {}", pid, GP_CLIENT_LOCK_FILE);
+  }
 }
 
 fn get_csd_uid(csd_user: &Option<String>) -> anyhow::Result<u32> {

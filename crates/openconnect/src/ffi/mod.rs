@@ -13,6 +13,7 @@ pub(crate) struct ConnectOptions {
 
   pub script: *const c_char,
   pub interface: *const c_char,
+  pub script_tun: u32,
   pub os: *const c_char,
   pub certificate: *const c_char,
   pub sslkey: *const c_char,
