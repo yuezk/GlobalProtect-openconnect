@@ -13,6 +13,7 @@ typedef struct vpn_options {
 
 	const char *script;
 	const char *interface;
+	const int script_tun;
 	const char *os;
 	const char *certificate;
 	const char *sslkey;
