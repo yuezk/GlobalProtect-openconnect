@@ -11,10 +11,18 @@ pub trait CommandExt {
 
 impl CommandExt for Command {
   fn new_pkexec<S: AsRef<OsStr>>(program: S) -> Command {
-    let mut cmd = Command::new("pkexec");
-    cmd.arg("--user").arg("root").arg(program);
-
-    cmd
+    #[cfg(target_os = "macos")]
+    {
+      let mut cmd = Command::new("sudo");
+      cmd.arg(program);
+      cmd
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+      let mut cmd = Command::new("pkexec");
+      cmd.arg("--user").arg("root").arg(program);
+      cmd
+    }
   }
 
   fn into_non_root(mut self) -> anyhow::Result<Command> {
