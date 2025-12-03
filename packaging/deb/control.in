@@ -5,7 +5,6 @@ Maintainer: Kevin Yue <k3vinyue@gmail.com>
 Standards-Version: 4.1.4
 Build-Depends: debhelper (>= 9),
   pkg-config,
-  jq (>= 1),
   make (>= 4),
   libssl-dev,
   libsecret-1-0,

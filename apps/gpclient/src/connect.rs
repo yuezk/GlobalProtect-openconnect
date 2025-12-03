@@ -95,6 +95,9 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "If not specified, it will be computed based on the --os option")]
   os_version: Option<String>,
 
+  #[arg(long, help = "The GP client version to emulate, e.g., '6.2.4-49'")]
+  client_version: Option<String>,
+
   #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
 
@@ -276,7 +279,11 @@ impl<'a> ConnectHandler<'a> {
       }
     };
 
-    self.connect_gateway(gateway, &cookie).await
+    // Use the client version from the command line argument if specified, otherwise
+    // use the version from the portal config if available
+    let client_version = self.args.client_version.as_deref().or_else(|| portal_config.version());
+
+    self.connect_gateway(gateway, &cookie, client_version).await
   }
 
   async fn connect_gateway_with_prelogin(&self, gateway: &str) -> anyhow::Result<()> {
@@ -290,7 +297,10 @@ impl<'a> ConnectHandler<'a> {
 
     let cookie = self.login_gateway(gateway, &cred, &gp_params).await?;
 
-    self.connect_gateway(gateway, &cookie).await
+    // When logging in to a gateway directly, there is no portal config to get the client version from
+    let client_version = self.args.client_version.as_deref();
+
+    self.connect_gateway(gateway, &cookie, client_version).await
   }
 
   async fn login_gateway(&self, gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<String> {
@@ -310,7 +320,7 @@ impl<'a> ConnectHandler<'a> {
     }
   }
 
-  async fn connect_gateway(&self, gateway: &str, cookie: &str) -> anyhow::Result<()> {
+  async fn connect_gateway(&self, gateway: &str, cookie: &str, client_version: Option<&str>) -> anyhow::Result<()> {
     let mtu = self.args.mtu.unwrap_or(0);
     let csd_uid = get_csd_uid(&self.args.csd_user)?;
     let (hip, csd_wrapper) = if let Some(csd_wrapper) = &self.args.csd_wrapper {
@@ -322,12 +332,14 @@ impl<'a> ConnectHandler<'a> {
     };
 
     let os = ClientOs::from(&self.args.os).to_openconnect_os().to_string();
+    let client_version = client_version.map(|s| s.to_owned());
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
       .interface(self.args.interface.clone())
       .script_tun(self.args.script_tun)
       .user_agent(self.args.user_agent.clone())
       .os(Some(os))
+      .client_version(client_version)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
       .key_password(self.latest_key_password.borrow().clone())

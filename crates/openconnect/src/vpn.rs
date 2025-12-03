@@ -14,11 +14,15 @@ type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce() + 'static + Send +
 pub struct Vpn {
   server: CString,
   cookie: CString,
+
   user_agent: CString,
+  os: CString,
+  client_version: Option<CString>,
+
   script: CString,
   interface: Option<CString>,
   script_tun: bool,
-  os: CString,
+
   certificate: Option<CString>,
   sslkey: Option<CString>,
   key_password: Option<CString>,
@@ -67,11 +71,14 @@ impl Vpn {
 
       server: self.server.as_ptr(),
       cookie: self.cookie.as_ptr(),
+
       user_agent: self.user_agent.as_ptr(),
+      os: self.os.as_ptr(),
+      client_version: Self::option_to_ptr(&self.client_version),
+
       script: self.script.as_ptr(),
       interface: Self::option_to_ptr(&self.interface),
       script_tun: self.script_tun as u32,
-      os: self.os.as_ptr(),
 
       certificate: Self::option_to_ptr(&self.certificate),
       sslkey: Self::option_to_ptr(&self.sslkey),
@@ -125,6 +132,7 @@ pub struct VpnBuilder {
 
   user_agent: Option<String>,
   os: Option<String>,
+  client_version: Option<String>,
 
   certificate: Option<String>,
   sslkey: Option<String>,
@@ -153,6 +161,7 @@ impl VpnBuilder {
 
       user_agent: None,
       os: None,
+      client_version: None,
 
       certificate: None,
       sslkey: None,
@@ -192,6 +201,11 @@ impl VpnBuilder {
 
   pub fn os<T: Into<Option<String>>>(mut self, os: T) -> Self {
     self.os = os.into();
+    self
+  }
+
+  pub fn client_version<T: Into<Option<String>>>(mut self, client_version: T) -> Self {
+    self.client_version = client_version.into();
     self
   }
 
@@ -287,11 +301,14 @@ impl VpnBuilder {
     Ok(Vpn {
       server: Self::to_cstring(&self.server),
       cookie: Self::to_cstring(&self.cookie),
+
       user_agent: Self::to_cstring(&user_agent),
+      os: Self::to_cstring(&os),
+      client_version: self.client_version.as_deref().map(Self::to_cstring),
+
       script: Self::to_cstring(&script),
       interface: self.interface.as_deref().map(Self::to_cstring),
       script_tun: self.script_tun,
-      os: Self::to_cstring(&os),
 
       certificate: self.certificate.as_deref().map(Self::to_cstring),
       sslkey: self.sslkey.as_deref().map(Self::to_cstring),

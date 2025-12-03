@@ -1,0 +1,3 @@
+[submodule "deps/openconnect"]
+	path = deps/openconnect
+	url = https://gitlab.com/openconnect/openconnect.git

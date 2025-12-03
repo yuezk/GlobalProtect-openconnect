@@ -42,6 +42,7 @@ impl VpnTaskContext {
       .script(args.vpnc_script())
       .user_agent(args.user_agent())
       .os(args.openconnect_os())
+      .client_version(args.client_version())
       .certificate(args.certificate())
       .sslkey(args.sslkey())
       .key_password(args.key_password())

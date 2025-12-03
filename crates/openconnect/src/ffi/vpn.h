@@ -7,14 +7,18 @@ typedef void (*vpn_connected_callback)(int cmd_pipe_fd, void *user_data);
 
 typedef struct vpn_options {
 	void *user_data;
+
 	const char *server;
 	const char *cookie;
+
 	const char *user_agent;
+	const char *os;
+	const char *client_version;
 
 	const char *script;
 	const char *interface;
 	const int script_tun;
-	const char *os;
+
 	const char *certificate;
 	const char *sslkey;
 	const char *key_password;

@@ -58,7 +58,6 @@ static void setup_tun_handler(void *_vpninfo)
 /* Initialize VPN connection */
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 {
-	INFO("openconnect version: %s", openconnect_get_version());
 	struct openconnect_info *vpninfo;
 	struct utsname utsbuf;
 
@@ -70,6 +69,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 
 	INFO("USER_AGENT: %s", options->user_agent);
 	INFO("OS: %s", options->os);
+	INFO("CLIENT_VERSION: %s", options->client_version);
 	INFO("VPNC_SCRIPT: %s", options->script);
 	INFO("SCRIPT_TUN: %d", g_script_tun);
 	INFO("CSD_USER: %d", options->csd_uid);
@@ -97,6 +97,11 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 
 	if (options->os) {
 		openconnect_set_reported_os(vpninfo, options->os);
+	}
+
+	if (options->client_version) {
+		openconnect_set_gp_app_version(vpninfo,
+					       options->client_version);
 	}
 
 	if (options->certificate) {

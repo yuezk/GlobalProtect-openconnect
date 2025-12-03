@@ -8,8 +8,10 @@ pkgdesc="A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO aut
 arch=('x86_64' 'aarch64')
 url="https://github.com/yuezk/GlobalProtect-openconnect"
 license=('GPL3')
-makedepends=('make' 'pkg-config' 'rust' 'cargo' 'jq' 'webkit2gtk-4.1' 'curl' 'wget' 'file' 'openssl' 'appmenu-gtk-module' 'libappindicator-gtk3' 'librsvg' 'openconnect' 'libsecret')
-depends=('openconnect>=8.20' webkit2gtk-4.1 libappindicator-gtk3 libsecret)
+makedepends=('make' 'pkg-config' 'rust' 'cargo' 'file')
+depends=('webkit2gtk-4.1' 'libappindicator-gtk3' 'librsvg' 'libsecret' 'openssl' 'appmenu-gtk-module'
+         'gnutls' 'libxml2' 'vpnc' 'lz4' 'libp11-kit' 'nettle' 'xdg-utils'
+         'openconnect>=8.20')
 optdepends=('wmctrl: for window management')
 
 provides=('globalprotect-openconnect' 'gpclient' 'gpservice' 'gpauth' 'gpgui')
