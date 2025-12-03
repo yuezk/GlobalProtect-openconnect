@@ -120,7 +120,7 @@ impl Cli {
         let timestamp = buf.timestamp();
         writeln!(
           buf,
-          "[{} {}  {}] {}",
+          "[{} {:<5} {}] {}",
           timestamp,
           record.level(),
           record.module_path().unwrap_or_default(),
