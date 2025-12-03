@@ -31,14 +31,19 @@ impl LaunchGuiRequest {
 pub struct ConnectArgs {
   cookie: String,
   vpnc_script: Option<String>,
+
   user_agent: Option<String>,
   os: Option<ClientOs>,
+  client_version: Option<String>,
+
   certificate: Option<String>,
   sslkey: Option<String>,
   key_password: Option<String>,
+
   hip: bool,
   csd_uid: u32,
   csd_wrapper: Option<String>,
+
   reconnect_timeout: u32,
   mtu: u32,
   disable_ipv6: bool,
@@ -52,6 +57,7 @@ impl ConnectArgs {
       vpnc_script: None,
       user_agent: None,
       os: None,
+      client_version: None,
       certificate: None,
       sslkey: None,
       key_password: None,
@@ -79,6 +85,10 @@ impl ConnectArgs {
 
   pub fn openconnect_os(&self) -> Option<String> {
     self.os.as_ref().map(|os| os.to_openconnect_os().to_string())
+  }
+
+  pub fn client_version(&self) -> Option<String> {
+    self.client_version.clone()
   }
 
   pub fn certificate(&self) -> Option<String> {
@@ -163,6 +173,11 @@ impl ConnectRequest {
 
   pub fn with_os<T: Into<Option<ClientOs>>>(mut self, os: T) -> Self {
     self.args.os = os.into();
+    self
+  }
+
+  pub fn with_client_version(mut self, client_version: &str) -> Self {
+    self.args.client_version = Some(client_version.to_string());
     self
   }
 

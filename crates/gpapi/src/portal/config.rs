@@ -1,6 +1,6 @@
 use anyhow::bail;
 use dns_lookup::lookup_addr;
-use log::{info, warn};
+use log::{debug, info, warn};
 use reqwest::{Client, StatusCode};
 use roxmltree::{Document, Node};
 use serde::Serialize;
@@ -9,7 +9,7 @@ use specta::Type;
 use crate::{
   credential::{AuthCookieCredential, Credential},
   error::PortalError,
-  gateway::{parse_gateways, Gateway},
+  gateway::{Gateway, parse_gateways},
   gp_params::GpParams,
   utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::NodeExt},
 };
@@ -29,6 +29,10 @@ pub struct PortalConfig {
    * - Some(true): Internal host detection is supported and the user is connected to the internal network
    */
   internal_host_detection: Option<bool>,
+  /**
+   * The version returned by the portal config, if any
+   */
+  version: Option<String>,
 }
 
 impl PortalConfig {
@@ -50,6 +54,10 @@ impl PortalConfig {
 
   pub fn internal_host_detection(&self) -> Option<bool> {
     self.internal_host_detection
+  }
+
+  pub fn version(&self) -> Option<&str> {
+    self.version.as_deref()
   }
 
   /// In-place sort the gateways by region
@@ -133,6 +141,7 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     bail!(PortalError::ConfigError("Empty portal config response".to_string()))
   }
 
+  debug!("Portal config response: {}", res_xml);
   let doc = Document::parse(&res_xml).map_err(|e| PortalError::ConfigError(e.to_string()))?;
   let root = doc.root();
 
@@ -158,6 +167,9 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     gateways.push(Gateway::new(server.to_string(), server.to_string()));
   }
 
+  let version = root.descendant_text("version").map(|s| s.to_string());
+  info!("Detected portal version: {:?}", version);
+
   Ok(PortalConfig {
     portal: server.to_string(),
     auth_cookie: AuthCookieCredential::new(cred.username(), user_auth_cookie, prelogon_user_auth_cookie),
@@ -165,6 +177,7 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     gateways,
     config_digest: config_digest.map(|s| s.to_string()),
     internal_host_detection: if ihd_enabled { Some(prefer_internal) } else { None },
+    version,
   })
 }
 

@@ -2,6 +2,7 @@ use crate::Vpn;
 use log::{debug, info, trace, warn};
 use std::ffi::{c_char, c_int, c_void};
 
+/// ConnectOptions struct for FFI, the field names and order must match the C definition.
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct ConnectOptions {
@@ -9,12 +10,15 @@ pub(crate) struct ConnectOptions {
 
   pub server: *const c_char,
   pub cookie: *const c_char,
+
   pub user_agent: *const c_char,
+  pub os: *const c_char,
+  pub client_version: *const c_char,
 
   pub script: *const c_char,
   pub interface: *const c_char,
   pub script_tun: u32,
-  pub os: *const c_char,
+
   pub certificate: *const c_char,
   pub sslkey: *const c_char,
   pub key_password: *const c_char,
