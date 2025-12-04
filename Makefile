@@ -6,7 +6,7 @@ INCLUDE_GUI ?= 0
 CARGO ?= cargo
 DISABLE_RUST_TOOLCHAIN ?= 0
 
-VERSION = $(shell $(CARGO) metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+VERSION = $(shell grep '^version' Cargo.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')
 REVISION ?= 1
 RPM_SOURCE ?= %{name}.tar.gz
 

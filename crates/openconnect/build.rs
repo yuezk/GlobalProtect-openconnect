@@ -53,6 +53,7 @@ fn main() {
     .disable_shared()
     .disable("nls", None) // disable translations to save space
     .disable("docs", None)
+    .disable("dsa-tests", None)
     .without("libproxy", None)
     .without("stoken", None)
     .without("libpcsclite", None)

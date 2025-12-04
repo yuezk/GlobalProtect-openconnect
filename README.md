@@ -216,12 +216,8 @@ This project includes a devcontainer configuration that provides a consistent bu
    docker build -t gpoc-devcontainer .devcontainer/
    ```
 
-3. Install `jq` in the container and build the project:
+3. Build the project:
    ```bash
-   docker run --privileged --cap-add=NET_ADMIN --device=/dev/net/tun \
-     -v "$(pwd)":/workspace -w /workspace --user root gpoc-devcontainer \
-     bash -c "apt-get update && apt-get install -y jq"
-   
    docker run --privileged --cap-add=NET_ADMIN --device=/dev/net/tun \
      -v "$(pwd)":/workspace -w /workspace gpoc-devcontainer \
      bash -c "export PATH=/usr/local/cargo/bin:\$PATH && make build"
@@ -248,7 +244,7 @@ This project includes a devcontainer configuration that provides a consistent bu
 
 - [Install Rust 1.85 or later](https://www.rust-lang.org/tools/install)
 - Install Tauri dependencies: https://tauri.app/start/prerequisites/
-- Install `perl` and `jq`
+- Install `perl`
 - Install `openconnect >= 8.20` and `libopenconnect-dev` (or `openconnect-devel` on RPM-based distributions)
 - Install `pkexec`, `gnome-keyring` (or `pam_kwallet` on KDE)
 - Install `nodejs` and `pnpm` (optional only if you downloaded the source tarball from the release page and run with the `BUILD_FE=0` flag, see below)
