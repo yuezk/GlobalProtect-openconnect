@@ -205,10 +205,11 @@ This project includes a devcontainer configuration that provides a consistent bu
 
 #### Build Steps
 
-1. Clone the repository:
+1. Clone the repository and submodules:
    ```bash
    git clone https://github.com/yuezk/GlobalProtect-openconnect.git
    cd GlobalProtect-openconnect
+   git submodule update --init --recursive
    ```
 
 2. Build the devcontainer image:

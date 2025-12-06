@@ -58,7 +58,6 @@ static void setup_tun_handler(void *_vpninfo)
 /* Initialize VPN connection */
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 {
-	INFO("openconnect version: %s", openconnect_get_version());
 	struct openconnect_info *vpninfo;
 	struct utsname utsbuf;
 
