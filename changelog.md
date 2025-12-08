@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.0 - 2025-12-08
+
+- GUI/CLI: statically link OpenConnect
+- GUI/CLI: support configure the client version
+- CLI: add the `-S/--script-tun` option to pass traffic to the `--script` handler
+- GUI: update the branding to `GP Connect`
+
 ## 2.4.7 - 2025-11-12
 
 - Support NixOS package installation
