@@ -15,6 +15,7 @@ const VPNC_SCRIPT_LOCATIONS: &[&str] = &[
 ];
 
 const CSD_WRAPPER_LOCATIONS: &[&str] = &[
+  "/usr/libexec/gpclient/hipreport.sh",
   #[cfg(target_arch = "x86_64")]
   "/usr/lib/x86_64-linux-gnu/openconnect/hipreport.sh",
   #[cfg(target_arch = "aarch64")]

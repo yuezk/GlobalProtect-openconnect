@@ -1,4 +1,5 @@
 pub const GP_USER_AGENT: &str = "PAN GlobalProtect";
+pub const GP_CLIENT_VERSION: &str = "6.3.0-33";
 pub const GP_SERVICE_LOCK_FILE: &str = "/var/run/gpservice.lock";
 pub const GP_CALLBACK_PORT_FILENAME: &str = "gpcallback.port";
 

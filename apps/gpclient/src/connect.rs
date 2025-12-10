@@ -15,7 +15,7 @@ use gpapi::{
     auth_launcher::SamlAuthLauncher,
     users::{get_non_root_user, get_user_by_name},
   },
-  utils::{request::RequestIdentityError, shutdown_signal},
+  utils::{host_utils, request::RequestIdentityError, shutdown_signal},
 };
 use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::{info, warn};
@@ -130,18 +130,29 @@ pub(crate) struct ConnectArgs {
 
 impl ConnectArgs {
   fn default_os() -> Os {
-    if cfg!(target_os = "macos") { Os::Mac } else { Os::Linux }
+    #[cfg(target_os = "macos")]
+    {
+      Os::Mac
+    }
+    #[cfg(target_os = "windows")]
+    {
+      Os::Windows
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+      Os::Linux
+    }
   }
 
-  fn os_version(&self) -> String {
+  fn os_version(&self) -> &str {
     if let Some(os_version) = self.os_version.as_deref() {
-      return os_version.to_string();
+      return os_version;
     }
 
     match self.os {
-      Os::Linux => format!("Linux {}", whoami::distro()),
-      Os::Windows => String::from("Microsoft Windows 11 Pro , 64-bit"),
-      Os::Mac => String::from("Apple Mac OS X 13.4.0"),
+      Os::Linux => host_utils::get_linux_os_string(),
+      Os::Windows => host_utils::get_windows_os_string(),
+      Os::Mac => host_utils::get_macos_os_string(),
     }
   }
 }
@@ -167,7 +178,7 @@ impl<'a> ConnectHandler<'a> {
     GpParams::builder()
       .user_agent(&self.args.user_agent)
       .client_os(ClientOs::from(&self.args.os))
-      .os_version(self.args.os_version())
+      .os_version(self.args.os_version().to_owned())
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())

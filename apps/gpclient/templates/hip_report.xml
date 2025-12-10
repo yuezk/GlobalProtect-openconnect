@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hip-report name="hip-report">
+	<md5-sum>{{ md5 }}</md5-sum>
+	<user-name>{{ user_name }}</user-name>
+	<domain>{{ host_info.domain }}.internal</domain>
+	<host-name>{{ host_info.host_name }}</host-name>
+	<host-id>{{ host_info.host_id }}</host-id>
+	<ip-address>{{ host_info.default_ipv4() }}</ip-address>
+	<ipv6-address>{{ host_info.default_ipv6() }}</ipv6-address>
+	<generate-time>{{ generate_time }}</generate-time>
+	<hip-report-version>4</hip-report-version>
+	<categories>
+		<entry name="host-info">
+			<client-version>{{ client_version }}</client-version>
+			<os>{{ host_info.os }}</os>
+			<os-vendor>{{ host_info.os_vendor }}</os-vendor>
+			<domain>{{ host_info.domain }}.internal</domain>
+			<host-name>{{ host_info.host_name }}</host-name>
+			<host-id>{{ host_info.host_id }}</host-id>
+			<network-interface>
+        {% for iface in host_info.network_interfaces.iter() -%}
+        <entry name="{{ iface.name }}">
+          <description>{{ iface.description }}</description>
+          {% if let Some(mac) = iface.mac_address -%}
+          <mac-address>{{ mac }}</mac-address>
+          {% endif -%}
+          {% if let Some(ipv4) = iface.ipv4 -%}
+          <ip-address>
+            <entry name="{{ ipv4 }}"/>
+          </ip-address>
+          {% endif -%}
+          {% if let Some(ipv6) = iface.ipv6 -%}
+          <ipv6-address>
+            <entry name="{{ ipv6 }}"/>
+          </ipv6-address>
+          {% endif -%}
+        </entry>
+        {% endfor -%}
+      </network-interface>
+		</entry>
+    {% if host_info.os_vendor == "Microsoft" -%}
+		<entry name="antivirus">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="McAfee VirusScan Enterprise" version="8.8.0.1804" defver="8682.0" prodType="1" engver="5900.7806" osType="1" vendor="McAfee, Inc." dateday="{{ day }}" dateyear="{{ year }}" datemon="{{ month }}">
+						</Prod>
+						<real-time-protection>yes</real-time-protection>
+						<last-full-scan-time>{{ generate_time }}</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+				<entry>
+					<ProductInfo>
+						<Prod name="Windows Defender" version="4.11.15063.332" defver="1.245.683.0" prodType="1" engver="1.1.13804.0" osType="1" vendor="Microsoft Corp." dateday="{{ day }}" dateyear="{{ year }}" datemon="{{ month }}">
+						</Prod>
+						<real-time-protection>no</real-time-protection>
+						<last-full-scan-time>n/a</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="anti-spyware">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="McAfee VirusScan Enterprise" version="8.8.0.1804" defver="8682.0" prodType="2" engver="5900.7806" osType="1" vendor="McAfee, Inc." dateday="{{ day }}" dateyear="{{ year }}" datemon="{{ month }}">
+						</Prod>
+						<real-time-protection>yes</real-time-protection>
+						<last-full-scan-time>{{ generate_time }}</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+				<entry>
+					<ProductInfo>
+						<Prod name="Windows Defender" version="4.11.15063.332" defver="1.245.683.0" prodType="2" engver="1.1.13804.0" osType="1" vendor="Microsoft Corp." dateday="{{ day }}" dateyear="{{ year }}" datemon="{{ month }}">
+						</Prod>
+						<real-time-protection>no</real-time-protection>
+						<last-full-scan-time>n/a</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="disk-backup">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="Windows Backup and Restore" version="{{ host_info.os_version }}" vendor="Microsoft Corp.">
+						</Prod>
+						<last-backup-time>n/a</last-backup-time>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="disk-encryption">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="Windows Drive Encryption" version="{{ host_info.os_version }}" vendor="Microsoft Corp.">
+						</Prod>
+						<drives>
+							<entry>
+								<drive-name>C:\\</drive-name>
+								<enc-state>full</enc-state>
+							</entry>
+						</drives>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="firewall">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="Microsoft Windows Firewall" version="10.0" vendor="Microsoft Corp.">
+						</Prod>
+						<is-enabled>yes</is-enabled>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="patch-management">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="McAfee ePolicy Orchestrator Agent" version="5.0.5.658" vendor="McAfee, Inc.">
+						</Prod>
+						<is-enabled>yes</is-enabled>
+					</ProductInfo>
+				</entry>
+				<entry>
+					<ProductInfo>
+						<Prod name="Microsoft Windows Update Agent" version="{{ host_info.os_version }}" vendor="Microsoft Corp.">
+						</Prod>
+						<is-enabled>yes</is-enabled>
+					</ProductInfo>
+				</entry>
+			</list>
+			<missing-patches/>
+		</entry>
+    {% elif host_info.os_vendor == "Apple" -%}
+		<entry name="anti-malware">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod vendor="Apple Inc." name="Xprotect" version="2167" defver="235000000000000" engver="" datemon="{{ month }}" dateday="{{ day }}" dateyear="{{ year }}" prodType="3" osType="4"/>
+						<real-time-protection>yes</real-time-protection>
+						<last-full-scan-time>n/a</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+				<entry>
+					<ProductInfo>
+						<Prod vendor="Apple Inc." name="Gatekeeper" version="{{ host_info.os_version }}" defver="" engver="" datemon="{{ month }}" dateday="{{ day }}" dateyear="{{ year }}" prodType="3" osType="4"/>
+						<real-time-protection>yes</real-time-protection>
+						<last-full-scan-time>n/a</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="disk-backup">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod vendor="Apple Inc." name="Time Machine" version="1.3"/>
+						<last-backup-time>n/a</last-backup-time>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="disk-encryption">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod vendor="Apple Inc." name="FileVault" version="{{ host_info.os_version }}"/>
+						<drives>
+							<entry>
+								<drive-name>Macintosh HD</drive-name>
+								<enc-state>encrypted</enc-state>
+							</entry>
+							<entry>
+								<drive-name>Data</drive-name>
+								<enc-state>encrypted</enc-state>
+							</entry>
+							<entry>
+								<drive-name>All</drive-name>
+								<enc-state>encrypted</enc-state>
+							</entry>
+						</drives>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="firewall">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod vendor="Apple Inc." name="Mac OS X Builtin Firewall" version="{{ host_info.os_version }}"/>
+						<is-enabled>yes</is-enabled>
+					</ProductInfo>
+				</entry>
+				<entry>
+					<ProductInfo>
+						<Prod vendor="OpenBSD" name="Packet Filter" version="{{ host_info.os_version }}"/>
+						<is-enabled>no</is-enabled>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="patch-management">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod vendor="Apple Inc." name="Software Update" version="3.0"/>
+						<is-enabled>yes</is-enabled>
+					</ProductInfo>
+				</entry>
+			</list>
+			<missing-patches>
+			</missing-patches>
+		</entry>
+    {% elif host_info.os_vendor == "Linux" -%}
+		<entry name="anti-malware">
+			<list/>
+		</entry>
+		<entry name="disk-backup">
+			<list/>
+		</entry>
+		<entry name="disk-encryption">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="cryptsetup" version="2.3.3" vendor="GitLab Inc.">
+						</Prod>
+						<drives>
+							<entry>
+								<drive-name>/</drive-name>
+								<enc-state>encrypted</enc-state>
+							</entry>
+						</drives>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="firewall">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="IPTables" version="1.8.4" vendor="IPTables">
+						</Prod>
+						<is-enabled>no</is-enabled>
+					</ProductInfo>
+				</entry>
+				<entry>
+					<ProductInfo>
+						<Prod name="nftables" version="0.9.3" vendor="The Netfilter Project">
+						</Prod>
+						<is-enabled>n/a</is-enabled>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="patch-management">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="Dandified Yum" version="4.2.23" vendor="Red Hat, Inc.">
+						</Prod>
+						<is-enabled>yes</is-enabled>
+					</ProductInfo>
+				</entry>
+			</list>
+			<missing-patches/>
+		</entry>
+    {% endif -%}
+		<entry name="data-loss-prevention">
+			<list/>
+		</entry>
+	</categories>
+</hip-report>

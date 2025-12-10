@@ -1,14 +1,14 @@
 use anyhow::{anyhow, bail};
 use log::{info, warn};
 use reqwest::{Client, StatusCode};
-use roxmltree::Document;
 use serde::Serialize;
 use specta::Type;
+use xmltree::Element;
 
 use crate::{
   error::PortalError,
   gp_params::GpParams,
-  utils::{base64, normalize_server, parse_gp_response, xml::NodeExt},
+  utils::{base64, normalize_server, parse_gp_response, xml::ElementExt},
 };
 
 const REQUIRED_PARAMS: [&str; 8] = [
@@ -143,32 +143,30 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
 }
 
 fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
-  let doc = Document::parse(res_xml)?;
-  let root = doc.root();
+  let root = Element::parse(res_xml.as_bytes())?;
 
   let status = root
     .descendant_text("status")
     .ok_or_else(|| anyhow::anyhow!("Prelogin response does not contain status element"))?;
   // Check the status of the prelogin response
   if status.to_uppercase() != "SUCCESS" {
-    let msg = root.descendant_text("msg").unwrap_or("Unknown error");
+    let msg = root
+      .descendant_text("msg")
+      .unwrap_or_else(|| String::from("Unknown error"));
     bail!("{}", msg)
   }
 
-  let region = root
-    .descendant_text("region")
-    .unwrap_or_else(|| {
-      info!("Prelogin response does not contain region element");
-      "Unknown"
-    })
-    .to_string();
+  let region = root.descendant_text("region").unwrap_or_else(|| {
+    info!("Prelogin response does not contain region element");
+    String::from("Unknown")
+  });
 
   let saml_method = root.descendant_text("saml-auth-method");
   let saml_request = root.descendant_text("saml-request");
   let saml_default_browser = root.descendant_text("saml-default-browser");
   // Check if the prelogin response is SAML
   if saml_method.is_some() && saml_request.is_some() {
-    let saml_request = base64::decode_to_string(saml_request.unwrap())?;
+    let saml_request = base64::decode_to_string(&saml_request.unwrap())?;
     let support_default_browser = saml_default_browser.map(|s| s.to_lowercase() == "yes").unwrap_or(false);
 
     let saml_prelogin = SamlPrelogin {
@@ -181,25 +179,18 @@ fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
     return Ok(Prelogin::Saml(saml_prelogin));
   }
 
-  let label_username = root
-    .descendant_text("username-label")
-    .unwrap_or_else(|| {
-      info!("Username label has no value, using default");
-      "Username"
-    })
-    .to_string();
-  let label_password = root
-    .descendant_text("password-label")
-    .unwrap_or_else(|| {
-      info!("Password label has no value, using default");
-      "Password"
-    })
-    .to_string();
+  let label_username = root.descendant_text("username-label").unwrap_or_else(|| {
+    info!("Username label has no value, using default");
+    String::from("Username")
+  });
+  let label_password = root.descendant_text("password-label").unwrap_or_else(|| {
+    info!("Password label has no value, using default");
+    String::from("Password")
+  });
 
   let auth_message = root
     .descendant_text("authentication-message")
-    .unwrap_or("Please enter the login credentials")
-    .to_string();
+    .unwrap_or_else(|| String::from("Please enter the login credentials"));
   let standard_prelogin = StandardPrelogin {
     region,
     is_gateway,

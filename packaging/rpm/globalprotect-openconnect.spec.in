@@ -52,6 +52,7 @@ make build OFFLINE=@OFFLINE@ BUILD_FE=0
 %files
 %defattr(-,root,root)
 %{_bindir}/*
+%{_libexecdir}/gpclient/hipreport.sh
 %{_datadir}/applications/gpgui.desktop
 %{_datadir}/icons/hicolor/32x32/apps/gpgui.png
 %{_datadir}/icons/hicolor/128x128/apps/gpgui.png
@@ -66,6 +67,8 @@ make build OFFLINE=@OFFLINE@ BUILD_FE=0
 /usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
 /usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
 
+%dir %{_libexecdir}
+%dir %{_libexecdir}/gpclient
 %dir %{_datadir}/icons/hicolor
 %dir %{_datadir}/icons/hicolor/32x32
 %dir %{_datadir}/icons/hicolor/32x32/apps

@@ -1,12 +1,12 @@
 diff --git a/gpst.c b/gpst.c
-index 244aaf04..205bec1d 100644
+index 244aaf04..17fc1f45 100644
 --- a/gpst.c
 +++ b/gpst.c
 @@ -650,8 +650,11 @@ static int gpst_get_config(struct openconnect_info *vpninfo)
  
  
  	/* submit getconfig request */
-+	char *app_version = vpninfo->csd_ticket ? : (vpninfo->gp_app_version ? : "6.3.0-33");
++	char *app_version = openconnect_get_gp_app_version(vpninfo);
 +	vpn_progress(vpninfo, PRG_DEBUG, _("Using GlobalProtect app version: %s\n"), app_version);
 +
  	buf_append(request_body, "client-type=1&protocol-version=p1&internal=no");
@@ -15,8 +15,20 @@ index 244aaf04..205bec1d 100644
  	append_opt(request_body, "ipv6-support", vpninfo->disable_ipv6 ? "no" : "yes");
  	append_opt(request_body, "clientos", gpst_os_name(vpninfo));
  	append_opt(request_body, "os-version", vpninfo->platname);
+@@ -1040,9 +1043,8 @@ static int run_hip_script(struct openconnect_info *vpninfo)
+ 		 * accept new ones.
+ 		 */
+ 		unsetenv("APP_VERSION");
+-		if (vpninfo->csd_ticket)
+-			if (setenv("APP_VERSION", vpninfo->csd_ticket, 1))
+-				goto out;
++		if (setenv("APP_VERSION", openconnect_get_gp_app_version(vpninfo), 1))
++			goto out;
+ 
+ 		execv(hip_argv[0], (char **)hip_argv);
+ 
 diff --git a/library.c b/library.c
-index b5e74e9b..fff28f77 100644
+index b5e74e9b..18334c76 100644
 --- a/library.c
 +++ b/library.c
 @@ -896,6 +896,7 @@ void openconnect_vpninfo_free(struct openconnect_info *vpninfo)
@@ -27,7 +39,7 @@ index b5e74e9b..fff28f77 100644
  	free(vpninfo->authgroup);
  #ifdef HAVE_LIBSTOKEN
  	if (vpninfo->stoken_pin)
-@@ -1019,6 +1020,15 @@ int openconnect_set_useragent(struct openconnect_info *vpninfo,
+@@ -1019,6 +1020,20 @@ int openconnect_set_useragent(struct openconnect_info *vpninfo,
  	return 0;
  }
  
@@ -40,11 +52,16 @@ index b5e74e9b..fff28f77 100644
 +	return 0;
 +}
 +
++const char *openconnect_get_gp_app_version(struct openconnect_info *vpninfo)
++{
++	return vpninfo->csd_ticket ?: (vpninfo->gp_app_version ?: "6.3.0-33");
++}
++
  int openconnect_set_urlpath(struct openconnect_info *vpninfo,
  			    const char *urlpath)
  {
 diff --git a/openconnect-internal.h b/openconnect-internal.h
-index abf45bbd..85933f4a 100644
+index abf45bbd..988f85f0 100644
 --- a/openconnect-internal.h
 +++ b/openconnect-internal.h
 @@ -786,6 +786,7 @@ struct openconnect_info {
@@ -55,6 +72,16 @@ index abf45bbd..85933f4a 100644
  
  	const char *quit_reason;
  	const char *delay_tunnel_reason;        /* If non-null, provides a reason why protocol is not yet ready for tunnel setup */
+@@ -1677,6 +1678,9 @@ void openconnect_set_juniper(struct openconnect_info *vpninfo);
+ /* hpke.c */
+ int handle_external_browser(struct openconnect_info *vpninfo);
+ 
++/* Get the app version */
++const char *openconnect_get_gp_app_version(struct openconnect_info *vpninfo);
++
+ /* version.c */
+ extern const char openconnect_version_str[];
+ 
 diff --git a/openconnect.h b/openconnect.h
 index 136f181a..67fc1283 100644
 --- a/openconnect.h
