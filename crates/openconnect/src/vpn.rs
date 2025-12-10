@@ -17,6 +17,7 @@ pub struct Vpn {
 
   user_agent: CString,
   os: CString,
+  os_version: Option<CString>,
   client_version: Option<CString>,
 
   script: CString,
@@ -74,6 +75,7 @@ impl Vpn {
 
       user_agent: self.user_agent.as_ptr(),
       os: self.os.as_ptr(),
+      os_version: Self::option_to_ptr(&self.os_version),
       client_version: Self::option_to_ptr(&self.client_version),
 
       script: self.script.as_ptr(),
@@ -132,6 +134,7 @@ pub struct VpnBuilder {
 
   user_agent: Option<String>,
   os: Option<String>,
+  os_version: Option<String>,
   client_version: Option<String>,
 
   certificate: Option<String>,
@@ -161,6 +164,7 @@ impl VpnBuilder {
 
       user_agent: None,
       os: None,
+      os_version: None,
       client_version: None,
 
       certificate: None,
@@ -201,6 +205,11 @@ impl VpnBuilder {
 
   pub fn os<T: Into<Option<String>>>(mut self, os: T) -> Self {
     self.os = os.into();
+    self
+  }
+
+  pub fn os_version<T: Into<Option<String>>>(mut self, os_version: T) -> Self {
+    self.os_version = os_version.into();
     self
   }
 
@@ -304,6 +313,7 @@ impl VpnBuilder {
 
       user_agent: Self::to_cstring(&user_agent),
       os: Self::to_cstring(&os),
+      os_version: self.os_version.as_deref().map(Self::to_cstring),
       client_version: self.client_version.as_deref().map(Self::to_cstring),
 
       script: Self::to_cstring(&script),

@@ -94,9 +94,14 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	openconnect_set_protocol(vpninfo, "gp");
 	openconnect_parse_url(vpninfo, options->server);
 	openconnect_set_cookie(vpninfo, options->cookie);
+	openconnect_set_useragent(vpninfo, options->user_agent);
 
 	if (options->os) {
 		openconnect_set_reported_os(vpninfo, options->os);
+	}
+
+	if (options->os_version) {
+		openconnect_set_gp_os_version(vpninfo, options->os_version);
 	}
 
 	if (options->client_version) {

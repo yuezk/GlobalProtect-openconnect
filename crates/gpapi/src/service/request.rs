@@ -34,6 +34,7 @@ pub struct ConnectArgs {
 
   user_agent: Option<String>,
   os: Option<ClientOs>,
+  os_version: Option<String>,
   client_version: Option<String>,
 
   certificate: Option<String>,
@@ -57,6 +58,7 @@ impl ConnectArgs {
       vpnc_script: None,
       user_agent: None,
       os: None,
+      os_version: None,
       client_version: None,
       certificate: None,
       sslkey: None,
@@ -85,6 +87,10 @@ impl ConnectArgs {
 
   pub fn openconnect_os(&self) -> Option<String> {
     self.os.as_ref().map(|os| os.to_openconnect_os().to_string())
+  }
+
+  pub fn os_version(&self) -> Option<String> {
+    self.os_version.clone()
   }
 
   pub fn client_version(&self) -> Option<String> {
@@ -173,6 +179,11 @@ impl ConnectRequest {
 
   pub fn with_os<T: Into<Option<ClientOs>>>(mut self, os: T) -> Self {
     self.args.os = os.into();
+    self
+  }
+
+  pub fn with_os_version<T: Into<Option<String>>>(mut self, os_version: T) -> Self {
+    self.args.os_version = os_version.into();
     self
   }
 

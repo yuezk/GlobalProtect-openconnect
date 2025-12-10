@@ -18,9 +18,10 @@ Homepage: https://github.com/yuezk/GlobalProtect-openconnect
 Package: globalprotect-openconnect
 Architecture: any
 Multi-Arch: foreign
-Depends: ${misc:Depends},
+Depends:
+  ${misc:Depends},
   ${shlibs:Depends},
-  openconnect (>=8.20),
+  vpnc-scripts,
   libsecret-1-0,
   libayatana-appindicator3-1,
   gnome-keyring,

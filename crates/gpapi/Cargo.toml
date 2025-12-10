@@ -15,7 +15,7 @@ reqwest.workspace = true
 openssl.workspace = true
 version-compare = "0.2"
 pem.workspace = true
-roxmltree.workspace = true
+xmltree.workspace = true
 serde.workspace = true
 specta = { workspace = true, features = ["derive"] }
 urlencoding.workspace = true
@@ -32,7 +32,10 @@ uzers.workspace = true
 serde_urlencoded.workspace = true
 md5.workspace = true
 sha256.workspace = true
+machine-uid.workspace = true
+uuid = { workspace = true, features = ["v5"] }
 
+# Optional dependencies for features
 tauri = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 clap-verbosity-flag = { workspace = true, optional = true }
@@ -40,6 +43,11 @@ clap-verbosity-flag = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 log-reload = { version = "0.1", optional = true }
 
+# Dependencies for macOS and Windows only
+[target.'cfg(any(target_os="macos", target_os="windows"))'.dependencies]
+os_info = { version = "3", default-features = false }
+
+# Dependencies for Linux and other OSes only
 [target.'cfg(not(any(target_os="macos", target_os="windows")))'.dependencies]
 gtk = "0.18"
 

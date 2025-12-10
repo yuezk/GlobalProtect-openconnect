@@ -19,7 +19,9 @@ license = "GPL-3.0"
 
 [workspace.dependencies]
 anyhow = "1.0"
+askama = "0.14"
 base64 = "0.22"
+chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap-verbosity-flag = "3"
 ctrlc = "3.4"
@@ -32,7 +34,7 @@ regex = "1"
 reqwest = { version = "0.12", features = ["native-tls", "json"] }
 openssl = "0.10"
 pem = "3"
-roxmltree = "0.21"
+xmltree = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # Use 0.36 as newer versions requires Rust 1.88+
@@ -54,6 +56,9 @@ serde_urlencoded = "0.7"
 md5 = "0.8"
 sha256 = "1"
 which = "8"
+uuid = "1"
+netdev = "0.40"
+machine-uid = "0.5"
 
 # Tauri dependencies
 tauri = { version = "2" }

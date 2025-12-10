@@ -13,6 +13,7 @@ pub(crate) struct ConnectOptions {
 
   pub user_agent: *const c_char,
   pub os: *const c_char,
+  pub os_version: *const c_char,
   pub client_version: *const c_char,
 
   pub script: *const c_char,

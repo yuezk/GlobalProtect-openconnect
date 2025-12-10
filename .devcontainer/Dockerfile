@@ -7,19 +7,36 @@ ARG USER_GID=$USER_UID
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
-    RUST_VERSION=1.85.0
+    RUST_VERSION=1.85.0 \
+    DEBIAN_FRONTEND=noninteractive
 
-# Install common dependencies
+# Install all system dependencies in a single layer and clean up apt cache
 RUN set -eux; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
+    # Common utilities
     sudo \
     ca-certificates \
     curl \
     gnupg \
     git \
     less \
-    software-properties-common
+    wget \
+    file \
+    software-properties-common \
+    # libopenconnect-dev to install the related dependencies for building openconnect from source
+    # Otherwise, we have to install them manually one by one
+    libopenconnect-dev \
+    # Tauri dependencies
+    libwebkit2gtk-4.1-dev \
+    build-essential \
+    libxdo-dev \
+    libssl-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev; \
+  # Clean up apt cache to reduce image size
+  apt-get clean; \
+  rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
 RUN set -eux; \
@@ -30,38 +47,21 @@ RUN set -eux; \
 
 # Install Rust
 RUN set -eux; \
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain $RUST_VERSION; \
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain $RUST_VERSION --profile minimal; \
   chown -R $USERNAME:$USERNAME $RUSTUP_HOME $CARGO_HOME; \
   rustup --version; \
   cargo --version; \
   rustc --version
 
-# Install Node.js
+# Install Node.js and global npm packages
 RUN set -eux; \
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
-  apt-get install -y nodejs; \
+  apt-get install -y --no-install-recommends nodejs; \
   corepack enable; \
-  # Install diff-so-fancy
-  npm install -g diff-so-fancy
-
-# Install openconnect
-RUN set -eux; \
-  add-apt-repository ppa:yuezk/globalprotect-openconnect; \
-  apt-get update; \
-  apt-get install -y openconnect libopenconnect-dev
-
-# Tauri dependencies
-RUN set -eux; \
-  apt-get install -y \
-    libwebkit2gtk-4.1-dev \
-    build-essential \
-    curl \
-    wget \
-    file \
-    libxdo-dev \
-    libssl-dev \
-    libayatana-appindicator3-dev \
-    librsvg2-dev
+  npm install -g diff-so-fancy; \
+  # Clean up apt cache
+  apt-get clean; \
+  rm -rf /var/lib/apt/lists/*
 
 USER $USERNAME
 

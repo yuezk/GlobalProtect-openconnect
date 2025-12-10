@@ -1,8 +1,8 @@
-use std::{cell::RefCell, fs, sync::Arc};
+use std::{borrow::Cow, cell::RefCell, fs, sync::Arc};
 
 use anyhow::bail;
 use clap::Args;
-use common::constants::GP_USER_AGENT;
+use common::constants::{GP_CLIENT_VERSION, GP_USER_AGENT};
 use gpapi::{
   auth::SamlAuthResult,
   clap::{ToVerboseArg, args::Os},
@@ -15,7 +15,7 @@ use gpapi::{
     auth_launcher::SamlAuthLauncher,
     users::{get_non_root_user, get_user_by_name},
   },
-  utils::{request::RequestIdentityError, shutdown_signal},
+  utils::{host_utils, request::RequestIdentityError, shutdown_signal},
 };
 use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::{info, warn};
@@ -86,8 +86,11 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Do not ask for IPv6 connectivity")]
   disable_ipv6: bool,
 
-  #[arg(long, default_value = GP_USER_AGENT, help = "The user agent to use")]
-  user_agent: String,
+  #[arg(
+    long,
+    help = "The user agent to use, if not specified, it will be generated based on the OS and client version"
+  )]
+  user_agent: Option<String>,
 
   #[arg(long, value_enum, default_value_t = ConnectArgs::default_os())]
   os: Os,
@@ -130,18 +133,23 @@ pub(crate) struct ConnectArgs {
 
 impl ConnectArgs {
   fn default_os() -> Os {
-    if cfg!(target_os = "macos") { Os::Mac } else { Os::Linux }
+    #[cfg(target_os = "macos")]
+    return Os::Mac;
+    #[cfg(target_os = "windows")]
+    return Os::Windows;
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    return Os::Linux;
   }
 
-  fn os_version(&self) -> String {
+  fn os_version(&self) -> &str {
     if let Some(os_version) = self.os_version.as_deref() {
-      return os_version.to_string();
+      return os_version;
     }
 
     match self.os {
-      Os::Linux => format!("Linux {}", whoami::distro()),
-      Os::Windows => String::from("Microsoft Windows 11 Pro , 64-bit"),
-      Os::Mac => String::from("Apple Mac OS X 13.4.0"),
+      Os::Linux => host_utils::get_linux_os_string(),
+      Os::Windows => host_utils::get_windows_os_string(),
+      Os::Mac => host_utils::get_macos_os_string(),
     }
   }
 }
@@ -163,11 +171,25 @@ impl<'a> ConnectHandler<'a> {
     }
   }
 
+  fn user_agent(&self) -> Cow<'_, str> {
+    if let Some(user_agent) = self.args.user_agent.as_deref() {
+      Cow::Borrowed(user_agent)
+    } else {
+      let client_version = self.args.client_version.as_deref().unwrap_or(GP_CLIENT_VERSION);
+      Cow::Owned(format!(
+        "{}/{} ({})",
+        GP_USER_AGENT,
+        client_version,
+        self.args.os_version()
+      ))
+    }
+  }
+
   fn build_gp_params(&self) -> GpParams {
     GpParams::builder()
-      .user_agent(&self.args.user_agent)
+      .user_agent(&self.user_agent())
       .client_os(ClientOs::from(&self.args.os))
-      .os_version(self.args.os_version())
+      .os_version(self.args.os_version().to_owned())
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
@@ -331,14 +353,16 @@ impl<'a> ConnectHandler<'a> {
       (false, None)
     };
 
-    let os = ClientOs::from(&self.args.os).to_openconnect_os().to_string();
+    let os = ClientOs::from(&self.args.os).to_openconnect_os().to_owned();
+    let os_version = self.args.os_version().to_owned();
     let client_version = client_version.map(|s| s.to_owned());
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
       .interface(self.args.interface.clone())
       .script_tun(self.args.script_tun)
-      .user_agent(self.args.user_agent.clone())
+      .user_agent(self.user_agent().into_owned())
       .os(Some(os))
+      .os_version(Some(os_version))
       .client_version(client_version)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
@@ -394,10 +418,11 @@ impl<'a> ConnectHandler<'a> {
 
         let os_version = self.args.os_version();
         let verbose = self.shared_args.verbose.to_verbose_arg();
+        let user_agent = self.user_agent();
         let auth_launcher = SamlAuthLauncher::new(&self.args.server)
           .gateway(is_gateway)
           .saml_request(prelogin.saml_request())
-          .user_agent(&self.args.user_agent)
+          .user_agent(&user_agent)
           .os(self.args.os.as_str())
           .os_version(Some(&os_version))
           .fix_openssl(self.shared_args.fix_openssl)

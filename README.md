@@ -1,32 +1,52 @@
 # GlobalProtect-openconnect
 
-A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method. Inspired by [gp-saml-gui](https://github.com/dlenski/gp-saml-gui).
+A modern GlobalProtect VPN client for Linux, built on OpenConnect with full support for SSO authentication. This project provides both command-line and graphical interfaces for seamless VPN connectivity.
 
 <p align="center">
-  <img width="300" src="https://github.com/yuezk/GlobalProtect-openconnect/assets/3297602/9242df9c-217d-42ab-8c21-8f9f69cd4eb5">
+  <img width="300" src="https://github.com/user-attachments/assets/2fb6116c-dc57-43f2-af75-9c3d97ab7122">
 </p>
+
+> **Inspired by** [gp-saml-gui](https://github.com/dlenski/gp-saml-gui)
+
+## Table of Contents
+
+- [Features](#features)
+- [Usage](#usage)
+  - [Command-Line Interface](#command-line-interface)
+  - [Graphical User Interface](#graphical-user-interface)
+- [Installation](#installation)
+  - [Debian / Ubuntu](#debian--ubuntu)
+  - [Arch Linux / Manjaro](#arch-linux--manjaro)
+  - [Fedora 38+ / Rawhide](#fedora-38--rawhide)
+  - [openSUSE Leap 15.6+ / Tumbleweed](#opensuse-leap-156--tumbleweed)
+  - [Other RPM-based Distributions](#other-rpm-based-distributions)
+  - [Gentoo](#gentoo)
+  - [NixOS](#nixos)
+  - [Other Distributions](#other-distributions)
+- [Building from Source](#building-from-source)
+- [Frequently Asked Questions](#frequently-asked-questions)
+- [License](#license)
 
 ## Features
 
-- [x] Better Linux support
-- [x] Support both CLI and GUI
-- [x] Support both SSO and non-SSO authentication
-- [x] Support the FIDO2 authentication (e.g., YubiKey)
-- [x] Support authentication using default browser
-- [x] Support client certificate authentication
-- [x] Support multiple portals
-- [x] Support gateway selection
-- [x] Support connect gateway directly
-- [x] Support auto-connect on startup
-- [x] Support system tray icon
+- **Cross-Platform Linux Support** – Optimized for various Linux distributions
+- **Dual Interface** – Available as both CLI and GUI applications
+- **Flexible Authentication** – Supports SSO, non-SSO, FIDO2 (e.g., YubiKey), and client certificate authentication
+- **Browser Integration** – Authenticate using your default browser or any specified browser
+- **Multi-Portal Support** – Connect to multiple portals and gateways
+- **Direct Gateway Connection** – Bypass portal selection when needed
+- **Auto-Connect** – Automatically connect on system startup
+- **System Tray Integration** – Convenient system tray icon (requires [gnome-shell-extension-appindicator](https://extensions.gnome.org/extension/615/appindicator-support/) on GNOME)
 
 ## Usage
 
-### CLI
+### Command-Line Interface
 
-The CLI version is always free and open source in this repo. It has almost the same features as the GUI version.
+The CLI version is fully open source and feature-rich, providing nearly identical functionality to the GUI version.
 
-```
+#### Basic Commands
+
+```bash
 Usage: gpclient [OPTIONS] <COMMAND>
 
 Commands:
@@ -36,54 +56,66 @@ Commands:
   help        Print this message or the help of the given subcommand(s)
 
 Options:
-      --fix-openssl        Get around the OpenSSL `unsafe legacy renegotiation` error
-      --ignore-tls-errors  Ignore the TLS errors
+      --fix-openssl        Get around the OpenSSL 'unsafe legacy renegotiation' error
+      --ignore-tls-errors  Ignore TLS errors
   -h, --help               Print help
   -V, --version            Print version
-
-See 'gpclient help <command>' for more information on a specific command.
 ```
 
-To use the external browser for authentication with the CLI version, you need to use the following command:
+> **Tip:** Use `gpclient help <command>` for detailed information on a specific command.
+
+#### External Browser Authentication
+
+For browser-based authentication with the CLI:
+
+**Method 1:** Using sudo with environment preservation:
+```bash
+sudo -E gpclient connect --browser <portal>
+```
+
+**Method 2:** Using authentication piping:
+```bash
+gpauth <portal> --browser 2>/dev/null | sudo gpclient connect <portal> --cookie-on-stdin
+```
+
+**Browser Options:**
+- Use `--browser <browser>` to specify a browser (e.g., `firefox`, `chrome`)
+- Use `--browser remote` for headless servers – this provides a URL you can access from another machine to complete authentication
+
+### Graphical User Interface
+
+The GUI application provides an intuitive interface for managing VPN connections. Launch it from your application menu or via the terminal:
 
 ```bash
-sudo -E gpclient connect --browser default <portal>
+gpclient launch-gui
 ```
-
-Or you can try the following command if the above command does not work:
-
-```bash
-gpauth <portal> --browser default 2>/dev/null | sudo gpclient connect <portal> --cookie-on-stdin
-```
-
-You can specify the browser with the `--browser <browser>` option, e.g., `--browser firefox`, `--browser chrome`, etc. Use `--browser remote` to use a remote browser for authentication, this will give you a URL you can access on a separate computer with a browser to complete authentication. Useful for headless servers.
-
-### GUI
-
-The GUI version is also available after you installed it. You can launch it from the application menu or run `gpclient launch-gui` in the terminal.
 
 > [!Note]
 >
-> The GUI version is partially open source. Its background service is open sourced in this repo as [gpservice](./apps/gpservice/). The GUI part is a wrapper of the background service, which is not open sourced.
+> The GUI version is partially open source. The background service ([gpservice](./apps/gpservice/)) is open source, while the GUI wrapper is proprietary.
 
 ## Installation
 
-### Debian/Ubuntu based distributions
+### Debian / Ubuntu
 
-#### Install from PPA
+#### Option 1: Install from PPA (Recommended)
 
-```
+```bash
 sudo add-apt-repository ppa:yuezk/globalprotect-openconnect
+sudo apt-get update
 sudo apt-get install globalprotect-openconnect
 ```
 
 > [!Note]
 >
-> For Linux Mint, you might need to import the GPG key with: `sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761` if you encountered an error `gpg: keyserver receive failed: General error`.
+> **For Linux Mint users:** If you encounter a GPG key error, import the key manually:
+> ```bash
+> sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7937C393082992E5D6E4A60453FC26B43838D761
+> ```
 
-#### Install from deb package
+#### Option 2: Install from DEB Package
 
-Download the latest deb package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Then install it with `apt`:
+Download the latest `.deb` package from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page, then install:
 
 ```bash
 sudo apt install --fix-broken globalprotect-openconnect_*.deb
@@ -91,44 +123,60 @@ sudo apt install --fix-broken globalprotect-openconnect_*.deb
 
 ### Arch Linux / Manjaro
 
-#### Install from AUR
+#### Option 1: Install from AUR
 
-Install from AUR: [globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)
+Package: [globalprotect-openconnect-git](https://aur.archlinux.org/packages/globalprotect-openconnect-git/)
+
+You can install it using an AUR helper like [`yay`](https://github.com/Jguer/yay):
 
 ```bash
 yay -S globalprotect-openconnect-git
 ```
 
-#### Install from package
+#### Option 2: Install from the Official Extra Repository
 
-Download the latest package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Then install it with `pacman`:
+The package is also available in the official Arch Linux Extra repository.
+
+Package: [globalprotect-openconnect](https://archlinux.org/packages/extra/x86_64/globalprotect-openconnect/)
+
+> [!Note]
+>
+> Since the official package does not include the system tray support dependency, you need to install `libappindicator` manually:
+
+```bash
+sudo pacman -S libappindicator globalprotect-openconnect
+```
+
+#### Option 3: Install from Package
+
+Download the latest package from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page, then install:
 
 ```bash
 sudo pacman -U globalprotect-openconnect-*.pkg.tar.zst
 ```
 
-### Fedora 38 and later / Fedora Rawhide
+### Fedora 38+ / Rawhide
 
 #### Install from COPR
 
-The package is available on [COPR](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/) for various RPM-based distributions. You can install it with the following commands:
+The package is available on [COPR](https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/) for RPM-based distributions:
 
 ```bash
 sudo dnf copr enable yuezk/globalprotect-openconnect
 sudo dnf install globalprotect-openconnect
 ```
 
-### openSUSE Leap 15.6 / openSUSE Tumbleweed
+### openSUSE Leap 15.6+ / Tumbleweed
 
 #### Install from OBS (openSUSE Build Service)
 
-The package is also available on [OBS](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect) for various RPM-based distributions. You can follow the instructions [on this page](https://software.opensuse.org//download.html?project=home%3Ayuezk&package=globalprotect-openconnect) to install it.
+Packages are available on the [openSUSE Build Service](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect). Follow the [installation instructions](https://software.opensuse.org//download.html?project=home%3Ayuezk&package=globalprotect-openconnect) for your distribution.
 
-### Other RPM-based distributions
+### Other RPM-based Distributions
 
-#### Install from RPM package
+#### Install from RPM Package
 
-Download the latest RPM package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
+Download the latest RPM package from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page:
 
 ```bash
 sudo rpm -i globalprotect-openconnect-*.rpm
@@ -136,130 +184,166 @@ sudo rpm -i globalprotect-openconnect-*.rpm
 
 ### Gentoo
 
-It is available via `guru` and `lamdness` overlays.
+Available via the `guru` and `lamdness` overlays:
 
 ```bash
 sudo eselect repository enable guru
-sudo emerge -r guru sync
-sudo emerge -av net-vpn/GlobalProtect-openconnect
+sudo emerge --sync guru
+sudo emerge --ask --verbose net-vpn/GlobalProtect-openconnect
 ```
 
 ### NixOS
 
-This repo includes a flake for NixOS. You can add the following to your `flake.nix`:
+This repository includes a flake for NixOS integration.
 
-```nix
-{
-  inputs = {
-    # ... other inputs
-    globalprotect-openconnect.url = "github:yuezk/GlobalProtect-openconnect";
-  };
+#### Installation Steps
 
-  outputs = { nixpkgs, ... }@inputs: {
-    nixosConfigurations.<your-host> = nixpkgs.lib.nixosSystem {
-      specialArgs = { inherit inputs; };
-      modules = [
-        ./configuration.nix
+1. Add the flake to your `flake.nix`:
+
+    ```nix
+    {
+      inputs = {
+        # ... other inputs
+        globalprotect-openconnect.url = "github:yuezk/GlobalProtect-openconnect";
+      };
+
+      outputs = { nixpkgs, ... }@inputs: {
+        nixosConfigurations.<your-host> = nixpkgs.lib.nixosSystem {
+          specialArgs = { inherit inputs; };
+          modules = [
+            ./configuration.nix
+          ];
+        };
+      };
+    }
+    ```
+
+2. Add the package to your `configuration.nix`:
+
+    ```nix
+    { config, pkgs, inputs, ... }:
+
+    {
+      # ... other configurations
+      environment.systemPackages = with pkgs; [
+        # ... other packages
+      ] ++ [
+        inputs.globalprotect-openconnect.packages.${pkgs.system}.default
       ];
-    };
-  };
-}
-```
+    }
+    ```
 
-Then add `globalprotect-openconnect` to your `environment.systemPackages` in `configuration.nix`:
+3. Apply the changes:
 
-```nix
-{ config, pkgs, inputs, ... }:
+    ```bash
+    sudo nixos-rebuild switch
+    ```
 
-{
-  # ... other configurations
-  environment.systemPackages = with pkgs; [
-    # ... other packages
-  ] ++ [
-    inputs.globalprotect-openconnect.packages.${pkgs.system}.default
-  ];
-}
-```
+### Other Distributions
 
-Finally, run `sudo nixos-rebuild switch` to apply the changes.
+#### Manual Installation
 
-### Other distributions
+1. **Install dependencies:**
+   - `webkit2gtk`
+   - `libsecret`
+   - `libayatana-appindicator` or `libappindicator-gtk3`
 
-- Install `openconnect >= 8.20`, `webkit2gtk`, `libsecret`, `libayatana-appindicator` or `libappindicator-gtk3`.
-- Download `globalprotect-openconnect_${version}_${arch}.bin.tar.xz` from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
-- Extract the tarball with `tar -xJf globalprotect-openconnect_${version}_${arch}.bin.tar.xz`.
-- Run `sudo make install` to install the client.
+2. **Download and extract:**
+   Download `globalprotect-openconnect_${version}_${arch}.bin.tar.xz` from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page:
+   ```bash
+   tar -xJf globalprotect-openconnect_${version}_${arch}.bin.tar.xz
+   ```
 
-## Build from source
+3. **Install:**
+   ```bash
+   sudo make install
+   ```
 
-You can build the client from source using either a devcontainer (recommended) or a local setup.
+## Building from Source
 
-### Option 1: Using DevContainer (Recommended)
+You can build the application from source using either a DevContainer (recommended) or a local development environment.
 
-This project includes a devcontainer configuration that provides a consistent build environment with all dependencies pre-installed.
+### Method 1: Using DevContainer (Recommended)
+
+This project includes a DevContainer configuration that provides a consistent, reproducible build environment with all dependencies pre-installed.
 
 #### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/)
-- [VS Code](https://code.visualstudio.com/) with [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) (optional, for IDE support)
+- [Visual Studio Code](https://code.visualstudio.com/) (optional, for IDE support)
+- [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) (if using VS Code)
 
 #### Build Steps
 
-1. Clone the repository and submodules:
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/yuezk/GlobalProtect-openconnect.git
    cd GlobalProtect-openconnect
    git submodule update --init --recursive
    ```
 
-2. Build the devcontainer image:
+2. **Build the DevContainer image:**
    ```bash
    docker build -t gpoc-devcontainer .devcontainer/
    ```
 
-3. Build the project:
+3. **Build the project:**
    ```bash
    docker run --privileged --cap-add=NET_ADMIN --device=/dev/net/tun \
      -v "$(pwd)":/workspace -w /workspace gpoc-devcontainer \
      bash -c "export PATH=/usr/local/cargo/bin:\$PATH && make build"
    ```
 
-4. The built binaries will be available in `target/release/`:
-   - `gpclient` - CLI client
-   - `gpservice` - Background service
-   - `gpauth` - Authentication helper
-   - `gpgui-helper` - GUI helper
+4. **Locate build artifacts:**
 
-#### Alternative: VS Code DevContainer
+   The compiled binaries will be available in `target/release/`:
+   - `gpclient` – CLI client
+   - `gpservice` – Background service
+   - `gpauth` – Authentication helper
+   - `gpgui-helper` – GUI helper
+
+#### Alternative: Using VS Code
 
 1. Open the project in VS Code
-2. When prompted, click "Reopen in Container" or run the command "Dev Containers: Reopen in Container"
-3. Once the container is built and running, open a terminal in VS Code and run:
+2. When prompted, click "Reopen in Container" (or run **Dev Containers: Reopen in Container**)
+3. Once the container is ready, open a terminal and run:
    ```bash
    make build
    ```
 
-### Option 2: Local Build
+### Method 2: Local Development Build
 
 #### Prerequisites
 
-- [Install Rust 1.85 or later](https://www.rust-lang.org/tools/install)
-- Install Tauri dependencies: https://tauri.app/start/prerequisites/
-- Install `perl`
-- Install `openconnect >= 8.20` and `libopenconnect-dev` (or `openconnect-devel` on RPM-based distributions)
-- Install `pkexec`, `gnome-keyring` (or `pam_kwallet` on KDE)
-- Install `nodejs` and `pnpm` (optional only if you downloaded the source tarball from the release page and run with the `BUILD_FE=0` flag, see below)
+- [Rust 1.85 or later](https://www.rust-lang.org/tools/install)
+- [Tauri dependencies](https://tauri.app/start/prerequisites/)
+- `libopenconnect-dev` (or `openconnect-devel` on RPM-based systems)
+- `pkexec` and `gnome-keyring` (or `pam_kwallet` on KDE)
+- `nodejs` and `pnpm` (optional if using pre-built release tarballs with `BUILD_FE=0`)
 
 #### Build Steps
 
-1. Download the source code tarball from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Choose `globalprotect-openconnect-${version}.tar.gz`.
-2. Extract the tarball with `tar -xzf globalprotect-openconnect-${version}.tar.gz`.
-3. Enter the source directory and run `make build BUILD_FE=0` to build the client.
-4. Run `sudo make install` to install the client. (Note, `DESTDIR` is not supported)
+1. **Download source code:**
 
-### Testing the Build
+   Download `globalprotect-openconnect-${version}.tar.gz` from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
 
-After building, you can test the CLI client:
+2. **Extract and build:**
+   ```bash
+   tar -xzf globalprotect-openconnect-${version}.tar.gz
+   cd globalprotect-openconnect-${version}
+   make build BUILD_FE=0
+   ```
+
+3. **Install:**
+   ```bash
+   sudo make install
+   ```
+
+   > **Note:** `DESTDIR` is not currently supported.
+
+### Testing Your Build
+
+Verify the CLI client is working correctly:
 
 ```bash
 ./target/release/gpclient --help
@@ -267,36 +351,48 @@ After building, you can test the CLI client:
 
 ### Build Options
 
-- `BUILD_GUI=0` - Disable GUI components (CLI only)
-- `BUILD_FE=0` - Skip frontend build (use pre-built assets)
-- `OFFLINE=1` - Build in offline mode using vendored dependencies
+- `BUILD_GUI=0` – Build CLI components only (excludes GUI)
+- `BUILD_FE=0` – Skip frontend build (uses pre-built assets)
+- `OFFLINE=1` – Build in offline mode using vendored dependencies
 
-## FAQ
+## Frequently Asked Questions
 
-1. How to deal with error `Secure Storage not ready`
+### Q: How do I resolve the "Secure Storage not ready" error?
 
-   Try upgrade the client to `2.2.0` or later, which will use a file-based storage as a fallback.
+**Solution 1:** Update to version 2.2.0 or later, which includes a file-based storage fallback.
 
-   You need to install the `gnome-keyring` package, and restart the system (See [#321](https://github.com/yuezk/GlobalProtect-openconnect/issues/321), [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)).
+**Solution 2:** Install the `gnome-keyring` package and restart your system.
 
-2. How to deal with error `(gpauth:18869): Gtk-WARNING **: 10:33:37.566: cannot open display:`
+See related issues: [#321](https://github.com/yuezk/GlobalProtect-openconnect/issues/321), [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)
 
-   If you encounter this error when using the CLI version, try to run the command with `sudo -E` (See [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)).
+### Q: How do I fix the "cannot open display" error when using CLI?
 
-## About Trial
+If you encounter `(gpauth:18869): Gtk-WARNING **: 10:33:37.566: cannot open display:`, try running the command with `sudo -E`:
 
-The CLI version is always free, while the GUI version is paid. There are two trial modes for the GUI version:
+```bash
+sudo -E gpclient connect <portal>
+```
 
-1. 10-day trial: You can use the GUI stable release for 10 days after the installation.
-2. 14-day trial: Each beta release has a fresh trial period (at most 14 days) after released.
+See related issue: [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)
 
-## License
+## Licensing
 
-- crate [gpapi](./crates/gpapi): [MIT](./crates/gpapi/LICENSE)
-- crate [openconnect](./crates/openconnect): [GPL-3.0](./crates/openconnect/LICENSE)
-- crate [common](./crates/common): [GPL-3.0](./crates/common/LICENSE)
-- crate [auth](./crates/auth): [GPL-3.0](./crates/auth/LICENSE)
-- app [gpservice](./apps/gpservice): [GPL-3.0](./apps/gpservice/LICENSE)
-- app [gpclient](./apps/gpclient): [GPL-3.0](./apps/gpclient/LICENSE)
-- app [gpauth](./apps/gpauth): [GPL-3.0](./apps/gpauth/LICENSE)
-- app [gpgui-helper](./apps/gpgui-helper): [GPL-3.0](./apps/gpgui-helper/LICENSE)
+### Trial and Pricing
+
+The **CLI version** is completely free and open source.
+The **GUI version** is a paid application with a **10-day trial period** after installation.
+
+### Open Source Licenses
+
+This project consists of multiple components, each with its own license:
+
+| Component | Type | License |
+|-----------|------|---------|
+| [gpapi](./crates/gpapi) | Crate | [MIT](./crates/gpapi/LICENSE) |
+| [openconnect](./crates/openconnect) | Crate | [GPL-3.0](./crates/openconnect/LICENSE) |
+| [common](./crates/common) | Crate | [GPL-3.0](./crates/common/LICENSE) |
+| [auth](./crates/auth) | Crate | [GPL-3.0](./crates/auth/LICENSE) |
+| [gpservice](./apps/gpservice) | Application | [GPL-3.0](./apps/gpservice/LICENSE) |
+| [gpclient](./apps/gpclient) | Application | [GPL-3.0](./apps/gpclient/LICENSE) |
+| [gpauth](./apps/gpauth) | Application | [GPL-3.0](./apps/gpauth/LICENSE) |
+| [gpgui-helper](./apps/gpgui-helper) | Application | [GPL-3.0](./apps/gpgui-helper/LICENSE) |
