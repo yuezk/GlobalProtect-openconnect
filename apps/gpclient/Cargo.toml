@@ -24,11 +24,16 @@ serde_json.workspace = true
 serde_urlencoded.workspace = true
 whoami.workspace = true
 tempfile.workspace = true
-reqwest.workspace = true
 directories.workspace = true
 compile-time.workspace = true
 netdev.workspace = true
 xmltree.workspace = true
+
+[target.'cfg(target_os="windows")'.dependencies]
+reqwest = { workspace = true, features = ["native-tls-vendored", "json"] }
+
+[target.'cfg(target_family="unix")'.dependencies]
+reqwest.workspace = true
 
 [features]
 default = ["webview-auth"]

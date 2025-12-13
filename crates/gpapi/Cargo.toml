@@ -11,8 +11,6 @@ anyhow.workspace = true
 base64.workspace = true
 dns-lookup.workspace = true
 log.workspace = true
-reqwest.workspace = true
-openssl.workspace = true
 version-compare = "0.2"
 pem.workspace = true
 xmltree.workspace = true
@@ -51,8 +49,14 @@ os_info = { version = "3", default-features = false }
 [target.'cfg(not(any(target_os="macos", target_os="windows")))'.dependencies]
 gtk = "0.18"
 
+[target.'cfg(target_os="windows")'.dependencies]
+reqwest = { workspace = true, features = ["native-tls-vendored", "json"] }
+openssl = { workspace = true, features = ["vendored"] }
+
 # Dependencies for Unix-like systems only
 [target.'cfg(target_family="unix")'.dependencies]
+reqwest.workspace = true
+openssl.workspace = true
 uzers.workspace = true
 
 [features]
