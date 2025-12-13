@@ -56,7 +56,7 @@ Or you can try the following command if the above command does not work:
 gpauth <portal> --browser default 2>/dev/null | sudo gpclient connect <portal> --cookie-on-stdin
 ```
 
-You can specify the browser with the `--browser <browser>` option, e.g., `--browser firefox`, `--browser chrome`, etc.
+You can specify the browser with the `--browser <browser>` option, e.g., `--browser firefox`, `--browser chrome`, etc. Use `--browser remote` to use a remote browser for authentication, this will give you a URL you can access on a separate computer with a browser to complete authentication. Useful for headless servers.
 
 ### GUI
 
@@ -141,8 +141,47 @@ It is available via `guru` and `lamdness` overlays.
 ```bash
 sudo eselect repository enable guru
 sudo emerge -r guru sync
-sudo emerge -av net-vpn/globalprotect-openconnect
+sudo emerge -av net-vpn/GlobalProtect-openconnect
 ```
+
+### NixOS
+
+This repo includes a flake for NixOS. You can add the following to your `flake.nix`:
+
+```nix
+{
+  inputs = {
+    # ... other inputs
+    globalprotect-openconnect.url = "github:yuezk/GlobalProtect-openconnect";
+  };
+
+  outputs = { nixpkgs, ... }@inputs: {
+    nixosConfigurations.<your-host> = nixpkgs.lib.nixosSystem {
+      specialArgs = { inherit inputs; };
+      modules = [
+        ./configuration.nix
+      ];
+    };
+  };
+}
+```
+
+Then add `globalprotect-openconnect` to your `environment.systemPackages` in `configuration.nix`:
+
+```nix
+{ config, pkgs, inputs, ... }:
+
+{
+  # ... other configurations
+  environment.systemPackages = with pkgs; [
+    # ... other packages
+  ] ++ [
+    inputs.globalprotect-openconnect.packages.${pkgs.system}.default
+  ];
+}
+```
+
+Finally, run `sudo nixos-rebuild switch` to apply the changes.
 
 ### Other distributions
 
@@ -153,23 +192,84 @@ sudo emerge -av net-vpn/globalprotect-openconnect
 
 ## Build from source
 
-You can also build the client from source, steps are as follows:
+You can build the client from source using either a devcontainer (recommended) or a local setup.
 
-### Prerequisites
+### Option 1: Using DevContainer (Recommended)
 
-- [Install Rust 1.80 or later](https://www.rust-lang.org/tools/install)
+This project includes a devcontainer configuration that provides a consistent build environment with all dependencies pre-installed.
+
+#### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [VS Code](https://code.visualstudio.com/) with [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) (optional, for IDE support)
+
+#### Build Steps
+
+1. Clone the repository and submodules:
+   ```bash
+   git clone https://github.com/yuezk/GlobalProtect-openconnect.git
+   cd GlobalProtect-openconnect
+   git submodule update --init --recursive
+   ```
+
+2. Build the devcontainer image:
+   ```bash
+   docker build -t gpoc-devcontainer .devcontainer/
+   ```
+
+3. Build the project:
+   ```bash
+   docker run --privileged --cap-add=NET_ADMIN --device=/dev/net/tun \
+     -v "$(pwd)":/workspace -w /workspace gpoc-devcontainer \
+     bash -c "export PATH=/usr/local/cargo/bin:\$PATH && make build"
+   ```
+
+4. The built binaries will be available in `target/release/`:
+   - `gpclient` - CLI client
+   - `gpservice` - Background service
+   - `gpauth` - Authentication helper
+   - `gpgui-helper` - GUI helper
+
+#### Alternative: VS Code DevContainer
+
+1. Open the project in VS Code
+2. When prompted, click "Reopen in Container" or run the command "Dev Containers: Reopen in Container"
+3. Once the container is built and running, open a terminal in VS Code and run:
+   ```bash
+   make build
+   ```
+
+### Option 2: Local Build
+
+#### Prerequisites
+
+- [Install Rust 1.85 or later](https://www.rust-lang.org/tools/install)
 - Install Tauri dependencies: https://tauri.app/start/prerequisites/
-- Install `perl` and `jq`
+- Install `perl`
 - Install `openconnect >= 8.20` and `libopenconnect-dev` (or `openconnect-devel` on RPM-based distributions)
 - Install `pkexec`, `gnome-keyring` (or `pam_kwallet` on KDE)
 - Install `nodejs` and `pnpm` (optional only if you downloaded the source tarball from the release page and run with the `BUILD_FE=0` flag, see below)
 
-### Build
+#### Build Steps
 
 1. Download the source code tarball from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Choose `globalprotect-openconnect-${version}.tar.gz`.
 2. Extract the tarball with `tar -xzf globalprotect-openconnect-${version}.tar.gz`.
 3. Enter the source directory and run `make build BUILD_FE=0` to build the client.
-3. Run `sudo make install` to install the client. (Note, `DESTDIR` is not supported)
+4. Run `sudo make install` to install the client. (Note, `DESTDIR` is not supported)
+
+### Testing the Build
+
+After building, you can test the CLI client:
+
+```bash
+./target/release/gpclient --help
+```
+
+### Build Options
+
+- `BUILD_GUI=0` - Disable GUI components (CLI only)
+- `BUILD_FE=0` - Skip frontend build (use pre-built assets)
+- `OFFLINE=1` - Build in offline mode using vendored dependencies
 
 ## FAQ
 

@@ -46,7 +46,7 @@ pub fn fix_openssl_env() -> anyhow::Result<NamedTempFile> {
   let openssl_conf_path = openssl_conf.path();
 
   fix_openssl(openssl_conf_path)?;
-  std::env::set_var("OPENSSL_CONF", openssl_conf_path);
+  unsafe { std::env::set_var("OPENSSL_CONF", openssl_conf_path) };
 
   Ok(openssl_conf)
 }

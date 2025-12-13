@@ -1,14 +1,16 @@
+use std::borrow::Cow;
+
 use anyhow::bail;
-use log::{info, warn};
+use log::{debug, info, warn};
 use reqwest::Client;
-use roxmltree::Document;
 use urlencoding::encode;
+use xmltree::Element;
 
 use crate::{
   credential::Credential,
   error::PortalError,
   gp_params::GpParams,
-  utils::{normalize_server, parse_gp_response, remove_url_scheme},
+  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::ElementExt},
 };
 
 pub enum GatewayLogin {
@@ -50,18 +52,20 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
     return Ok(GatewayLogin::Mfa(message, input_str));
   }
 
-  let doc = Document::parse(&res)?;
+  debug!("Gateway login response: {}", res);
 
-  let cookie = build_gateway_token(&doc, gp_params.computer())?;
+  let root = Element::parse(res.as_bytes())?;
+
+  let cookie = build_gateway_token(&root, gp_params.computer())?;
 
   Ok(GatewayLogin::Cookie(cookie))
 }
 
-fn build_gateway_token(doc: &Document, computer: &str) -> anyhow::Result<String> {
-  let args = doc
-    .descendants()
-    .filter(|n| n.has_tag_name("argument"))
-    .map(|n| n.text().unwrap_or("").to_string())
+fn build_gateway_token(element: &Element, computer: &str) -> anyhow::Result<String> {
+  let args = element
+    .descendants("argument")
+    .iter()
+    .map(|e| e.get_text().unwrap_or_default())
     .collect::<Vec<_>>();
 
   let params = [
@@ -82,7 +86,7 @@ fn build_gateway_token(doc: &Document, computer: &str) -> anyhow::Result<String>
   Ok(token)
 }
 
-fn read_args<'a>(args: &'a [String], index: usize, key: &'a str) -> anyhow::Result<(&'a str, &'a str)> {
+fn read_args<'a>(args: &'a [Cow<'_, str>], index: usize, key: &'a str) -> anyhow::Result<(&'a str, &'a str)> {
   args
     .get(index)
     .ok_or_else(|| anyhow::anyhow!("Failed to read {key} from args"))

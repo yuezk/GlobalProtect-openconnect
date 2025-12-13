@@ -7,7 +7,7 @@ ARG USER_GID=$USER_UID
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
-    RUST_VERSION=1.80.0
+    RUST_VERSION=1.85.0
 
 # Install common dependencies
 RUN set -eux; \

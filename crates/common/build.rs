@@ -14,6 +14,9 @@ fn main() {
   println!("cargo:rustc-env=GP_SERVICE_BINARY={}", gp_service_binary.display());
   println!("cargo:rustc-env=GP_CLIENT_BINARY={}", gp_client_binary.display());
   println!("cargo:rustc-env=GP_AUTH_BINARY={}", gp_auth_binary.display());
-  println!("cargo:rustc-env=GP_GUI_HELPER_BINARY={}", gp_gui_helper_binary.display());
+  println!(
+    "cargo:rustc-env=GP_GUI_HELPER_BINARY={}",
+    gp_gui_helper_binary.display()
+  );
   println!("cargo:rustc-env=GP_GUI_BINARY={}", gp_gui_binary.display());
 }

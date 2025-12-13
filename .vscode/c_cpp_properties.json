@@ -2,7 +2,7 @@
   "configurations": [
     {
       "name": "Mac",
-      "includePath": ["/opt/homebrew/include"],
+      "includePath": ["deps/openconnect"],
       "macFrameworkPath": ["/System/Library/Frameworks", "/Library/Frameworks"],
       "intelliSenseMode": "macos-clang-x64",
       "compilerPath": "/usr/bin/clang",

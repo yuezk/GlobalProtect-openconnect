@@ -1,8 +1,8 @@
 [Desktop Entry]
 
 Type=Application
-Name=GlobalProtect Openconnect VPN Client
-Comment=A GUI for GlobalProtect VPN
+Name=GP Connect
+Comment=A GUI client for GlobalProtect VPN
 GenericName=GlobalProtect VPN Client
 Categories=Network;Dialup;
 Exec=/usr/bin/gpclient launch-gui %u

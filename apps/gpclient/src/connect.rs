@@ -2,27 +2,26 @@ use std::{cell::RefCell, fs, sync::Arc};
 
 use anyhow::bail;
 use clap::Args;
-use common::vpn_utils::find_csd_wrapper;
+use common::constants::GP_USER_AGENT;
 use gpapi::{
   auth::SamlAuthResult,
-  clap::{args::Os, ToVerboseArg},
+  clap::{ToVerboseArg, args::Os},
   credential::{Credential, PasswordCredential},
   error::PortalError,
-  gateway::{gateway_login, GatewayLogin},
+  gateway::{GatewayLogin, gateway_login},
   gp_params::{ClientOs, GpParams},
-  portal::{prelogin, retrieve_config, Prelogin},
+  portal::{Prelogin, StandardPrelogin, prelogin, retrieve_config},
   process::{
     auth_launcher::SamlAuthLauncher,
     users::{get_non_root_user, get_user_by_name},
   },
-  utils::{request::RequestIdentityError, shutdown_signal},
-  GP_USER_AGENT,
+  utils::{host_utils, request::RequestIdentityError, shutdown_signal},
 };
 use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::{info, warn};
 use openconnect::Vpn;
 
-use crate::{cli::SharedArgs, GP_CLIENT_LOCK_FILE};
+use crate::{GP_CLIENT_LOCK_FILE, cli::SharedArgs};
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -41,8 +40,14 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Read the cookie from standard input")]
   cookie_on_stdin: bool,
 
-  #[arg(long, short, help = "The VPNC script to use")]
+  #[arg(long, short, help = "The VPNC script to use", required_if_eq("script_tun", "true"))]
   script: Option<String>,
+
+  #[arg(long, short, help = "The IFNAME for tunnel interface")]
+  interface: Option<String>,
+
+  #[arg(long, short = 'S', help = "Pass traffic to '--script' program, not tun")]
+  script_tun: bool,
 
   #[arg(long, help = "Connect the server as a gateway, instead of a portal")]
   as_gateway: bool,
@@ -90,8 +95,17 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "If not specified, it will be computed based on the --os option")]
   os_version: Option<String>,
 
+  #[arg(long, help = "The GP client version to emulate, e.g., '6.2.4-49'")]
+  client_version: Option<String>,
+
   #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
+
+  #[arg(
+    long = "force-dpd",
+    help = "Same as the '--force-dpd' option in the openconnect command"
+  )]
+  dpd_interval: Option<u32>,
 
   #[cfg(feature = "webview-auth")]
   #[arg(long, help = "The HiDPI mode, useful for high-resolution screens")]
@@ -107,29 +121,38 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, or the path to the browser executable"
+    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`.\nOr the path to the browser executable.\nUse 'remote' for headless servers.",
+    default_missing_value = "default",
+    num_args=0..=1
   )]
   browser: Option<String>,
 }
 
 impl ConnectArgs {
   fn default_os() -> Os {
-    if cfg!(target_os = "macos") {
+    #[cfg(target_os = "macos")]
+    {
       Os::Mac
-    } else {
+    }
+    #[cfg(target_os = "windows")]
+    {
+      Os::Windows
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
       Os::Linux
     }
   }
 
-  fn os_version(&self) -> String {
+  fn os_version(&self) -> &str {
     if let Some(os_version) = self.os_version.as_deref() {
-      return os_version.to_string();
+      return os_version;
     }
 
     match self.os {
-      Os::Linux => format!("Linux {}", whoami::distro()),
-      Os::Windows => String::from("Microsoft Windows 11 Pro , 64-bit"),
-      Os::Mac => String::from("Apple Mac OS X 13.4.0"),
+      Os::Linux => host_utils::get_linux_os_string(),
+      Os::Windows => host_utils::get_windows_os_string(),
+      Os::Mac => host_utils::get_macos_os_string(),
     }
   }
 }
@@ -138,6 +161,7 @@ pub(crate) struct ConnectHandler<'a> {
   args: &'a ConnectArgs,
   shared_args: &'a SharedArgs<'a>,
   latest_key_password: RefCell<Option<String>>,
+  password_from_stdin: RefCell<Option<String>>,
 }
 
 impl<'a> ConnectHandler<'a> {
@@ -146,6 +170,7 @@ impl<'a> ConnectHandler<'a> {
       args,
       shared_args,
       latest_key_password: Default::default(),
+      password_from_stdin: Default::default(),
     }
   }
 
@@ -153,7 +178,7 @@ impl<'a> ConnectHandler<'a> {
     GpParams::builder()
       .user_agent(&self.args.user_agent)
       .client_os(ClientOs::from(&self.args.os))
-      .os_version(self.args.os_version())
+      .os_version(self.args.os_version().to_owned())
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
@@ -265,7 +290,11 @@ impl<'a> ConnectHandler<'a> {
       }
     };
 
-    self.connect_gateway(gateway, &cookie).await
+    // Use the client version from the command line argument if specified, otherwise
+    // use the version from the portal config if available
+    let client_version = self.args.client_version.as_deref().or_else(|| portal_config.version());
+
+    self.connect_gateway(gateway, &cookie, client_version).await
   }
 
   async fn connect_gateway_with_prelogin(&self, gateway: &str) -> anyhow::Result<()> {
@@ -279,7 +308,10 @@ impl<'a> ConnectHandler<'a> {
 
     let cookie = self.login_gateway(gateway, &cred, &gp_params).await?;
 
-    self.connect_gateway(gateway, &cookie).await
+    // When logging in to a gateway directly, there is no portal config to get the client version from
+    let client_version = self.args.client_version.as_deref();
+
+    self.connect_gateway(gateway, &cookie, client_version).await
   }
 
   async fn login_gateway(&self, gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<String> {
@@ -299,31 +331,37 @@ impl<'a> ConnectHandler<'a> {
     }
   }
 
-  async fn connect_gateway(&self, gateway: &str, cookie: &str) -> anyhow::Result<()> {
+  async fn connect_gateway(&self, gateway: &str, cookie: &str, client_version: Option<&str>) -> anyhow::Result<()> {
     let mtu = self.args.mtu.unwrap_or(0);
     let csd_uid = get_csd_uid(&self.args.csd_user)?;
-    let csd_wrapper = if self.args.csd_wrapper.is_some() {
-      self.args.csd_wrapper.clone()
+    let (hip, csd_wrapper) = if let Some(csd_wrapper) = &self.args.csd_wrapper {
+      (true, Some(csd_wrapper.clone()))
     } else if self.args.hip {
-      find_csd_wrapper()
+      (true, None)
     } else {
-      None
+      (false, None)
     };
 
     let os = ClientOs::from(&self.args.os).to_openconnect_os().to_string();
+    let client_version = client_version.map(|s| s.to_owned());
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
+      .interface(self.args.interface.clone())
+      .script_tun(self.args.script_tun)
       .user_agent(self.args.user_agent.clone())
       .os(Some(os))
+      .client_version(client_version)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
       .key_password(self.latest_key_password.borrow().clone())
+      .hip(hip)
       .csd_uid(csd_uid)
       .csd_wrapper(csd_wrapper)
       .reconnect_timeout(self.args.reconnect_timeout)
       .mtu(mtu)
       .disable_ipv6(self.args.disable_ipv6)
       .no_dtls(self.args.no_dtls)
+      .dpd_interval(self.args.dpd_interval.unwrap_or(0))
       .build()?;
 
     let vpn = Arc::new(vpn);
@@ -358,7 +396,9 @@ impl<'a> ConnectHandler<'a> {
         let browser = if prelogin.support_default_browser() {
           self.args.browser.as_deref()
         } else if !cfg!(feature = "webview-auth") {
-          bail!("The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature");
+          bail!(
+            "The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature"
+          );
         } else {
           None
         };
@@ -397,23 +437,40 @@ impl<'a> ConnectHandler<'a> {
           |user| Ok(user.to_owned()),
         )?;
 
-        let password = if self.args.passwd_on_stdin {
-          info!("Reading password from standard input");
-          let mut input = String::new();
-          std::io::stdin().read_line(&mut input)?;
-          input.trim_end().to_owned()
-        } else {
-          Password::new(&format!("{}:", prelogin.label_password()))
-            .without_confirmation()
-            .with_display_mode(PasswordDisplayMode::Masked)
-            .prompt()?
-        };
-
+        let password = self.obtain_password(prelogin)?;
         let password_cred = PasswordCredential::new(&user, &password);
 
         Ok(password_cred.into())
       }
     }
+  }
+
+  fn obtain_password(&self, prelogin: &StandardPrelogin) -> anyhow::Result<String> {
+    let password = if self.args.passwd_on_stdin {
+      // If the password has been read from stdin, use it directly
+      if let Some(password) = self.password_from_stdin.borrow().as_ref() {
+        info!("Reusing the password read from standard input");
+        return Ok(password.clone());
+      }
+
+      info!("Reading password from standard input");
+      let mut input = String::new();
+      std::io::stdin().read_line(&mut input)?;
+      let password = input.trim_end().to_owned();
+      // Considering that the gateway connection may fail even though the password read
+      // from stdin is correct. It may retry the gateway connection, so we need to
+      // save the password read from stdin to avoid reading stdin again.
+      self.password_from_stdin.replace(Some(password.clone()));
+
+      password
+    } else {
+      Password::new(&format!("{}:", prelogin.label_password()))
+        .without_confirmation()
+        .with_display_mode(PasswordDisplayMode::Masked)
+        .prompt()?
+    };
+
+    Ok(password)
   }
 }
 
@@ -433,8 +490,11 @@ fn read_cookie_from_stdin() -> anyhow::Result<Credential> {
 fn write_pid_file() {
   let pid = std::process::id();
 
-  fs::write(GP_CLIENT_LOCK_FILE, pid.to_string()).unwrap();
-  info!("Wrote PID {} to {}", pid, GP_CLIENT_LOCK_FILE);
+  if let Err(err) = fs::write(GP_CLIENT_LOCK_FILE, pid.to_string()) {
+    warn!("Failed to write PID file: {}", err);
+  } else {
+    info!("Wrote PID {} to {}", pid, GP_CLIENT_LOCK_FILE);
+  }
 }
 
 fn get_csd_uid(csd_user: &Option<String>) -> anyhow::Result<u32> {

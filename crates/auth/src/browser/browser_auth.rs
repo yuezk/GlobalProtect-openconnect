@@ -1,8 +1,12 @@
 use std::{env::temp_dir, fs};
 
-use gpapi::{auth::SamlAuthData, GP_CALLBACK_PORT_FILENAME};
+use common::constants::GP_CALLBACK_PORT_FILENAME;
+use gpapi::auth::SamlAuthData;
 use log::info;
-use tokio::{io::AsyncReadExt, net::TcpListener};
+use tokio::{
+  io::AsyncReadExt,
+  net::{TcpListener, UdpSocket},
+};
 
 use crate::browser::auth_server::AuthServer;
 
@@ -10,6 +14,7 @@ pub enum Browser<'a> {
   Default,
   Chrome,
   Firefox,
+  Remote,
   Other(&'a str),
 }
 
@@ -19,6 +24,7 @@ impl<'a> Browser<'a> {
       "default" => Browser::Default,
       "chrome" => Browser::Chrome,
       "firefox" => Browser::Firefox,
+      "remote" => Browser::Remote,
       _ => Browser::Other(browser),
     }
   }
@@ -28,6 +34,7 @@ impl<'a> Browser<'a> {
       Browser::Default => "default",
       Browser::Chrome => "chrome",
       Browser::Firefox => "firefox",
+      Browser::Remote => "remote",
       Browser::Other(browser) => browser,
     }
   }
@@ -47,7 +54,8 @@ impl<'a> BrowserAuthenticator<'a> {
   }
 
   pub async fn authenticate(&self) -> anyhow::Result<SamlAuthData> {
-    let auth_server = AuthServer::new()?;
+    let addr = self.determine_addr().await?;
+    let auth_server = AuthServer::new(&addr)?;
     let auth_url = auth_server.auth_url();
 
     let auth_request = self.auth_request.to_string();
@@ -56,6 +64,25 @@ impl<'a> BrowserAuthenticator<'a> {
     });
 
     match self.browser {
+      Browser::Remote => {
+        info!(
+          r#"
+
+==== Manual Authentication Required ====
+
+Please open the following URL in your browser:
+
+{}
+
+After completing the authentication, please paste the authentication data back to this terminal.
+(The data should start with "globalprotectcallback:...")
+
+Note that the URL is only valid for a single use.
+"#,
+          auth_url
+        );
+        return read_auth_data_from_stdin();
+      }
       Browser::Default => {
         info!("Launching the default browser...");
         webbrowser::open(&auth_url)?;
@@ -71,6 +98,28 @@ impl<'a> BrowserAuthenticator<'a> {
     info!("Please continue the authentication process in the default browser");
     wait_auth_data().await
   }
+
+  async fn determine_addr(&self) -> anyhow::Result<String> {
+    if matches!(self.browser, Browser::Remote) {
+      let local_ip = detect_local_ip().await?;
+      Ok(format!("{}:0", local_ip))
+    } else {
+      Ok("127.0.0.1:0".to_string())
+    }
+  }
+}
+
+/// Detect the local IP address by creating a UDP socket and connecting to an external address
+async fn detect_local_ip() -> anyhow::Result<String> {
+  let socket = UdpSocket::bind("0.0.0.0:0").await?;
+  if let Err(err) = socket.connect("1.1.1.1:80").await {
+    anyhow::bail!("Failed to connect to external address to determine local IP: {}", err);
+  }
+  let local_addr = socket.local_addr()?;
+  let ip = local_addr.ip().to_string();
+  info!("Determined local IP address: {}", ip);
+
+  Ok(ip.to_string())
 }
 
 fn find_browser_path(browser: &Browser) -> String {
@@ -121,5 +170,13 @@ async fn wait_auth_data() -> anyhow::Result<SamlAuthData> {
   fs::remove_file(&port_file)?;
 
   let auth_data = SamlAuthData::from_gpcallback(&data)?;
+  Ok(auth_data)
+}
+
+fn read_auth_data_from_stdin() -> anyhow::Result<SamlAuthData> {
+  let mut data = String::new();
+  std::io::stdin().read_line(&mut data)?;
+
+  let auth_data = SamlAuthData::from_gpcallback(data.trim())?;
   Ok(auth_data)
 }

@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.5.0 - 2025-12-08
+
+- GUI/CLI: statically link OpenConnect
+- GUI/CLI: support configure the client version
+- CLI: add the `-S/--script-tun` option to pass traffic to the `--script` handler
+- GUI: update the branding to `GP Connect`
+
+## 2.4.7 - 2025-11-12
+
+- Support NixOS package installation
+- Fix the VPNC script location on Void Linux
+- Upgrade to Rust 1.85
+- `--browser` without argument uses the system default browser
+
+## 2.4.6 - 2025-10-15
+
+- GUI: support the default configuration file for GUI client (fix [#492](https://github.com/yuezk/GlobalProtect-openconnect/issues/492))
+- GUI: add the option to not reuse the authentication cookies (fix [#540](https://github.com/yuezk/GlobalProtect-openconnect/issues/540))
+- GUI: improve the license validation logic (fix [#502](https://github.com/yuezk/GlobalProtect-openconnect/issues/502))
+- CLI: support the `--browser remote` option to use the remote browser for authentication ([#544](https://github.com/yuezk/GlobalProtect-openconnect/pull/544) by [@dark12](https://github.com/dark12))
+- CLI: fix gpclient disconnect bailing with client is already running issue ([#542](https://github.com/yuezk/GlobalProtect-openconnect/pull/542) by [@zeroepoch](https://github.com/zeroepoch))
+- CLI: fix the `--passwd-on-stdin` reads again on gateway failure ([#546](https://github.com/yuezk/GlobalProtect-openconnect/issues/546))
+
+## 2.4.5 - 2025-07-16
+
+- GUI/CLI: fix the issue that the custom port is not supported issue (fix [#404](https://github.com/yuezk/GlobalProtect-openconnect/issues/404))
+- CLI: add the `--force-dpd` option to specify the interval for DPD (Dead Peer Detection).
+- CLI: add the `-i/--interface` option to specify the interface to use.
+
+## 2.4.4 - 2025-02-09
+
+- GUI: fix multiple tray icons issue (fix [#464](https://github.com/yuezk/GlobalProtect-openconnect/issues/464))
+- CLI: check the cli running state before running the `gpclient` command (fix [#447](https://github.com/yuezk/GlobalProtect-openconnect/issues/447))
+
 ## 2.4.3 - 2025-01-21
 
 - Do not use static default value for `--os-version` option.

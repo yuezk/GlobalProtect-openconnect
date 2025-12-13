@@ -1,5 +1,6 @@
 name: Build
 on:
+  workflow_dispatch:
   push:
     paths-ignore:
       - LICENSE
@@ -31,7 +32,7 @@ jobs:
         run: |
           # Set the matrix to include arm64 if the ref is a tag or is the dev branch
           if [[ "${{ github.ref }}" == "refs/tags/"* || "${{ github.ref }}" == "refs/heads/dev" ]]; then
-            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "arm64", "arch": "arm64"}]' >> $GITHUB_OUTPUT
+            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "ubuntu-24.04-arm", "arch": "ubuntu-24.04-arm"}]' >> $GITHUB_OUTPUT
           else
             echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}]' >> $GITHUB_OUTPUT
           fi
@@ -53,6 +54,7 @@ jobs:
         repository: yuezk/GlobalProtect-openconnect
         ref: ${{ github.ref }}
         path: source/gp
+        submodules: recursive
 
     - name: Create tarball
       run: |
@@ -132,9 +134,8 @@ jobs:
     - tarball
     strategy:
       matrix:
-        # Only build gp on amd64, as the arm64 package will be built in release.yaml
-        os: [{runner: ubuntu-latest, arch: amd64}]
-        package: [deb, rpm, pkg, binary]
+        os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
+        package: [deb, rpm, pkg, binary, ubuntu-rolling]
     runs-on: ${{ matrix.os.runner }}
     name: build-gp (${{ matrix.package }}, ${{ matrix.os.arch }})
     steps:
@@ -152,16 +153,20 @@ jobs:
     - name: Build ${{ matrix.package }} package in Docker
       run: |
         docker run --pull=always --rm \
-          -v $(pwd)/build-gp-${{ matrix.package }}:/${{ matrix.package }} \
+          -e COREPACK_INTEGRITY_KEYS=0 \
+          -v $(pwd)/build-gp-${{ matrix.package }}:/workspace \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2
     - name: Install ${{ matrix.package }} package in Docker
       run: |
         docker run --pull=always --rm \
+          -e COREPACK_INTEGRITY_KEYS=0 \
           -e GPGUI_INSTALLED=0 \
-          -v $(pwd)/build-gp-${{ matrix.package }}:/${{ matrix.package }} \
+          -v $(pwd)/build-gp-${{ matrix.package }}:/workspace \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \
           bash install.sh
+    # Don't upload package for ubuntu-rolling because it's duplicate of deb package
     - name: Upload ${{ matrix.package }} package
+      if: ${{ matrix.package != 'ubuntu-rolling' }}
       uses: actions/upload-artifact@v4
       with:
         name: artifact-gp-${{ matrix.package }}-${{ matrix.os.arch }}
@@ -190,6 +195,7 @@ jobs:
         repository: yuezk/GlobalProtect-openconnect
         ref: ${{ github.ref }}
         path: gpgui-source/gp
+        submodules: recursive
     - name: Checkout gpgui@${{ github.ref_name }}
       uses: actions/checkout@v4
       with:
@@ -205,13 +211,17 @@ jobs:
       run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
     - name: Build gpgui in Docker
       run: |
-        docker run --pull=always --rm -v $(pwd)/gpgui-source:/gpgui yuezk/gpdev:gpgui-builder-tauri2
+        docker run --pull=always --rm \
+          -e COREPACK_INTEGRITY_KEYS=0 \
+          -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:gpgui-builder-tauri2
     - name: Install gpgui in Docker
       run: |
         cd gpgui-source
         tar -xJf *.bin.tar.xz
-        docker run --pull=always --rm -v $(pwd):/gpgui yuezk/gpdev:gpgui-builder-tauri2 \
-          bash -c "cd /gpgui/gpgui_*/ && ./gpgui --version"
+        docker run --pull=always --rm \
+          -e COREPACK_INTEGRITY_KEYS=0 \
+          -v $(pwd):/workspace yuezk/gpdev:gpgui-builder-tauri2 \
+          bash -c "cd /workspace/gpgui_*/ && ./gpgui --version"
     - name: Upload gpgui
       uses: actions/upload-artifact@v4
       with:
@@ -241,6 +251,7 @@ jobs:
         repository: yuezk/GlobalProtect-openconnect
         ref: ${{ github.ref }}
         path: gh-release/gp
+        submodules: recursive
 
     - name: Download all artifacts
       uses: actions/download-artifact@v4

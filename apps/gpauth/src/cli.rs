@@ -1,11 +1,11 @@
 use auth::{auth_prelogin, BrowserAuthenticator};
 use clap::Parser;
+use common::constants::GP_USER_AGENT;
 use gpapi::{
   auth::{SamlAuthData, SamlAuthResult},
   clap::{args::Os, handle_error, Args, InfoLevelVerbosity},
   gp_params::{ClientOs, GpParams},
   utils::{normalize_server, openssl},
-  GP_USER_AGENT,
 };
 use log::info;
 use serde_json::json;
@@ -62,7 +62,9 @@ struct Cli {
 
   #[arg(
     long,
-    help = "The browser to use for authentication, e.g., `default`, `firefox`, `chrome`, `chromium`, or the path to the browser executable"
+    help = "The browser to use for authentication, e.g., `default`, `firefox`, `chrome`, `chromium`, or the path to the browser executable",
+    default_missing_value = "default",
+    num_args=0..=1
   )]
   browser: Option<String>,
 

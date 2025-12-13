@@ -1,17 +1,17 @@
 use anyhow::bail;
 use dns_lookup::lookup_addr;
-use log::{info, warn};
+use log::{debug, info, warn};
 use reqwest::{Client, StatusCode};
-use roxmltree::{Document, Node};
 use serde::Serialize;
 use specta::Type;
+use xmltree::Element;
 
 use crate::{
   credential::{AuthCookieCredential, Credential},
   error::PortalError,
-  gateway::{parse_gateways, Gateway},
+  gateway::{Gateway, parse_gateways},
   gp_params::GpParams,
-  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::NodeExt},
+  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::ElementExt},
 };
 
 #[derive(Debug, Serialize, Type)]
@@ -29,6 +29,10 @@ pub struct PortalConfig {
    * - Some(true): Internal host detection is supported and the user is connected to the internal network
    */
   internal_host_detection: Option<bool>,
+  /**
+   * The version returned by the portal config, if any
+   */
+  version: Option<String>,
 }
 
 impl PortalConfig {
@@ -50,6 +54,10 @@ impl PortalConfig {
 
   pub fn internal_host_detection(&self) -> Option<bool> {
     self.internal_host_detection
+  }
+
+  pub fn version(&self) -> Option<&str> {
+    self.version.as_deref()
   }
 
   /// In-place sort the gateways by region
@@ -133,12 +141,12 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     bail!(PortalError::ConfigError("Empty portal config response".to_string()))
   }
 
-  let doc = Document::parse(&res_xml).map_err(|e| PortalError::ConfigError(e.to_string()))?;
-  let root = doc.root();
+  debug!("Portal config response: {}", res_xml);
+  let root = Element::parse(res_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
 
   let mut ihd_enabled = false;
   let mut prefer_internal = false;
-  if let Some(ihd_node) = root.find_descendant("internal-host-detection") {
+  if let Some(ihd_node) = root.descendant("internal-host-detection") {
     ihd_enabled = true;
     prefer_internal = internal_host_detect(&ihd_node)
   }
@@ -158,21 +166,25 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     gateways.push(Gateway::new(server.to_string(), server.to_string()));
   }
 
+  let version = root.descendant_text("version").map(|s| s.to_string());
+  info!("Detected portal version: {:?}", version);
+
   Ok(PortalConfig {
     portal: server.to_string(),
-    auth_cookie: AuthCookieCredential::new(cred.username(), user_auth_cookie, prelogon_user_auth_cookie),
+    auth_cookie: AuthCookieCredential::new(cred.username(), &user_auth_cookie, &prelogon_user_auth_cookie),
     config_cred: cred.clone(),
     gateways,
     config_digest: config_digest.map(|s| s.to_string()),
     internal_host_detection: if ihd_enabled { Some(prefer_internal) } else { None },
+    version,
   })
 }
 
 // Perform DNS lookup and compare the result with the expected hostname
-fn internal_host_detect(node: &Node) -> bool {
+fn internal_host_detect(element: &Element) -> bool {
   let ip_info = [
-    (node.child_text("ip-address"), node.child_text("host")),
-    (node.child_text("ipv6-address"), node.child_text("ipv6-host")),
+    (element.child_text("ip-address"), element.child_text("host")),
+    (element.child_text("ipv6-address"), element.child_text("ipv6-host")),
   ];
 
   info!("Found internal-host-detection, performing DNS lookup");

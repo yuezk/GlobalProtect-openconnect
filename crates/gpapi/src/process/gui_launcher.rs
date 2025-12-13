@@ -5,10 +5,11 @@ use std::{
 };
 
 use anyhow::bail;
+use common::constants::GP_GUI_BINARY;
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::{process::gui_helper_launcher::GuiHelperLauncher, utils::base64, GP_GUI_BINARY};
+use crate::{process::gui_helper_launcher::GuiHelperLauncher, utils::base64};
 
 use super::command_traits::CommandExt;
 

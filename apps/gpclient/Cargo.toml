@@ -12,18 +12,23 @@ gpapi = { path = "../../crates/gpapi", features = ["clap"] }
 openconnect = { path = "../../crates/openconnect" }
 
 anyhow.workspace = true
+askama.workspace = true
+chrono.workspace = true
 clap.workspace = true
 env_logger.workspace = true
-inquire = "0.7"
+inquire = "0.9"
 log.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 sysinfo.workspace = true
 serde_json.workspace = true
+serde_urlencoded.workspace = true
 whoami.workspace = true
 tempfile.workspace = true
 reqwest.workspace = true
 directories.workspace = true
 compile-time.workspace = true
+netdev.workspace = true
+xmltree.workspace = true
 
 [features]
 default = ["webview-auth"]

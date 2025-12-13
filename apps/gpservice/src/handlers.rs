@@ -17,11 +17,11 @@ use axum::{
   http::StatusCode,
   response::IntoResponse,
 };
+use common::constants::GP_GUI_BINARY;
 use futures::{SinkExt, StreamExt};
 use gpapi::{
   service::{event::WsEvent, request::UpdateGuiRequest},
   utils::checksum::verify_checksum,
-  GP_GUI_BINARY,
 };
 use log::{info, warn};
 use tar::Archive;

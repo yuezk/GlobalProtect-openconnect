@@ -9,11 +9,13 @@ const VPNC_SCRIPT_LOCATIONS: &[&str] = &[
   "/usr/sbin/vpnc-script",
   "/etc/vpnc/vpnc-script",
   "/etc/openconnect/vpnc-script",
+  "/usr/libexec/vpnc-scripts/vpnc-script",
   #[cfg(target_os = "macos")]
   "/opt/homebrew/etc/vpnc/vpnc-script",
 ];
 
 const CSD_WRAPPER_LOCATIONS: &[&str] = &[
+  "/usr/libexec/gpclient/hipreport.sh",
   #[cfg(target_arch = "x86_64")]
   "/usr/lib/x86_64-linux-gnu/openconnect/hipreport.sh",
   #[cfg(target_arch = "aarch64")]
@@ -24,22 +26,22 @@ const CSD_WRAPPER_LOCATIONS: &[&str] = &[
   "/opt/homebrew/opt/openconnect/libexec/openconnect/hipreport.sh",
 ];
 
-fn find_executable(locations: &[&str]) -> Option<String> {
+fn find_executable(locations: &[&'static str]) -> Option<&'static str> {
   for location in locations.iter() {
     let path = Path::new(location);
     if path.is_executable() {
-      return Some(location.to_string());
+      return Some(*location);
     }
   }
 
   None
 }
 
-pub fn find_vpnc_script() -> Option<String> {
+pub fn find_vpnc_script() -> Option<&'static str> {
   find_executable(&VPNC_SCRIPT_LOCATIONS)
 }
 
-pub fn find_csd_wrapper() -> Option<String> {
+pub fn find_csd_wrapper() -> Option<&'static str> {
   find_executable(&CSD_WRAPPER_LOCATIONS)
 }
 

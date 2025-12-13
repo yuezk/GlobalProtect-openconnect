@@ -3,7 +3,7 @@ use std::{env::temp_dir, fs::File, str::FromStr};
 use anyhow::bail;
 use clap::{Parser, Subcommand};
 use gpapi::{
-  clap::{handle_error, Args, InfoLevelVerbosity},
+  clap::{Args, InfoLevelVerbosity, handle_error},
   utils::openssl,
 };
 use log::info;
@@ -12,10 +12,11 @@ use tempfile::NamedTempFile;
 use tokio::fs;
 
 use crate::{
+  GP_CLIENT_LOCK_FILE,
   connect::{ConnectArgs, ConnectHandler},
   disconnect::{DisconnectArgs, DisconnectHandler},
+  hip::{HipArgs, HipHandler},
   launch_gui::{LaunchGuiArgs, LaunchGuiHandler},
-  GP_CLIENT_LOCK_FILE,
 };
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
@@ -34,6 +35,8 @@ enum CliCommand {
   Disconnect(DisconnectArgs),
   #[command(about = "Launch the GUI")]
   LaunchGui(LaunchGuiArgs),
+  #[command(about = "Generate HIP report")]
+  Hip(HipArgs),
 }
 
 #[derive(Parser)]
@@ -111,7 +114,7 @@ impl Cli {
 
   async fn run(&self) -> anyhow::Result<()> {
     // check if an instance is running
-    if self.is_running().await {
+    if !matches!(self.command, CliCommand::Disconnect(_)) && self.is_running().await {
       bail!("Another instance of the client is already running");
     }
 
@@ -132,6 +135,7 @@ impl Cli {
       CliCommand::Connect(args) => ConnectHandler::new(args, &shared_args).handle().await,
       CliCommand::Disconnect(args) => DisconnectHandler::new(args).handle().await,
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
+      CliCommand::Hip(args) => HipHandler::new(args).handle().await,
     }
   }
 }

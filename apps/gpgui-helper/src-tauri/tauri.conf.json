@@ -15,7 +15,7 @@
     },
     "windows": [
       {
-        "title": "GlobalProtect GUI Helper",
+        "title": "GP Connect Helper",
         "center": true,
         "resizable": true,
         "width": 500,

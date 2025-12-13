@@ -1,14 +1,16 @@
 use std::process::Stdio;
 
 use anyhow::bail;
+use common::constants::GP_AUTH_BINARY;
 use tokio::process::Command;
 
-use crate::{auth::SamlAuthResult, credential::Credential, GP_AUTH_BINARY};
+use crate::{auth::SamlAuthResult, credential::Credential};
 
 use super::command_traits::CommandExt;
 
 pub struct SamlAuthLauncher<'a> {
   server: &'a str,
+  auth_executable: Option<&'a str>,
   gateway: bool,
   saml_request: Option<&'a str>,
   user_agent: Option<&'a str>,
@@ -30,6 +32,7 @@ impl<'a> SamlAuthLauncher<'a> {
   pub fn new(server: &'a str) -> Self {
     Self {
       server,
+      auth_executable: None,
       gateway: false,
       saml_request: None,
       user_agent: None,
@@ -46,6 +49,11 @@ impl<'a> SamlAuthLauncher<'a> {
       browser: None,
       verbose: None,
     }
+  }
+
+  pub fn auth_executable(mut self, auth_executable: Option<&'a str>) -> Self {
+    self.auth_executable = auth_executable;
+    self
   }
 
   pub fn gateway(mut self, gateway: bool) -> Self {
@@ -113,7 +121,8 @@ impl<'a> SamlAuthLauncher<'a> {
 
   /// Launch the authenticator binary as the current user or SUDO_USER if available.
   pub async fn launch(self) -> anyhow::Result<Credential> {
-    let mut auth_cmd = Command::new(GP_AUTH_BINARY);
+    let program = self.auth_executable.unwrap_or(GP_AUTH_BINARY);
+    let mut auth_cmd = Command::new(program);
     auth_cmd.arg(self.server);
 
     if self.gateway {

@@ -4,19 +4,25 @@ use std::{
   sync::{Arc, RwLock},
 };
 
-use common::vpn_utils::{check_executable, find_vpnc_script};
 use log::info;
 
 use crate::ffi;
+use crate::vpn_utils::{check_executable, find_csd_wrapper, find_vpnc_script};
 
 type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce() + 'static + Send + Sync>>>>;
 
 pub struct Vpn {
   server: CString,
   cookie: CString,
+
   user_agent: CString,
-  script: CString,
   os: CString,
+  client_version: Option<CString>,
+
+  script: CString,
+  interface: Option<CString>,
+  script_tun: bool,
+
   certificate: Option<CString>,
   sslkey: Option<CString>,
   key_password: Option<CString>,
@@ -29,6 +35,8 @@ pub struct Vpn {
   mtu: u32,
   disable_ipv6: bool,
   no_dtls: bool,
+
+  dpd_interval: u32,
 
   callback: OnConnectedCallback,
 }
@@ -63,9 +71,14 @@ impl Vpn {
 
       server: self.server.as_ptr(),
       cookie: self.cookie.as_ptr(),
+
       user_agent: self.user_agent.as_ptr(),
-      script: self.script.as_ptr(),
       os: self.os.as_ptr(),
+      client_version: Self::option_to_ptr(&self.client_version),
+
+      script: self.script.as_ptr(),
+      interface: Self::option_to_ptr(&self.interface),
+      script_tun: self.script_tun as u32,
 
       certificate: Self::option_to_ptr(&self.certificate),
       sslkey: Self::option_to_ptr(&self.sslkey),
@@ -79,6 +92,7 @@ impl Vpn {
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6 as u32,
       no_dtls: self.no_dtls as u32,
+      dpd_interval: self.dpd_interval,
     }
   }
 
@@ -113,14 +127,18 @@ pub struct VpnBuilder {
   server: String,
   cookie: String,
   script: Option<String>,
+  interface: Option<String>,
+  script_tun: bool,
 
   user_agent: Option<String>,
   os: Option<String>,
+  client_version: Option<String>,
 
   certificate: Option<String>,
   sslkey: Option<String>,
   key_password: Option<String>,
 
+  hip: bool,
   csd_uid: u32,
   csd_wrapper: Option<String>,
 
@@ -128,6 +146,8 @@ pub struct VpnBuilder {
   mtu: u32,
   disable_ipv6: bool,
   no_dtls: bool,
+
+  dpd_interval: u32,
 }
 
 impl VpnBuilder {
@@ -136,14 +156,18 @@ impl VpnBuilder {
       server: server.to_string(),
       cookie: cookie.to_string(),
       script: None,
+      interface: None,
+      script_tun: false,
 
       user_agent: None,
       os: None,
+      client_version: None,
 
       certificate: None,
       sslkey: None,
       key_password: None,
 
+      hip: false,
       csd_uid: 0,
       csd_wrapper: None,
 
@@ -151,11 +175,22 @@ impl VpnBuilder {
       mtu: 0,
       disable_ipv6: false,
       no_dtls: false,
+      dpd_interval: 0,
     }
   }
 
   pub fn script<T: Into<Option<String>>>(mut self, script: T) -> Self {
     self.script = script.into();
+    self
+  }
+
+  pub fn interface<T: Into<Option<String>>>(mut self, interface: T) -> Self {
+    self.interface = interface.into();
+    self
+  }
+
+  pub fn script_tun(mut self, script_tun: bool) -> Self {
+    self.script_tun = script_tun;
     self
   }
 
@@ -166,6 +201,11 @@ impl VpnBuilder {
 
   pub fn os<T: Into<Option<String>>>(mut self, os: T) -> Self {
     self.os = os.into();
+    self
+  }
+
+  pub fn client_version<T: Into<Option<String>>>(mut self, client_version: T) -> Self {
+    self.client_version = client_version.into();
     self
   }
 
@@ -181,6 +221,11 @@ impl VpnBuilder {
 
   pub fn key_password<T: Into<Option<String>>>(mut self, key_password: T) -> Self {
     self.key_password = key_password.into();
+    self
+  }
+
+  pub fn hip(mut self, hip: bool) -> Self {
+    self.hip = hip;
     self
   }
 
@@ -214,18 +259,41 @@ impl VpnBuilder {
     self
   }
 
-  pub fn build(self) -> Result<Vpn, VpnError> {
-    let script = match self.script {
-      Some(script) => {
-        check_executable(&script).map_err(|e| VpnError::new(e.to_string()))?;
-        script
-      }
-      None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script")))?,
-    };
+  pub fn dpd_interval(mut self, dpd_interval: u32) -> Self {
+    self.dpd_interval = dpd_interval;
+    self
+  }
 
-    if let Some(csd_wrapper) = &self.csd_wrapper {
-      check_executable(csd_wrapper).map_err(|e| VpnError::new(e.to_string()))?;
+  fn determine_script(&self) -> Result<&str, VpnError> {
+    match &self.script {
+      Some(script) => {
+        check_executable(script).map_err(|e| VpnError::new(e.to_string()))?;
+        Ok(script)
+      }
+      None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script"))),
     }
+  }
+
+  fn determine_csd_wrapper(&self) -> Result<Option<&str>, VpnError> {
+    if !self.hip {
+      return Ok(None);
+    }
+
+    match &self.csd_wrapper {
+      Some(csd_wrapper) if !csd_wrapper.is_empty() => {
+        check_executable(csd_wrapper).map_err(|e| VpnError::new(e.to_string()))?;
+        Ok(Some(csd_wrapper))
+      }
+      _ => {
+        let s = find_csd_wrapper().ok_or_else(|| VpnError::new(String::from("Failed to find csd wrapper")))?;
+        Ok(Some(s))
+      }
+    }
+  }
+
+  pub fn build(self) -> Result<Vpn, VpnError> {
+    let script = self.determine_script()?.to_owned();
+    let csd_wrapper = self.determine_csd_wrapper()?.map(|s| s.to_owned());
 
     let user_agent = self.user_agent.unwrap_or_default();
     let os = self.os.unwrap_or("linux".to_string());
@@ -233,9 +301,14 @@ impl VpnBuilder {
     Ok(Vpn {
       server: Self::to_cstring(&self.server),
       cookie: Self::to_cstring(&self.cookie),
+
       user_agent: Self::to_cstring(&user_agent),
-      script: Self::to_cstring(&script),
       os: Self::to_cstring(&os),
+      client_version: self.client_version.as_deref().map(Self::to_cstring),
+
+      script: Self::to_cstring(&script),
+      interface: self.interface.as_deref().map(Self::to_cstring),
+      script_tun: self.script_tun,
 
       certificate: self.certificate.as_deref().map(Self::to_cstring),
       sslkey: self.sslkey.as_deref().map(Self::to_cstring),
@@ -243,12 +316,13 @@ impl VpnBuilder {
       servercert: None,
 
       csd_uid: self.csd_uid,
-      csd_wrapper: self.csd_wrapper.as_deref().map(Self::to_cstring),
+      csd_wrapper: csd_wrapper.as_deref().map(Self::to_cstring),
 
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6,
       no_dtls: self.no_dtls,
+      dpd_interval: self.dpd_interval,
 
       callback: Default::default(),
     })

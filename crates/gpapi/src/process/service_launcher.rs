@@ -4,9 +4,8 @@ use std::{
   process::{ExitStatus, Stdio},
 };
 
+use common::constants::GP_SERVICE_BINARY;
 use tokio::process::Command;
-
-use crate::GP_SERVICE_BINARY;
 
 use super::command_traits::CommandExt;
 
@@ -15,7 +14,7 @@ pub struct ServiceLauncher<'a> {
   minimized: bool,
   env_file: Option<String>,
   log_file: Option<String>,
-  verbose: Option<&'a str>
+  verbose: Option<&'a str>,
 }
 
 impl Default for ServiceLauncher<'_> {
@@ -31,7 +30,7 @@ impl<'a> ServiceLauncher<'a> {
       minimized: false,
       env_file: None,
       log_file: None,
-      verbose: None
+      verbose: None,
     }
   }
 

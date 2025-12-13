@@ -4,9 +4,9 @@ OFFLINE ?= 0
 BUILD_FE ?= 1
 INCLUDE_GUI ?= 0
 CARGO ?= cargo
-RUST_VERSION = 1.80
+DISABLE_RUST_TOOLCHAIN ?= 0
 
-VERSION = $(shell $(CARGO) metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+VERSION = $(shell grep '^version' Cargo.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')
 REVISION ?= 1
 RPM_SOURCE ?= %{name}.tar.gz
 
@@ -102,12 +102,16 @@ build-rs:
 		tar -xJf vendor.tar.xz; \
 	fi
 
+	# Remove the rust-toolchain.toml if DISABLE_RUST_TOOLCHAIN is set to 1
+	if [ $(DISABLE_RUST_TOOLCHAIN) -eq 1 ]; then \
+		rm -vf rust-toolchain.toml; \
+	fi
+
 	# Only build the GUI components if BUILD_GUI is set to 1
 	if [ $(BUILD_GUI) -eq 1 ]; then \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth; \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpgui-helper --features "tauri/custom-protocol"; \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth -p gpgui-helper; \
 	else \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth --no-default-features; \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth; \
 	fi
 
 clean:
@@ -132,6 +136,9 @@ install:
 		install -Dm755 .build/gpgui/gpgui_*/gpgui $(DESTDIR)/usr/bin/gpgui; \
 	fi
 
+	# Install the HIP report script
+	install -Dm755 packaging/files/usr/libexec/gpclient/hipreport.sh $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
+
 	# Install the disconnect hooks
 	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
 	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
@@ -151,6 +158,8 @@ uninstall:
 	rm -f $(DESTDIR)/usr/bin/gpservice
 	rm -f $(DESTDIR)/usr/bin/gpgui-helper
 	rm -f $(DESTDIR)/usr/bin/gpgui
+
+	rm -f $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
 
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
@@ -180,11 +189,9 @@ init-debian: clean-debian tarball
 
 	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/deb/$(PKG)/debian/rules
 	sed -i "s/@BUILD_GUI@/$(BUILD_GUI)/g" .build/deb/$(PKG)/debian/rules
-	sed -i "s/@RUST_VERSION@/$(RUST_VERSION)/g" .build/deb/$(PKG)/debian/rules
 
 	# Remove the GUI dependencies if BUILD_GUI is set to 0
 	if [ $(BUILD_GUI) -eq 0 ]; then \
-		sed -i "/libxml2/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/libsecret-1-0/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/libayatana-appindicator3-1/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/gnome-keyring/d" .build/deb/$(PKG)/debian/control; \
@@ -194,10 +201,10 @@ init-debian: clean-debian tarball
 	rm -f .build/deb/$(PKG)/debian/changelog
 
 deb: init-debian
-	# Remove the rust build dependency from the control file
-	sed -i "s/@RUST@//g" .build/deb/$(PKG)/debian/control
-
 	cd .build/deb/$(PKG) && dch --create --distribution unstable --package $(PKG_NAME) --newversion $(VERSION)-$(REVISION) "Bugfix and improvements."
+
+	# Install build dependencies
+	cd .build/deb/$(PKG) && sudo mk-build-deps --install --remove debian/control
 
 	cd .build/deb/$(PKG) && debuild --preserve-env -e PATH -us -uc -b
 
@@ -208,8 +215,6 @@ check-ppa:
 
 # Usage: make ppa SERIES=focal OFFLINE=1 PUBLISH=1
 ppa: check-ppa init-debian
-	sed -i "s/@RUST@/cargo-1.80/g" .build/deb/$(PKG)/debian/control
-
 	$(eval SERIES_VER = $(shell distro-info --series $(SERIES) -r | cut -d' ' -f1))
 	@echo "Building for $(SERIES) $(SERIES_VER)"
 

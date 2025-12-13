@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use common::constants::GP_SERVICE_LOCK_FILE;
 use thiserror::Error;
 use tokio::fs;
 
@@ -94,7 +95,7 @@ impl LockInfo {
 }
 
 pub async fn gpservice_lock_info() -> Result<LockInfo, LockFileError> {
-  LockInfo::from_file(crate::GP_SERVICE_LOCK_FILE).await
+  LockInfo::from_file(GP_SERVICE_LOCK_FILE).await
 }
 
 #[cfg(test)]

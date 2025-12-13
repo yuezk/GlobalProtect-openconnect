@@ -10,6 +10,7 @@ license.workspace = true
 tauri-build = { version = "2", features = [], optional = true }
 
 [dependencies]
+common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap"] }
 
 auth = { path = "../../crates/auth", features = ["browser-auth"] }
@@ -24,8 +25,8 @@ tokio.workspace = true
 tempfile.workspace = true
 compile-time.workspace = true
 
-# Pin the version of home because the latest version requires Rust 1.81
-home = "=0.5.9"
+# Pin to specific version due to MSRV
+home = "=0.5.11"
 
 # webview auth dependencies
 tauri = { workspace = true, optional = true }
