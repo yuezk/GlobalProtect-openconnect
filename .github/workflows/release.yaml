@@ -109,10 +109,12 @@ jobs:
     - name: Docker Login
       run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
     - name: Build ${{ matrix.package }} package in Docker
+      # LIBXML2_STATIC is needed to avoid the dynamic linking issue on different distros
       run: |
         docker run --pull=always --rm \
           -v $(pwd)/build-${{ matrix.package }}:/workspace \
           -e COREPACK_INTEGRITY_KEYS=0 \
+          -e LIBXML2_STATIC=1 \
           -e INCLUDE_GUI=1 \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2
 
