@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.5.1 - 2025-12-22
+
+- Fix the `.deb` package installation issue (fix [#563](https://github.com/yuezk/GlobalProtect-openconnect/issues/563))
+- GUI: fix the tray icon size issue on GNOME Flashback (fix [#564](https://github.com/yuezk/GlobalProtect-openconnect/issues/564))
+- Improve the HIP report generation logic
+
 ## 2.5.0 - 2025-12-08
 
 - GUI/CLI: statically link OpenConnect
