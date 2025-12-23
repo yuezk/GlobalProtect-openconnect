@@ -4,7 +4,6 @@
     naersk.url = "github:nix-community/naersk";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
-    self.submodules = true;
   };
 
   outputs =
@@ -34,6 +33,11 @@
           rustc = toolchain;
         };
 
+        src = pkgs.fetchzip {
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/globalprotect-openconnect-${version}.tar.gz";
+          hash = "sha256-4hlWP7yvwk4rTvQWuh60D40DJ20GfHhLTYA5+dkc4Hc=";
+        };
+
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
         gpgui = pkgs.fetchzip {
@@ -47,12 +51,10 @@
       {
         # For `nix build`
         packages.default = naersk'.buildPackage {
-          inherit pname version;
+          inherit pname version src;
 
           # Must be set to true to avoid issues with the Tauri build process
           singleStep = true;
-
-          src = ./.;
 
           buildInputs =
             with pkgs;
