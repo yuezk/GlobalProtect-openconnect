@@ -1,7 +1,5 @@
 .SHELLFLAGS += -e
 
-OFFLINE ?= 0
-BUILD_FE ?= 1
 INCLUDE_GUI ?= 0
 CARGO ?= cargo
 DISABLE_RUST_TOOLCHAIN ?= 0
@@ -17,11 +15,16 @@ SERIES ?= $(shell lsb_release -cs)
 PUBLISH ?= 0
 
 # Indicates whether to build the GUI components
-BUILD_GUI ?= 1
+BUILD_GUI_HELPER ?= 1
 
 export DEBEMAIL = k3vinyue@gmail.com
 export DEBFULLNAME = Kevin Yue
 export SNAPSHOT = $(shell test -f SNAPSHOT && echo "true" || echo "false")
+export OFFLINE_BUILD = $(shell test -f OFFLINE_BUILD && echo "1" || echo "0")
+# If OFFLINE is not set, use OFFLINE_BUILD
+ifndef OFFLINE
+	OFFLINE = $(OFFLINE_BUILD)
+endif
 
 ifeq ($(SNAPSHOT), true)
 	RELEASE_TAG = snapshot
@@ -48,21 +51,15 @@ clean-tarball:
 
 # Create a tarball, include the cargo dependencies if OFFLINE is set to 1
 tarball: clean-tarball
-	if [ $(BUILD_GUI) -eq 1 ] && [ $(BUILD_FE) -eq 1 ]; then \
-		echo "Building frontend..."; \
-		cd apps/gpgui-helper && pnpm install && pnpm build; \
-	fi
-
-	# Remove node_modules to reduce the tarball size
-	rm -rf apps/gpgui-helper/node_modules
-
 	mkdir -p .cargo
 	mkdir -p .build/tarball
 
 	# If OFFLINE is set to 1, vendor all cargo dependencies
+	# Generate a OFFLINE_BUILD file to indicate offline build
 	if [ $(OFFLINE) -eq 1 ]; then \
 		$(CARGO) vendor .vendor > .cargo/config.toml; \
 		tar -cJf vendor.tar.xz .vendor; \
+		touch OFFLINE_BUILD; \
 	fi
 
 	@echo "Creating tarball..."
@@ -81,21 +78,7 @@ download-gui:
 		echo "Skipping GlobalProtect GUI download (INCLUDE_GUI=0)"; \
 	fi
 
-build: download-gui build-fe build-rs
-
-# Install and build the frontend
-# If OFFLINE is set to 1, skip it
-build-fe:
-	if [ $(BUILD_GUI) -eq 0 ] || [ $(OFFLINE) -eq 1 ] || [ $(BUILD_FE) -eq 0 ]; then \
-		echo "Skipping frontend build (BUILD_GUI=0 or OFFLINE=1 or BUILD_FE=0)"; \
-	else \
-		cd apps/gpgui-helper && pnpm install && pnpm build; \
-	fi
-
-	if [ $(BUILD_GUI) -eq 1 ] && [ ! -d apps/gpgui-helper/dist ]; then \
-		echo "Error: frontend build failed"; \
-		exit 1; \
-	fi
+build: download-gui build-rs
 
 build-rs:
 	if [ $(OFFLINE) -eq 1 ]; then \
@@ -107,8 +90,8 @@ build-rs:
 		rm -vf rust-toolchain.toml; \
 	fi
 
-	# Only build the GUI components if BUILD_GUI is set to 1
-	if [ $(BUILD_GUI) -eq 1 ]; then \
+	# Only build the GUI components if BUILD_GUI_HELPER is set to 1
+	if [ $(BUILD_GUI_HELPER) -eq 1 ]; then \
 		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth -p gpgui-helper; \
 	else \
 		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth; \
@@ -127,8 +110,8 @@ install:
 	install -Dm755 target/release/gpauth $(DESTDIR)/usr/bin/gpauth
 	install -Dm755 target/release/gpservice $(DESTDIR)/usr/bin/gpservice
 
-	# Install the GUI components if BUILD_GUI is set to 1
-	if [ $(BUILD_GUI) -eq 1 ]; then \
+	# Install the GUI components if BUILD_GUI_HELPER is set to 1
+	if [ $(BUILD_GUI_HELPER) -eq 1 ]; then \
 		install -Dm755 target/release/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper; \
 	fi
 
@@ -187,11 +170,10 @@ init-debian: clean-debian tarball
 	cp -f packaging/deb/postrm .build/deb/$(PKG)/debian/postrm
 	cp -f packaging/deb/compat .build/deb/$(PKG)/debian/compat
 
-	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/deb/$(PKG)/debian/rules
-	sed -i "s/@BUILD_GUI@/$(BUILD_GUI)/g" .build/deb/$(PKG)/debian/rules
+	sed -i "s/@BUILD_GUI_HELPER@/$(BUILD_GUI_HELPER)/g" .build/deb/$(PKG)/debian/rules
 
-	# Remove the GUI dependencies if BUILD_GUI is set to 0
-	if [ $(BUILD_GUI) -eq 0 ]; then \
+	# Remove the GUI dependencies if BUILD_GUI_HELPER is set to 0
+	if [ $(BUILD_GUI_HELPER) -eq 0 ]; then \
 		sed -i "/libsecret-1-0/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/libayatana-appindicator3-1/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/gnome-keyring/d" .build/deb/$(PKG)/debian/control; \
@@ -242,7 +224,6 @@ init-rpm: clean-rpm
 	sed -i "s/@VERSION@/$(VERSION)/g" .build/rpm/globalprotect-openconnect.spec
 	sed -i "s/@REVISION@/$(REVISION)/g" .build/rpm/globalprotect-openconnect.spec
 	sed -i "s|@SOURCE@|$(RPM_SOURCE)|g" .build/rpm/globalprotect-openconnect.spec
-	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/rpm/globalprotect-openconnect.spec
 	sed -i "s/@DATE@/$(shell LC_ALL=en.US date "+%a %b %d %Y")/g" .build/rpm/globalprotect-openconnect.spec
 
 	sed -i "s/@VERSION@/$(VERSION)/g" .build/rpm/globalprotect-openconnect.changes
@@ -275,7 +256,6 @@ init-pkgbuild: clean-pkgbuild tarball
 	sed -i "s/@PKG_NAME@/$(PKG_NAME)/g" .build/pkgbuild/PKGBUILD
 	sed -i "s/@VERSION@/$(VERSION)/g" .build/pkgbuild/PKGBUILD
 	sed -i "s/@REVISION@/$(REVISION)/g" .build/pkgbuild/PKGBUILD
-	sed -i "s/@OFFLINE@/$(OFFLINE)/g" .build/pkgbuild/PKGBUILD
 
 pkgbuild: init-pkgbuild
 	cd .build/pkgbuild && makepkg -s --noconfirm
@@ -291,7 +271,7 @@ binary: clean-binary tarball
 
 	mkdir -p .build/binary/$(PKG_NAME)_$(VERSION)/artifacts
 
-	make -C .build/binary/${PKG} build OFFLINE=$(OFFLINE) BUILD_FE=0 INCLUDE_GUI=$(INCLUDE_GUI)
+	make -C .build/binary/${PKG} build INCLUDE_GUI=$(INCLUDE_GUI)
 	make -C .build/binary/${PKG} install DESTDIR=$(PWD)/.build/binary/$(PKG_NAME)_$(VERSION)/artifacts
 
 	cp packaging/binary/Makefile.in .build/binary/$(PKG_NAME)_$(VERSION)/Makefile

@@ -1,8 +1,6 @@
 #!/usr/bin/make -f
 
-export OFFLINE = @OFFLINE@
-export BUILD_FE = 0
-export BUILD_GUI = @BUILD_GUI@
+export BUILD_GUI_HELPER = @BUILD_GUI_HELPER@
 export DISABLE_RUST_TOOLCHAIN = 0
 
 export PATH := /usr/lib/rust-1.85/bin:$(PATH)

@@ -319,7 +319,7 @@ This project includes a DevContainer configuration that provides a consistent, r
 - [Tauri dependencies](https://tauri.app/start/prerequisites/)
 - `libopenconnect-dev` (or `openconnect-devel` on RPM-based systems)
 - `pkexec` and `gnome-keyring` (or `pam_kwallet` on KDE)
-- `nodejs` and `pnpm` (optional if using pre-built release tarballs with `BUILD_FE=0`)
+- `nodejs` and `pnpm` (optional)
 
 #### Build Steps
 
@@ -331,7 +331,7 @@ This project includes a DevContainer configuration that provides a consistent, r
    ```bash
    tar -xzf globalprotect-openconnect-${version}.tar.gz
    cd globalprotect-openconnect-${version}
-   make build BUILD_FE=0
+   make build
    ```
 
 3. **Install:**
@@ -351,8 +351,7 @@ Verify the CLI client is working correctly:
 
 ### Build Options
 
-- `BUILD_GUI=0` – Build CLI components only (excludes GUI)
-- `BUILD_FE=0` – Skip frontend build (uses pre-built assets)
+- `BUILD_GUI_HELPER=0` – Build CLI components only (excludes GUI)
 - `OFFLINE=1` – Build in offline mode using vendored dependencies
 
 ## Frequently Asked Questions
