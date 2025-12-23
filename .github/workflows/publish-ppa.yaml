@@ -74,8 +74,7 @@ jobs:
         cp -v packaging/deb/compat .build/debian/compat
         cp -v packaging/deb/postrm .build/debian/postrm
 
-        sed -i "s/@OFFLINE@/1/g" .build/debian/rules
-        sed -i "s/@BUILD_GUI@/1/g" .build/debian/rules
+        sed -i "s/@BUILD_GUI_HELPER@/1/g" .build/debian/rules
 
         # Update the control file with the correct Rust version
         # sed -i "s/rust-[0-9.]\+-all/rust-${{ inputs.rust }}-all/g" .build/debian/control
