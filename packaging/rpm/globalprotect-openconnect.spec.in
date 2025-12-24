@@ -13,7 +13,6 @@ BuildRequires:  libtool
 BuildRequires:  autoconf
 BuildRequires:  automake
 BuildRequires:  gcc-c++
-BuildRequires:  rust
 BuildRequires:  cargo
 BuildRequires:  pkg-config
 BuildRequires:  openconnect-devel
@@ -31,7 +30,10 @@ BuildRequires:  webkit2gtk4.1-devel
 BuildRequires:  (libappindicator-gtk3-devel or libappindicator3-1)
 BuildRequires:  (librsvg2-devel or librsvg-devel)
 
-Requires:       vpnc-script, (libappindicator-gtk3 or libayatana-appindicator)
+# Still requires openconnect because of the latest vpnc-script it provides on
+# some distros (e.g., opensuse)
+Requires:       openconnect >= 8.20
+Requires:       (libappindicator-gtk3 or libayatana-appindicator)
 Conflicts:      globalprotect-openconnect-snapshot
 
 %global debug_package %{nil}
