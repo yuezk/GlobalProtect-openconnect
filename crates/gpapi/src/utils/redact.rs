@@ -1,8 +1,14 @@
-use std::sync::RwLock;
+use std::sync::{LazyLock, RwLock};
 
 use redact_engine::{Pattern, Redaction as RedactEngine};
 use regex::Regex;
 use url::{form_urlencoded, Url};
+
+// Compile the IP address regex once at startup
+static IP_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+  Regex::new("(((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4})")
+    .expect("IP address regex pattern is valid")
+});
 
 pub struct Redaction {
   redact_engine: RwLock<Option<RedactEngine>>,
@@ -17,7 +23,7 @@ impl Default for Redaction {
 impl Redaction {
   pub fn new() -> Self {
     let redact_engine = RedactEngine::custom("[**********]").add_pattern(Pattern {
-      test: Regex::new("(((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4})").unwrap(),
+      test: IP_REGEX.clone(),
       group: 1,
     });
 
@@ -59,13 +65,20 @@ impl Redaction {
   }
 
   pub fn redact_str(&self, text: &str) -> String {
-    self
-      .redact_engine
-      .read()
-      .expect("Failed to acquire read lock on redact engine")
-      .as_ref()
-      .expect("Failed to get redact engine")
-      .redact_str(text)
+    // Use proper error handling instead of expect()
+    match self.redact_engine.read() {
+      Ok(guard) => match guard.as_ref() {
+        Some(engine) => engine.redact_str(text),
+        None => {
+          log::warn!("Redact engine is None, returning original text");
+          text.to_string()
+        }
+      },
+      Err(e) => {
+        log::error!("Failed to acquire read lock on redact engine: {}", e);
+        text.to_string()
+      }
+    }
   }
 }
 
