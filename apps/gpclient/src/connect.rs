@@ -54,9 +54,14 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use the default CSD wrapper to generate the HIP report and send it to the server"
+    help = "Use HIP (Host Integrity Protection) extension, optionally specify the HIP script path",
+    default_missing_value = "",
+    num_args=0..=1
   )]
-  hip: bool,
+  hip: Option<String>,
+
+  #[arg(long, help = "The user used to run the HIP script")]
+  hip_user: Option<String>,
 
   #[arg(
     short,
@@ -71,10 +76,10 @@ pub(crate) struct ConnectArgs {
   #[arg(short = 'p', long, help = "The key passphrase of the private key")]
   key_password: Option<String>,
 
-  #[arg(long, help = "Same as the '--csd-user' option in the openconnect command")]
+  #[arg(long, help = "Deprecated: Use the '--hip-user' option instead")]
   csd_user: Option<String>,
 
-  #[arg(long, help = "Same as the '--csd-wrapper' option in the openconnect command")]
+  #[arg(long, help = "Deprecated: Use the '--hip' option instead")]
   csd_wrapper: Option<String>,
 
   #[arg(long, default_value = "300", help = "Reconnection retry timeout in seconds")]
@@ -119,9 +124,10 @@ pub(crate) struct ConnectArgs {
   clean: bool,
 
   #[cfg(feature = "webview-auth")]
-  #[arg(long, help = "Use the default browser to authenticate")]
+  #[arg(long, help = "Deprecated: Use the `--browser` option instead")]
   default_browser: bool,
 
+  #[cfg(feature = "webview-auth")]
   #[arg(
     long,
     help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`.\nOr the path to the browser executable.\nUse 'remote' for headless servers.",
@@ -201,6 +207,15 @@ impl<'a> ConnectHandler<'a> {
     #[cfg(feature = "webview-auth")]
     if self.args.default_browser && self.args.browser.is_some() {
       bail!("Cannot use `--default-browser` and `--browser` options at the same time");
+    }
+
+    // Warn if deprecated options are used and will be removed in the future
+    if self.args.csd_user.is_some() {
+      warn!("The '--csd-user' option is deprecated and will be removed in future releases, please use the '--hip-user' option instead");
+    }
+
+    if self.args.csd_wrapper.is_some() {
+      warn!("The '--csd-wrapper' option is deprecated and will be removed in future releases, please use the '--hip' option instead");
     }
 
     self.latest_key_password.replace(self.args.key_password.clone());
@@ -344,14 +359,9 @@ impl<'a> ConnectHandler<'a> {
 
   async fn connect_gateway(&self, gateway: &str, cookie: &str, client_version: Option<&str>) -> anyhow::Result<()> {
     let mtu = self.args.mtu.unwrap_or(0);
-    let csd_uid = get_csd_uid(&self.args.csd_user)?;
-    let (hip, csd_wrapper) = if let Some(csd_wrapper) = &self.args.csd_wrapper {
-      (true, Some(csd_wrapper.clone()))
-    } else if self.args.hip {
-      (true, None)
-    } else {
-      (false, None)
-    };
+    let (hip, csd_wrapper) = self.determine_hip_script();
+    let hip_user = self.determine_hip_user();
+    let csd_uid = get_uid(&hip_user)?;
 
     let os = ClientOs::from(&self.args.os).to_openconnect_os().to_owned();
     let os_version = self.args.os_version().to_owned();
@@ -486,6 +496,27 @@ impl<'a> ConnectHandler<'a> {
 
     Ok(password)
   }
+
+  fn determine_hip_script(&self) -> (bool, Option<String>) {
+    if let Some(hip) = &self.args.hip {
+      return if hip.is_empty() {
+        (true, None)
+      } else {
+        (true, Some(hip.clone()))
+      };
+    }
+
+    (self.args.csd_wrapper.is_some(), self.args.csd_wrapper.clone())
+  }
+
+  fn determine_hip_user(&self) -> Option<String> {
+    if let Some(hip_user) = &self.args.hip_user {
+      return Some(hip_user.clone());
+    }
+
+    self.args.csd_user.clone()
+  }
+
 }
 
 fn read_cookie_from_stdin() -> anyhow::Result<Credential> {
@@ -511,9 +542,9 @@ fn write_pid_file() {
   }
 }
 
-fn get_csd_uid(csd_user: &Option<String>) -> anyhow::Result<u32> {
-  if let Some(csd_user) = csd_user {
-    get_user_by_name(csd_user).map(|user| user.uid())
+fn get_uid(user: &Option<String>) -> anyhow::Result<u32> {
+  if let Some(user) = user {
+    get_user_by_name(user).map(|user| user.uid())
   } else {
     get_non_root_user().map_or_else(|_| Ok(0), |user| Ok(user.uid()))
   }
