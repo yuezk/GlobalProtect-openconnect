@@ -1,0 +1,17 @@
+# Clippy configuration for GlobalProtect-openconnect
+# This file configures clippy lints to enforce code quality standards
+
+# Deny certain lints to catch common mistakes
+avoid-breaking-exported-api = true
+
+# Disallow unwrap() and expect() in production code (allow in tests)
+disallowed-methods = [
+    { path = "std::option::Option::unwrap", reason = "use proper error handling instead" },
+    { path = "std::result::Result::unwrap", reason = "use proper error handling instead" },
+]
+
+# Set cognitive complexity threshold
+cognitive-complexity-threshold = 30
+
+# Enable additional restriction lints
+# Note: These are suggestions and should be enabled gradually

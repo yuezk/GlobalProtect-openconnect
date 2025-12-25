@@ -39,13 +39,14 @@ pub fn load_env_vars<T: AsRef<Path>>(env_file: T) -> anyhow::Result<HashMap<Stri
 
 pub fn patch_gui_runtime_env(hidpi: bool) {
   // This is to avoid blank screen on some systems
-  unsafe { std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1") };
+  // SAFETY: Setting environment variables should be done before spawning any threads
+  // to avoid data races. This function should be called early in the program lifecycle.
+  std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
 
   if hidpi {
     info!("Setting GDK_SCALE=2 and GDK_DPI_SCALE=0.5");
-    unsafe {
-      std::env::set_var("GDK_SCALE", "2");
-      std::env::set_var("GDK_DPI_SCALE", "0.5");
-    };
+    // SAFETY: Same as above - should be called before spawning threads
+    std::env::set_var("GDK_SCALE", "2");
+    std::env::set_var("GDK_DPI_SCALE", "0.5");
   }
 }

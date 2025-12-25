@@ -1,4 +1,5 @@
 use std::borrow::{Borrow, Cow};
+use std::sync::LazyLock;
 
 use anyhow::bail;
 use log::{info, warn};
@@ -126,8 +127,25 @@ impl SamlAuthData {
 }
 
 fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
-  let re = Regex::new(&format!("<{}>(.*)</{}>", tag, tag)).unwrap();
-  re.captures(html)
+  // Note: This creates a regex on each call for different tags.
+  // Since we have a finite set of tags (saml-auth-status, saml-username, prelogin-cookie, portal-userauthcookie),
+  // we could optimize further by pre-compiling all regexes, but this approach balances simplicity and performance.
+  static REGEX_CACHE: LazyLock<std::sync::Mutex<std::collections::HashMap<String, Regex>>> =
+    LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+  let regex = {
+    let mut cache = REGEX_CACHE.lock().unwrap();
+    cache
+      .entry(tag.to_string())
+      .or_insert_with(|| {
+        Regex::new(&format!("<{}>(.*)</{}>", regex::escape(tag), regex::escape(tag)))
+          .expect("Invalid regex pattern")
+      })
+      .clone()
+  };
+
+  regex
+    .captures(html)
     .and_then(|captures| captures.get(1))
     .map(|m| m.as_str().to_string())
 }
