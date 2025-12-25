@@ -28,10 +28,29 @@ pub enum SamlAuthResult {
 }
 
 impl SamlAuthResult {
+  /// Returns `true` if the result is a success.
   pub fn is_success(&self) -> bool {
+    matches!(self, SamlAuthResult::Success(_))
+  }
+
+  /// Returns `true` if the result is a failure.
+  pub fn is_failure(&self) -> bool {
+    matches!(self, SamlAuthResult::Failure(_))
+  }
+
+  /// Converts from `SamlAuthResult` to `Result<&SamlAuthData, &String>`.
+  pub fn as_result(&self) -> Result<&SamlAuthData, &String> {
     match self {
-      SamlAuthResult::Success(_) => true,
-      SamlAuthResult::Failure(_) => false,
+      SamlAuthResult::Success(data) => Ok(data),
+      SamlAuthResult::Failure(err) => Err(err),
+    }
+  }
+
+  /// Converts from `SamlAuthResult` to `Result<SamlAuthData, String>`, consuming self.
+  pub fn into_result(self) -> Result<SamlAuthData, String> {
+    match self {
+      SamlAuthResult::Success(data) => Ok(data),
+      SamlAuthResult::Failure(err) => Err(err),
     }
   }
 }

@@ -13,5 +13,9 @@ disallowed-methods = [
 # Set cognitive complexity threshold
 cognitive-complexity-threshold = 30
 
-# Enable additional restriction lints
-# Note: These are suggestions and should be enabled gradually
+# Additional lint configuration
+too-many-arguments-threshold = 7
+type-complexity-threshold = 250
+
+# Specific lints to warn or deny
+# These align with Rust best practices and help catch common issues
