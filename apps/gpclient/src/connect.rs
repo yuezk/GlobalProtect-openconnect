@@ -165,6 +165,7 @@ pub(crate) struct ConnectHandler<'a> {
   shared_args: &'a SharedArgs<'a>,
   latest_key_password: RefCell<Option<String>>,
   password_from_stdin: RefCell<Option<String>>,
+  cookie_from_stdin: RefCell<Option<String>>,
 }
 
 impl<'a> ConnectHandler<'a> {
@@ -174,6 +175,7 @@ impl<'a> ConnectHandler<'a> {
       shared_args,
       latest_key_password: Default::default(),
       password_from_stdin: Default::default(),
+      cookie_from_stdin: Default::default(),
     }
   }
 
@@ -413,7 +415,7 @@ impl<'a> ConnectHandler<'a> {
 
   async fn obtain_credential(&self, prelogin: &Prelogin, server: &str) -> anyhow::Result<Credential> {
     if self.args.cookie_on_stdin {
-      return read_cookie_from_stdin();
+      return self.read_cookie_from_stdin();
     }
 
     let is_gateway = prelogin.is_gateway();
@@ -473,6 +475,27 @@ impl<'a> ConnectHandler<'a> {
     }
   }
 
+  fn read_cookie_from_stdin(&self) -> anyhow::Result<Credential> {
+    // If the cookie has been read from stdin, use it directly
+    if let Some(cookie) = self.cookie_from_stdin.borrow().as_ref() {
+      info!("Reusing the cookie read from standard input");
+      return Credential::try_from(serde_json::from_str::<SamlAuthResult>(cookie)?);
+    }
+
+    info!("Reading cookie from standard input");
+
+    let mut cookie = String::new();
+    std::io::stdin().read_line(&mut cookie)?;
+
+    // Considering that the gateway connection may fail even though the cookie read
+    // from stdin is correct. It may retry the gateway connection, so we need to
+    // save the cookie read from stdin to avoid reading stdin again.
+    self.cookie_from_stdin.replace(Some(cookie.trim_end().to_owned()));
+
+    let auth_result = serde_json::from_str::<SamlAuthResult>(cookie.trim_end()).context("Failed to parse auth data")?;
+    Credential::try_from(auth_result)
+  }
+
   fn obtain_password(&self, prelogin: &StandardPrelogin) -> anyhow::Result<String> {
     let password = if self.args.passwd_on_stdin {
       // If the password has been read from stdin, use it directly
@@ -520,16 +543,6 @@ impl<'a> ConnectHandler<'a> {
 
     self.args.csd_user.clone()
   }
-}
-
-fn read_cookie_from_stdin() -> anyhow::Result<Credential> {
-  info!("Reading cookie from standard input");
-
-  let mut cookie = String::new();
-  std::io::stdin().read_line(&mut cookie)?;
-
-  let auth_result = serde_json::from_str::<SamlAuthResult>(cookie.trim_end()).context("Failed to parse auth data")?;
-  Credential::try_from(auth_result)
 }
 
 fn write_pid_file() {
