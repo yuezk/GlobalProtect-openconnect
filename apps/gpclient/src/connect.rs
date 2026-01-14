@@ -1,6 +1,6 @@
 use std::{borrow::Cow, cell::RefCell, fs, sync::Arc};
 
-use anyhow::bail;
+use anyhow::{Context, bail};
 use clap::Args;
 use common::constants::{GP_CLIENT_VERSION, GP_USER_AGENT};
 use gpapi::{
@@ -211,11 +211,15 @@ impl<'a> ConnectHandler<'a> {
 
     // Warn if deprecated options are used and will be removed in the future
     if self.args.csd_user.is_some() {
-      warn!("The '--csd-user' option is deprecated and will be removed in future releases, please use the '--hip-user' option instead");
+      warn!(
+        "The '--csd-user' option is deprecated and will be removed in future releases, please use the '--hip-user' option instead"
+      );
     }
 
     if self.args.csd_wrapper.is_some() {
-      warn!("The '--csd-wrapper' option is deprecated and will be removed in future releases, please use the '--hip' option instead");
+      warn!(
+        "The '--csd-wrapper' option is deprecated and will be removed in future releases, please use the '--hip' option instead"
+      );
     }
 
     self.latest_key_password.replace(self.args.key_password.clone());
@@ -516,7 +520,6 @@ impl<'a> ConnectHandler<'a> {
 
     self.args.csd_user.clone()
   }
-
 }
 
 fn read_cookie_from_stdin() -> anyhow::Result<Credential> {
@@ -525,10 +528,7 @@ fn read_cookie_from_stdin() -> anyhow::Result<Credential> {
   let mut cookie = String::new();
   std::io::stdin().read_line(&mut cookie)?;
 
-  let Ok(auth_result) = serde_json::from_str::<SamlAuthResult>(cookie.trim_end()) else {
-    bail!("Failed to parse auth data")
-  };
-
+  let auth_result = serde_json::from_str::<SamlAuthResult>(cookie.trim_end()).context("Failed to parse auth data")?;
   Credential::try_from(auth_result)
 }
 
