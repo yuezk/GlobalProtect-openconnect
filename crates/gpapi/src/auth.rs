@@ -84,6 +84,8 @@ impl SamlAuthData {
 
   pub fn from_gpcallback(data: &str) -> anyhow::Result<SamlAuthData, AuthDataParseError> {
     let auth_data = data.trim_start_matches("globalprotectcallback:");
+    // Further remove the leading "/" if it exists, because some versions of GP may include it
+    let auth_data = auth_data.trim_start_matches('/');
 
     if auth_data.starts_with("cas-as") {
       info!("Got CAS auth data from globalprotectcallback");
@@ -104,7 +106,7 @@ impl SamlAuthData {
     }
 
     let auth_data = decode_to_string(auth_data).map_err(|e| {
-      warn!("Failed to decode SAML auth data: {}, data: {}", e, auth_data);
+      warn!("Failed to decode SAML auth data: {}, data: {}", e, data);
       AuthDataParseError::Invalid(anyhow::anyhow!(e))
     })?;
     let auth_data = Self::from_html(&auth_data)?;
