@@ -43,6 +43,12 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
     anyhow::anyhow!("Gateway login error: {}", err.reason)
   })?;
 
+  // It's possible to get an empty response, log the response headers for debugging
+  if res.trim().is_empty() {
+    debug!("Empty gateway login response headers: {:?}", res);
+    bail!("Got empty gateway login response");
+  }
+
   // MFA detected
   if res.contains("Challenge") {
     let Some((message, input_str)) = parse_mfa(&res) else {
