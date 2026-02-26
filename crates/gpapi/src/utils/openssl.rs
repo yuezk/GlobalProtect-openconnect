@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::LazyLock;
 
 use log::{info, warn};
 use regex::Regex;
@@ -46,7 +47,10 @@ pub fn fix_openssl_env() -> anyhow::Result<NamedTempFile> {
   let openssl_conf_path = openssl_conf.path();
 
   fix_openssl(openssl_conf_path)?;
-  unsafe { std::env::set_var("OPENSSL_CONF", openssl_conf_path) };
+  // SAFETY: Setting environment variables is safe in single-threaded contexts or before any threads are spawned.
+  // This should be called early in the program lifecycle before spawning threads.
+  // Note: std::env::set_var is actually not an unsafe function, so the unsafe block is unnecessary.
+  std::env::set_var("OPENSSL_CONF", openssl_conf_path);
 
   Ok(openssl_conf)
 }
@@ -79,8 +83,10 @@ fn get_openssl_option() -> &'static str {
 }
 
 fn extract_openssl_version(version: &str) -> Option<&str> {
-  let re = Regex::new(r"OpenSSL (\d+\.\d+\.\d+[^\s]*)").unwrap();
-  re.captures(version).and_then(|caps| caps.get(1)).map(|m| m.as_str())
+  static VERSION_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"OpenSSL (\d+\.\d+\.\d+[^\s]*)").expect("Invalid regex pattern"));
+  
+  VERSION_REGEX.captures(version).and_then(|caps| caps.get(1)).map(|m| m.as_str())
 }
 
 #[cfg(test)]

@@ -35,7 +35,7 @@ pub fn normalize_server(server: &str) -> anyhow::Result<String> {
     .host_str()
     .ok_or(anyhow::anyhow!("Invalid server URL: missing host"))?;
 
-  let port: String = normalized_url.port().map_or("".into(), |port| format!(":{}", port));
+  let port = normalized_url.port().map_or(String::new(), |port| format!(":{}", port));
 
   let normalized_url = format!("{}://{}{}", scheme, host, port);
 
@@ -43,7 +43,14 @@ pub fn normalize_server(server: &str) -> anyhow::Result<String> {
 }
 
 pub fn remove_url_scheme(s: &str) -> String {
-  s.replace("http://", "").replace("https://", "")
+  // More efficient: check prefixes and strip once instead of two replace operations
+  if let Some(stripped) = s.strip_prefix("https://") {
+    stripped.to_string()
+  } else if let Some(stripped) = s.strip_prefix("http://") {
+    stripped.to_string()
+  } else {
+    s.to_string()
+  }
 }
 
 #[derive(Error, Debug)]

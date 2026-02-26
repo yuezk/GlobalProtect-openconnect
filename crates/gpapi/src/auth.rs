@@ -1,4 +1,5 @@
 use std::borrow::{Borrow, Cow};
+use std::sync::LazyLock;
 
 use anyhow::bail;
 use log::{info, warn};
@@ -27,10 +28,29 @@ pub enum SamlAuthResult {
 }
 
 impl SamlAuthResult {
+  /// Returns `true` if the result is a success.
   pub fn is_success(&self) -> bool {
+    matches!(self, SamlAuthResult::Success(_))
+  }
+
+  /// Returns `true` if the result is a failure.
+  pub fn is_failure(&self) -> bool {
+    matches!(self, SamlAuthResult::Failure(_))
+  }
+
+  /// Converts from `SamlAuthResult` to `Result<&SamlAuthData, &String>`.
+  pub fn as_result(&self) -> Result<&SamlAuthData, &String> {
     match self {
-      SamlAuthResult::Success(_) => true,
-      SamlAuthResult::Failure(_) => false,
+      SamlAuthResult::Success(data) => Ok(data),
+      SamlAuthResult::Failure(err) => Err(err),
+    }
+  }
+
+  /// Converts from `SamlAuthResult` to `Result<SamlAuthData, String>`, consuming self.
+  pub fn into_result(self) -> Result<SamlAuthData, String> {
+    match self {
+      SamlAuthResult::Success(data) => Ok(data),
+      SamlAuthResult::Failure(err) => Err(err),
     }
   }
 }
@@ -126,8 +146,38 @@ impl SamlAuthData {
 }
 
 fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
-  let re = Regex::new(&format!("<{}>(.*)</{}>", tag, tag)).unwrap();
-  re.captures(html)
+  // Note: This creates a regex on each call for different tags.
+  // Since we have a finite set of tags (saml-auth-status, saml-username, prelogin-cookie, portal-userauthcookie),
+  // we could optimize further by pre-compiling all regexes, but this approach balances simplicity and performance.
+  // Using RwLock since cache hits (reads) are more common than cache misses (writes).
+  static REGEX_CACHE: LazyLock<std::sync::RwLock<std::collections::HashMap<String, Regex>>> =
+    LazyLock::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+
+  // Try to read from cache first (fast path)
+  {
+    let cache = REGEX_CACHE.read().ok()?;
+    if let Some(regex) = cache.get(tag) {
+      return regex.captures(html)
+        .and_then(|captures| captures.get(1))
+        .map(|m| m.as_str().to_string());
+    }
+  }
+
+  // Cache miss - acquire write lock and insert
+  let regex = {
+    let mut cache = REGEX_CACHE.write().ok()?;
+    cache
+      .entry(tag.to_string())
+      .or_insert_with(|| {
+        Regex::new(&format!("<{}>(.*)</{}>", regex::escape(tag), regex::escape(tag)))
+          .expect("Invalid regex pattern for known-safe tag")
+      })
+      .clone()
+  };
+
+
+  regex
+    .captures(html)
     .and_then(|captures| captures.get(1))
     .map(|m| m.as_str().to_string())
 }

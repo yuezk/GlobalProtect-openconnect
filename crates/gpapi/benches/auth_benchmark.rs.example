@@ -1,0 +1,33 @@
+// Example benchmark for performance-critical functions
+// Run with: cargo bench --package gpapi
+
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use gpapi::auth::SamlAuthData;
+
+fn benchmark_auth_parsing(c: &mut Criterion) {
+    let html = r#"
+        <saml-auth-status>1</saml-auth-status>
+        <saml-username>test@example.com</saml-username>
+        <prelogin-cookie>test-cookie-value</prelogin-cookie>
+        <portal-userauthcookie>test-auth-cookie</portal-userauthcookie>
+    "#;
+
+    c.bench_function("parse_saml_from_html", |b| {
+        b.iter(|| {
+            SamlAuthData::from_html(black_box(html))
+        })
+    });
+}
+
+fn benchmark_gpcallback_parsing(c: &mut Criterion) {
+    let callback_data = "globalprotectcallback:cas-as=1&un=user@example.com&token=very_long_token_string";
+
+    c.bench_function("parse_saml_from_gpcallback", |b| {
+        b.iter(|| {
+            SamlAuthData::from_gpcallback(black_box(callback_data))
+        })
+    });
+}
+
+criterion_group!(benches, benchmark_auth_parsing, benchmark_gpcallback_parsing);
+criterion_main!(benches);

@@ -167,8 +167,8 @@ fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
   let saml_request = root.descendant_text("saml-request");
   let saml_default_browser = root.descendant_text("saml-default-browser");
   // Check if the prelogin response is SAML
-  if saml_method.is_some() && saml_request.is_some() {
-    let saml_request = base64::decode_to_string(&saml_request.unwrap())?;
+  if let (Some(_), Some(saml_request_value)) = (saml_method, saml_request) {
+    let saml_request = base64::decode_to_string(&saml_request_value)?;
     let support_default_browser = saml_default_browser.map(|s| s.to_lowercase() == "yes").unwrap_or(false);
 
     let saml_prelogin = SamlPrelogin {
