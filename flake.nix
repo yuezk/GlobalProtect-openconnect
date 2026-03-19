@@ -98,13 +98,6 @@
               glib-networking
             ];
 
-          # optional but very useful on NixOS
-          preFixup = pkgs.lib.optionalString stdenv.isLinux ''
-            gappsWrapperArgs+=(
-              --set-default GIO_EXTRA_MODULES "${pkgs.glib-networking}/lib/gio/modules"
-            )
-          '';
-
           overrideMain =
             { ... }:
             {
