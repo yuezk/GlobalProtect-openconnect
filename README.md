@@ -228,7 +228,7 @@ This repository includes a flake for NixOS integration.
       environment.systemPackages = with pkgs; [
         # ... other packages
       ] ++ [
-        inputs.globalprotect-openconnect.packages.${pkgs.system}.default
+        inputs.globalprotect-openconnect.packages.${pkgs.stdenv.hostPlatform.system}.default
       ];
     }
     ```

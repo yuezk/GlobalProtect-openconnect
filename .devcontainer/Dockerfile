@@ -15,6 +15,7 @@ RUN set -eux; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
     # Common utilities
+    dh-autoreconf \
     sudo \
     ca-certificates \
     curl \

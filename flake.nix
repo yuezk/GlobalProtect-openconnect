@@ -73,6 +73,8 @@
               gtk3
               libsoup_3
               webkitgtk_4_1
+              glib-networking
+              openssl
             ];
 
           nativeBuildInputs =
@@ -85,6 +87,7 @@
             ]
             ++ lib.optionals stdenv.isLinux [
               autoPatchelfHook
+              wrapGAppsHook4
             ];
 
           runtimeDependencies =
@@ -92,6 +95,7 @@
             [ ]
             ++ lib.optionals stdenv.isLinux [
               libappindicator-gtk3
+              glib-networking
             ];
 
           overrideMain =
