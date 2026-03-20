@@ -20,7 +20,7 @@ export default defineConfig(async () => {
     // https://tauri.app/v1/api/config#buildconfig.beforedevcommand
     envPrefix: ["VITE_", "TAURI_"],
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         input: {
           main: resolve(__dirname, "index.html"),
         },
