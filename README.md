@@ -315,7 +315,7 @@ This project includes a DevContainer configuration that provides a consistent, r
 
 #### Prerequisites
 
-- [Rust 1.85 or later](https://www.rust-lang.org/tools/install)
+- [Rust 1.89 or later](https://www.rust-lang.org/tools/install)
 - [Tauri dependencies](https://tauri.app/start/prerequisites/)
 - `libopenconnect-dev` (or `openconnect-devel` on RPM-based systems)
 - `pkexec` and `gnome-keyring` (or `pam_kwallet` on KDE)
