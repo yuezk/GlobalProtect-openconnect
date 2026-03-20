@@ -15,6 +15,11 @@ on:
         type: "string"
         required: false
         default: ""
+      excluded_series:
+        description: 'Additional Ubuntu series to exclude from publishing'
+        type: "string"
+        required: false
+        default: ""
       rust:
         description: 'Rust version to use'
         type: "string"
@@ -93,6 +98,6 @@ jobs:
         deb_fullname: "Kevin Yue"
         extra_ppa: "yuezk/globalprotect-openconnect"
         # Ubuntu 18.04 and 20.04 are excluded because tauri2 no longer supports them
-        excluded_series: "bionic focal"
+        excluded_series: "bionic focal ${{ inputs.excluded_series }}"
         series: ${{ inputs.series }}
         revision: ${{ inputs.revision }}
