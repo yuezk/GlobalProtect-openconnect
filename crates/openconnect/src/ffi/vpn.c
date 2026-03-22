@@ -12,6 +12,7 @@ void *g_user_data;
 static int g_cmd_pipe_fd;
 static const char *g_vpnc_script;
 static const char *g_vpnc_interface;
+static const char *g_split_dns;
 static int g_script_tun;
 static vpn_connected_callback on_vpn_connected;
 
@@ -40,9 +41,19 @@ static void print_progress(__attribute__((unused)) void *_vpninfo, int level,
 	}
 }
 
+static void sync_split_dns_env()
+{
+	if (g_split_dns && *g_split_dns) {
+		setenv("CISCO_SPLIT_DNS", g_split_dns, 1);
+	} else {
+		unsetenv("CISCO_SPLIT_DNS");
+	}
+}
+
 static void setup_tun_handler(void *_vpninfo)
 {
 	int ret;
+	sync_split_dns_env();
 	if (g_script_tun) {
 		ret = openconnect_setup_tun_script(_vpninfo, g_vpnc_script);
 	} else {
@@ -64,6 +75,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	g_user_data = options->user_data;
 	g_vpnc_script = options->script;
 	g_vpnc_interface = options->interface;
+	g_split_dns = options->split_dns;
 	g_script_tun = options->script_tun;
 	on_vpn_connected = callback;
 
@@ -166,6 +178,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 
 		if (ret) {
 			INFO("openconnect_mainloop returned %d, exiting", ret);
+			unsetenv("CISCO_SPLIT_DNS");
 			openconnect_vpninfo_free(vpninfo);
 			return ret;
 		}

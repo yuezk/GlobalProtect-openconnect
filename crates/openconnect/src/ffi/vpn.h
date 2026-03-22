@@ -15,6 +15,7 @@ typedef struct vpn_options {
 	const char *os;
 	const char *os_version;
 	const char *client_version;
+	const char *split_dns;
 
 	const char *script;
 	const char *interface;
