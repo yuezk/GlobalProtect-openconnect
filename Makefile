@@ -3,6 +3,8 @@
 INCLUDE_GUI ?= 0
 CARGO ?= cargo
 DISABLE_RUST_TOOLCHAIN ?= 0
+RUST_VERSION ?= 1.89
+IGNORE_RUST_VERSION ?= 0
 
 VERSION = $(shell grep '^version' Cargo.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')
 REVISION ?= 1
@@ -36,6 +38,10 @@ CARGO_BUILD_ARGS = --release
 
 ifeq ($(OFFLINE), 1)
 	CARGO_BUILD_ARGS += --frozen
+endif
+
+ifeq ($(IGNORE_RUST_VERSION), 1)
+	CARGO_BUILD_ARGS += --ignore-rust-version
 endif
 
 default: build
@@ -170,7 +176,7 @@ init-debian: clean-debian tarball
 	cp -f packaging/deb/postrm .build/deb/$(PKG)/debian/postrm
 	cp -f packaging/deb/compat .build/deb/$(PKG)/debian/compat
 
-	sed -i "s/@BUILD_GUI_HELPER@/$(BUILD_GUI_HELPER)/g" .build/deb/$(PKG)/debian/rules
+	sed -i "s/@RUST_VERSION@/$(RUST_VERSION)/g" .build/deb/$(PKG)/debian/control
 
 	# Remove the GUI dependencies if BUILD_GUI_HELPER is set to 0
 	if [ $(BUILD_GUI_HELPER) -eq 0 ]; then \
@@ -179,6 +185,9 @@ init-debian: clean-debian tarball
 		sed -i "/gnome-keyring/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/libwebkit2gtk-4.1-dev/d" .build/deb/$(PKG)/debian/control; \
 	fi
+
+	sed -i "s/@BUILD_GUI_HELPER@/$(BUILD_GUI_HELPER)/g" .build/deb/$(PKG)/debian/rules
+	sed -i "s/@RUST_VERSION@/$(RUST_VERSION)/g" .build/deb/$(PKG)/debian/rules
 
 	rm -f .build/deb/$(PKG)/debian/changelog
 
