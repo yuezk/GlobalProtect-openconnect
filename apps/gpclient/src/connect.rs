@@ -109,6 +109,9 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Disable DTLS and ESP")]
   no_dtls: bool,
 
+  #[arg(long, help = "Comma-separated split-DNS domains to pass to the VPNC script")]
+  split_dns: Option<String>,
+
   #[arg(
     long = "force-dpd",
     help = "Same as the '--force-dpd' option in the openconnect command"
@@ -157,6 +160,24 @@ impl ConnectArgs {
       Os::Windows => host_utils::get_windows_os_string(),
       Os::Mac => host_utils::get_macos_os_string(),
     }
+  }
+
+  fn normalized_split_dns(&self) -> anyhow::Result<Option<String>> {
+    let Some(split_dns) = self.split_dns.as_deref() else {
+      return Ok(None);
+    };
+
+    let domains = split_dns
+      .split(',')
+      .map(str::trim)
+      .map(str::to_owned)
+      .collect::<Vec<_>>();
+
+    if domains.iter().any(|domain| domain.is_empty()) {
+      bail!("The '--split-dns' option must contain a comma-separated list of non-empty domains");
+    }
+
+    Ok(Some(domains.join(",")))
   }
 }
 
@@ -256,6 +277,8 @@ impl<'a> ConnectHandler<'a> {
   }
 
   pub(crate) async fn handle_impl(&self) -> anyhow::Result<()> {
+    self.args.normalized_split_dns()?;
+
     let server = self.args.server.as_str();
     let as_gateway = self.args.as_gateway;
 
@@ -365,6 +388,7 @@ impl<'a> ConnectHandler<'a> {
 
   async fn connect_gateway(&self, gateway: &str, cookie: &str, client_version: Option<&str>) -> anyhow::Result<()> {
     let mtu = self.args.mtu.unwrap_or(0);
+    let split_dns = self.args.normalized_split_dns()?;
     let (hip, csd_wrapper) = self.determine_hip_script();
     let hip_user = self.determine_hip_user();
     let csd_uid = get_uid(&hip_user)?;
@@ -380,6 +404,7 @@ impl<'a> ConnectHandler<'a> {
       .os(Some(os))
       .os_version(Some(os_version))
       .client_version(client_version)
+      .split_dns(split_dns)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
       .key_password(self.latest_key_password.borrow().clone())
@@ -560,5 +585,54 @@ fn get_uid(user: &Option<String>) -> anyhow::Result<u32> {
     get_user_by_name(user).map(|user| user.uid())
   } else {
     get_non_root_user().map_or_else(|_| Ok(0), |user| Ok(user.uid()))
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use clap::Parser;
+
+  use super::ConnectArgs;
+
+  #[derive(Parser)]
+  struct TestCli {
+    #[command(flatten)]
+    args: ConnectArgs,
+  }
+
+  fn parse_connect_args(args: &[&str]) -> ConnectArgs {
+    TestCli::parse_from(args).args
+  }
+
+  #[test]
+  fn parses_split_dns_domains() {
+    let args = parse_connect_args(&["gpclient", "example.com", "--split-dns", "corp.local,svc.local"]);
+
+    assert_eq!(
+      args.normalized_split_dns().unwrap(),
+      Some("corp.local,svc.local".to_string())
+    );
+  }
+
+  #[test]
+  fn normalizes_split_dns_whitespace() {
+    let args = parse_connect_args(&["gpclient", "example.com", "--split-dns", " corp.local , svc.local "]);
+
+    assert_eq!(
+      args.normalized_split_dns().unwrap(),
+      Some("corp.local,svc.local".to_string())
+    );
+  }
+
+  #[test]
+  fn rejects_empty_split_dns_domains() {
+    let args = parse_connect_args(&["gpclient", "example.com", "--split-dns", "corp.local,,svc.local"]);
+
+    let err = args.normalized_split_dns().unwrap_err();
+
+    assert_eq!(
+      err.to_string(),
+      "The '--split-dns' option must contain a comma-separated list of non-empty domains"
+    );
   }
 }

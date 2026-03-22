@@ -15,6 +15,7 @@ pub(crate) struct ConnectOptions {
   pub os: *const c_char,
   pub os_version: *const c_char,
   pub client_version: *const c_char,
+  pub split_dns: *const c_char,
 
   pub script: *const c_char,
   pub interface: *const c_char,

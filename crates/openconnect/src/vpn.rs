@@ -1,5 +1,5 @@
 use std::{
-  ffi::{c_char, CString},
+  ffi::{CString, c_char},
   fmt,
   sync::{Arc, RwLock},
 };
@@ -19,6 +19,7 @@ pub struct Vpn {
   os: CString,
   os_version: Option<CString>,
   client_version: Option<CString>,
+  split_dns: Option<CString>,
 
   script: CString,
   interface: Option<CString>,
@@ -77,6 +78,7 @@ impl Vpn {
       os: self.os.as_ptr(),
       os_version: Self::option_to_ptr(&self.os_version),
       client_version: Self::option_to_ptr(&self.client_version),
+      split_dns: Self::option_to_ptr(&self.split_dns),
 
       script: self.script.as_ptr(),
       interface: Self::option_to_ptr(&self.interface),
@@ -136,6 +138,7 @@ pub struct VpnBuilder {
   os: Option<String>,
   os_version: Option<String>,
   client_version: Option<String>,
+  split_dns: Option<String>,
 
   certificate: Option<String>,
   sslkey: Option<String>,
@@ -166,6 +169,7 @@ impl VpnBuilder {
       os: None,
       os_version: None,
       client_version: None,
+      split_dns: None,
 
       certificate: None,
       sslkey: None,
@@ -215,6 +219,11 @@ impl VpnBuilder {
 
   pub fn client_version<T: Into<Option<String>>>(mut self, client_version: T) -> Self {
     self.client_version = client_version.into();
+    self
+  }
+
+  pub fn split_dns<T: Into<Option<String>>>(mut self, split_dns: T) -> Self {
+    self.split_dns = split_dns.into();
     self
   }
 
@@ -315,6 +324,7 @@ impl VpnBuilder {
       os: Self::to_cstring(&os),
       os_version: self.os_version.as_deref().map(Self::to_cstring),
       client_version: self.client_version.as_deref().map(Self::to_cstring),
+      split_dns: self.split_dns.as_deref().map(Self::to_cstring),
 
       script: Self::to_cstring(&script),
       interface: self.interface.as_deref().map(Self::to_cstring),
@@ -340,5 +350,51 @@ impl VpnBuilder {
 
   fn to_cstring(value: &str) -> CString {
     CString::new(value.to_string()).expect("Failed to convert to CString")
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{
+    ffi::CStr,
+    fs,
+    time::{SystemTime, UNIX_EPOCH},
+  };
+
+  #[cfg(unix)]
+  use std::os::unix::fs::PermissionsExt;
+
+  use super::Vpn;
+
+  #[cfg(unix)]
+  fn create_executable_script() -> String {
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let path = std::env::temp_dir().join(format!("gp-openconnect-test-{nanos}.sh"));
+
+    fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
+
+    let mut permissions = fs::metadata(&path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&path, permissions).unwrap();
+
+    path.to_string_lossy().into_owned()
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn split_dns_survives_into_connect_options() {
+    let script = create_executable_script();
+    let vpn = Vpn::builder("https://vpn.example.com", "cookie")
+      .script(Some(script.clone()))
+      .split_dns(Some("corp.local,svc.local".to_string()))
+      .build()
+      .unwrap();
+
+    let options = vpn.build_connect_options();
+    let split_dns = unsafe { CStr::from_ptr(options.split_dns) }.to_str().unwrap();
+
+    assert_eq!(split_dns, "corp.local,svc.local");
+
+    fs::remove_file(script).unwrap();
   }
 }
