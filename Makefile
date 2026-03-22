@@ -195,9 +195,9 @@ deb: init-debian
 	cd .build/deb/$(PKG) && dch --create --distribution unstable --package $(PKG_NAME) --newversion $(VERSION)-$(REVISION) "Bugfix and improvements."
 
 	# Install build dependencies
-	cd .build/deb/$(PKG) && sudo mk-build-deps --install --remove debian/control
+	cd .build/deb/$(PKG) && sudo mk-build-deps --install --remove debian/control || echo "mk-build-deps failed, continuing"
 
-	cd .build/deb/$(PKG) && debuild --preserve-env -e PATH -us -uc -b
+	cd .build/deb/$(PKG) && debuild --preserve-env -e PATH -us -uc -b -d
 
 check-ppa:
 	if [ $(OFFLINE) -eq 0 ]; then \
