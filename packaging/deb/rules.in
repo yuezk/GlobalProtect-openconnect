@@ -3,7 +3,7 @@
 export BUILD_GUI_HELPER = @BUILD_GUI_HELPER@
 export DISABLE_RUST_TOOLCHAIN = 0
 
-export PATH := /usr/lib/rust-1.89/bin:$(PATH)
+export PATH := /usr/lib/rust-@RUST_VERSION@/bin:$(PATH)
 
 %:
 	which cargo
