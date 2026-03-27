@@ -1,0 +1,28 @@
+# Clippy configuration for GlobalProtect-openconnect
+# This file configures clippy lints to enforce code quality standards
+
+# Deny certain lints to catch common mistakes
+avoid-breaking-exported-api = true
+
+# Disallow unwrap() and expect() in most production code
+# Note: These are warnings by default. For critical paths, use proper error handling.
+# Static initialization with expect() is acceptable when the pattern is known to be valid.
+disallowed-methods = [
+    { path = "std::option::Option::unwrap", reason = "use proper error handling instead, or document why unwrap is safe" },
+    { path = "std::result::Result::unwrap", reason = "use proper error handling instead, or document why unwrap is safe" },
+]
+
+# Set cognitive complexity threshold
+cognitive-complexity-threshold = 30
+
+# Additional lint configuration
+too-many-arguments-threshold = 7
+type-complexity-threshold = 250
+
+# Specific lints to warn or deny
+# These align with Rust best practices and help catch common issues
+
+# Note: expect() is allowed for:
+# - Static/const initialization with known-valid patterns
+# - Test code
+# - Cases where panic is the correct behavior (documented with explanation)

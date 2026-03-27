@@ -1,0 +1,60 @@
+# cargo-deny configuration
+# https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+# The path where the advisory database is cloned/fetched into
+db-path = "~/.cargo/advisory-db"
+# The url(s) of the advisory databases to use
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# Lint level for security vulnerabilities
+vulnerability = "deny"
+# Lint level for unmaintained crates
+unmaintained = "warn"
+# Lint level for crates with security notices
+notice = "warn"
+# Lint level for crates that have been yanked from crates.io
+yanked = "warn"
+
+[licenses]
+# Lint level for crates with licenses that are not in the allow list
+unlicensed = "deny"
+# List of explicitly allowed licenses
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "GPL-3.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "OpenSSL",
+]
+# Lint level for licenses in the deny list
+deny = []
+# Lint level for copyleft licenses
+copyleft = "allow"
+# Allow 1 or more licenses on a single dependency
+allow-osi-fsf-free = "both"
+# Allow licenses that are both OSI and FSF approved
+confidence-threshold = 0.8
+
+[bans]
+# Lint level for when multiple versions of the same crate are detected
+multiple-versions = "warn"
+# Lint level for when a crate version requirement is `*`
+wildcards = "warn"
+# The lint level for crates that are skipped
+skip = []
+# Certain crates are denied from being used
+deny = []
+
+[sources]
+# Lint level for what to happen when a crate from a crate registry that is not in the allow list is encountered
+unknown-registry = "warn"
+# Lint level for what to happen when a crate from a git repository that is not in the allow list is encountered
+unknown-git = "warn"
+# List of URLs for allowed crate registries
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# List of URLs for allowed git repositories
+allow-git = []
