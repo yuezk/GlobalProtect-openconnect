@@ -60,6 +60,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 {
 	struct openconnect_info *vpninfo;
 	struct utsname utsbuf;
+	const char *effective_local_hostname = NULL;
 
 	g_user_data = options->user_data;
 	g_vpnc_script = options->script;
@@ -79,6 +80,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	INFO("DISABLE_IPV6: %d", options->disable_ipv6);
 	INFO("NO_DTLS: %d", options->no_dtls);
 	INFO("DPD_INTERVAL: %d", options->dpd_interval);
+	INFO("NO_XMLPOST: %d", options->no_xmlpost);
 
 	vpninfo =
 	    openconnect_vpninfo_new(options->user_agent, validate_peer_cert,
@@ -109,6 +111,17 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 					       options->client_version);
 	}
 
+	effective_local_hostname = options->local_hostname;
+	if (!effective_local_hostname && !uname(&utsbuf)) {
+		effective_local_hostname = utsbuf.nodename;
+	}
+	if (effective_local_hostname) {
+		openconnect_set_localname(vpninfo, effective_local_hostname);
+	}
+
+	INFO("LOCAL_HOSTNAME: %s",
+	     effective_local_hostname ? effective_local_hostname : "(not set)");
+
 	if (options->certificate) {
 		INFO("Setting client certificate: %s", options->certificate);
 		openconnect_set_client_cert(vpninfo, options->certificate,
@@ -117,6 +130,10 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 
 	if (options->key_password) {
 		openconnect_set_key_password(vpninfo, options->key_password);
+	}
+
+	if (options->no_xmlpost) {
+		openconnect_set_xmlpost(vpninfo, 0);
 	}
 
 	if (options->csd_wrapper) {
@@ -141,10 +158,6 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	if (g_cmd_pipe_fd < 0) {
 		ERROR("openconnect_setup_cmd_pipe failed");
 		return 1;
-	}
-
-	if (!uname(&utsbuf)) {
-		openconnect_set_localname(vpninfo, utsbuf.nodename);
 	}
 
 	// Essential step

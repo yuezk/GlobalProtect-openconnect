@@ -9,7 +9,7 @@ use gpapi::{
 };
 use log::{info, warn};
 use openconnect::Vpn;
-use tokio::sync::{mpsc, oneshot, watch, RwLock};
+use tokio::sync::{RwLock, mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct VpnTaskContext {
@@ -54,6 +54,9 @@ impl VpnTaskContext {
       .mtu(args.mtu())
       .disable_ipv6(args.disable_ipv6())
       .no_dtls(args.no_dtls())
+      .local_hostname(args.local_hostname())
+      .dpd_interval(args.force_dpd())
+      .no_xmlpost(args.no_xmlpost())
       .build()
     {
       Ok(vpn) => vpn,

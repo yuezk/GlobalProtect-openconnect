@@ -49,6 +49,9 @@ pub struct ConnectArgs {
   mtu: u32,
   disable_ipv6: bool,
   no_dtls: bool,
+  local_hostname: Option<String>,
+  force_dpd: u32,
+  no_xmlpost: bool,
 }
 
 impl ConnectArgs {
@@ -70,6 +73,9 @@ impl ConnectArgs {
       mtu: 0,
       disable_ipv6: false,
       no_dtls: false,
+      local_hostname: None,
+      force_dpd: 0,
+      no_xmlpost: false,
     }
   }
 
@@ -135,6 +141,18 @@ impl ConnectArgs {
 
   pub fn no_dtls(&self) -> bool {
     self.no_dtls
+  }
+
+  pub fn local_hostname(&self) -> Option<String> {
+    self.local_hostname.clone()
+  }
+
+  pub fn force_dpd(&self) -> u32 {
+    self.force_dpd
+  }
+
+  pub fn no_xmlpost(&self) -> bool {
+    self.no_xmlpost
   }
 }
 
@@ -224,6 +242,21 @@ impl ConnectRequest {
 
   pub fn with_no_dtls(mut self, no_dtls: bool) -> Self {
     self.args.no_dtls = no_dtls;
+    self
+  }
+
+  pub fn with_local_hostname<T: Into<Option<String>>>(mut self, local_hostname: T) -> Self {
+    self.args.local_hostname = local_hostname.into();
+    self
+  }
+
+  pub fn with_force_dpd(mut self, force_dpd: u32) -> Self {
+    self.args.force_dpd = force_dpd;
+    self
+  }
+
+  pub fn with_no_xmlpost(mut self, no_xmlpost: bool) -> Self {
+    self.args.no_xmlpost = no_xmlpost;
     self
   }
 

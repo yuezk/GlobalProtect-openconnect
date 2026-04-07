@@ -15,6 +15,7 @@ pub(crate) struct ConnectOptions {
   pub os: *const c_char,
   pub os_version: *const c_char,
   pub client_version: *const c_char,
+  pub local_hostname: *const c_char,
 
   pub script: *const c_char,
   pub interface: *const c_char,
@@ -34,6 +35,7 @@ pub(crate) struct ConnectOptions {
   pub no_dtls: u32,
 
   pub dpd_interval: u32,
+  pub no_xmlpost: u32,
 }
 
 #[link(name = "vpn")]

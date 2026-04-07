@@ -1,5 +1,5 @@
 use std::{
-  ffi::{c_char, CString},
+  ffi::{CString, c_char},
   fmt,
   sync::{Arc, RwLock},
 };
@@ -19,6 +19,7 @@ pub struct Vpn {
   os: CString,
   os_version: Option<CString>,
   client_version: Option<CString>,
+  local_hostname: Option<CString>,
 
   script: CString,
   interface: Option<CString>,
@@ -38,6 +39,7 @@ pub struct Vpn {
   no_dtls: bool,
 
   dpd_interval: u32,
+  no_xmlpost: bool,
 
   callback: OnConnectedCallback,
 }
@@ -77,6 +79,7 @@ impl Vpn {
       os: self.os.as_ptr(),
       os_version: Self::option_to_ptr(&self.os_version),
       client_version: Self::option_to_ptr(&self.client_version),
+      local_hostname: Self::option_to_ptr(&self.local_hostname),
 
       script: self.script.as_ptr(),
       interface: Self::option_to_ptr(&self.interface),
@@ -95,6 +98,7 @@ impl Vpn {
       disable_ipv6: self.disable_ipv6 as u32,
       no_dtls: self.no_dtls as u32,
       dpd_interval: self.dpd_interval,
+      no_xmlpost: self.no_xmlpost as u32,
     }
   }
 
@@ -136,6 +140,7 @@ pub struct VpnBuilder {
   os: Option<String>,
   os_version: Option<String>,
   client_version: Option<String>,
+  local_hostname: Option<String>,
 
   certificate: Option<String>,
   sslkey: Option<String>,
@@ -151,6 +156,7 @@ pub struct VpnBuilder {
   no_dtls: bool,
 
   dpd_interval: u32,
+  no_xmlpost: bool,
 }
 
 impl VpnBuilder {
@@ -166,6 +172,7 @@ impl VpnBuilder {
       os: None,
       os_version: None,
       client_version: None,
+      local_hostname: None,
 
       certificate: None,
       sslkey: None,
@@ -180,6 +187,7 @@ impl VpnBuilder {
       disable_ipv6: false,
       no_dtls: false,
       dpd_interval: 0,
+      no_xmlpost: false,
     }
   }
 
@@ -215,6 +223,11 @@ impl VpnBuilder {
 
   pub fn client_version<T: Into<Option<String>>>(mut self, client_version: T) -> Self {
     self.client_version = client_version.into();
+    self
+  }
+
+  pub fn local_hostname<T: Into<Option<String>>>(mut self, local_hostname: T) -> Self {
+    self.local_hostname = local_hostname.into();
     self
   }
 
@@ -273,6 +286,11 @@ impl VpnBuilder {
     self
   }
 
+  pub fn no_xmlpost(mut self, no_xmlpost: bool) -> Self {
+    self.no_xmlpost = no_xmlpost;
+    self
+  }
+
   fn determine_script(&self) -> Result<&str, VpnError> {
     match &self.script {
       Some(script) => {
@@ -315,6 +333,7 @@ impl VpnBuilder {
       os: Self::to_cstring(&os),
       os_version: self.os_version.as_deref().map(Self::to_cstring),
       client_version: self.client_version.as_deref().map(Self::to_cstring),
+      local_hostname: self.local_hostname.as_deref().map(Self::to_cstring),
 
       script: Self::to_cstring(&script),
       interface: self.interface.as_deref().map(Self::to_cstring),
@@ -333,6 +352,7 @@ impl VpnBuilder {
       disable_ipv6: self.disable_ipv6,
       no_dtls: self.no_dtls,
       dpd_interval: self.dpd_interval,
+      no_xmlpost: self.no_xmlpost,
 
       callback: Default::default(),
     })

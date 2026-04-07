@@ -15,6 +15,7 @@ typedef struct vpn_options {
 	const char *os;
 	const char *os_version;
 	const char *client_version;
+	const char *local_hostname;
 
 	const char *script;
 	const char *interface;
@@ -34,6 +35,7 @@ typedef struct vpn_options {
 	const int no_dtls;
 
 	const int dpd_interval;
+	const int no_xmlpost;
 } vpn_options;
 
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback);

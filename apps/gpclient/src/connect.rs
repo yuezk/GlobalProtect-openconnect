@@ -110,10 +110,22 @@ pub(crate) struct ConnectArgs {
   no_dtls: bool,
 
   #[arg(
+    long = "local-hostname",
+    help = "Same as the '--local-hostname' option in the openconnect command"
+  )]
+  local_hostname: Option<String>,
+
+  #[arg(
     long = "force-dpd",
     help = "Same as the '--force-dpd' option in the openconnect command"
   )]
   dpd_interval: Option<u32>,
+
+  #[arg(
+    long = "no-xmlpost",
+    help = "Same as the '--no-xmlpost' option in the openconnect command"
+  )]
+  no_xmlpost: bool,
 
   #[cfg(feature = "webview-auth")]
   #[arg(long, help = "The HiDPI mode, useful for high-resolution screens")]
@@ -390,7 +402,9 @@ impl<'a> ConnectHandler<'a> {
       .mtu(mtu)
       .disable_ipv6(self.args.disable_ipv6)
       .no_dtls(self.args.no_dtls)
+      .local_hostname(self.args.local_hostname.clone())
       .dpd_interval(self.args.dpd_interval.unwrap_or(0))
+      .no_xmlpost(self.args.no_xmlpost)
       .build()?;
 
     let vpn = Arc::new(vpn);
