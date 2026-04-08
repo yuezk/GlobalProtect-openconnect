@@ -1,8 +1,8 @@
 use chacha20poly1305::{
-  aead::{Aead, OsRng},
   AeadCore, ChaCha20Poly1305, Key, KeyInit,
+  aead::{Aead, OsRng},
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 pub fn generate_key() -> Key {
   ChaCha20Poly1305::generate_key(&mut OsRng)

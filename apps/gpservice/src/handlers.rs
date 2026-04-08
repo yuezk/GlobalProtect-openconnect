@@ -11,8 +11,8 @@ use anyhow::bail;
 use axum::{
   body::Bytes,
   extract::{
-    ws::{self, CloseFrame, Message, Utf8Bytes, WebSocket},
     State, WebSocketUpgrade,
+    ws::{self, CloseFrame, Message, Utf8Bytes, WebSocket},
   },
   http::StatusCode,
   response::IntoResponse,

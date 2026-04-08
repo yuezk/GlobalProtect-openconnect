@@ -5,8 +5,8 @@ use gpapi::utils::redact::redact_uri;
 use log::warn;
 use tauri::webview::PlatformWebview;
 use webkit2gtk::{
-  gio::Cancellable, glib::GString, LoadEvent, TLSErrorsPolicy, URIResponseExt, WebResource, WebResourceExt, WebViewExt,
-  WebsiteDataManagerExt,
+  LoadEvent, TLSErrorsPolicy, URIResponseExt, WebResource, WebResourceExt, WebViewExt, WebsiteDataManagerExt,
+  gio::Cancellable, glib::GString,
 };
 
 use super::{

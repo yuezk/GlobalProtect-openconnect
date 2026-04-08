@@ -1,7 +1,7 @@
 use block2::RcBlock;
 use log::warn;
 use objc2::runtime::AnyObject;
-use objc2_foundation::{NSError, NSString, NSURLRequest, NSURL};
+use objc2_foundation::{NSError, NSString, NSURL, NSURLRequest};
 use objc2_web_kit::WKWebView;
 use tauri::webview::PlatformWebview;
 

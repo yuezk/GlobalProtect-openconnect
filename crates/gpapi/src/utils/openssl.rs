@@ -3,7 +3,7 @@ use std::path::Path;
 use log::{info, warn};
 use regex::Regex;
 use tempfile::NamedTempFile;
-use version_compare::{compare_to, Cmp};
+use version_compare::{Cmp, compare_to};
 
 pub fn openssl_conf() -> String {
   let option = get_openssl_option();

@@ -2,7 +2,7 @@ use std::sync::RwLock;
 
 use redact_engine::{Pattern, Redaction as RedactEngine};
 use regex::Regex;
-use url::{form_urlencoded, Url};
+use url::{Url, form_urlencoded};
 
 pub struct Redaction {
   redact_engine: RwLock<Option<RedactEngine>>,

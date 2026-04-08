@@ -159,7 +159,7 @@ mod signals {
 
   pub async fn handle_signals(vpn_ctx: Arc<VpnTaskContext>, ws_ctx: Arc<WsServerContext>) {
     use gpapi::service::event::WsEvent;
-    use tokio::signal::unix::{signal, Signal, SignalKind};
+    use tokio::signal::unix::{Signal, SignalKind, signal};
 
     let (mut user_sig1, mut user_sig2) = match || -> anyhow::Result<(Signal, Signal)> {
       let user_sig1 = signal(SignalKind::user_defined1())?;

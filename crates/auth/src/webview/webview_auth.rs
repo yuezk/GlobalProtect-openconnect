@@ -4,8 +4,8 @@ use anyhow::bail;
 use gpapi::{auth::SamlAuthData, gp_params::GpParams, utils::redact::redact_uri};
 use log::{info, warn};
 use tauri::{
-  webview::{PageLoadEvent, PageLoadPayload},
   AppHandle, WebviewUrl, WebviewWindow, WindowEvent,
+  webview::{PageLoadEvent, PageLoadPayload},
 };
 use tokio::{sync::oneshot, time};
 

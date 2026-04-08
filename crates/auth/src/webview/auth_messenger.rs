@@ -2,7 +2,7 @@ use anyhow::bail;
 use gpapi::{auth::SamlAuthData, error::AuthDataParseError};
 use log::{error, info};
 use regex::Regex;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug)]

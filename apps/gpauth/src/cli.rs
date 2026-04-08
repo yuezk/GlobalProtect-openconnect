@@ -1,9 +1,9 @@
-use auth::{auth_prelogin, BrowserAuthenticator};
+use auth::{BrowserAuthenticator, auth_prelogin};
 use clap::Parser;
 use common::constants::GP_USER_AGENT;
 use gpapi::{
   auth::{SamlAuthData, SamlAuthResult},
-  clap::{args::Os, handle_error, Args, InfoLevelVerbosity},
+  clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
   gp_params::{ClientOs, GpParams},
   utils::{normalize_server, openssl},
 };

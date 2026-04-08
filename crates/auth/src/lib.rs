@@ -1,7 +1,7 @@
 use anyhow::bail;
 use gpapi::{
   gp_params::GpParams,
-  portal::{prelogin, Prelogin},
+  portal::{Prelogin, prelogin},
 };
 
 #[cfg(feature = "browser-auth")]

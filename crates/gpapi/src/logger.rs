@@ -2,7 +2,7 @@ use std::sync::OnceLock;
 
 use anyhow::bail;
 use env_logger::Logger;
-use log::{warn, Level};
+use log::{Level, warn};
 use log_reload::{ReloadHandle, ReloadLog};
 
 static LOG_HANDLE: OnceLock<ReloadHandle<log_reload::LevelFilter<Logger>>> = OnceLock::new();

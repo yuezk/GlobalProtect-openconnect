@@ -23,9 +23,9 @@ mod unix {
 
   use anyhow::bail;
   use gtk::{
+    EventBox,
     glib::Cast,
     traits::{EventBoxExt, GtkWindowExt, WidgetExt},
-    EventBox,
   };
   use log::info;
   use tauri::WebviewWindow;

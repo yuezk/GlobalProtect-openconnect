@@ -11,7 +11,7 @@ use openconnect::{find_csd_wrapper, find_vpnc_script};
 use serde::de::DeserializeOwned;
 use tokio::{
   net::TcpListener,
-  sync::{mpsc, watch, RwLock},
+  sync::{RwLock, mpsc, watch},
 };
 use tokio_util::sync::CancellationToken;
 
