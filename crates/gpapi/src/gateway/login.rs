@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use anyhow::bail;
 use log::{debug, info, warn};
 use reqwest::Client;
-use urlencoding::encode;
+use urlencoding::{decode, encode};
 use xmltree::Element;
 
 use crate::{
@@ -74,14 +74,19 @@ fn build_gateway_token(element: &Element, computer: &str) -> anyhow::Result<Stri
     .map(|e| e.get_text().unwrap_or_default())
     .collect::<Vec<_>>();
 
-  let params = [
-    read_args(&args, 1, "authcookie")?,
-    read_args(&args, 3, "portal")?,
-    read_args(&args, 4, "user")?,
-    read_args(&args, 7, "domain")?,
-    read_args(&args, 15, "preferred-ip")?,
-    ("computer", computer),
-  ];
+  let mut params = vec![
+    read_required_arg(&args, 1, "authcookie")?,
+    read_optional_arg(&args, 2, "persistent-cookie")?,
+    read_optional_arg(&args, 3, "portal")?,
+    read_required_arg(&args, 4, "user")?,
+    read_optional_arg(&args, 7, "domain")?,
+    read_optional_arg(&args, 15, "preferred-ip")?,
+    read_optional_arg(&args, 18, "preferred-ipv6")?,
+  ]
+  .into_iter()
+  .flatten()
+  .collect::<Vec<_>>();
+  params.push(("computer", computer.to_string()));
 
   let token = params
     .iter()
@@ -92,11 +97,43 @@ fn build_gateway_token(element: &Element, computer: &str) -> anyhow::Result<Stri
   Ok(token)
 }
 
-fn read_args<'a>(args: &'a [Cow<'_, str>], index: usize, key: &'a str) -> anyhow::Result<(&'a str, &'a str)> {
-  args
-    .get(index)
-    .ok_or_else(|| anyhow::anyhow!("Failed to read {key} from args"))
-    .map(|s| (key, s.as_ref()))
+fn read_required_arg(
+  args: &[Cow<'_, str>],
+  index: usize,
+  key: &'static str,
+) -> anyhow::Result<Option<(&'static str, String)>> {
+  let Some(value) = read_arg_value(args, index)? else {
+    bail!("Failed to read {key} from args");
+  };
+
+  Ok(Some((key, value)))
+}
+
+fn read_optional_arg(
+  args: &[Cow<'_, str>],
+  index: usize,
+  key: &'static str,
+) -> anyhow::Result<Option<(&'static str, String)>> {
+  Ok(read_arg_value(args, index)?.map(|value| (key, value)))
+}
+
+fn read_arg_value(args: &[Cow<'_, str>], index: usize) -> anyhow::Result<Option<String>> {
+  Ok(
+    args
+      .get(index)
+      .map(|s| normalize_arg_value(s.as_ref()))
+      .transpose()
+      .map_err(|err| anyhow::anyhow!("Failed to decode gateway login argument {index}: {err}"))?
+      .flatten(),
+  )
+}
+
+fn normalize_arg_value(value: &str) -> anyhow::Result<Option<String>> {
+  if value.is_empty() || value == "(null)" || value == "-1" {
+    return Ok(None);
+  }
+
+  Ok(Some(decode(value)?.into_owned()))
 }
 
 fn parse_mfa(res: &str) -> Option<(String, String)> {
@@ -126,5 +163,79 @@ thisForm.inputStr.value = "5ef64e83000119ed";"#;
     let (message, input_str) = parse_mfa(res).unwrap();
     assert_eq!(message, "MFA message");
     assert_eq!(input_str, "5ef64e83000119ed");
+  }
+
+  #[test]
+  fn gateway_token_keeps_upstream_cookie_fields() {
+    let res = r#"
+<jnlp>
+  <application-desc>
+    <argument></argument>
+    <argument>AUTHCOOKIE</argument>
+    <argument>PERSISTENTCOOKIE</argument>
+    <argument>vpn.example.com</argument>
+    <argument>alice</argument>
+    <argument>LDAP-auth</argument>
+    <argument>vsys1</argument>
+    <argument>%28empty_domain%29</argument>
+    <argument></argument>
+    <argument></argument>
+    <argument></argument>
+    <argument></argument>
+    <argument>tunnel</argument>
+    <argument>-1</argument>
+    <argument>4100</argument>
+    <argument>10.0.0.10</argument>
+    <argument>unused-user-cookie</argument>
+    <argument>unused-prelogon-cookie</argument>
+    <argument>2001:db8::10</argument>
+  </application-desc>
+</jnlp>
+"#;
+
+    let root = Element::parse(res.as_bytes()).unwrap();
+    let token = build_gateway_token(&root, "metalklesk").unwrap();
+
+    assert_eq!(
+      token,
+      "authcookie=AUTHCOOKIE&persistent-cookie=PERSISTENTCOOKIE&portal=vpn.example.com&user=alice&domain=%28empty_domain%29&preferred-ip=10.0.0.10&preferred-ipv6=2001%3Adb8%3A%3A10&computer=metalklesk"
+    );
+  }
+
+  #[test]
+  fn gateway_token_omits_empty_optional_fields() {
+    let res = r#"
+<jnlp>
+  <application-desc>
+    <argument></argument>
+    <argument>AUTHCOOKIE</argument>
+    <argument></argument>
+    <argument>vpn.example.com</argument>
+    <argument>alice</argument>
+    <argument>LDAP-auth</argument>
+    <argument>vsys1</argument>
+    <argument>-1</argument>
+    <argument></argument>
+    <argument></argument>
+    <argument></argument>
+    <argument></argument>
+    <argument>tunnel</argument>
+    <argument>-1</argument>
+    <argument>4100</argument>
+    <argument></argument>
+    <argument>unused-user-cookie</argument>
+    <argument>unused-prelogon-cookie</argument>
+    <argument>(null)</argument>
+  </application-desc>
+</jnlp>
+"#;
+
+    let root = Element::parse(res.as_bytes()).unwrap();
+    let token = build_gateway_token(&root, "metalklesk").unwrap();
+
+    assert_eq!(
+      token,
+      "authcookie=AUTHCOOKIE&portal=vpn.example.com&user=alice&computer=metalklesk"
+    );
   }
 }

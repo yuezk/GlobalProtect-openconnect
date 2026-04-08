@@ -206,15 +206,21 @@ impl<'a> ConnectHandler<'a> {
   }
 
   fn build_gp_params(&self) -> GpParams {
-    GpParams::builder()
+    let mut builder = GpParams::builder();
+    builder
       .user_agent(&self.user_agent())
       .client_os(ClientOs::from(&self.args.os))
       .os_version(self.args.os_version().to_owned())
       .ignore_tls_errors(self.shared_args.ignore_tls_errors)
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
-      .key_password(self.latest_key_password.borrow().clone())
-      .build()
+      .key_password(self.latest_key_password.borrow().clone());
+
+    if let Some(local_hostname) = self.args.local_hostname.as_deref() {
+      builder.computer(local_hostname);
+    }
+
+    builder.build()
   }
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
