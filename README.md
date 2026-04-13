@@ -196,6 +196,14 @@ sudo emerge --ask --verbose net-vpn/GlobalProtect-openconnect
 
 This repository includes a flake for NixOS integration.
 
+If you want a quick user-level install, you can install it directly from the flake:
+
+```bash
+nix profile add github:yuezk/GlobalProtect-openconnect
+```
+
+If you want it managed as part of your NixOS system configuration, use the steps below.
+
 #### Installation Steps
 
 1. Add the flake to your `flake.nix`:
