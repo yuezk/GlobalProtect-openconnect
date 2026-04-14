@@ -88,6 +88,10 @@ impl GuiUpdater {
   }
 
   pub async fn update(&self) {
+    if !cfg!(any(target_arch = "x86_64", target_arch = "aarch64")) {
+        info!("GUI version is not supported on this architecture.");
+        return;
+    }
     info!("Update GUI, version: {}", self.version);
 
     #[cfg(debug_assertions)]
@@ -99,10 +103,11 @@ impl GuiUpdater {
       format!("v{}", self.version)
     };
 
-    #[cfg(target_arch = "x86_64")]
-    let arch = "x86_64";
-    #[cfg(target_arch = "aarch64")]
-    let arch = "aarch64";
+    let arch = if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else {
+        "aarch64"
+    };
 
     let file_url = format!(
       "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{}/gpgui_{}.bin.tar.xz",
