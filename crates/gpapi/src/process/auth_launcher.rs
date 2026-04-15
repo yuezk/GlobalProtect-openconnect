@@ -177,10 +177,16 @@ impl<'a> SamlAuthLauncher<'a> {
     }
 
     let mut non_root_cmd = auth_cmd.into_non_root()?;
-    let output = non_root_cmd
+    let child = non_root_cmd
       .kill_on_drop(true)
       .stdout(Stdio::piped())
-      .spawn()?
+      .spawn();
+
+    if child.is_err() {
+      bail!("Failed to spawn {}: {}", program, child.unwrap_err())
+    }
+
+    let output = child.unwrap()
       .wait_with_output()
       .await?;
 

@@ -72,10 +72,16 @@ impl<'a> HipLauncher<'a> {
       cmd.env("APP_VERSION", client_version);
     }
 
-    let output = cmd
+    let child = cmd
       .kill_on_drop(true)
       .stdout(Stdio::piped())
-      .spawn()?
+      .spawn();
+
+    if child.is_err() {
+      bail!("Failed to spawn {}: {}", self.program, child.unwrap_err())
+    }
+
+    let output = child.unwrap()
       .wait_with_output()
       .await?;
 
