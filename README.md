@@ -288,13 +288,16 @@ This project includes a DevContainer configuration that provides a consistent, r
    ```
 
 3. **Build the project:**
+
+   To build everything including the GUI helper run this command:
    ```bash
    docker run --privileged --cap-add=NET_ADMIN --device=/dev/net/tun \
-     -v "$(pwd)":/workspace -w /workspace gpoc-devcontainer \
+     --tty -v "$(pwd)":/workspace -w /workspace gpoc-devcontainer \
      bash -c "export PATH=/usr/local/cargo/bin:\$PATH && make build"
    ```
+   To build without the GUI helper run the same command as above, but with `BUILD_GUI=0` passed as an argument to `make`.
 
-4. **Locate build artifacts:**
+5. **Locate build artifacts:**
 
    The compiled binaries will be available in `target/release/`:
    - `gpclient` – CLI client
