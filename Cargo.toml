@@ -64,9 +64,27 @@ machine-uid = "0.5"
 tauri = { version = "2" }
 specta = "=2.0.0-rc.20"
 
+# Workspace-level dev dependencies for testing
+[workspace.dev-dependencies]
+criterion = "0.5"
+proptest = "1.0"
+mockito = "1.0"
+
 [profile.release]
 opt-level = 'z'   # Optimize for size
 lto = true        # Enable link-time optimization
 codegen-units = 1 # Reduce number of codegen units to increase optimizations
 panic = 'abort'   # Abort on panic
-strip = true      # Strip symbols from binary*
+strip = true      # Strip symbols from binary
+
+# Profile for development with better performance than debug
+[profile.dev-optimized]
+inherits = "dev"
+opt-level = 1
+debug = true
+
+# Profile for CI builds - faster than release, includes debug info
+[profile.ci]
+inherits = "release"
+strip = false
+debug = true
