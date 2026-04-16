@@ -177,18 +177,16 @@ impl<'a> SamlAuthLauncher<'a> {
     }
 
     let mut non_root_cmd = auth_cmd.into_non_root()?;
-    let child = non_root_cmd
-      .kill_on_drop(true)
-      .stdout(Stdio::piped())
-      .spawn();
+    let child = non_root_cmd.kill_on_drop(true).stdout(Stdio::piped()).spawn();
 
-    if child.is_err() {
-      bail!("Failed to spawn {}: {}", program, child.unwrap_err())
-    }
+    let child = match child {
+      Ok(child) => child,
+      Err(err) => {
+        bail!("Failed to spawn {}: {}", program, err);
+      }
+    };
 
-    let output = child.unwrap()
-      .wait_with_output()
-      .await?;
+    let output = child.wait_with_output().await?;
 
     let Ok(auth_result) = serde_json::from_slice::<SamlAuthResult>(&output.stdout) else {
       bail!("Failed to parse auth data")
