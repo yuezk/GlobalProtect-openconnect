@@ -69,7 +69,12 @@ impl<'a> GuiLauncher<'a> {
 
     info!("Launching gpgui");
     let mut non_root_cmd = cmd.into_non_root()?;
-    let mut child = non_root_cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn()?;
+    let child = non_root_cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn();
+    let mut child = match child {
+      Ok(child) => child,
+      Err(err) => bail!("Failed to spawn {}: {}", self.program.display(), err),
+    };
+
     let Some(mut stdin) = child.stdin.take() else {
       bail!("Failed to open stdin");
     };

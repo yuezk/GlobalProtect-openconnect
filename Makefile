@@ -111,7 +111,7 @@ build-rs:
 	if [ $(BUILD_GUI) -eq 1 ]; then \
 		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth -p gpgui-helper; \
 	else \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth; \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth --no-default-features; \
 	fi
 
 clean:
