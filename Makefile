@@ -162,7 +162,7 @@ init-debian: clean-debian tarball
 	cp .build/tarball/${PKG}.tar.gz .build/deb
 
 	tar -xzf .build/deb/${PKG}.tar.gz -C .build/deb
-	cd .build/deb/${PKG} && debmake
+	cd .build/deb/${PKG} && LC_ALL=C.UTF-8 LANG=C.UTF-8 PYTHONUTF8=1 debmake
 
 	cp -f packaging/deb/control.in .build/deb/$(PKG)/debian/control
 	cp -f packaging/deb/rules.in .build/deb/$(PKG)/debian/rules
