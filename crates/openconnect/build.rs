@@ -134,7 +134,10 @@ fn main() {
   pkg_config::probe_library("p11-kit-1").unwrap();
   pkg_config::probe_library("hogweed").unwrap();
   pkg_config::probe_library("nettle").unwrap();
-  pkg_config::probe_library("gmp").unwrap();
+  if pkg_config::probe_library("gmp").is_err() {
+    println!("cargo:warning=Falling back to direct gmp linking because pkg-config metadata is unavailable");
+    println!("cargo:rustc-link-lib=gmp");
+  }
 
   println!("cargo:rerun-if-changed=src/ffi/vpn.c");
   println!("cargo:rerun-if-changed=src/ffi/vpn.h");
