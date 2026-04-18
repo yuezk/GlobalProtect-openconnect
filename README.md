@@ -145,6 +145,12 @@ The package is also available on [OBS](https://build.opensuse.org/package/show/h
 
 Download the latest RPM package from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page.
 
+On RHEL / Rocky Linux / AlmaLinux / CentOS, enable EPEL first:
+
+```bash
+sudo dnf install epel-release
+```
+
 ```bash
 sudo rpm -i globalprotect-openconnect-*.rpm
 ```

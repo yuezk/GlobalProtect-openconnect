@@ -29,10 +29,10 @@ BuildRequires:  file
 BuildRequires:  perl
 
 BuildRequires:  (webkit2gtk4.0-devel or webkit2gtk3-devel or webkit2gtk3-soup2-devel)
-BuildRequires:  (libayatana-appindicator-gtk3-devel or libappindicator-gtk3-devel or libappindicator3-1)
+BuildRequires:  (libappindicator-gtk3-devel or libappindicator3-1)
 BuildRequires:  (librsvg2-devel or librsvg-devel)
 
-Requires:       (libayatana-appindicator-gtk3 or libayatana-appindicator or libappindicator-gtk3)
+Requires:       (libayatana-appindicator or libappindicator-gtk3)
 Conflicts:      globalprotect-openconnect-snapshot
 
 %global debug_package %{nil}
