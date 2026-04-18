@@ -7,7 +7,6 @@ on:
       - .vscode
       - .devcontainer
     branches:
-      - 2.3.x
       - main
       - dev
       - hotfix/*
