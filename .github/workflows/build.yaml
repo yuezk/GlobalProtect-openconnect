@@ -33,7 +33,7 @@ env:
   GPGUI_REF: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
 
 jobs:
-  # Include arm64 if ref is a tag
+  # Always include arm64
   setup-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -42,11 +42,7 @@ jobs:
       - name: Set up matrix
         id: set-matrix
         run: |
-          if [[ "${{ github.ref }}" == "refs/tags/"* ]]; then
-            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "ubuntu-24.04-arm", "arch": "ubuntu-24.04-arm"}]' >> $GITHUB_OUTPUT
-          else
-            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}]' >> $GITHUB_OUTPUT
-          fi
+          echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "ubuntu-24.04-arm", "arch": "ubuntu-24.04-arm"}]' >> $GITHUB_OUTPUT
 
   tarball:
     runs-on: ubuntu-latest
