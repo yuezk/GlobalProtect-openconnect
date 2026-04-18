@@ -5,6 +5,7 @@ pub mod checksum;
 pub mod crypto;
 pub mod endpoint;
 pub mod env_file;
+pub mod host_utils;
 pub mod lock_file;
 pub mod openssl;
 pub mod redact;
@@ -92,4 +93,23 @@ async fn parse_gp_error(res: Response) -> (String, String) {
   );
 
   (reason, res)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::normalize_server;
+
+  #[test]
+  fn normalize_server_preserves_custom_port() {
+    let normalized = normalize_server("vpn.example.com:4443").unwrap();
+
+    assert_eq!(normalized, "https://vpn.example.com:4443");
+  }
+
+  #[test]
+  fn normalize_server_removes_path_but_keeps_custom_port() {
+    let normalized = normalize_server("https://vpn.example.com:4443/global-protect").unwrap();
+
+    assert_eq!(normalized, "https://vpn.example.com:4443");
+  }
 }

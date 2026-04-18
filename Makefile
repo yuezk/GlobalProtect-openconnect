@@ -117,6 +117,9 @@ install:
 		install -Dm755 .build/gpgui/gpgui_*/gpgui $(DESTDIR)/usr/bin/gpgui; \
 	fi
 
+	install -Dm755 packaging/files/usr/libexec/gpclient/vpnc-script $(DESTDIR)/usr/libexec/gpclient/vpnc-script
+	install -Dm755 packaging/files/usr/libexec/gpclient/hipreport.sh $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
+
 	# Install the disconnect hooks
 	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
 	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
@@ -137,6 +140,9 @@ uninstall:
 	rm -f $(DESTDIR)/usr/bin/gpgui-helper
 	rm -f $(DESTDIR)/usr/bin/gpgui
 
+	rm -f $(DESTDIR)/usr/libexec/gpclient/vpnc-script
+	rm -f $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
+
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
 
@@ -156,7 +162,7 @@ init-debian: clean-debian tarball
 	cp .build/tarball/${PKG}.tar.gz .build/deb
 
 	tar -xzf .build/deb/${PKG}.tar.gz -C .build/deb
-	cd .build/deb/${PKG} && debmake
+	cd .build/deb/${PKG} && LC_ALL=C.UTF-8 LANG=C.UTF-8 PYTHONUTF8=1 debmake
 
 	cp -f packaging/deb/control.in .build/deb/$(PKG)/debian/control
 	cp -f packaging/deb/rules.in .build/deb/$(PKG)/debian/rules

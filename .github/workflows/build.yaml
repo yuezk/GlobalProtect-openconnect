@@ -147,6 +147,7 @@ jobs:
     - name: Build ${{ matrix.package }} package in Docker
       run: |
         docker run --rm \
+          -e LIBXML2_STATIC=1 \
           -v $(pwd)/build-gp-${{ matrix.package }}:/${{ matrix.package }} \
           yuezk/gpdev:${{ matrix.package }}-builder
     - name: Install ${{ matrix.package }} package in Docker
@@ -201,7 +202,7 @@ jobs:
       run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
     - name: Build gpgui in Docker
       run: |
-        docker run --rm -v $(pwd)/gpgui-source:/gpgui yuezk/gpdev:gpgui-builder
+        docker run --rm -e LIBXML2_STATIC=1 -v $(pwd)/gpgui-source:/gpgui yuezk/gpdev:gpgui-builder
     - name: Install gpgui in Docker
       run: |
         cd gpgui-source

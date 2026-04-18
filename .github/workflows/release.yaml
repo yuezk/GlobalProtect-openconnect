@@ -111,6 +111,7 @@ jobs:
     - name: Build ${{ matrix.package }} package in Docker
       run: |
         docker run --rm \
+          -e LIBXML2_STATIC=1 \
           -v $(pwd)/build-${{ matrix.package }}:/${{ matrix.package }} \
           -e INCLUDE_GUI=1 \
           yuezk/gpdev:${{ matrix.package }}-builder
@@ -151,4 +152,3 @@ jobs:
         tag_name: ${{ inputs.tag }}
         files: |
           gh-release/artifact-*/*
-

@@ -2,6 +2,7 @@
 
 export OFFLINE = @OFFLINE@
 export BUILD_FE = 0
+export LIBXML2_STATIC = 1
 
 %:
 	dh $@ --no-parallel

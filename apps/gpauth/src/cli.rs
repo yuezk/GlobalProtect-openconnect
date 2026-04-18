@@ -73,7 +73,9 @@ struct Cli {
 
   #[arg(
     long,
-    help = "The browser to use for authentication, e.g., `default`, `firefox`, `chrome`, `chromium`, or the path to the browser executable"
+    help = "The browser to use for authentication, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`, or the path to the browser executable. Use `remote` for headless servers",
+    default_missing_value = "default",
+    num_args=0..=1
   )]
   browser: Option<String>,
 }
@@ -104,7 +106,12 @@ impl Cli {
     };
 
     if let Some(browser_auth) = browser_auth {
-      browser_auth.authenticate()?;
+      if let Some(auth_data) = browser_auth.authenticate()? {
+        info!("Authentication completed");
+        println!("{}", json!(SamlAuthResult::Success(auth_data)));
+
+        return Ok(());
+      }
 
       info!("Please continue the authentication process in the default browser");
 
