@@ -14,10 +14,22 @@ on:
       - release/*
     tags:
       - v*.*.*
+  pull_request:
+    paths-ignore:
+      - LICENSE
+      - "*.md"
+      - .vscode
+      - .devcontainer
+    branches:
+      - 2.3.x
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  GP_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
+  GPGUI_REF: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
 
 jobs:
   # Include arm64 if ref is a tag
@@ -49,7 +61,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.ref }}
+        ref: ${{ env.GP_REF }}
         path: source/gp
         submodules: recursive
     - name: Create tarball
@@ -172,15 +184,15 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.ref }}
+        ref: ${{ env.GP_REF }}
         path: gpgui-source/gp
         submodules: recursive
-    - name: Checkout gpgui@${{ github.ref_name }}
+    - name: Checkout gpgui@${{ env.GPGUI_REF }}
       uses: actions/checkout@v3
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/gpgui
-        ref: ${{ github.ref_name }}
+        ref: ${{ env.GPGUI_REF }}
         path: gpgui-source/gpgui
     - name: Tarball
       run: |
