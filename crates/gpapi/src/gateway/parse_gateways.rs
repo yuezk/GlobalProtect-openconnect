@@ -1,62 +1,59 @@
 use log::info;
-use roxmltree::Node;
+use xmltree::Element;
 
-use crate::utils::xml::NodeExt;
+use crate::utils::xml::ElementExt;
 
 use super::{Gateway, PriorityRule};
 
-pub(crate) fn parse_gateways(node: &Node, prefer_internal: bool) -> Option<Vec<Gateway>> {
-  let node_gateways = node.find_descendant("gateways")?;
+pub(crate) fn parse_gateways(root: &Element, prefer_internal: bool) -> Option<Vec<Gateway>> {
+  let node_gateways = root.descendant("gateways")?;
   let internal_gateway_list = if prefer_internal {
     info!("Try to parse the internal gateways...");
-    node_gateways.find_descendant("internal").and_then(|n| n.find_child("list"))
+    node_gateways.descendant("internal").and_then(|node| node.child("list"))
   } else {
     None
   };
 
   let gateway_list = internal_gateway_list.or_else(|| {
     info!("Try to parse the external gateways...");
-    node_gateways.find_descendant("external").and_then(|n| n.find_child("list"))
+    node_gateways.descendant("external").and_then(|node| node.child("list"))
   })?;
 
   let gateways = gateway_list
-    .children()
-    .filter_map(|gateway_item| {
-      if !gateway_item.has_tag_name("entry") {
-        return None;
-      }
-      let address = gateway_item.attribute("name").unwrap_or_default().to_string();
-      let name = gateway_item.child_text("description").unwrap_or_default().to_string();
+    .children("entry")
+    .iter()
+    .map(|gateway_item| {
+      let address = gateway_item.attr("name").unwrap_or_default().to_string();
+      let name = gateway_item.child_text("description").unwrap_or_default();
       let priority = gateway_item
         .child_text("priority")
         .and_then(|s| s.parse().ok())
         .unwrap_or(u32::MAX);
       let priority_rules = gateway_item
-        .find_child("priority-rule")
-        .map(|n| {
-          n.children()
-            .filter_map(|n| {
-              if !n.has_tag_name("entry") {
-                return None;
-              }
-              let name = n.attribute("name").unwrap_or_default().to_string();
-              let priority: u32 = n
+        .child("priority-rule")
+        .map(|node| {
+          node
+            .children("entry")
+            .iter()
+            .map(|entry| {
+              let name = entry.attr("name").unwrap_or_default().to_string();
+              let priority: u32 = entry
                 .child_text("priority")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(u32::MAX);
 
-              Some(PriorityRule { name, priority })
+              PriorityRule { name, priority }
             })
             .collect()
         })
         .unwrap_or_default();
 
-      Some(Gateway {
+      Gateway {
         name,
         address,
         priority,
         priority_rules,
-      })
+      }
     })
     .collect();
 

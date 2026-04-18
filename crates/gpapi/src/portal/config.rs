@@ -2,16 +2,16 @@ use anyhow::bail;
 use dns_lookup::lookup_addr;
 use log::{debug, info, warn};
 use reqwest::{Client, StatusCode};
-use roxmltree::{Document, Node};
 use serde::Serialize;
 use specta::Type;
+use xmltree::Element;
 
 use crate::{
   credential::{AuthCookieCredential, Credential},
   error::PortalError,
   gateway::{parse_gateways, Gateway},
   gp_params::GpParams,
-  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::NodeExt},
+  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::ElementExt},
 };
 
 #[derive(Debug, Serialize, Type)]
@@ -137,14 +137,13 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
 
   debug!("Portal config response: {}", res_xml);
 
-  let doc = Document::parse(&res_xml).map_err(|e| PortalError::ConfigError(e.to_string()))?;
-  let root = doc.root();
+  let root = Element::parse(res_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
 
   let mut ihd_enabled = false;
   let mut prefer_internal = false;
-  if let Some(ihd_node) = root.find_descendant("internal-host-detection") {
+  if let Some(ihd_node) = root.descendant("internal-host-detection") {
     ihd_enabled = true;
-    prefer_internal = internal_host_detect(&ihd_node)
+    prefer_internal = internal_host_detect(ihd_node)
   }
 
   let mut gateways = parse_gateways(&root, prefer_internal).unwrap_or_else(|| {
@@ -164,16 +163,16 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
 
   Ok(PortalConfig {
     portal: server.to_string(),
-    auth_cookie: AuthCookieCredential::new(cred.username(), user_auth_cookie, prelogon_user_auth_cookie),
+    auth_cookie: AuthCookieCredential::new(cred.username(), &user_auth_cookie, &prelogon_user_auth_cookie),
     config_cred: cred.clone(),
     gateways,
-    config_digest: config_digest.map(|s| s.to_string()),
+    config_digest,
     internal_host_detection: if ihd_enabled { Some(prefer_internal) } else { None },
   })
 }
 
 // Perform DNS lookup and compare the result with the expected hostname
-fn internal_host_detect(node: &Node) -> bool {
+fn internal_host_detect(node: &Element) -> bool {
   let ip_info = [
     (node.child_text("ip-address"), node.child_text("host")),
     (node.child_text("ipv6-address"), node.child_text("ipv6-host")),

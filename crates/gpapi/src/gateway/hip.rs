@@ -2,9 +2,13 @@ use std::collections::HashMap;
 
 use log::{info, warn};
 use reqwest::Client;
-use roxmltree::Document;
+use xmltree::Element;
 
-use crate::{gp_params::GpParams, process::hip_launcher::HipLauncher, utils::normalize_server};
+use crate::{
+  gp_params::GpParams,
+  process::hip_launcher::HipLauncher,
+  utils::{normalize_server, xml::ElementExt},
+};
 
 struct HipReporter<'a> {
   server: String,
@@ -65,16 +69,12 @@ impl HipReporter<'_> {
 
     let res = self.client.post(&config_url).form(&params).send().await?;
     let res_xml = res.error_for_status()?.text().await?;
-    let doc = Document::parse(&res_xml)?;
-
-    // Get <ip-address>
-    let ip = doc
-      .descendants()
-      .find(|n| n.has_tag_name("ip-address"))
-      .and_then(|n| n.text())
+    let root = Element::parse(res_xml.as_bytes())?;
+    let ip = root
+      .descendant_text("ip-address")
       .ok_or_else(|| anyhow::anyhow!("ip-address not found"))?;
 
-    Ok(ip.to_string())
+    Ok(ip)
   }
 
   async fn check_hip(&self, client_ip: &str) -> anyhow::Result<bool> {
@@ -122,12 +122,9 @@ impl HipReporter<'_> {
 }
 
 fn is_hip_needed(res_xml: &str) -> anyhow::Result<bool> {
-  let doc = Document::parse(res_xml)?;
-
-  let hip_needed = doc
-    .descendants()
-    .find(|n| n.has_tag_name("hip-report-needed"))
-    .and_then(|n| n.text())
+  let root = Element::parse(res_xml.as_bytes())?;
+  let hip_needed = root
+    .descendant_text("hip-report-needed")
     .ok_or_else(|| anyhow::anyhow!("hip-report-needed not found"))?;
 
   Ok(hip_needed == "yes")
