@@ -74,7 +74,7 @@ jobs:
         fi
         make tarball
     - name: Upload tarball
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: artifact-source
         if-no-files-found: error
@@ -95,7 +95,7 @@ jobs:
       run: rm -rf source-offline && mkdir source-offline
 
     - name: Download tarball
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: artifact-source
         path: source-offline
@@ -116,7 +116,7 @@ jobs:
         mv -v .build/tarball/*.tar.gz ../$offline_tarball
 
     - name: Upload offline tarball
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         path: source-offline/*.offline.tar.gz
         name: artifact-source-offline
@@ -139,7 +139,7 @@ jobs:
         rm -rf build-gp-${{ matrix.package }}
         mkdir -p build-gp-${{ matrix.package }}
     - name: Download tarball
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: artifact-source
         path: build-gp-${{ matrix.package }}
@@ -158,7 +158,7 @@ jobs:
           yuezk/gpdev:${{ matrix.package }}-builder \
           bash install.sh
     - name: Upload ${{ matrix.package }} package
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: artifact-gp-${{ matrix.package }}-${{ matrix.os.arch }}
         if-no-files-found: error
@@ -210,7 +210,7 @@ jobs:
         docker run --rm -v $(pwd):/gpgui yuezk/gpdev:gpgui-builder \
           bash -c "cd /gpgui/gpgui_*/ && ./gpgui --version"
     - name: Upload gpgui
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: artifact-gpgui-${{ matrix.os.arch }}
         if-no-files-found: error
@@ -240,7 +240,7 @@ jobs:
         path: gh-release/gp
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: gh-release/gp/.build/artifacts
 
