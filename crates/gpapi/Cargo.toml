@@ -31,6 +31,8 @@ serde_urlencoded.workspace = true
 md5.workspace = true
 sha256.workspace = true
 which.workspace = true
+machine-uid = "0.5"
+uuid = { version = "1", features = ["v5"] }
 
 # Pin the version of home because the latest version requires Rust 1.81
 home = "=0.5.9"
@@ -39,6 +41,9 @@ tauri = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 open = { version = "5", optional = true }
 webbrowser = { version = "1", optional = true }
+
+[target.'cfg(any(target_os="macos", target_os="windows"))'.dependencies]
+os_info = { version = "3", default-features = false }
 
 [features]
 tauri = ["dep:tauri"]

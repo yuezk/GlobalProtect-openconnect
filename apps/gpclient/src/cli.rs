@@ -8,6 +8,7 @@ use tempfile::NamedTempFile;
 use crate::{
   connect::{ConnectArgs, ConnectHandler},
   disconnect::{DisconnectArgs, DisconnectHandler},
+  hip::{HipArgs, HipHandler},
   launch_gui::{LaunchGuiArgs, LaunchGuiHandler},
 };
 
@@ -26,6 +27,8 @@ enum CliCommand {
   Disconnect(DisconnectArgs),
   #[command(about = "Launch the GUI")]
   LaunchGui(LaunchGuiArgs),
+  #[command(about = "Generate HIP report")]
+  Hip(HipArgs),
 }
 
 #[derive(Parser)]
@@ -50,7 +53,10 @@ struct Cli {
   #[command(subcommand)]
   command: CliCommand,
 
-  #[arg(long, help = "Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats.")]
+  #[arg(
+    long,
+    help = "Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats."
+  )]
   fix_openssl: bool,
   #[arg(long, help = "Ignore the TLS errors")]
   ignore_tls_errors: bool,
@@ -83,6 +89,7 @@ impl Cli {
       CliCommand::Connect(args) => ConnectHandler::new(args, &shared_args).handle().await,
       CliCommand::Disconnect(args) => DisconnectHandler::new(args).handle().await,
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
+      CliCommand::Hip(args) => HipHandler::new(args).handle().await,
     }
   }
 }

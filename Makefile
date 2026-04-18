@@ -117,6 +117,9 @@ install:
 		install -Dm755 .build/gpgui/gpgui_*/gpgui $(DESTDIR)/usr/bin/gpgui; \
 	fi
 
+	install -Dm755 packaging/files/usr/libexec/gpclient/vpnc-script $(DESTDIR)/usr/libexec/gpclient/vpnc-script
+	install -Dm755 packaging/files/usr/libexec/gpclient/hipreport.sh $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
+
 	# Install the disconnect hooks
 	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
 	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
@@ -136,6 +139,9 @@ uninstall:
 	rm -f $(DESTDIR)/usr/bin/gpservice
 	rm -f $(DESTDIR)/usr/bin/gpgui-helper
 	rm -f $(DESTDIR)/usr/bin/gpgui
+
+	rm -f $(DESTDIR)/usr/libexec/gpclient/vpnc-script
+	rm -f $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
 
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook

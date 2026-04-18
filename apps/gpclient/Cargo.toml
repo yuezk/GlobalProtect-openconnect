@@ -10,6 +10,8 @@ common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap"] }
 openconnect = { path = "../../crates/openconnect" }
 anyhow.workspace = true
+askama = "0.12"
+chrono = "0.4"
 clap.workspace = true
 env_logger.workspace = true
 inquire = "0.6.2"
@@ -17,8 +19,10 @@ log.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 sysinfo.workspace = true
 serde_json.workspace = true
+serde_urlencoded.workspace = true
 whoami.workspace = true
 tempfile.workspace = true
 reqwest.workspace = true
 directories = "5.0"
 compile-time.workspace = true
+xmltree = "0.11"
