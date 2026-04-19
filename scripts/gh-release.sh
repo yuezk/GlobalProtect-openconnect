@@ -33,11 +33,22 @@ release_snapshot() {
 }
 
 release_tag() {
+  local release_args=()
+
+  if existing_notes=$(gh -R "$REPO" release view "$TAG" --json body --jq .body 2>/dev/null); then
+    RELEASE_NOTES="$existing_notes"
+  fi
+
+  if [[ $TAG == v2.3.* ]]; then
+    release_args+=(--latest=false)
+  fi
+
   echo "Removing existing release..."
   gh -R "$REPO" release delete $TAG --yes --cleanup-tag || true
 
   echo "Creating release..."
   gh -R "$REPO" release create $TAG \
+    "${release_args[@]}" \
     --title "$TAG" \
     --notes "$RELEASE_NOTES" \
     "$PROJECT_DIR"/.build/artifacts/artifact-source*/* \

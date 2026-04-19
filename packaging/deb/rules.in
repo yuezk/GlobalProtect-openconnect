@@ -4,5 +4,8 @@ export OFFLINE = @OFFLINE@
 export BUILD_FE = 0
 export LIBXML2_STATIC = 1
 
+override_dh_auto_build:
+	$(MAKE) build
+
 %:
 	dh $@ --no-parallel
