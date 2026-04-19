@@ -73,9 +73,12 @@ jobs:
           const inputs = ${{ toJson(inputs) }}
           const { arch } = inputs
           const osMap = {
-            "all": ["ubuntu-latest", "ubuntu-24.04-arm"],
-            "x86_64": ["ubuntu-latest"],
-            "arm64": ["ubuntu-24.04-arm"]
+            "all": [
+              { runner: "ubuntu-latest", arch: "amd64" },
+              { runner: "ubuntu-24.04-arm", arch: "ubuntu-24.04-arm" },
+            ],
+            "x86_64": [{ runner: "ubuntu-latest", arch: "amd64" }],
+            "arm64": [{ runner: "ubuntu-24.04-arm", arch: "ubuntu-24.04-arm" }],
           }
 
           const package = Object.entries(inputs)
@@ -92,7 +95,8 @@ jobs:
     - setup-matrix
     strategy:
       matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os.runner }}
+    name: build (${{ matrix.package }}, ${{ matrix.os.arch }})
     steps:
     - name: Prepare workspace
       run: rm -rf build-${{ matrix.package }} && mkdir -p build-${{ matrix.package }}
@@ -124,9 +128,9 @@ jobs:
           bash install.sh
 
     - name: Upload ${{ matrix.package }} package
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: artifact-${{ matrix.os }}-${{ matrix.package }}
+        name: artifact-${{ matrix.os.arch }}-${{ matrix.package }}
         if-no-files-found: error
         path: |
           build-${{ matrix.package }}/artifacts/*
@@ -140,7 +144,7 @@ jobs:
     - name: Prepare workspace
       run: rm -rf gh-release && mkdir gh-release
     - name: Download artifact
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: gh-release
     - name: Update release
