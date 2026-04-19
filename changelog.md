@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.12 - 2026-04-19
+
+- Backport the vendored OpenConnect/libxml2 runtime from newer releases, including the updated HIP flow and bundled Linux helper scripts.
+- CLI/browser authentication: support `--browser remote` for headless servers, restore the browser flag default behavior, and improve external browser auth handling.
+- Support VPN portals and gateways running on custom ports (fix [#404](https://github.com/yuezk/GlobalProtect-openconnect/issues/404)).
+- Improve `2.3.x` build and packaging compatibility on current Linux toolchains and builder environments.
+
 ## 2.3.11 - 2025-01-21
 
 - Update minimal Rust version to 1.71.1, so that the PPA can be built on Ubuntu 18.04.
