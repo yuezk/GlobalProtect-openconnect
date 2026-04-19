@@ -174,23 +174,91 @@ sudo emerge -av net-vpn/globalprotect-openconnect
 
 ## Build from source
 
-You can also build the client from source, steps are as follows:
+The source build now vendors OpenConnect in `crates/openconnect/deps/openconnect`.
+It can also build libxml2 from `crates/openconnect/deps/libxml2` when needed.
+You do not need to install `openconnect` or `libopenconnect-dev` to build from source.
+
+If you build from a git checkout, make sure the vendored sources are present:
+
+```bash
+git clone --recursive https://github.com/yuezk/GlobalProtect-openconnect.git
+```
+
+Or, if you already cloned the repo without submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
+If you build from the release source tarball (`globalprotect-openconnect-${version}.tar.gz`), the vendored sources are already included, so you do not need the submodule step.
 
 ### Prerequisites
 
 - [Install Rust 1.75 or later](https://www.rust-lang.org/tools/install)
 - Install Tauri dependencies: https://tauri.app/v1/guides/getting-started/prerequisites/#setting-up-linux
-- Install `perl` and `jq`
-- Install `openconnect >= 8.20` and `libopenconnect-dev` (or `openconnect-devel` on RPM-based distributions)
+- Install `make`, `pkg-config`, `autoconf`, `automake`, `libtool`, `patch`, `perl`, and `jq`
+- Install development libraries for `gnutls`, `zlib`, `lz4`, `p11-kit`, `nettle`, `gmp`, and `openssl`
 - Install `pkexec`, `gnome-keyring` (or `pam_kwallet` on KDE)
-- Install `nodejs` and `pnpm` (optional only if you downloaded the source tarball from the release page and run with the `BUILD_FE=0` flag, see below)
+- Install `nodejs` and `pnpm` if you are building from a git checkout
+- Install `libxml2` development headers if you want to link against the system libxml2
+
+On Debian/Ubuntu, that usually means:
+
+```bash
+sudo apt-get install \
+  autoconf automake libtool patch pkg-config jq make perl \
+  zlib1g-dev liblz4-dev libp11-kit-dev nettle-dev libgnutls28-dev libgmp-dev libssl-dev libxml2-dev \
+  libsecret-1-dev libayatana-appindicator3-dev libwebkit2gtk-4.0-dev \
+  gnome-keyring
+```
+
+On RHEL 9 / Rocky Linux 9 / AlmaLinux 9 / CentOS Stream 9, that usually means:
+
+```bash
+sudo dnf install \
+  autoconf automake libtool patch pkgconf-pkg-config jq make perl gcc-c++ \
+  zlib-devel lz4-devel p11-kit-devel nettle-devel gnutls-devel gmp-devel openssl-devel libxml2-devel \
+  libsecret libappindicator-gtk3 webkit2gtk4.0-devel
+```
+
+If your distro uses different package names, check `packaging/deb/control.in` and `packaging/rpm/globalprotect-openconnect.spec.in` for the dependency lists used by the project packaging.
 
 ### Build
 
-1. Download the source code tarball from [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page. Choose `globalprotect-openconnect-${version}.tar.gz`.
-2. Extract the tarball with `tar -xzf globalprotect-openconnect-${version}.tar.gz`.
-3. Enter the source directory and run `make build BUILD_FE=0` to build the client.
-3. Run `sudo make install` to install the client. (Note, `DESTDIR` is not supported)
+#### From a git checkout
+
+Use the default build if you have `nodejs` and `pnpm` installed:
+
+```bash
+make build
+sudo make install
+```
+
+#### From the release source tarball
+
+The release source tarball already includes the generated frontend assets, so you can skip the frontend build:
+
+```bash
+tar -xzf globalprotect-openconnect-${version}.tar.gz
+cd globalprotect-openconnect-${version}
+make build BUILD_FE=0
+sudo make install
+```
+
+#### Build with vendored libxml2
+
+By default, the build links against the system `libxml2`.
+If you also want to build libxml2 from the vendored source, use:
+
+```bash
+make build LIBXML2_STATIC=1
+```
+
+Or, when building from the release tarball:
+
+```bash
+make build BUILD_FE=0 LIBXML2_STATIC=1
+```
 
 ## FAQ
 
