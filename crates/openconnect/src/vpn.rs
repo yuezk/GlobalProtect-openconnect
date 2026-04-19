@@ -258,3 +258,16 @@ impl VpnBuilder {
     CString::new(value.to_string()).expect("Failed to convert to CString")
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::Vpn;
+
+  #[test]
+  fn vpn_builder_preserves_raw_host_and_custom_port() {
+    let builder = Vpn::builder("vpn.example.com:4443", "cookie");
+
+    assert_eq!(builder.server, "vpn.example.com:4443");
+    assert_eq!(builder.cookie, "cookie");
+  }
+}
