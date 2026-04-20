@@ -45,7 +45,7 @@ jobs:
     needs: check
     runs-on: ubuntu-latest
     steps:
-    - uses: pnpm/action-setup@v4
+    - uses: pnpm/action-setup@v5
       with:
         version: 9
     - name: Prepare workspace

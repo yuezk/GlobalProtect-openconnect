@@ -41,14 +41,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup-matrix]
     steps:
-    - uses: pnpm/action-setup@v4
+    - uses: pnpm/action-setup@v5
       with:
         version: 9
     - name: Prepare workspace
       run: rm -rf source && mkdir -p source/artifacts
 
     - name: Checkout GlobalProtect-openconnect
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
@@ -80,7 +80,7 @@ jobs:
         mv -v .build/rpm/*.spec ../artifacts/
 
     - name: Upload tarball
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: artifact-source
         if-no-files-found: error
@@ -93,7 +93,7 @@ jobs:
     needs:
     - tarball
     steps:
-    - uses: pnpm/action-setup@v4
+    - uses: pnpm/action-setup@v5
       with:
         version: 9
 
@@ -101,7 +101,7 @@ jobs:
       run: rm -rf source-offline && mkdir source-offline
 
     - name: Download tarball
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v8
       with:
         name: artifact-source
         path: source-offline
@@ -122,7 +122,7 @@ jobs:
         mv -v .build/tarball/*.tar.gz ../$offline_tarball
 
     - name: Upload offline tarball
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         path: source-offline/*.offline.tar.gz
         name: artifact-source-offline
@@ -144,7 +144,7 @@ jobs:
         rm -rf build-gp-${{ matrix.package }}
         mkdir -p build-gp-${{ matrix.package }}
     - name: Download tarball
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v8
       with:
         name: artifact-source
         path: build-gp-${{ matrix.package }}
@@ -169,7 +169,7 @@ jobs:
     # Don't upload package for ubuntu-rolling because it's duplicate of deb package
     - name: Upload ${{ matrix.package }} package
       if: ${{ matrix.package != 'ubuntu-rolling' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: artifact-gp-${{ matrix.package }}-${{ matrix.os.arch }}
         if-no-files-found: error
@@ -185,13 +185,13 @@ jobs:
     runs-on: ${{ matrix.os.runner }}
     name: build-gpgui (${{ matrix.os.arch }})
     steps:
-    - uses: pnpm/action-setup@v4
+    - uses: pnpm/action-setup@v5
       with:
         version: 9
     - name: Prepare workspace
       run: rm -rf gpgui-source && mkdir gpgui-source
     - name: Checkout GlobalProtect-openconnect
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
@@ -199,7 +199,7 @@ jobs:
         path: gpgui-source/gp
         submodules: recursive
     - name: Checkout gpgui@${{ github.ref_name }}
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/gpgui
@@ -225,7 +225,7 @@ jobs:
           -v $(pwd):/workspace yuezk/gpdev:gpgui-builder-tauri2 \
           bash -c "cd /workspace/gpgui_*/ && ./gpgui --version"
     - name: Upload gpgui
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: artifact-gpgui-${{ matrix.os.arch }}
         if-no-files-found: error
@@ -247,7 +247,7 @@ jobs:
       run: rm -rf gh-release && mkdir gh-release
 
     - name: Checkout GlobalProtect-openconnect
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
@@ -256,7 +256,7 @@ jobs:
         submodules: recursive
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v8
       with:
         path: gh-release/gp/.build/artifacts
 
