@@ -96,6 +96,10 @@ gpclient launch-gui
 
 ## Installation
 
+> [!Note]
+>
+> For older Linux distributions, use [v2.3.13](https://github.com/yuezk/GlobalProtect-openconnect/releases/tag/v2.3.13) instead of the latest release.
+
 ### Debian / Ubuntu
 
 #### Option 1: Install from PPA (Recommended)
