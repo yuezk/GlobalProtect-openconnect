@@ -98,7 +98,7 @@ gpclient launch-gui
 
 > [!Note]
 >
-> For older Linux distributions, use [v2.3.13](https://github.com/yuezk/GlobalProtect-openconnect/releases/tag/v2.3.13) instead of the latest release.
+> For older Linux distributions, use [v2.3.13](https://github.com/yuezk/GlobalProtect-openconnect/releases/tag/v2.3.13) instead of the latest release. It provides release assets for common distro families, including Debian/Ubuntu (`.deb`), Arch Linux / Manjaro (`.pkg.tar.zst`), RPM-based distros such as Fedora / RHEL / Rocky / AlmaLinux / CentOS (`.rpm`), and generic Linux tarballs (`.bin.tar.xz`).
 
 ### Debian / Ubuntu
 
