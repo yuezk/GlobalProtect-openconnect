@@ -143,7 +143,7 @@ jobs:
     - name: Prepare workspace
       run: rm -rf gh-release && mkdir gh-release
     - name: Download artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         path: gh-release
     - name: Update release
@@ -155,4 +155,3 @@ jobs:
         tag_name: ${{ inputs.tag }}
         files: |
           gh-release/artifact-*/*
-

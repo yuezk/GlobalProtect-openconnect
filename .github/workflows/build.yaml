@@ -101,7 +101,7 @@ jobs:
       run: rm -rf source-offline && mkdir source-offline
 
     - name: Download tarball
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: artifact-source
         path: source-offline
@@ -144,7 +144,7 @@ jobs:
         rm -rf build-gp-${{ matrix.package }}
         mkdir -p build-gp-${{ matrix.package }}
     - name: Download tarball
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: artifact-source
         path: build-gp-${{ matrix.package }}
@@ -256,7 +256,7 @@ jobs:
         submodules: recursive
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         path: gh-release/gp/.build/artifacts
 
