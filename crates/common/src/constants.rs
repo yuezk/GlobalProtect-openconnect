@@ -4,16 +4,28 @@ pub const GP_SERVICE_LOCK_FILE: &str = "/var/run/gpservice.lock";
 pub const GP_CALLBACK_PORT_FILENAME: &str = "gpcallback.port";
 
 // Release binaries - macOS (Apple Silicon Homebrew)
-#[cfg(all(not(debug_assertions), target_os = "macos"))]
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "aarch64"))]
 pub const GP_CLIENT_BINARY: &str = "/opt/homebrew/bin/gpclient";
-#[cfg(all(not(debug_assertions), target_os = "macos"))]
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "aarch64"))]
 pub const GP_SERVICE_BINARY: &str = "/opt/homebrew/bin/gpservice";
-#[cfg(all(not(debug_assertions), target_os = "macos"))]
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "aarch64"))]
 pub const GP_GUI_BINARY: &str = "/opt/homebrew/bin/gpgui";
-#[cfg(all(not(debug_assertions), target_os = "macos"))]
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "aarch64"))]
 pub const GP_GUI_HELPER_BINARY: &str = "/opt/homebrew/bin/gpgui-helper";
-#[cfg(all(not(debug_assertions), target_os = "macos"))]
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "aarch64"))]
 pub const GP_AUTH_BINARY: &str = "/opt/homebrew/bin/gpauth";
+
+// Release binaries - macOS (Intel Homebrew)
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "x86_64"))]
+pub const GP_CLIENT_BINARY: &str = "/usr/local/bin/gpclient";
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "x86_64"))]
+pub const GP_SERVICE_BINARY: &str = "/usr/local/bin/gpservice";
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "x86_64"))]
+pub const GP_GUI_BINARY: &str = "/usr/local/bin/gpgui";
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "x86_64"))]
+pub const GP_GUI_HELPER_BINARY: &str = "/usr/local/bin/gpgui-helper";
+#[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "x86_64"))]
+pub const GP_AUTH_BINARY: &str = "/usr/local/bin/gpauth";
 
 // Release binaries - Linux
 #[cfg(all(not(debug_assertions), not(target_os = "macos")))]
