@@ -17,7 +17,7 @@ use crate::{
 pub async fn retrieve_session_info(req: &ConnectRequest) -> anyhow::Result<SessionInfo> {
   let base_url = normalize_server(req.gateway().server())?;
   let client = build_client(req.args())?;
-  let form = parse_cookie_form(req.args().cookie())?;
+  let form = build_session_form(req.args())?;
   let url = format!("{base_url}/ssl-vpn/getconfig.esp");
 
   info!("Retrieving gateway session info");
@@ -28,6 +28,12 @@ pub async fn retrieve_session_info(req: &ConnectRequest) -> anyhow::Result<Sessi
   })?;
 
   let response = parse_gp_response(response).await.map_err(|err| anyhow::anyhow!(err.reason))?;
+  let response = response.trim();
+  debug!("Gateway session info response body: {}", response);
+  if !response.starts_with('<') {
+    return Err(anyhow::anyhow!("Gateway session info error: {response}"));
+  }
+
   let root = Element::parse(response.as_bytes())?;
   let session_info = parse_session_info(&root)?;
 
@@ -49,15 +55,43 @@ fn build_client(args: &ConnectArgs) -> anyhow::Result<Client> {
   Client::try_from(&builder.build())
 }
 
-fn parse_cookie_form(cookie: &str) -> anyhow::Result<HashMap<String, String>> {
-  Ok(serde_urlencoded::from_str(cookie)?)
+fn build_session_form(args: &ConnectArgs) -> anyhow::Result<HashMap<String, String>> {
+  let mut form = HashMap::from([
+    ("client-type".to_string(), "1".to_string()),
+    ("protocol-version".to_string(), "p1".to_string()),
+    ("internal".to_string(), "no".to_string()),
+    (
+      "app-version".to_string(),
+      args.client_version().unwrap_or_else(|| "6.3.0-33".to_string()),
+    ),
+    (
+      "ipv6-support".to_string(),
+      if args.disable_ipv6() { "no" } else { "yes" }.to_string(),
+    ),
+    (
+      "clientos".to_string(),
+      args.os().unwrap_or(ClientOs::default()).as_str().to_string(),
+    ),
+    ("hmac-algo".to_string(), "sha1,md5,sha256".to_string()),
+    ("enc-algo".to_string(), "aes-128-cbc,aes-256-cbc".to_string()),
+  ]);
+
+  if let Some(os_version) = args.os_version() {
+    form.insert("os-version".to_string(), os_version);
+  }
+
+  form.extend(serde_urlencoded::from_str::<HashMap<String, String>>(args.cookie())?);
+
+  Ok(form)
 }
 
 fn parse_session_info(root: &Element) -> anyhow::Result<SessionInfo> {
+  let user_expires = parse_optional_u32(root, "user-expires")?
+    .or(parse_optional_u32(root, "user_expires")?);
+
   Ok(SessionInfo {
-    lifetime_secs: parse_optional_u64(root, "lifetime")?,
-    user_expires: parse_optional_u64(root, "user-expires")
-      .or_else(|_| parse_optional_u64(root, "user_expires"))?,
+    lifetime_secs: parse_optional_u32(root, "lifetime")?,
+    user_expires,
     lifetime_warning: parse_warning(root, "lifetime-notify-prior", "lifetime-notify-message")?,
     inactivity_warning: parse_warning(root, "inactivity-notify-prior", "inactivity-notify-message")?,
     admin_logout_message: root.descendant_text("admin-logout-notify-message"),
@@ -66,7 +100,7 @@ fn parse_session_info(root: &Element) -> anyhow::Result<SessionInfo> {
 }
 
 fn parse_warning(root: &Element, prior_tag: &str, message_tag: &str) -> anyhow::Result<Option<SessionWarning>> {
-  let prior_secs = parse_optional_u64(root, prior_tag)?;
+  let prior_secs = parse_optional_u32(root, prior_tag)?;
   let message = root.descendant_text(message_tag).filter(|value| !value.is_empty());
 
   Ok(match (prior_secs, message) {
@@ -75,7 +109,7 @@ fn parse_warning(root: &Element, prior_tag: &str, message_tag: &str) -> anyhow::
   })
 }
 
-fn parse_optional_u64(root: &Element, tag: &str) -> anyhow::Result<Option<u64>> {
+fn parse_optional_u32(root: &Element, tag: &str) -> anyhow::Result<Option<u32>> {
   let Some(value) = root.descendant_text(tag) else {
     return Ok(None);
   };
@@ -94,6 +128,33 @@ fn parse_bool_flag(value: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn builds_gateway_session_form() {
+    let gateway = crate::gateway::Gateway::new("vpn".to_string(), "vpn.example.com".to_string());
+    let req = ConnectRequest::new(
+      crate::service::vpn_state::ConnectInfo::new("vpn.example.com".to_string(), gateway.clone(), vec![gateway]),
+      "authcookie=AUTH&portal=vpn.example.com&user=alice&preferred-ip=10.0.0.10".to_string(),
+    )
+    .with_os(ClientOs::Mac)
+    .with_os_version(Some("macOS 15.0".to_string()))
+    .with_client_version("6.3.1-12")
+    .with_disable_ipv6(true);
+
+    let form = build_session_form(req.args()).unwrap();
+
+    assert_eq!(form.get("client-type").map(String::as_str), Some("1"));
+    assert_eq!(form.get("protocol-version").map(String::as_str), Some("p1"));
+    assert_eq!(form.get("internal").map(String::as_str), Some("no"));
+    assert_eq!(form.get("app-version").map(String::as_str), Some("6.3.1-12"));
+    assert_eq!(form.get("ipv6-support").map(String::as_str), Some("no"));
+    assert_eq!(form.get("clientos").map(String::as_str), Some("Mac"));
+    assert_eq!(form.get("os-version").map(String::as_str), Some("macOS 15.0"));
+    assert_eq!(form.get("authcookie").map(String::as_str), Some("AUTH"));
+    assert_eq!(form.get("portal").map(String::as_str), Some("vpn.example.com"));
+    assert_eq!(form.get("user").map(String::as_str), Some("alice"));
+    assert_eq!(form.get("preferred-ip").map(String::as_str), Some("10.0.0.10"));
+  }
 
   #[test]
   fn parses_session_info() {
@@ -129,5 +190,19 @@ mod tests {
     let info = parse_session_info(&root).unwrap();
 
     assert!(!info.allow_extend_session);
+  }
+
+  #[test]
+  fn parses_user_expires_underscore_variant() {
+    let xml = r#"
+      <response>
+        <user_expires>1779810767</user_expires>
+      </response>
+    "#;
+    let root = Element::parse(xml.as_bytes()).unwrap();
+
+    let info = parse_session_info(&root).unwrap();
+
+    assert_eq!(info.user_expires, Some(1779810767));
   }
 }
