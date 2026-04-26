@@ -72,10 +72,8 @@ impl WsServerContext {
     if let Err(err) = conn.send_event(&WsEvent::VpnEnv(vpn_env)).await {
       warn!("Failed to send VPN state to new client: {}", err);
     }
-    if let Err(err) = conn
-      .send_event(&WsEvent::SessionInfo(self.session_info_rx.borrow().clone()))
-      .await
-    {
+    let session_info = self.session_info_rx.borrow().clone();
+    if let Err(err) = conn.send_event(&WsEvent::SessionInfo(session_info)).await {
       warn!("Failed to send session info to new client: {}", err);
     }
 
@@ -199,9 +197,8 @@ async fn watch_vpn_state(mut vpn_state_rx: watch::Receiver<VpnState>, ctx: Arc<W
 
 async fn watch_session_info(mut session_info_rx: watch::Receiver<Option<SessionInfo>>, ctx: Arc<WsServerContext>) {
   while session_info_rx.changed().await.is_ok() {
-    ctx
-      .send_event(WsEvent::SessionInfo(session_info_rx.borrow().clone()))
-      .await;
+    let session_info = session_info_rx.borrow().clone();
+    ctx.send_event(WsEvent::SessionInfo(session_info)).await;
   }
 }
 
