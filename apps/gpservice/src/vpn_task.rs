@@ -1,9 +1,11 @@
 use std::{sync::Arc, thread};
 
 use gpapi::{
+  gateway,
   logger,
   service::{
     request::{ConnectRequest, UpdateLogLevelRequest, WsRequest},
+    session::SessionInfo,
     vpn_state::VpnState,
   },
 };
@@ -14,15 +16,19 @@ use tokio_util::sync::CancellationToken;
 
 pub(crate) struct VpnTaskContext {
   vpn_handle: Arc<RwLock<Option<Vpn>>>,
+  connect_req: Arc<RwLock<Option<ConnectRequest>>>,
   vpn_state_tx: Arc<watch::Sender<VpnState>>,
+  session_info_tx: Arc<watch::Sender<Option<SessionInfo>>>,
   disconnect_rx: RwLock<Option<oneshot::Receiver<()>>>,
 }
 
 impl VpnTaskContext {
-  pub fn new(vpn_state_tx: watch::Sender<VpnState>) -> Self {
+  pub fn new(vpn_state_tx: watch::Sender<VpnState>, session_info_tx: watch::Sender<Option<SessionInfo>>) -> Self {
     Self {
       vpn_handle: Default::default(),
+      connect_req: Default::default(),
       vpn_state_tx: Arc::new(vpn_state_tx),
+      session_info_tx: Arc::new(session_info_tx),
       disconnect_rx: Default::default(),
     }
   }
@@ -35,7 +41,9 @@ impl VpnTaskContext {
     }
 
     let vpn_state_tx = self.vpn_state_tx.clone();
+    let session_info_tx = self.session_info_tx.clone();
     let info = req.info().clone();
+    self.connect_req.write().await.replace(req.clone());
     let vpn_handle = Arc::clone(&self.vpn_handle);
     let args = req.args();
     let vpn = match Vpn::builder(req.gateway().server(), args.cookie())
@@ -62,6 +70,7 @@ impl VpnTaskContext {
       Ok(vpn) => vpn,
       Err(err) => {
         warn!("Failed to create VPN: {}", err);
+        self.connect_req.write().await.take();
         vpn_state_tx.send(VpnState::Disconnected).ok();
         return;
       }
@@ -71,6 +80,15 @@ impl VpnTaskContext {
     vpn_handle.write().await.replace(vpn);
     let connect_info = Box::new(info.clone());
     vpn_state_tx.send(VpnState::Connecting(connect_info)).ok();
+    match gateway::retrieve_session_info(&req).await {
+      Ok(session_info) => {
+        session_info_tx.send(Some(session_info)).ok();
+      }
+      Err(err) => {
+        warn!("Failed to retrieve session info: {}", err);
+        session_info_tx.send(None).ok();
+      }
+    }
 
     let (disconnect_tx, disconnect_rx) = oneshot::channel::<()>();
     self.disconnect_rx.write().await.replace(disconnect_rx);
@@ -89,6 +107,7 @@ impl VpnTaskContext {
 
       // Notify the VPN is disconnected
       vpn_state_tx_clone.send(VpnState::Disconnected).ok();
+      session_info_tx.send(None).ok();
       // Remove the VPN handle
       vpn_handle.blocking_write().take();
 
@@ -107,12 +126,14 @@ impl VpnTaskContext {
       // Wait for the VPN to be disconnected
       disconnect_rx.await.ok();
       info!("VPN disconnected");
+      self.connect_req.write().await.take();
 
       true
     } else {
       info!("VPN is not connected, skip disconnect");
       self.vpn_state_tx.send(VpnState::Disconnected).ok();
-
+      self.session_info_tx.send(None).ok();
+      self.connect_req.write().await.take();
       false
     }
   }
@@ -125,8 +146,12 @@ pub(crate) struct VpnTask {
 }
 
 impl VpnTask {
-  pub fn new(ws_req_rx: mpsc::Receiver<WsRequest>, vpn_state_tx: watch::Sender<VpnState>) -> Self {
-    let ctx = Arc::new(VpnTaskContext::new(vpn_state_tx));
+  pub fn new(
+    ws_req_rx: mpsc::Receiver<WsRequest>,
+    vpn_state_tx: watch::Sender<VpnState>,
+    session_info_tx: watch::Sender<Option<SessionInfo>>,
+  ) -> Self {
+    let ctx = Arc::new(VpnTaskContext::new(vpn_state_tx, session_info_tx));
     let cancel_token = CancellationToken::new();
 
     Self {

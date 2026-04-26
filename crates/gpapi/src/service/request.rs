@@ -27,7 +27,7 @@ impl LaunchGuiRequest {
   }
 }
 
-#[derive(Debug, Deserialize, Serialize, Type)]
+#[derive(Debug, Deserialize, Serialize, Type, Clone)]
 pub struct ConnectArgs {
   cookie: String,
   vpnc_script: Option<String>,
@@ -95,6 +95,10 @@ impl ConnectArgs {
     self.os.as_ref().map(|os| os.to_openconnect_os().to_string())
   }
 
+  pub fn os(&self) -> Option<ClientOs> {
+    self.os.clone()
+  }
+
   pub fn os_version(&self) -> Option<String> {
     self.os_version.clone()
   }
@@ -156,7 +160,7 @@ impl ConnectArgs {
   }
 }
 
-#[derive(Debug, Deserialize, Serialize, Type)]
+#[derive(Debug, Deserialize, Serialize, Type, Clone)]
 pub struct ConnectRequest {
   info: ConnectInfo,
   args: ConnectArgs,
