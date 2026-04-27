@@ -29,7 +29,6 @@ pub async fn retrieve_session_info(req: &ConnectRequest) -> anyhow::Result<Sessi
 
   let response = parse_gp_response(response).await.map_err(|err| anyhow::anyhow!(err.reason))?;
   let response = response.trim();
-  debug!("Gateway session info response body: {}", response);
   if !response.starts_with('<') {
     return Err(anyhow::anyhow!("Gateway session info error: {response}"));
   }
