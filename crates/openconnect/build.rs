@@ -121,7 +121,8 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
   // We explicitly enable static and disable shared to ensure we get a .a file.
   // .reconf("-ivf") is CRITICAL for git submodules because 'configure'
   // usually doesn't exist yet and needs to be generated.
-  let dst = autotools::Config::new(&build_src)
+  let mut config = autotools::Config::new(&build_src);
+  config
     .reconf("-ivf")
     .enable_static()
     .disable_shared()
@@ -134,8 +135,15 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
     .without("libpskc", None)
     .without("gssapi", None)
     .with("gnutls-tss2", Some("no"))
-    .with("vpnc-script", Some("/etc/vpnc/vpnc-script")) // Specify vpnc-script, otherwise it will fail on macOS
-    .build();
+    .with("vpnc-script", Some("/etc/vpnc/vpnc-script")); // Specify vpnc-script, otherwise it will fail on macOS
+
+  #[cfg(target_os = "macos")]
+  {
+    config.ldflag("-liconv");
+    config.env("LIBS", "-liconv");
+  }
+
+  let dst = config.build();
 
   let lib_dir = dst.join("lib");
   let include_dir = dst.join("include");
