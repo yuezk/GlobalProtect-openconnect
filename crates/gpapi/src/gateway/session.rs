@@ -15,9 +15,13 @@ use crate::{
 };
 
 pub async fn retrieve_session_info(req: &ConnectRequest) -> anyhow::Result<SessionInfo> {
-  let base_url = normalize_server(req.gateway().server())?;
-  let client = build_client(req.args())?;
-  let form = build_session_form(req.args())?;
+  retrieve_session_info_for_gateway(req.gateway().server(), req.args()).await
+}
+
+pub async fn retrieve_session_info_for_gateway(server: &str, args: &ConnectArgs) -> anyhow::Result<SessionInfo> {
+  let base_url = normalize_server(server)?;
+  let client = build_session_client(args)?;
+  let form = build_session_form(args)?;
   let url = format!("{base_url}/ssl-vpn/getconfig.esp");
 
   info!("Retrieving gateway session info");
@@ -27,7 +31,9 @@ pub async fn retrieve_session_info(req: &ConnectRequest) -> anyhow::Result<Sessi
     anyhow::anyhow!(PortalError::NetworkError(err))
   })?;
 
-  let response = parse_gp_response(response).await.map_err(|err| anyhow::anyhow!(err.reason))?;
+  let response = parse_gp_response(response)
+    .await
+    .map_err(|err| anyhow::anyhow!(err.reason))?;
   let response = response.trim();
   if !response.starts_with('<') {
     return Err(anyhow::anyhow!("Gateway session info error: {response}"));
@@ -41,7 +47,7 @@ pub async fn retrieve_session_info(req: &ConnectRequest) -> anyhow::Result<Sessi
   Ok(session_info)
 }
 
-fn build_client(args: &ConnectArgs) -> anyhow::Result<Client> {
+pub fn build_session_client(args: &ConnectArgs) -> anyhow::Result<Client> {
   let mut builder = GpParams::builder();
   builder.user_agent(args.user_agent().as_deref().unwrap_or_default());
   builder.client_os(args.os().unwrap_or(ClientOs::default()));
@@ -54,7 +60,7 @@ fn build_client(args: &ConnectArgs) -> anyhow::Result<Client> {
   Client::try_from(&builder.build())
 }
 
-fn build_session_form(args: &ConnectArgs) -> anyhow::Result<HashMap<String, String>> {
+pub fn build_session_form(args: &ConnectArgs) -> anyhow::Result<HashMap<String, String>> {
   let mut form = HashMap::from([
     ("client-type".to_string(), "1".to_string()),
     ("protocol-version".to_string(), "p1".to_string()),
@@ -85,8 +91,7 @@ fn build_session_form(args: &ConnectArgs) -> anyhow::Result<HashMap<String, Stri
 }
 
 fn parse_session_info(root: &Element) -> anyhow::Result<SessionInfo> {
-  let user_expires = parse_optional_u32(root, "user-expires")?
-    .or(parse_optional_u32(root, "user_expires")?);
+  let user_expires = parse_optional_u32(root, "user-expires")?.or(parse_optional_u32(root, "user_expires")?);
 
   Ok(SessionInfo {
     lifetime_secs: parse_optional_u32(root, "lifetime")?,
@@ -156,6 +161,20 @@ mod tests {
   }
 
   #[test]
+  fn builds_gateway_session_form_with_ipv6_enabled() {
+    let gateway = crate::gateway::Gateway::new("vpn".to_string(), "vpn.example.com".to_string());
+    let req = ConnectRequest::new(
+      crate::service::vpn_state::ConnectInfo::new("vpn.example.com".to_string(), gateway.clone(), vec![gateway]),
+      "authcookie=AUTH".to_string(),
+    )
+    .with_client_version("6.3.1-12");
+
+    let form = build_session_form(req.args()).unwrap();
+
+    assert_eq!(form.get("ipv6-support").map(String::as_str), Some("yes"));
+  }
+
+  #[test]
   fn parses_session_info() {
     let xml = r#"
       <response>
@@ -177,7 +196,10 @@ mod tests {
     assert_eq!(info.user_expires, Some(1776828409));
     assert_eq!(info.lifetime_warning.unwrap().prior_secs, 1800);
     assert_eq!(info.inactivity_warning.unwrap().prior_secs, 300);
-    assert_eq!(info.admin_logout_message.as_deref(), Some("Logged out by administrator."));
+    assert_eq!(
+      info.admin_logout_message.as_deref(),
+      Some("Logged out by administrator.")
+    );
     assert!(info.allow_extend_session);
   }
 
