@@ -9,7 +9,7 @@ use gpapi::{
 };
 use log::{info, warn};
 use openconnect::Vpn;
-use tokio::sync::{RwLock, mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot, watch, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct VpnTaskContext {
@@ -112,7 +112,6 @@ impl VpnTaskContext {
     } else {
       info!("VPN is not connected, skip disconnect");
       self.vpn_state_tx.send(VpnState::Disconnected).ok();
-
       false
     }
   }

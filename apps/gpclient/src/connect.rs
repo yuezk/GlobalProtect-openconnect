@@ -1,4 +1,9 @@
-use std::{borrow::Cow, cell::RefCell, fs, sync::Arc};
+use std::{
+  borrow::Cow,
+  cell::RefCell,
+  fs,
+  sync::{Arc, Mutex},
+};
 
 use anyhow::{Context, bail};
 use clap::Args;
@@ -20,8 +25,13 @@ use gpapi::{
 use inquire::{Password, PasswordDisplayMode, Select, Text};
 use log::{info, warn};
 use openconnect::Vpn;
+use tokio::{runtime::Handle, task::JoinHandle};
 
-use crate::{GP_CLIENT_LOCK_FILE, cli::SharedArgs};
+use crate::{
+  GP_CLIENT_LOCK_FILE,
+  cli::SharedArgs,
+  session::{SessionContextInput, build_session_context, spawn_session_runtime},
+};
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -344,7 +354,7 @@ impl<'a> ConnectHandler<'a> {
     // use the version from the portal config if available
     let client_version = self.args.client_version.as_deref().or_else(|| portal_config.version());
 
-    self.connect_gateway(gateway, &cookie, client_version).await
+    self.connect_gateway(portal, gateway, &cookie, client_version).await
   }
 
   async fn connect_gateway_with_prelogin(&self, gateway: &str) -> anyhow::Result<()> {
@@ -361,7 +371,7 @@ impl<'a> ConnectHandler<'a> {
     // When logging in to a gateway directly, there is no portal config to get the client version from
     let client_version = self.args.client_version.as_deref();
 
-    self.connect_gateway(gateway, &cookie, client_version).await
+    self.connect_gateway(gateway, gateway, &cookie, client_version).await
   }
 
   async fn login_gateway(&self, gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<String> {
@@ -381,7 +391,13 @@ impl<'a> ConnectHandler<'a> {
     }
   }
 
-  async fn connect_gateway(&self, gateway: &str, cookie: &str, client_version: Option<&str>) -> anyhow::Result<()> {
+  async fn connect_gateway(
+    &self,
+    portal: &str,
+    gateway: &str,
+    cookie: &str,
+    client_version: Option<&str>,
+  ) -> anyhow::Result<()> {
     let mtu = self.args.mtu.unwrap_or(0);
     let (hip, csd_wrapper) = self.determine_hip_script();
     let hip_user = self.determine_hip_user();
@@ -390,6 +406,19 @@ impl<'a> ConnectHandler<'a> {
     let os = ClientOs::from(&self.args.os).to_openconnect_os().to_owned();
     let os_version = self.args.os_version().to_owned();
     let client_version = client_version.map(|s| s.to_owned());
+    let session_ctx = build_session_context(SessionContextInput {
+      portal: portal.to_string(),
+      gateway: gateway.to_string(),
+      cookie: cookie.to_string(),
+      user_agent: self.user_agent().into_owned(),
+      os: ClientOs::from(&self.args.os),
+      os_version: os_version.clone(),
+      client_version: client_version.clone(),
+      certificate: self.args.certificate.clone(),
+      sslkey: self.args.sslkey.clone(),
+      key_password: self.latest_key_password.borrow().clone(),
+      disable_ipv6: self.args.disable_ipv6,
+    });
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
       .interface(self.args.interface.clone())
@@ -415,6 +444,11 @@ impl<'a> ConnectHandler<'a> {
 
     let vpn = Arc::new(vpn);
     let vpn_clone = vpn.clone();
+    let runtime_handle = Handle::current();
+    let session_ctx = Arc::new(Mutex::new(Some(session_ctx)));
+    let session_task: Arc<Mutex<Option<JoinHandle<()>>>> = Arc::new(Mutex::new(None));
+    let session_task_on_connect = Arc::clone(&session_task);
+    let session_ctx_on_connect = Arc::clone(&session_ctx);
 
     // Listen for the interrupt signal in the background
     tokio::spawn(async move {
@@ -423,7 +457,20 @@ impl<'a> ConnectHandler<'a> {
       vpn_clone.disconnect();
     });
 
-    vpn.connect(write_pid_file);
+    vpn.connect(move || {
+      write_pid_file();
+
+      let Some(session_ctx) = session_ctx_on_connect.lock().unwrap().take() else {
+        return;
+      };
+
+      let task = spawn_session_runtime(&runtime_handle, session_ctx);
+      session_task_on_connect.lock().unwrap().replace(task);
+    });
+
+    if let Some(task) = session_task.lock().unwrap().take() {
+      task.abort();
+    }
 
     if fs::metadata(GP_CLIENT_LOCK_FILE).is_ok() {
       info!("Removing PID file");

@@ -1,6 +1,6 @@
 use xmltree::Element;
 
-pub(crate) trait ElementExt {
+pub trait ElementExt {
   /// Recursively find all descendants with the given name
   fn descendants(&self, name: &str) -> Vec<&Element>;
 
