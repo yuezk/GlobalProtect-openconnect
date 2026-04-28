@@ -1,10 +1,4 @@
-use std::{
-  sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-  },
-  thread,
-};
+use std::{sync::Arc, thread};
 
 use gpapi::{
   gateway, logger,
@@ -21,7 +15,6 @@ use tokio_util::sync::CancellationToken;
 
 pub(crate) struct VpnTaskContext {
   vpn_handle: Arc<RwLock<Option<Vpn>>>,
-  session_generation: Arc<AtomicU64>,
   vpn_state_tx: Arc<watch::Sender<VpnState>>,
   session_info_tx: Arc<watch::Sender<Option<SessionInfo>>>,
   disconnect_rx: RwLock<Option<oneshot::Receiver<()>>>,
@@ -31,7 +24,6 @@ impl VpnTaskContext {
   pub fn new(vpn_state_tx: watch::Sender<VpnState>, session_info_tx: watch::Sender<Option<SessionInfo>>) -> Self {
     Self {
       vpn_handle: Default::default(),
-      session_generation: Arc::new(AtomicU64::new(0)),
       vpn_state_tx: Arc::new(vpn_state_tx),
       session_info_tx: Arc::new(session_info_tx),
       disconnect_rx: Default::default(),
@@ -47,9 +39,7 @@ impl VpnTaskContext {
 
     let vpn_state_tx = self.vpn_state_tx.clone();
     let session_info_tx = self.session_info_tx.clone();
-    let session_generation = Arc::clone(&self.session_generation);
     let info = req.info().clone();
-    let generation = self.next_session_generation();
     let vpn_handle = Arc::clone(&self.vpn_handle);
     let args = req.args();
     let vpn = match Vpn::builder(req.gateway().server(), args.cookie())
@@ -87,9 +77,18 @@ impl VpnTaskContext {
     let connect_info = Box::new(info.clone());
     vpn_state_tx.send(VpnState::Connecting(connect_info)).ok();
 
+    match gateway::retrieve_session_info(&req).await {
+      Ok(session_info) => {
+        session_info_tx.send(Some(session_info)).ok();
+      }
+      Err(err) => {
+        warn!("Failed to retrieve session info: {}", err);
+        session_info_tx.send(None).ok();
+      }
+    }
+
     let (disconnect_tx, disconnect_rx) = oneshot::channel::<()>();
     self.disconnect_rx.write().await.replace(disconnect_rx);
-    let thread_session_generation = Arc::clone(&session_generation);
 
     // Spawn a new thread to process the VPN connection, cannot use tokio::spawn here.
     // Otherwise, it will block the tokio runtime and cannot send the VPN state to the channel
@@ -105,25 +104,11 @@ impl VpnTaskContext {
 
       // Notify the VPN is disconnected
       vpn_state_tx_clone.send(VpnState::Disconnected).ok();
-      thread_session_generation.fetch_add(1, Ordering::SeqCst);
       session_info_tx.send(None).ok();
       // Remove the VPN handle
       vpn_handle.blocking_write().take();
 
       disconnect_tx.send(()).ok();
-    });
-
-    let session_info_tx = Arc::clone(&self.session_info_tx);
-    tokio::spawn(async move {
-      match gateway::retrieve_session_info(&req).await {
-        Ok(session_info) => {
-          publish_session_info_if_current(&session_generation, &session_info_tx, generation, Some(session_info));
-        }
-        Err(err) => {
-          warn!("Failed to retrieve session info: {}", err);
-          publish_session_info_if_current(&session_generation, &session_info_tx, generation, None);
-        }
-      }
     });
   }
 
@@ -149,24 +134,8 @@ impl VpnTaskContext {
     }
   }
 
-  fn next_session_generation(&self) -> u64 {
-    self.session_generation.fetch_add(1, Ordering::SeqCst) + 1
-  }
-
   fn clear_session_info_state(&self) {
-    self.next_session_generation();
     self.session_info_tx.send(None).ok();
-  }
-}
-
-fn publish_session_info_if_current(
-  session_generation: &AtomicU64,
-  session_info_tx: &watch::Sender<Option<SessionInfo>>,
-  generation: u64,
-  session_info: Option<SessionInfo>,
-) {
-  if session_generation.load(Ordering::SeqCst) == generation {
-    session_info_tx.send(session_info).ok();
   }
 }
 
@@ -238,49 +207,5 @@ async fn process_ws_req(req: WsRequest, ctx: Arc<VpnTaskContext>) {
         warn!("Failed to update log level: {}", err);
       }
     }
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn publish_session_info_ignores_stale_generation() {
-    let (vpn_state_tx, _) = watch::channel(VpnState::Disconnected);
-    let (session_info_tx, session_info_rx) = watch::channel(None);
-    let ctx = VpnTaskContext::new(vpn_state_tx, session_info_tx);
-    let generation = ctx.next_session_generation();
-    ctx.clear_session_info_state();
-
-    publish_session_info_if_current(
-      &ctx.session_generation,
-      &ctx.session_info_tx,
-      generation,
-      Some(SessionInfo::default()),
-    );
-
-    assert_eq!(*session_info_rx.borrow(), None);
-  }
-
-  #[test]
-  fn publish_session_info_accepts_current_generation() {
-    let (vpn_state_tx, _) = watch::channel(VpnState::Disconnected);
-    let (session_info_tx, session_info_rx) = watch::channel(None);
-    let ctx = VpnTaskContext::new(vpn_state_tx, session_info_tx);
-    let generation = ctx.next_session_generation();
-    let session_info = SessionInfo {
-      allow_extend_session: true,
-      ..Default::default()
-    };
-
-    publish_session_info_if_current(
-      &ctx.session_generation,
-      &ctx.session_info_tx,
-      generation,
-      Some(session_info.clone()),
-    );
-
-    assert_eq!(*session_info_rx.borrow(), Some(session_info));
   }
 }
