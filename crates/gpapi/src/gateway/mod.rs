@@ -1,8 +1,10 @@
 pub mod hip;
 mod login;
 mod parse_gateways;
+pub mod session;
 
 pub use login::*;
+pub use session::*;
 pub(crate) use parse_gateways::*;
 
 use serde::{Deserialize, Serialize};
