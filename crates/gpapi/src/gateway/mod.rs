@@ -1,11 +1,9 @@
 pub mod hip;
 mod login;
 mod parse_gateways;
-mod session;
 
 pub use login::*;
 pub(crate) use parse_gateways::*;
-pub use session::*;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;

@@ -8,7 +8,7 @@ use gpapi::clap::InfoLevelVerbosity;
 use gpapi::logger;
 use gpapi::{
   process::gui_launcher::GuiLauncher,
-  service::{request::WsRequest, session::SessionInfo, vpn_state::VpnState},
+  service::{request::WsRequest, vpn_state::VpnState},
   utils::{crypto::generate_key, env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
 };
 use log::{info, warn};
@@ -51,17 +51,9 @@ impl Cli {
     let (ws_req_tx, ws_req_rx) = mpsc::channel::<WsRequest>(32);
     // Channel for receiving the VPN state from the VPN task
     let (vpn_state_tx, vpn_state_rx) = watch::channel(VpnState::Disconnected);
-    let (session_info_tx, session_info_rx) = watch::channel::<Option<SessionInfo>>(None);
 
-    let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx, session_info_tx);
-    let ws_server = WsServer::new(
-      api_key.clone(),
-      ws_req_tx,
-      vpn_state_rx,
-      session_info_rx,
-      lock_file.clone(),
-      redaction,
-    );
+    let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx);
+    let ws_server = WsServer::new(api_key.clone(), ws_req_tx, vpn_state_rx, lock_file.clone(), redaction);
 
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(4);
     let shutdown_tx_clone = shutdown_tx.clone();
@@ -167,7 +159,7 @@ mod signals {
 
   pub async fn handle_signals(vpn_ctx: Arc<VpnTaskContext>, ws_ctx: Arc<WsServerContext>) {
     use gpapi::service::event::WsEvent;
-    use tokio::signal::unix::{Signal, SignalKind, signal};
+    use tokio::signal::unix::{signal, Signal, SignalKind};
 
     let (mut user_sig1, mut user_sig2) = match || -> anyhow::Result<(Signal, Signal)> {
       let user_sig1 = signal(SignalKind::user_defined1())?;

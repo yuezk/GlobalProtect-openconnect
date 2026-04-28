@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::extract::ws::Message;
 use common::constants::GP_AUTH_BINARY;
 use gpapi::{
-  service::{event::WsEvent, request::WsRequest, session::SessionInfo, vpn_env::VpnEnv, vpn_state::VpnState},
+  service::{event::WsEvent, request::WsRequest, vpn_env::VpnEnv, vpn_state::VpnState},
   utils::{crypto::Crypto, lock_file::LockFile, redact::Redaction},
 };
 use log::{info, warn};
@@ -11,7 +11,7 @@ use openconnect::{find_csd_wrapper, find_vpnc_script};
 use serde::de::DeserializeOwned;
 use tokio::{
   net::TcpListener,
-  sync::{RwLock, mpsc, watch},
+  sync::{mpsc, watch, RwLock},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -21,7 +21,6 @@ pub(crate) struct WsServerContext {
   crypto: Arc<Crypto>,
   ws_req_tx: mpsc::Sender<WsRequest>,
   vpn_state_rx: watch::Receiver<VpnState>,
-  session_info_rx: watch::Receiver<Option<SessionInfo>>,
   redaction: Arc<Redaction>,
   connections: RwLock<Vec<Arc<WsConnection>>>,
 }
@@ -31,14 +30,12 @@ impl WsServerContext {
     api_key: Vec<u8>,
     ws_req_tx: mpsc::Sender<WsRequest>,
     vpn_state_rx: watch::Receiver<VpnState>,
-    session_info_rx: watch::Receiver<Option<SessionInfo>>,
     redaction: Arc<Redaction>,
   ) -> Self {
     Self {
       crypto: Arc::new(Crypto::new(api_key)),
       ws_req_tx,
       vpn_state_rx,
-      session_info_rx,
       redaction,
       connections: Default::default(),
     }
@@ -72,10 +69,6 @@ impl WsServerContext {
     if let Err(err) = conn.send_event(&WsEvent::VpnEnv(vpn_env)).await {
       warn!("Failed to send VPN state to new client: {}", err);
     }
-    let session_info = self.session_info_rx.borrow().clone();
-    if let Err(err) = conn.send_event(&WsEvent::SessionInfo(session_info)).await {
-      warn!("Failed to send session info to new client: {}", err);
-    }
 
     self.connections.write().await.push(Arc::clone(&conn));
 
@@ -89,10 +82,6 @@ impl WsServerContext {
 
   fn vpn_state_rx(&self) -> watch::Receiver<VpnState> {
     self.vpn_state_rx.clone()
-  }
-
-  fn session_info_rx(&self) -> watch::Receiver<Option<SessionInfo>> {
-    self.session_info_rx.clone()
   }
 
   pub async fn forward_req(&self, req: WsRequest) -> anyhow::Result<()> {
@@ -119,17 +108,10 @@ impl WsServer {
     api_key: Vec<u8>,
     ws_req_tx: mpsc::Sender<WsRequest>,
     vpn_state_rx: watch::Receiver<VpnState>,
-    session_info_rx: watch::Receiver<Option<SessionInfo>>,
     lock_file: Arc<LockFile>,
     redaction: Arc<Redaction>,
   ) -> Self {
-    let ctx = Arc::new(WsServerContext::new(
-      api_key,
-      ws_req_tx,
-      vpn_state_rx,
-      session_info_rx,
-      redaction,
-    ));
+    let ctx = Arc::new(WsServerContext::new(api_key, ws_req_tx, vpn_state_rx, redaction));
     let cancel_token = CancellationToken::new();
 
     Self {
@@ -161,9 +143,6 @@ impl WsServer {
       _ = watch_vpn_state(self.ctx.vpn_state_rx(), Arc::clone(&self.ctx)) => {
         info!("VPN state watch task completed");
       }
-      _ = watch_session_info(self.ctx.session_info_rx(), Arc::clone(&self.ctx)) => {
-        info!("Session info watch task completed");
-      }
       _ = start_server(listener, self.ctx.clone()) => {
           info!("WS server stopped");
       }
@@ -192,13 +171,6 @@ async fn watch_vpn_state(mut vpn_state_rx: watch::Receiver<VpnState>, ctx: Arc<W
   while vpn_state_rx.changed().await.is_ok() {
     let vpn_state = vpn_state_rx.borrow().clone();
     ctx.send_event(WsEvent::VpnState(vpn_state)).await;
-  }
-}
-
-async fn watch_session_info(mut session_info_rx: watch::Receiver<Option<SessionInfo>>, ctx: Arc<WsServerContext>) {
-  while session_info_rx.changed().await.is_ok() {
-    let session_info = session_info_rx.borrow().clone();
-    ctx.send_event(WsEvent::SessionInfo(session_info)).await;
   }
 }
 
