@@ -3,7 +3,6 @@ use std::{
   cell::RefCell,
   fs,
   sync::{Arc, Mutex},
-  time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, bail};
@@ -14,14 +13,13 @@ use gpapi::{
   clap::{ToVerboseArg, args::Os},
   credential::{Credential, PasswordCredential},
   error::PortalError,
-  gateway::{Gateway, GatewayLogin, SessionContext, extend_session, gateway_login, retrieve_session_info_for_gateway},
+  gateway::{GatewayLogin, gateway_login},
   gp_params::{ClientOs, GpParams},
   portal::{Prelogin, StandardPrelogin, prelogin, retrieve_config},
   process::{
     auth_launcher::SamlAuthLauncher,
     users::{get_non_root_user, get_user_by_name},
   },
-  service::{request::ConnectRequest, session::SessionInfo, vpn_state::ConnectInfo},
   utils::{host_utils, request::RequestIdentityError, shutdown_signal},
 };
 use inquire::{Password, PasswordDisplayMode, Select, Text};
@@ -29,7 +27,11 @@ use log::{info, warn};
 use openconnect::Vpn;
 use tokio::{runtime::Handle, task::JoinHandle};
 
-use crate::{GP_CLIENT_LOCK_FILE, cli::SharedArgs};
+use crate::{
+  GP_CLIENT_LOCK_FILE,
+  cli::SharedArgs,
+  session::{SessionContextInput, build_session_context, spawn_session_runtime},
+};
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -404,37 +406,19 @@ impl<'a> ConnectHandler<'a> {
     let os = ClientOs::from(&self.args.os).to_openconnect_os().to_owned();
     let os_version = self.args.os_version().to_owned();
     let client_version = client_version.map(|s| s.to_owned());
-    let connect_info = ConnectInfo::new(
-      portal.to_string(),
-      Gateway::new(gateway.to_string(), gateway.to_string()),
-      vec![],
-    );
-    let mut connect_req = ConnectRequest::new(connect_info, cookie.to_string())
-      .with_vpnc_script(self.args.script.clone())
-      .with_user_agent(Some(self.user_agent().into_owned()))
-      .with_os(Some(ClientOs::from(&self.args.os)))
-      .with_os_version(Some(os_version.clone()))
-      .with_certificate(self.args.certificate.clone())
-      .with_sslkey(self.args.sslkey.clone())
-      .with_key_password(self.latest_key_password.borrow().clone())
-      .with_hip(hip)
-      .with_csd_uid(csd_uid)
-      .with_csd_wrapper(csd_wrapper.clone())
-      .with_reconnect_timeout(self.args.reconnect_timeout)
-      .with_mtu(mtu)
-      .with_disable_ipv6(self.args.disable_ipv6)
-      .with_no_dtls(self.args.no_dtls)
-      .with_local_hostname(self.args.local_hostname.clone())
-      .with_force_dpd(self.args.dpd_interval.unwrap_or(0))
-      .with_no_xmlpost(self.args.no_xmlpost);
-    if let Some(client_version) = client_version.as_deref() {
-      connect_req = connect_req.with_client_version(client_version);
-    }
-    let session_ctx = SessionContext::new(
-      gateway.to_string(),
-      portal.to_string(),
-      connect_req.args().clone(),
-    );
+    let session_ctx = build_session_context(SessionContextInput {
+      portal: portal.to_string(),
+      gateway: gateway.to_string(),
+      cookie: cookie.to_string(),
+      user_agent: self.user_agent().into_owned(),
+      os: ClientOs::from(&self.args.os),
+      os_version: os_version.clone(),
+      client_version: client_version.clone(),
+      certificate: self.args.certificate.clone(),
+      sslkey: self.args.sslkey.clone(),
+      key_password: self.latest_key_password.borrow().clone(),
+      disable_ipv6: self.args.disable_ipv6,
+    });
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
       .interface(self.args.interface.clone())
@@ -480,7 +464,7 @@ impl<'a> ConnectHandler<'a> {
         return;
       };
 
-      let task = runtime_handle.spawn(run_session_runtime(session_ctx));
+      let task = spawn_session_runtime(&runtime_handle, session_ctx);
       session_task_on_connect.lock().unwrap().replace(task);
     });
 
@@ -643,133 +627,5 @@ fn get_uid(user: &Option<String>) -> anyhow::Result<u32> {
     get_user_by_name(user).map(|user| user.uid())
   } else {
     get_non_root_user().map_or_else(|_| Ok(0), |user| Ok(user.uid()))
-  }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct SessionWarningSchedule {
-  delay: Duration,
-  message: String,
-  should_auto_extend: bool,
-}
-
-async fn run_session_runtime(session_ctx: SessionContext) {
-  let mut session_info = match retrieve_session_info_for_gateway(session_ctx.server(), session_ctx.connect_args()).await {
-    Ok(session_info) => session_info,
-    Err(err) => {
-      warn!("Failed to retrieve session info: {}", err);
-      return;
-    }
-  };
-
-  loop {
-    let Some(schedule) = build_session_warning_schedule(&session_info) else {
-      info!("No session warning schedule provided by the gateway");
-      return;
-    };
-
-    tokio::time::sleep(schedule.delay).await;
-
-    eprintln!("\nWARNING: {}", schedule.message);
-
-    if !schedule.should_auto_extend {
-      info!("Session extension is not allowed by the gateway");
-      return;
-    }
-
-    info!("Attempting to extend the session");
-    match extend_session(&session_ctx).await {
-      Ok(next_session_info) => {
-        eprintln!("Session extended.");
-
-        if warning_due_immediately(&next_session_info) {
-          warn!("Session warning remained due after extension, stopping automatic extension");
-          return;
-        }
-
-        session_info = next_session_info;
-      }
-      Err(err) => {
-        warn!("Failed to extend session: {}", err);
-        eprintln!("WARNING: Failed to extend session: {}", err);
-        return;
-      }
-    }
-  }
-}
-
-fn build_session_warning_schedule(session_info: &SessionInfo) -> Option<SessionWarningSchedule> {
-  let warning = session_info.lifetime_warning.as_ref()?;
-  let warning_secs = if let Some(user_expires) = session_info.user_expires {
-    let now = unix_timestamp();
-    user_expires.saturating_sub(warning.prior_secs).saturating_sub(now)
-  } else if let Some(lifetime_secs) = session_info.lifetime_secs {
-    lifetime_secs.saturating_sub(warning.prior_secs)
-  } else {
-    return None;
-  };
-
-  Some(SessionWarningSchedule {
-    delay: Duration::from_secs(warning_secs as u64),
-    message: warning.message.clone(),
-    should_auto_extend: session_info.allow_extend_session,
-  })
-}
-
-fn warning_due_immediately(session_info: &SessionInfo) -> bool {
-  build_session_warning_schedule(session_info)
-    .map(|schedule| schedule.delay.is_zero())
-    .unwrap_or(false)
-}
-
-fn unix_timestamp() -> u32 {
-  SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .unwrap_or_default()
-    .as_secs() as u32
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use gpapi::service::session::SessionWarning;
-
-  fn sample_session_info(user_expires: Option<u32>, allow_extend_session: bool) -> SessionInfo {
-    SessionInfo {
-      user_expires,
-      lifetime_warning: Some(SessionWarning {
-        prior_secs: 1800,
-        message: "Session expires soon".to_string(),
-      }),
-      allow_extend_session,
-      ..Default::default()
-    }
-  }
-
-  #[test]
-  fn builds_warning_schedule_for_auto_extend() {
-    let session_info = sample_session_info(Some(unix_timestamp() + 1830), true);
-
-    let schedule = build_session_warning_schedule(&session_info).unwrap();
-
-    assert_eq!(schedule.message, "Session expires soon");
-    assert!(schedule.delay <= Duration::from_secs(30));
-    assert!(schedule.should_auto_extend);
-  }
-
-  #[test]
-  fn builds_warning_schedule_without_auto_extend() {
-    let session_info = sample_session_info(Some(unix_timestamp() + 1830), false);
-
-    let schedule = build_session_warning_schedule(&session_info).unwrap();
-
-    assert!(!schedule.should_auto_extend);
-  }
-
-  #[test]
-  fn warning_due_immediately_when_deadline_has_passed() {
-    let session_info = sample_session_info(Some(unix_timestamp() + 1800), true);
-
-    assert!(warning_due_immediately(&session_info));
   }
 }

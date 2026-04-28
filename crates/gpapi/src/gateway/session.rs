@@ -12,8 +12,7 @@ use crate::{
   error::PortalError,
   gp_params::GpParams,
   service::{
-    request::ConnectArgs,
-    session::{SessionInfo, SessionWarning},
+    session::{SessionInfo, SessionRequestArgs, SessionWarning},
   },
   utils::{normalize_server, parse_gp_response, xml::ElementExt},
 };
@@ -25,15 +24,15 @@ const EXTEND_SESSION_COMMENT: &str = "User extends the login lifetime";
 pub struct SessionContext {
   server: String,
   portal: String,
-  connect_args: ConnectArgs,
+  session_args: SessionRequestArgs,
 }
 
 impl SessionContext {
-  pub fn new(server: String, portal: String, connect_args: ConnectArgs) -> Self {
+  pub fn new(server: String, portal: String, session_args: SessionRequestArgs) -> Self {
     Self {
       server,
       portal,
-      connect_args,
+      session_args,
     }
   }
 
@@ -45,12 +44,12 @@ impl SessionContext {
     &self.portal
   }
 
-  pub fn connect_args(&self) -> &ConnectArgs {
-    &self.connect_args
+  pub fn session_args(&self) -> &SessionRequestArgs {
+    &self.session_args
   }
 }
 
-pub async fn retrieve_session_info_for_gateway(server: &str, args: &ConnectArgs) -> anyhow::Result<SessionInfo> {
+pub async fn retrieve_session_info_for_gateway(server: &str, args: &SessionRequestArgs) -> anyhow::Result<SessionInfo> {
   let base_url = normalize_server(server)?;
   let client = build_session_client(args)?;
   let form = build_session_form(args)?;
@@ -78,7 +77,7 @@ pub async fn retrieve_session_info_for_gateway(server: &str, args: &ConnectArgs)
 
 pub async fn extend_session(ctx: &SessionContext) -> anyhow::Result<SessionInfo> {
   let base_url = normalize_server(ctx.server())?;
-  let client = build_session_client(ctx.connect_args())?;
+  let client = build_session_client(ctx.session_args())?;
   let form = build_extend_session_form(ctx)?;
   let url = format!("{base_url}/ssl-vpn/agentmessage.esp");
 
@@ -93,7 +92,7 @@ pub async fn extend_session(ctx: &SessionContext) -> anyhow::Result<SessionInfo>
 
   match status.as_str() {
     "success" => {
-      let session_info = retrieve_session_info_for_gateway(ctx.server(), ctx.connect_args()).await?;
+      let session_info = retrieve_session_info_for_gateway(ctx.server(), ctx.session_args()).await?;
       info!("Extend-session refreshed session info: {:?}", session_info);
       Ok(session_info)
     }
@@ -101,7 +100,7 @@ pub async fn extend_session(ctx: &SessionContext) -> anyhow::Result<SessionInfo>
   }
 }
 
-fn build_session_client(args: &ConnectArgs) -> anyhow::Result<Client> {
+fn build_session_client(args: &SessionRequestArgs) -> anyhow::Result<Client> {
   let mut builder = GpParams::builder();
   builder.user_agent(args.user_agent().as_deref().unwrap_or_default());
   builder.client_os(args.os().unwrap_or_default());
@@ -114,7 +113,7 @@ fn build_session_client(args: &ConnectArgs) -> anyhow::Result<Client> {
   Client::try_from(&builder.build())
 }
 
-fn build_session_form(args: &ConnectArgs) -> anyhow::Result<HashMap<String, String>> {
+fn build_session_form(args: &SessionRequestArgs) -> anyhow::Result<HashMap<String, String>> {
   let mut form = HashMap::from([
     ("client-type".to_string(), "1".to_string()),
     ("protocol-version".to_string(), "p1".to_string()),
@@ -217,12 +216,12 @@ fn format_human_duration(total_secs: u64) -> String {
   parts.join(" ")
 }
 
-fn parse_cookie_form(args: &ConnectArgs) -> anyhow::Result<HashMap<String, String>> {
+fn parse_cookie_form(args: &SessionRequestArgs) -> anyhow::Result<HashMap<String, String>> {
   Ok(serde_urlencoded::from_str(args.cookie())?)
 }
 
 fn build_extend_session_form(ctx: &SessionContext) -> anyhow::Result<HashMap<String, String>> {
-  let mut form = parse_cookie_form(ctx.connect_args())?;
+  let mut form = parse_cookie_form(ctx.session_args())?;
   form.insert("portal".to_string(), ctx.portal().to_string());
   form.insert("timestamp".to_string(), unix_timestamp().to_string());
   form.insert("message".to_string(), EXTEND_SESSION_MESSAGE.to_string());
@@ -251,30 +250,23 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
   use crate::{
-    gateway::Gateway,
     gp_params::ClientOs,
-    service::{request::ConnectRequest, vpn_state::ConnectInfo},
+    service::session::SessionRequestArgs,
   };
 
   use super::*;
 
-  fn build_connect_args() -> ConnectArgs {
-    let gateway = Gateway::new("vpn".to_string(), "vpn.example.com".to_string());
-    ConnectRequest::new(
-      ConnectInfo::new("vpn.example.com".to_string(), gateway.clone(), vec![gateway]),
-      "authcookie=AUTH&portal=vpn.example.com&user=alice&preferred-ip=10.0.0.10".to_string(),
-    )
-    .with_os(ClientOs::Mac)
-    .with_os_version(Some("macOS 15.0".to_string()))
-    .with_client_version("6.3.1-12")
-    .with_disable_ipv6(true)
-    .args()
-    .clone()
+  fn build_session_args() -> SessionRequestArgs {
+    SessionRequestArgs::new("authcookie=AUTH&portal=vpn.example.com&user=alice&preferred-ip=10.0.0.10".to_string())
+      .with_os(Some(ClientOs::Mac))
+      .with_os_version(Some("macOS 15.0".to_string()))
+      .with_client_version(Some("6.3.1-12".to_string()))
+      .with_disable_ipv6(true)
   }
 
   #[test]
   fn builds_gateway_session_form() {
-    let form = build_session_form(&build_connect_args()).unwrap();
+    let form = build_session_form(&build_session_args()).unwrap();
 
     assert_eq!(form.get("client-type").map(String::as_str), Some("1"));
     assert_eq!(form.get("protocol-version").map(String::as_str), Some("p1"));
@@ -291,14 +283,7 @@ mod tests {
 
   #[test]
   fn builds_gateway_session_form_with_ipv6_enabled() {
-    let gateway = Gateway::new("vpn".to_string(), "vpn.example.com".to_string());
-    let args = ConnectRequest::new(
-      ConnectInfo::new("vpn.example.com".to_string(), gateway.clone(), vec![gateway]),
-      "authcookie=AUTH".to_string(),
-    )
-    .with_client_version("6.3.1-12")
-    .args()
-    .clone();
+    let args = SessionRequestArgs::new("authcookie=AUTH".to_string()).with_client_version(Some("6.3.1-12".to_string()));
 
     let form = build_session_form(&args).unwrap();
 
@@ -361,14 +346,14 @@ mod tests {
 
   #[test]
   fn active_session_context_preserves_connect_args_for_refresh() {
-    let connect_args = build_connect_args();
+    let session_args = build_session_args();
     let ctx = SessionContext::new(
       "vpn.example.com".to_string(),
       "portal.example.com".to_string(),
-      connect_args,
+      session_args,
     );
 
-    let form = build_session_form(ctx.connect_args()).unwrap();
+    let form = build_session_form(ctx.session_args()).unwrap();
 
     assert_eq!(form.get("ipv6-support").map(String::as_str), Some("no"));
     assert_eq!(form.get("clientos").map(String::as_str), Some("Mac"));
@@ -377,11 +362,11 @@ mod tests {
 
   #[test]
   fn builds_extend_session_form() {
-    let connect_args = build_connect_args();
+    let session_args = build_session_args();
     let ctx = SessionContext::new(
       "vpn.example.com".to_string(),
       "portal.example.com".to_string(),
-      connect_args,
+      session_args,
     );
 
     let form = build_extend_session_form(&ctx).unwrap();
