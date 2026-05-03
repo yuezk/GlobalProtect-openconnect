@@ -1,6 +1,6 @@
 use crate::Vpn;
 use log::{debug, info, trace, warn};
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{c_char, c_int, c_long, c_void};
 
 /// ConnectOptions struct for FFI, the field names and order must match the C definition.
 #[repr(C)]
@@ -38,10 +38,24 @@ pub(crate) struct ConnectOptions {
   pub no_xmlpost: u32,
 }
 
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct VpnSessionInfoRaw {
+  pub auth_expiration: c_long,
+  pub lifetime_secs: c_int,
+  pub user_expires: c_long,
+  pub lifetime_warning_prior: c_int,
+  pub lifetime_warning_message: *const c_char,
+  pub allow_extend_session: c_int,
+}
+
 #[link(name = "vpn")]
 unsafe extern "C" {
   #[link_name = "vpn_connect"]
-  fn vpn_connect(options: *const ConnectOptions, callback: extern "C" fn(i32, *mut c_void)) -> c_int;
+  fn vpn_connect(
+    options: *const ConnectOptions,
+    callback: extern "C" fn(i32, *const VpnSessionInfoRaw, *mut c_void),
+  ) -> c_int;
 
   #[link_name = "vpn_disconnect"]
   fn vpn_disconnect();
@@ -56,9 +70,9 @@ pub(crate) fn disconnect() {
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn on_vpn_connected(pipe_fd: i32, vpn: *mut c_void) {
+extern "C" fn on_vpn_connected(pipe_fd: i32, session_info: *const VpnSessionInfoRaw, vpn: *mut c_void) {
   let vpn = unsafe { &*(vpn as *const Vpn) };
-  vpn.on_connected(pipe_fd);
+  vpn.on_connected(pipe_fd, crate::vpn::session_info_from_raw(session_info));
 }
 
 // Logger used in the C code.

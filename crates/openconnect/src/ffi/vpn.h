@@ -3,7 +3,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-typedef void (*vpn_connected_callback)(int cmd_pipe_fd, void *user_data);
+typedef struct vpn_session_info {
+	long auth_expiration;
+	int lifetime_secs;
+	long user_expires;
+	int lifetime_warning_prior;
+	const char *lifetime_warning_message;
+	int allow_extend_session;
+} vpn_session_info;
+
+typedef void (*vpn_connected_callback)(int cmd_pipe_fd,
+				       const vpn_session_info *session_info,
+				       void *user_data);
 
 typedef struct vpn_options {
 	void *user_data;

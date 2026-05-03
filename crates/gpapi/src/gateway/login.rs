@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashMap};
 
 use anyhow::bail;
 use log::{debug, info, warn};
@@ -19,17 +19,30 @@ pub enum GatewayLogin {
 }
 
 pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<GatewayLogin> {
+  gateway_login_with_options(gateway, cred, gp_params, false).await
+}
+
+pub async fn gateway_login_with_extend_lifetime(
+  gateway: &str,
+  cred: &Credential,
+  gp_params: &GpParams,
+) -> anyhow::Result<GatewayLogin> {
+  gateway_login_with_options(gateway, cred, gp_params, true).await
+}
+
+async fn gateway_login_with_options(
+  gateway: &str,
+  cred: &Credential,
+  gp_params: &GpParams,
+  extend_lifetime: bool,
+) -> anyhow::Result<GatewayLogin> {
   let url = normalize_server(gateway)?;
   let gateway = remove_url_scheme(&url);
 
   let login_url = format!("{}/ssl-vpn/login.esp", url);
   let client = Client::try_from(gp_params)?;
 
-  let mut params = cred.to_params();
-  let extra_params = gp_params.to_params();
-
-  params.extend(extra_params);
-  params.insert("server", &gateway);
+  let params = build_gateway_login_params(&gateway, cred, gp_params, extend_lifetime);
 
   info!("Perform gateway login, user_agent: {}", gp_params.user_agent());
 
@@ -65,6 +78,33 @@ pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParam
   let cookie = build_gateway_token(&root, gp_params.computer())?;
 
   Ok(GatewayLogin::Cookie(cookie))
+}
+
+fn build_gateway_login_params(
+  gateway: &str,
+  cred: &Credential,
+  gp_params: &GpParams,
+  extend_lifetime: bool,
+) -> HashMap<String, String> {
+  let mut params = cred
+    .to_params()
+    .into_iter()
+    .map(|(key, value)| (key.to_string(), value.to_string()))
+    .collect::<HashMap<_, _>>();
+
+  params.extend(
+    gp_params
+      .to_params()
+      .into_iter()
+      .map(|(key, value)| (key.to_string(), value.to_string())),
+  );
+  params.insert("server".to_string(), gateway.to_string());
+
+  if extend_lifetime {
+    params.insert("extend-lifetime".to_string(), "true".to_string());
+  }
+
+  params
 }
 
 fn build_gateway_token(element: &Element, computer: &str) -> anyhow::Result<String> {
@@ -163,6 +203,26 @@ thisForm.inputStr.value = "5ef64e83000119ed";"#;
     let (message, input_str) = parse_mfa(res).unwrap();
     assert_eq!(message, "MFA message");
     assert_eq!(input_str, "5ef64e83000119ed");
+  }
+
+  #[test]
+  fn normal_gateway_login_params_do_not_extend_lifetime() {
+    let cred = Credential::Password(crate::credential::PasswordCredential::new("alice", "secret"));
+    let gp_params = GpParams::builder().build();
+
+    let params = build_gateway_login_params("vpn.example.com", &cred, &gp_params, false);
+
+    assert!(!params.contains_key("extend-lifetime"));
+  }
+
+  #[test]
+  fn extension_gateway_login_params_extend_lifetime() {
+    let cred = Credential::Password(crate::credential::PasswordCredential::new("alice", "secret"));
+    let gp_params = GpParams::builder().build();
+
+    let params = build_gateway_login_params("vpn.example.com", &cred, &gp_params, true);
+
+    assert_eq!(params.get("extend-lifetime").map(String::as_str), Some("true"));
   }
 
   #[test]

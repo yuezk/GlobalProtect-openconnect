@@ -6,6 +6,7 @@ pub mod gp_params;
 pub mod portal;
 pub mod process;
 pub mod service;
+pub mod session;
 pub mod utils;
 
 #[cfg(feature = "logger")]

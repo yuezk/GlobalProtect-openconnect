@@ -2,11 +2,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::constants::GP_CLIENT_VERSION;
 use gpapi::{
-  gateway::{SessionContext, extend_session, retrieve_session_info_for_gateway},
+  gateway::{SessionContext, SessionExtensionAuth, extend_session},
   gp_params::ClientOs,
-  service::session::{SessionInfo, SessionRequestArgs},
+  session::{SessionInfo, SessionRequestArgs, SessionWarning},
 };
 use log::{info, warn};
+use openconnect::VpnSessionInfo;
 use tokio::{runtime::Handle, task::JoinHandle};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -28,6 +29,7 @@ pub(crate) struct SessionContextInput {
   pub(crate) sslkey: Option<String>,
   pub(crate) key_password: Option<String>,
   pub(crate) disable_ipv6: bool,
+  pub(crate) extension_auth: Option<SessionExtensionAuth>,
 }
 
 pub(crate) fn build_session_context(input: SessionContextInput) -> SessionContext {
@@ -43,22 +45,34 @@ pub(crate) fn build_session_context(input: SessionContextInput) -> SessionContex
     .with_key_password(input.key_password)
     .with_disable_ipv6(input.disable_ipv6);
 
-  SessionContext::new(input.gateway, input.portal, session_args)
+  let ctx = SessionContext::new(input.gateway, input.portal, session_args);
+  match input.extension_auth {
+    Some(extension_auth) => ctx.with_extension_auth(extension_auth),
+    None => ctx,
+  }
 }
 
-pub(crate) fn spawn_session_runtime(handle: &Handle, session_ctx: SessionContext) -> JoinHandle<()> {
-  handle.spawn(run_session_runtime(session_ctx))
+pub(crate) fn session_info_from_vpn(vpn_session_info: VpnSessionInfo) -> SessionInfo {
+  SessionInfo::from_vpn_session_fields(
+    vpn_session_info.lifetime_secs,
+    vpn_session_info.user_expires,
+    vpn_session_info.lifetime_warning.map(|warning| SessionWarning {
+      prior_secs: warning.prior_secs,
+      message: warning.message,
+    }),
+    vpn_session_info.allow_extend_session,
+  )
 }
 
-async fn run_session_runtime(session_ctx: SessionContext) {
-  let mut session_info = match retrieve_session_info_for_gateway(session_ctx.server(), session_ctx.session_args()).await {
-    Ok(session_info) => session_info,
-    Err(err) => {
-      warn!("Failed to retrieve session info: {}", err);
-      return;
-    }
-  };
+pub(crate) fn spawn_session_runtime_with_info(
+  handle: &Handle,
+  session_ctx: SessionContext,
+  session_info: SessionInfo,
+) -> JoinHandle<()> {
+  handle.spawn(run_session_runtime(session_ctx, session_info))
+}
 
+async fn run_session_runtime(session_ctx: SessionContext, mut session_info: SessionInfo) {
   loop {
     let Some(schedule) = build_session_warning_schedule(&session_info) else {
       info!("No session warning schedule provided by the gateway");
@@ -76,14 +90,13 @@ async fn run_session_runtime(session_ctx: SessionContext) {
 
     info!("Attempting to extend the session");
     match extend_session(&session_ctx).await {
-      Ok(next_session_info) => {
-        eprintln!("Session extended.");
-
-        if warning_due_immediately(&next_session_info) {
-          warn!("Session warning remained due after extension, stopping automatic extension");
+      Ok(()) => {
+        let Some(next_session_info) = session_info.rescheduled_after_extension() else {
+          info!("Session extended, but no lifetime is available to schedule another warning");
           return;
-        }
+        };
 
+        eprintln!("Session extended.");
         session_info = next_session_info;
       }
       Err(err) => {
@@ -113,12 +126,6 @@ fn build_session_warning_schedule(session_info: &SessionInfo) -> Option<SessionW
   })
 }
 
-fn warning_due_immediately(session_info: &SessionInfo) -> bool {
-  build_session_warning_schedule(session_info)
-    .map(|schedule| schedule.delay.is_zero())
-    .unwrap_or(false)
-}
-
 fn unix_timestamp() -> u32 {
   SystemTime::now()
     .duration_since(UNIX_EPOCH)
@@ -129,7 +136,6 @@ fn unix_timestamp() -> u32 {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use gpapi::service::session::SessionWarning;
 
   fn sample_session_info(user_expires: Option<u32>, allow_extend_session: bool) -> SessionInfo {
     SessionInfo {
@@ -164,10 +170,14 @@ mod tests {
   }
 
   #[test]
-  fn warning_due_immediately_when_deadline_has_passed() {
-    let session_info = sample_session_info(Some(unix_timestamp() + 1800), true);
+  fn schedules_next_warning_after_extension_from_lifetime() {
+    let mut session_info = sample_session_info(Some(unix_timestamp() + 1830), true);
+    session_info.lifetime_secs = Some(7200);
 
-    assert!(warning_due_immediately(&session_info));
+    let next_session_info = session_info.rescheduled_after_extension().unwrap();
+    let schedule = build_session_warning_schedule(&next_session_info).unwrap();
+
+    assert!(schedule.delay <= Duration::from_secs(5400));
   }
 
   #[test]
@@ -184,6 +194,7 @@ mod tests {
       sslkey: Some("/tmp/client.key".to_string()),
       key_password: Some("secret".to_string()),
       disable_ipv6: true,
+      extension_auth: None,
     });
 
     assert_eq!(ctx.portal(), "portal.example.com");
@@ -197,5 +208,23 @@ mod tests {
     assert_eq!(ctx.session_args().sslkey().as_deref(), Some("/tmp/client.key"));
     assert_eq!(ctx.session_args().key_password().as_deref(), Some("secret"));
     assert!(ctx.session_args().disable_ipv6());
+  }
+
+  #[test]
+  fn maps_openconnect_session_metadata_to_runtime_session_info() {
+    let info = SessionInfo::from_vpn_session_fields(
+      Some(43_200),
+      Some(1_776_828_409),
+      Some(SessionWarning {
+        prior_secs: 1_800,
+        message: "Session expires soon".to_string(),
+      }),
+      true,
+    );
+
+    assert_eq!(info.lifetime_secs, Some(43_200));
+    assert_eq!(info.user_expires, Some(1_776_828_409));
+    assert_eq!(info.lifetime_warning.unwrap().prior_secs, 1_800);
+    assert!(info.allow_extend_session);
   }
 }

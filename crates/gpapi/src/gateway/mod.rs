@@ -4,8 +4,8 @@ mod parse_gateways;
 pub mod session;
 
 pub use login::*;
-pub use session::*;
 pub(crate) use parse_gateways::*;
+pub use session::*;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;

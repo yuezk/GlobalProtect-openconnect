@@ -59,6 +59,7 @@ which = "8"
 uuid = "1"
 netdev = "0.40"
 machine-uid = "0.5"
+humantime = "2"
 
 # Tauri dependencies
 tauri = { version = "2" }
