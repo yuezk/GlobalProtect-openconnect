@@ -1,0 +1,15 @@
+diff --git a/gpst.c b/gpst.c
+index 244aaf04..fb8d945d 100644
+--- a/gpst.c
++++ b/gpst.c
+@@ -669,6 +669,10 @@ static int gpst_get_config(struct openconnect_info *vpninfo)
+ 	result = do_https_request(vpninfo, "POST", "application/x-www-form-urlencoded", request_body, &xml_buf, NULL, HTTP_NO_FLAGS);
+ 	free(vpninfo->urlpath);
+ 	vpninfo->urlpath = orig_path;
++	if (result >= 0 && xml_buf)
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     "GlobalProtect getconfig.esp response:\n%s\n",
++			     xml_buf);
+ 
+ 	/* parse getconfig result */
+ 	if (result >= 0)
