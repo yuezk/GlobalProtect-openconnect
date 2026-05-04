@@ -1,0 +1,137 @@
+diff --git a/gpst.c b/gpst.c
+index 244aaf04..78c16d1c 100644
+--- a/gpst.c
++++ b/gpst.c
+@@ -438,8 +438,23 @@ static int gpst_parse_config_xml(struct openconnect_info *vpninfo, xmlNode *xml_
+ 			new_ip_info.netmask = add_option_steal(&new_opts, "netmask", &s);
+ 		} else if (!xmlnode_get_val(xml_node, "mtu", &s))
+ 			new_ip_info.mtu = atoi(s);
+-		else if (!xmlnode_get_val(xml_node, "lifetime", &s))
++		else if (!xmlnode_get_val(xml_node, "lifetime", &s)) {
++			vpninfo->gp_session_lifetime = atoi(s);
+ 			vpninfo->auth_expiration = time(NULL) + atol(s);
++		} else if (!xmlnode_get_val(xml_node, "user-expires", &s) ||
++			   !xmlnode_get_val(xml_node, "user_expires", &s)) {
++			vpninfo->gp_user_expires = atol(s);
++		} else if (!xmlnode_get_val(xml_node, "lifetime-notify-prior", &s)) {
++			vpninfo->gp_lifetime_notify_prior = atoi(s);
++		} else if (!xmlnode_get_val(xml_node, "lifetime-notify-message", &s)) {
++			free(vpninfo->gp_lifetime_notify_message);
++			vpninfo->gp_lifetime_notify_message = s;
++			s = NULL;
++		} else if (!xmlnode_get_val(xml_node, "allow-extend-session", &s)) {
++			vpninfo->gp_allow_extend_session = !strcasecmp(s, "yes") ||
++							   !strcasecmp(s, "true") ||
++							   !strcmp(s, "1");
++		}
+ 		else if (!xmlnode_get_val(xml_node, "quarantine", &s)) {
+ 			if (strcmp(s, "no"))
+ 				vpn_progress(vpninfo, PRG_DEBUG,
+diff --git a/libopenconnect.map.in b/libopenconnect.map.in
+index f036c071..44110486 100644
+--- a/libopenconnect.map.in
++++ b/libopenconnect.map.in
+@@ -113,6 +113,11 @@ OPENCONNECT_5_7 {
+ 	openconnect_set_cookie;
+ 	openconnect_set_allow_insecure_crypto;
+ 	openconnect_get_auth_expiration;
++	openconnect_get_gp_session_lifetime;
++	openconnect_get_gp_user_expires;
++	openconnect_get_gp_lifetime_notify_prior;
++	openconnect_get_gp_lifetime_notify_message;
++	openconnect_get_gp_allow_extend_session;
+ 	openconnect_disable_dtls;
+ 	openconnect_get_connect_url;
+ 	openconnect_set_webview_callback;
+diff --git a/libopenconnect5.symbols b/libopenconnect5.symbols
+index 7cb04d05..2c7af781 100644
+--- a/libopenconnect5.symbols
++++ b/libopenconnect5.symbols
+@@ -94,6 +94,11 @@ libopenconnect.so.5 libopenconnect5 #MINVER#
+  openconnect_set_cookie@OPENCONNECT_5_7 8.20
+  openconnect_set_allow_insecure_crypto@OPENCONNECT_5_7 8.20
+  openconnect_get_auth_expiration@OPENCONNECT_5_7 8.20
++ openconnect_get_gp_session_lifetime@OPENCONNECT_5_7 8.20
++ openconnect_get_gp_user_expires@OPENCONNECT_5_7 8.20
++ openconnect_get_gp_lifetime_notify_prior@OPENCONNECT_5_7 8.20
++ openconnect_get_gp_lifetime_notify_message@OPENCONNECT_5_7 8.20
++ openconnect_get_gp_allow_extend_session@OPENCONNECT_5_7 8.20
+  openconnect_disable_dtls@OPENCONNECT_5_7 8.20
+  openconnect_get_connect_url@OPENCONNECT_5_7 8.20
+  openconnect_set_webview_callback@OPENCONNECT_5_7 8.20
+diff --git a/library.c b/library.c
+index b5e74e9b..03f47004 100644
+--- a/library.c
++++ b/library.c
+@@ -838,6 +838,7 @@ void openconnect_vpninfo_free(struct openconnect_info *vpninfo)
+ 	free(vpninfo->dtls_cipher);
+ 	free(vpninfo->peer_cert_hash);
+ 	free(vpninfo->ciphersuite_config);
++	free(vpninfo->gp_lifetime_notify_message);
+ #if defined(OPENCONNECT_OPENSSL)
+ 	free(vpninfo->cstp_cipher);
+ #if defined(HAVE_BIO_METH_FREE)
+@@ -1137,6 +1138,31 @@ time_t openconnect_get_auth_expiration(struct openconnect_info *vpninfo)
+ 	return vpninfo->auth_expiration;
+ }
+ 
++int openconnect_get_gp_session_lifetime(struct openconnect_info *vpninfo)
++{
++	return vpninfo->gp_session_lifetime;
++}
++
++time_t openconnect_get_gp_user_expires(struct openconnect_info *vpninfo)
++{
++	return vpninfo->gp_user_expires;
++}
++
++int openconnect_get_gp_lifetime_notify_prior(struct openconnect_info *vpninfo)
++{
++	return vpninfo->gp_lifetime_notify_prior;
++}
++
++const char *openconnect_get_gp_lifetime_notify_message(struct openconnect_info *vpninfo)
++{
++	return vpninfo->gp_lifetime_notify_message;
++}
++
++int openconnect_get_gp_allow_extend_session(struct openconnect_info *vpninfo)
++{
++	return vpninfo->gp_allow_extend_session;
++}
++
+ int openconnect_get_ip_info(struct openconnect_info *vpninfo,
+ 			    const struct oc_ip_info **info,
+ 			    const struct oc_vpn_option **cstp_options,
+diff --git a/openconnect-internal.h b/openconnect-internal.h
+index abf45bbd..dd5507ca 100644
+--- a/openconnect-internal.h
++++ b/openconnect-internal.h
+@@ -647,6 +647,11 @@ struct openconnect_info {
+ 	int dtls_attempt_period;
+ 	int udp_probes_sent;
+ 	time_t auth_expiration;
++	int gp_session_lifetime;
++	time_t gp_user_expires;
++	int gp_lifetime_notify_prior;
++	char *gp_lifetime_notify_message;
++	int gp_allow_extend_session;
+ 	time_t new_dtls_started;
+ #if defined(OPENCONNECT_OPENSSL)
+ 	SSL_CTX *dtls_ctx;
+diff --git a/openconnect.h b/openconnect.h
+index 136f181a..febf15cc 100644
+--- a/openconnect.h
++++ b/openconnect.h
+@@ -655,6 +655,11 @@ void openconnect_set_dpd(struct openconnect_info *, int min_seconds);
+ void openconnect_set_trojan_interval(struct openconnect_info *, int seconds);
+ int openconnect_get_idle_timeout(struct openconnect_info *);
+ time_t openconnect_get_auth_expiration(struct openconnect_info *);
++int openconnect_get_gp_session_lifetime(struct openconnect_info *);
++time_t openconnect_get_gp_user_expires(struct openconnect_info *);
++int openconnect_get_gp_lifetime_notify_prior(struct openconnect_info *);
++const char *openconnect_get_gp_lifetime_notify_message(struct openconnect_info *);
++int openconnect_get_gp_allow_extend_session(struct openconnect_info *);
+ 
+ /* The returned structures are owned by the library and may be freed/replaced
+    due to rekey or reconnect. Assume that once the mainloop starts, the

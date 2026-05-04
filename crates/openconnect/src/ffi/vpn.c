@@ -51,7 +51,18 @@ static void setup_tun_handler(void *_vpninfo)
 	}
 
 	if (!ret) {
-		on_vpn_connected(g_cmd_pipe_fd, g_user_data);
+		vpn_session_info session_info = {
+			.auth_expiration = (long)openconnect_get_auth_expiration(_vpninfo),
+			.lifetime_secs = openconnect_get_gp_session_lifetime(_vpninfo),
+			.user_expires = (long)openconnect_get_gp_user_expires(_vpninfo),
+			.lifetime_warning_prior =
+			    openconnect_get_gp_lifetime_notify_prior(_vpninfo),
+			.lifetime_warning_message =
+			    openconnect_get_gp_lifetime_notify_message(_vpninfo),
+			.allow_extend_session =
+			    openconnect_get_gp_allow_extend_session(_vpninfo),
+		};
+		on_vpn_connected(g_cmd_pipe_fd, &session_info, g_user_data);
 	}
 }
 

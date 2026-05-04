@@ -13,7 +13,7 @@ use gpapi::{
   clap::{ToVerboseArg, args::Os},
   credential::{Credential, PasswordCredential},
   error::PortalError,
-  gateway::{GatewayLogin, gateway_login},
+  gateway::{GatewayLogin, SessionExtensionAuth, gateway_login},
   gp_params::{ClientOs, GpParams},
   portal::{Prelogin, StandardPrelogin, prelogin, retrieve_config},
   process::{
@@ -30,8 +30,13 @@ use tokio::{runtime::Handle, task::JoinHandle};
 use crate::{
   GP_CLIENT_LOCK_FILE,
   cli::SharedArgs,
-  session::{SessionContextInput, build_session_context, spawn_session_runtime},
+  session::{SessionContextInput, build_session_context, session_info_from_vpn, spawn_session_runtime_with_info},
 };
+
+struct GatewayLoginSession {
+  cookie: String,
+  extension_auth: SessionExtensionAuth,
+}
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -342,8 +347,8 @@ impl<'a> ConnectHandler<'a> {
     let gateway = selected_gateway.server();
     let cred = portal_config.auth_cookie().into();
 
-    let cookie = match self.login_gateway(gateway, &cred, &gp_params).await {
-      Ok(cookie) => cookie,
+    let login_session = match self.login_gateway(gateway, &cred, &gp_params).await {
+      Ok(login_session) => login_session,
       Err(err) => {
         info!("Gateway login failed: {}", err);
         return self.connect_gateway_with_prelogin(gateway).await;
@@ -354,7 +359,15 @@ impl<'a> ConnectHandler<'a> {
     // use the version from the portal config if available
     let client_version = self.args.client_version.as_deref().or_else(|| portal_config.version());
 
-    self.connect_gateway(portal, gateway, &cookie, client_version).await
+    self
+      .connect_gateway(
+        portal,
+        gateway,
+        &login_session.cookie,
+        client_version,
+        login_session.extension_auth,
+      )
+      .await
   }
 
   async fn connect_gateway_with_prelogin(&self, gateway: &str) -> anyhow::Result<()> {
@@ -366,20 +379,38 @@ impl<'a> ConnectHandler<'a> {
     let prelogin = prelogin(gateway, &gp_params).await?;
     let cred = self.obtain_credential(&prelogin, gateway).await?;
 
-    let cookie = self.login_gateway(gateway, &cred, &gp_params).await?;
+    let login_session = self.login_gateway(gateway, &cred, &gp_params).await?;
 
     // When logging in to a gateway directly, there is no portal config to get the client version from
     let client_version = self.args.client_version.as_deref();
 
-    self.connect_gateway(gateway, gateway, &cookie, client_version).await
+    self
+      .connect_gateway(
+        gateway,
+        gateway,
+        &login_session.cookie,
+        client_version,
+        login_session.extension_auth,
+      )
+      .await
   }
 
-  async fn login_gateway(&self, gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<String> {
+  async fn login_gateway(
+    &self,
+    gateway: &str,
+    cred: &Credential,
+    gp_params: &GpParams,
+  ) -> anyhow::Result<GatewayLoginSession> {
     let mut gp_params = gp_params.clone();
 
     loop {
       match gateway_login(gateway, cred, &gp_params).await? {
-        GatewayLogin::Cookie(cookie) => return Ok(cookie),
+        GatewayLogin::Cookie(cookie) => {
+          return Ok(GatewayLoginSession {
+            cookie,
+            extension_auth: SessionExtensionAuth::new(cred.clone(), gp_params),
+          });
+        }
         GatewayLogin::Mfa(message, input_str) => {
           let otp = Text::new(&message).prompt()?;
           gp_params.set_input_str(&input_str);
@@ -397,6 +428,7 @@ impl<'a> ConnectHandler<'a> {
     gateway: &str,
     cookie: &str,
     client_version: Option<&str>,
+    extension_auth: SessionExtensionAuth,
   ) -> anyhow::Result<()> {
     let mtu = self.args.mtu.unwrap_or(0);
     let (hip, csd_wrapper) = self.determine_hip_script();
@@ -418,6 +450,7 @@ impl<'a> ConnectHandler<'a> {
       sslkey: self.args.sslkey.clone(),
       key_password: self.latest_key_password.borrow().clone(),
       disable_ipv6: self.args.disable_ipv6,
+      extension_auth: Some(extension_auth),
     });
     let vpn = Vpn::builder(gateway, cookie)
       .script(self.args.script.clone())
@@ -457,14 +490,16 @@ impl<'a> ConnectHandler<'a> {
       vpn_clone.disconnect();
     });
 
-    vpn.connect(move || {
+    vpn.connect(move |vpn_session_info| {
       write_pid_file();
 
       let Some(session_ctx) = session_ctx_on_connect.lock().unwrap().take() else {
         return;
       };
+      let session_info = session_info_from_vpn(vpn_session_info);
+      info!("VPN session info: {}", session_info.log_summary());
 
-      let task = spawn_session_runtime(&runtime_handle, session_ctx);
+      let task = spawn_session_runtime_with_info(&runtime_handle, session_ctx, session_info);
       session_task_on_connect.lock().unwrap().replace(task);
     });
 

@@ -4,12 +4,13 @@ use gpapi::{
   logger,
   service::{
     request::{ConnectRequest, UpdateLogLevelRequest, WsRequest},
-    vpn_state::VpnState,
+    session::{SessionInfo, SessionWarning},
+    vpn_state::{ConnectedInfo, VpnState},
   },
 };
 use log::{info, warn};
 use openconnect::Vpn;
-use tokio::sync::{mpsc, oneshot, watch, RwLock};
+use tokio::sync::{RwLock, mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct VpnTaskContext {
@@ -81,9 +82,19 @@ impl VpnTaskContext {
       let vpn_state_tx_clone = vpn_state_tx.clone();
 
       vpn_handle.blocking_read().as_ref().map(|vpn| {
-        vpn.connect(move || {
-          let connect_info = Box::new(info.clone());
-          vpn_state_tx.send(VpnState::Connected(connect_info)).ok();
+        vpn.connect(move |vpn_session_info| {
+          let session_info = SessionInfo::from_vpn_session_fields(
+            vpn_session_info.lifetime_secs,
+            vpn_session_info.user_expires,
+            vpn_session_info.lifetime_warning.map(|warning| SessionWarning {
+              prior_secs: warning.prior_secs,
+              message: warning.message,
+            }),
+            vpn_session_info.allow_extend_session,
+          );
+          info!("VPN session info: {}", session_info.log_summary());
+          let connected_info = Box::new(ConnectedInfo::new(info.clone(), Some(session_info)));
+          vpn_state_tx.send(VpnState::Connected(connected_info)).ok();
         })
       });
 
@@ -181,5 +192,28 @@ async fn process_ws_req(req: WsRequest, ctx: Arc<VpnTaskContext>) {
         warn!("Failed to update log level: {}", err);
       }
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn maps_openconnect_session_metadata_to_service_session_info() {
+    let info = SessionInfo::from_vpn_session_fields(
+      Some(43_200),
+      None,
+      Some(SessionWarning {
+        prior_secs: 1_800,
+        message: "Session expires soon".to_string(),
+      }),
+      true,
+    );
+
+    assert_eq!(info.lifetime_secs, Some(43_200));
+    assert_eq!(info.expires_in_human.as_deref(), Some("12h"));
+    assert_eq!(info.lifetime_warning.unwrap().prior_secs, 1_800);
+    assert!(info.allow_extend_session);
   }
 }

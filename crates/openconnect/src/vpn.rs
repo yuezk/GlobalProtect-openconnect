@@ -1,5 +1,5 @@
 use std::{
-  ffi::{CString, c_char},
+  ffi::{CStr, CString, c_char},
   fmt,
   sync::{Arc, RwLock},
 };
@@ -9,7 +9,54 @@ use log::info;
 use crate::ffi;
 use crate::vpn_utils::{check_executable, find_csd_wrapper, find_vpnc_script};
 
-type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce() + 'static + Send + Sync>>>>;
+type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce(VpnSessionInfo) + 'static + Send + Sync>>>>;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VpnSessionInfo {
+  pub lifetime_secs: Option<u32>,
+  pub user_expires: Option<u32>,
+  pub lifetime_warning: Option<VpnSessionWarning>,
+  pub allow_extend_session: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VpnSessionWarning {
+  pub prior_secs: u32,
+  pub message: String,
+}
+
+pub(crate) fn session_info_from_raw(raw: *const ffi::VpnSessionInfoRaw) -> VpnSessionInfo {
+  if raw.is_null() {
+    return VpnSessionInfo::default();
+  }
+
+  let raw = unsafe { &*raw };
+  let warning_message =
+    unsafe { optional_c_string(raw.lifetime_warning_message) }.filter(|message| !message.is_empty());
+  let user_expires = positive_i64_to_u32(raw.user_expires).or_else(|| positive_i64_to_u32(raw.auth_expiration));
+
+  VpnSessionInfo {
+    lifetime_secs: positive_i64_to_u32(raw.lifetime_secs as i64),
+    user_expires,
+    lifetime_warning: match (positive_i64_to_u32(raw.lifetime_warning_prior as i64), warning_message) {
+      (Some(prior_secs), Some(message)) => Some(VpnSessionWarning { prior_secs, message }),
+      _ => None,
+    },
+    allow_extend_session: raw.allow_extend_session != 0,
+  }
+}
+
+unsafe fn optional_c_string(value: *const c_char) -> Option<String> {
+  if value.is_null() {
+    return None;
+  }
+
+  unsafe { CStr::from_ptr(value) }.to_str().ok().map(ToOwned::to_owned)
+}
+
+fn positive_i64_to_u32(value: i64) -> Option<u32> {
+  u32::try_from(value).ok().filter(|value| *value > 0)
+}
 
 pub struct Vpn {
   server: CString,
@@ -49,18 +96,18 @@ impl Vpn {
     VpnBuilder::new(server, cookie)
   }
 
-  pub fn connect(&self, on_connected: impl FnOnce() + 'static + Send + Sync) -> i32 {
+  pub fn connect(&self, on_connected: impl FnOnce(VpnSessionInfo) + 'static + Send + Sync) -> i32 {
     self.callback.write().unwrap().replace(Box::new(on_connected));
     let options = self.build_connect_options();
 
     ffi::connect(&options)
   }
 
-  pub(crate) fn on_connected(&self, pipe_fd: i32) {
+  pub(crate) fn on_connected(&self, pipe_fd: i32, session_info: VpnSessionInfo) {
     info!("Connected to VPN, pipe_fd: {}", pipe_fd);
 
     if let Some(callback) = self.callback.write().unwrap().take() {
-      callback();
+      callback(session_info);
     }
   }
 
@@ -360,5 +407,56 @@ impl VpnBuilder {
 
   fn to_cstring(value: &str) -> CString {
     CString::new(value.to_string()).expect("Failed to convert to CString")
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::ffi::CString;
+
+  #[test]
+  fn maps_session_info_from_callback_payload() {
+    let message = CString::new("Session expires soon").unwrap();
+    let raw = ffi::VpnSessionInfoRaw {
+      auth_expiration: 0,
+      lifetime_secs: 43_200,
+      user_expires: 1_776_828_409,
+      lifetime_warning_prior: 1_800,
+      lifetime_warning_message: message.as_ptr(),
+      allow_extend_session: 1,
+    };
+
+    let info = session_info_from_raw(&raw);
+
+    assert_eq!(info.lifetime_secs, Some(43_200));
+    assert_eq!(info.user_expires, Some(1_776_828_409));
+    assert_eq!(
+      info.lifetime_warning,
+      Some(VpnSessionWarning {
+        prior_secs: 1_800,
+        message: "Session expires soon".to_string(),
+      })
+    );
+    assert!(info.allow_extend_session);
+  }
+
+  #[test]
+  fn falls_back_to_auth_expiration_when_user_expires_is_absent() {
+    let raw = ffi::VpnSessionInfoRaw {
+      auth_expiration: 1_776_828_409,
+      lifetime_secs: 0,
+      user_expires: 0,
+      lifetime_warning_prior: 0,
+      lifetime_warning_message: std::ptr::null(),
+      allow_extend_session: 0,
+    };
+
+    let info = session_info_from_raw(&raw);
+
+    assert_eq!(info.user_expires, Some(1_776_828_409));
+    assert_eq!(info.lifetime_secs, None);
+    assert_eq!(info.lifetime_warning, None);
+    assert!(!info.allow_extend_session);
   }
 }
