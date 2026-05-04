@@ -46,7 +46,6 @@ pub(crate) struct VpnSessionInfoRaw {
   pub user_expires: c_long,
   pub lifetime_warning_prior: c_int,
   pub lifetime_warning_message: *const c_char,
-  pub allow_extend_session: c_int,
 }
 
 #[link(name = "vpn")]

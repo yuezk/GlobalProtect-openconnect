@@ -4,9 +4,9 @@ use gpapi::{
   logger,
   service::{
     request::{ConnectRequest, UpdateLogLevelRequest, WsRequest},
-    session::{SessionInfo, SessionWarning},
     vpn_state::{ConnectedInfo, VpnState},
   },
+  session::{SessionInfo, SessionWarning},
 };
 use log::{info, warn};
 use openconnect::Vpn;
@@ -39,6 +39,7 @@ impl VpnTaskContext {
     let info = req.info().clone();
     let vpn_handle = Arc::clone(&self.vpn_handle);
     let args = req.args();
+    let allow_extend_session = args.allow_extend_session();
     let vpn = match Vpn::builder(req.gateway().server(), args.cookie())
       .script(args.vpnc_script())
       .user_agent(args.user_agent())
@@ -90,7 +91,7 @@ impl VpnTaskContext {
               prior_secs: warning.prior_secs,
               message: warning.message,
             }),
-            vpn_session_info.allow_extend_session,
+            allow_extend_session,
           );
           info!("VPN session info: {}", session_info.log_summary());
           let connected_info = Box::new(ConnectedInfo::new(info.clone(), Some(session_info)));
@@ -215,5 +216,21 @@ mod tests {
     assert_eq!(info.expires_in_human.as_deref(), Some("12h"));
     assert_eq!(info.lifetime_warning.unwrap().prior_secs, 1_800);
     assert!(info.allow_extend_session);
+  }
+
+  #[test]
+  fn direct_request_session_metadata_keeps_extension_disabled() {
+    let info = SessionInfo::from_vpn_session_fields(
+      Some(43_200),
+      None,
+      Some(SessionWarning {
+        prior_secs: 1_800,
+        message: "Session expires soon".to_string(),
+      }),
+      false,
+    );
+
+    assert_eq!(info.lifetime_secs, Some(43_200));
+    assert!(!info.allow_extend_session);
   }
 }

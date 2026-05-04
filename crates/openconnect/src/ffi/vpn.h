@@ -9,7 +9,6 @@ typedef struct vpn_session_info {
 	long user_expires;
 	int lifetime_warning_prior;
 	const char *lifetime_warning_message;
-	int allow_extend_session;
 } vpn_session_info;
 
 typedef void (*vpn_connected_callback)(int cmd_pipe_fd,

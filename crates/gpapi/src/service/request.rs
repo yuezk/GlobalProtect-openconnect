@@ -52,6 +52,8 @@ pub struct ConnectArgs {
   local_hostname: Option<String>,
   force_dpd: u32,
   no_xmlpost: bool,
+  #[serde(rename = "allowExtendSession")]
+  allow_extend_session: bool,
 }
 
 impl ConnectArgs {
@@ -76,6 +78,7 @@ impl ConnectArgs {
       local_hostname: None,
       force_dpd: 0,
       no_xmlpost: false,
+      allow_extend_session: false,
     }
   }
 
@@ -157,6 +160,10 @@ impl ConnectArgs {
 
   pub fn no_xmlpost(&self) -> bool {
     self.no_xmlpost
+  }
+
+  pub fn allow_extend_session(&self) -> bool {
+    self.allow_extend_session
   }
 }
 
@@ -264,6 +271,11 @@ impl ConnectRequest {
     self
   }
 
+  pub fn with_allow_extend_session(mut self, allow_extend_session: bool) -> Self {
+    self.args.allow_extend_session = allow_extend_session;
+    self
+  }
+
   pub fn gateway(&self) -> &Gateway {
     self.info.gateway()
   }
@@ -295,4 +307,21 @@ pub enum WsRequest {
 pub struct UpdateGuiRequest {
   pub path: String,
   pub checksum: String,
+}
+
+#[cfg(test)]
+mod tests {
+  use serde_json::json;
+
+  use super::*;
+
+  #[test]
+  fn connect_request_serializes_allow_extend_session() {
+    let gateway = Gateway::new("Gateway".to_string(), "vpn.example.com".to_string());
+    let info = ConnectInfo::new("portal.example.com".to_string(), gateway.clone(), vec![gateway]);
+    let req = ConnectRequest::new(info, "authcookie=AUTH".to_string()).with_allow_extend_session(true);
+    let value = serde_json::to_value(req).unwrap();
+
+    assert_eq!(value["args"]["allowExtendSession"], json!(true));
+  }
 }

@@ -16,7 +16,6 @@ pub struct VpnSessionInfo {
   pub lifetime_secs: Option<u32>,
   pub user_expires: Option<u32>,
   pub lifetime_warning: Option<VpnSessionWarning>,
-  pub allow_extend_session: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,7 +41,6 @@ pub(crate) fn session_info_from_raw(raw: *const ffi::VpnSessionInfoRaw) -> VpnSe
       (Some(prior_secs), Some(message)) => Some(VpnSessionWarning { prior_secs, message }),
       _ => None,
     },
-    allow_extend_session: raw.allow_extend_session != 0,
   }
 }
 
@@ -424,7 +422,6 @@ mod tests {
       user_expires: 1_776_828_409,
       lifetime_warning_prior: 1_800,
       lifetime_warning_message: message.as_ptr(),
-      allow_extend_session: 1,
     };
 
     let info = session_info_from_raw(&raw);
@@ -438,7 +435,6 @@ mod tests {
         message: "Session expires soon".to_string(),
       })
     );
-    assert!(info.allow_extend_session);
   }
 
   #[test]
@@ -449,7 +445,6 @@ mod tests {
       user_expires: 0,
       lifetime_warning_prior: 0,
       lifetime_warning_message: std::ptr::null(),
-      allow_extend_session: 0,
     };
 
     let info = session_info_from_raw(&raw);
@@ -457,6 +452,5 @@ mod tests {
     assert_eq!(info.user_expires, Some(1_776_828_409));
     assert_eq!(info.lifetime_secs, None);
     assert_eq!(info.lifetime_warning, None);
-    assert!(!info.allow_extend_session);
   }
 }

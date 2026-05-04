@@ -294,7 +294,9 @@ impl<'a> ConnectHandler<'a> {
 
     if as_gateway {
       info!("Treating the server as a gateway");
-      return self.connect_gateway_with_prelogin(server).await;
+      return self
+        .connect_gateway_with_prelogin(server, server, self.args.client_version.as_deref(), false)
+        .await;
     }
 
     let Err(err) = self.connect_portal_with_prelogin(server).await else {
@@ -304,7 +306,9 @@ impl<'a> ConnectHandler<'a> {
     warn!("Failed to connect portal with prelogin: {}", err);
     if err.root_cause().downcast_ref::<PortalError>().is_some() {
       info!("Trying the gateway authentication workflow...");
-      self.connect_gateway_with_prelogin(server).await?;
+      self
+        .connect_gateway_with_prelogin(server, server, self.args.client_version.as_deref(), false)
+        .await?;
 
       eprintln!("\nNOTE: the server may be a gateway, not a portal.");
       eprintln!("NOTE: try to use the `--as-gateway` option if you were authenticated twice.");
@@ -351,13 +355,18 @@ impl<'a> ConnectHandler<'a> {
       Ok(login_session) => login_session,
       Err(err) => {
         info!("Gateway login failed: {}", err);
-        return self.connect_gateway_with_prelogin(gateway).await;
+        let client_version = self.args.client_version.as_deref().or_else(|| portal_config.version());
+        let allow_extend_session = portal_config.allow_extend_session().unwrap_or(false);
+        return self
+          .connect_gateway_with_prelogin(portal, gateway, client_version, allow_extend_session)
+          .await;
       }
     };
 
     // Use the client version from the command line argument if specified, otherwise
     // use the version from the portal config if available
     let client_version = self.args.client_version.as_deref().or_else(|| portal_config.version());
+    let allow_extend_session = portal_config.allow_extend_session().unwrap_or(false);
 
     self
       .connect_gateway(
@@ -365,12 +374,19 @@ impl<'a> ConnectHandler<'a> {
         gateway,
         &login_session.cookie,
         client_version,
+        allow_extend_session,
         login_session.extension_auth,
       )
       .await
   }
 
-  async fn connect_gateway_with_prelogin(&self, gateway: &str) -> anyhow::Result<()> {
+  async fn connect_gateway_with_prelogin(
+    &self,
+    portal: &str,
+    gateway: &str,
+    client_version: Option<&str>,
+    allow_extend_session: bool,
+  ) -> anyhow::Result<()> {
     info!("Performing the gateway authentication...");
 
     let mut gp_params = self.build_gp_params();
@@ -381,15 +397,13 @@ impl<'a> ConnectHandler<'a> {
 
     let login_session = self.login_gateway(gateway, &cred, &gp_params).await?;
 
-    // When logging in to a gateway directly, there is no portal config to get the client version from
-    let client_version = self.args.client_version.as_deref();
-
     self
       .connect_gateway(
-        gateway,
+        portal,
         gateway,
         &login_session.cookie,
         client_version,
+        allow_extend_session,
         login_session.extension_auth,
       )
       .await
@@ -428,6 +442,7 @@ impl<'a> ConnectHandler<'a> {
     gateway: &str,
     cookie: &str,
     client_version: Option<&str>,
+    allow_extend_session: bool,
     extension_auth: SessionExtensionAuth,
   ) -> anyhow::Result<()> {
     let mtu = self.args.mtu.unwrap_or(0);
@@ -496,7 +511,7 @@ impl<'a> ConnectHandler<'a> {
       let Some(session_ctx) = session_ctx_on_connect.lock().unwrap().take() else {
         return;
       };
-      let session_info = session_info_from_vpn(vpn_session_info);
+      let session_info = session_info_from_vpn(vpn_session_info, allow_extend_session);
       info!("VPN session info: {}", session_info.log_summary());
 
       let task = spawn_session_runtime_with_info(&runtime_handle, session_ctx, session_info);

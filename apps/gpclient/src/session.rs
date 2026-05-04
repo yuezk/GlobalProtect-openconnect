@@ -52,7 +52,7 @@ pub(crate) fn build_session_context(input: SessionContextInput) -> SessionContex
   }
 }
 
-pub(crate) fn session_info_from_vpn(vpn_session_info: VpnSessionInfo) -> SessionInfo {
+pub(crate) fn session_info_from_vpn(vpn_session_info: VpnSessionInfo, allow_extend_session: bool) -> SessionInfo {
   SessionInfo::from_vpn_session_fields(
     vpn_session_info.lifetime_secs,
     vpn_session_info.user_expires,
@@ -60,7 +60,7 @@ pub(crate) fn session_info_from_vpn(vpn_session_info: VpnSessionInfo) -> Session
       prior_secs: warning.prior_secs,
       message: warning.message,
     }),
-    vpn_session_info.allow_extend_session,
+    allow_extend_session,
   )
 }
 
@@ -212,13 +212,15 @@ mod tests {
 
   #[test]
   fn maps_openconnect_session_metadata_to_runtime_session_info() {
-    let info = SessionInfo::from_vpn_session_fields(
-      Some(43_200),
-      Some(1_776_828_409),
-      Some(SessionWarning {
-        prior_secs: 1_800,
-        message: "Session expires soon".to_string(),
-      }),
+    let info = session_info_from_vpn(
+      VpnSessionInfo {
+        lifetime_secs: Some(43_200),
+        user_expires: Some(1_776_828_409),
+        lifetime_warning: Some(openconnect::VpnSessionWarning {
+          prior_secs: 1_800,
+          message: "Session expires soon".to_string(),
+        }),
+      },
       true,
     );
 
@@ -226,5 +228,25 @@ mod tests {
     assert_eq!(info.user_expires, Some(1_776_828_409));
     assert_eq!(info.lifetime_warning.unwrap().prior_secs, 1_800);
     assert!(info.allow_extend_session);
+  }
+
+  #[test]
+  fn direct_gateway_session_info_does_not_allow_extension_without_portal_policy() {
+    let info = session_info_from_vpn(
+      VpnSessionInfo {
+        lifetime_secs: Some(43_200),
+        user_expires: Some(1_776_828_409),
+        lifetime_warning: Some(openconnect::VpnSessionWarning {
+          prior_secs: 1_800,
+          message: "Session expires soon".to_string(),
+        }),
+      },
+      false,
+    );
+
+    assert_eq!(info.lifetime_secs, Some(43_200));
+    assert_eq!(info.user_expires, Some(1_776_828_409));
+    assert_eq!(info.lifetime_warning.unwrap().prior_secs, 1_800);
+    assert!(!info.allow_extend_session);
   }
 }

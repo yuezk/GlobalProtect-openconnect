@@ -33,6 +33,10 @@ pub struct PortalConfig {
    * The version returned by the portal config, if any
    */
   version: Option<String>,
+  /**
+   * Whether the portal policy allows extending the gateway session.
+   */
+  allow_extend_session: Option<bool>,
 }
 
 impl PortalConfig {
@@ -58,6 +62,10 @@ impl PortalConfig {
 
   pub fn version(&self) -> Option<&str> {
     self.version.as_deref()
+  }
+
+  pub fn allow_extend_session(&self) -> Option<bool> {
+    self.allow_extend_session
   }
 
   /// In-place sort the gateways by region
@@ -168,6 +176,7 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
 
   let version = root.descendant_text("version").map(|s| s.to_string());
   info!("Detected portal version: {:?}", version);
+  let allow_extend_session = parse_allow_extend_session(&root);
 
   Ok(PortalConfig {
     portal: server.to_string(),
@@ -177,7 +186,16 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     config_digest: config_digest.map(|s| s.to_string()),
     internal_host_detection: if ihd_enabled { Some(prefer_internal) } else { None },
     version,
+    allow_extend_session,
   })
+}
+
+fn parse_allow_extend_session(root: &Element) -> Option<bool> {
+  match root.descendant_text("allow-extend-session")?.trim() {
+    "yes" => Some(true),
+    "no" => Some(false),
+    _ => None,
+  }
 }
 
 // Perform DNS lookup and compare the result with the expected hostname
@@ -212,4 +230,41 @@ fn internal_host_detect(element: &Element) -> bool {
   }
 
   false
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn parse_xml(xml: &str) -> Element {
+    Element::parse(xml.as_bytes()).unwrap()
+  }
+
+  #[test]
+  fn parses_allow_extend_session_yes() {
+    let root = parse_xml("<response><allow-extend-session>yes</allow-extend-session></response>");
+
+    assert_eq!(parse_allow_extend_session(&root), Some(true));
+  }
+
+  #[test]
+  fn parses_allow_extend_session_no() {
+    let root = parse_xml("<response><allow-extend-session>no</allow-extend-session></response>");
+
+    assert_eq!(parse_allow_extend_session(&root), Some(false));
+  }
+
+  #[test]
+  fn leaves_absent_allow_extend_session_unknown() {
+    let root = parse_xml("<response></response>");
+
+    assert_eq!(parse_allow_extend_session(&root), None);
+  }
+
+  #[test]
+  fn ignores_non_official_allow_extend_session_values() {
+    let root = parse_xml("<response><allow-extend-session>true</allow-extend-session></response>");
+
+    assert_eq!(parse_allow_extend_session(&root), None);
+  }
 }
