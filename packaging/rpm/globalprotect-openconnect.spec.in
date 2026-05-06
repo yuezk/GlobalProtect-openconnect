@@ -12,10 +12,18 @@ BuildRequires:  make
 BuildRequires:  libtool
 BuildRequires:  autoconf
 BuildRequires:  automake
+BuildRequires:  gettext
 BuildRequires:  gcc-c++
 BuildRequires:  cargo
 BuildRequires:  pkg-config
 BuildRequires:  (openssl-devel or libopenssl-devel)
+BuildRequires:  libxml2-devel
+BuildRequires:  zlib-devel
+BuildRequires:  (lz4-devel or liblz4-devel)
+BuildRequires:  gnutls-devel
+BuildRequires:  p11-kit-devel
+BuildRequires:  (nettle-devel or libnettle-devel)
+BuildRequires:  gmp-devel
 BuildRequires:  wget
 BuildRequires:  file
 BuildRequires:  perl

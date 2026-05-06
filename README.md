@@ -328,7 +328,7 @@ This project includes a DevContainer configuration that provides a consistent, r
 
 - [Rust 1.89 or later](https://www.rust-lang.org/tools/install)
 - [Tauri dependencies](https://tauri.app/start/prerequisites/)
-- `libopenconnect-dev` (or `openconnect-devel` on RPM-based systems)
+- OpenConnect source-build dependencies: `autoconf`, `automake`, `autopoint`/`gettext`, `libtool`, `patch`, `pkg-config`, `libxml2`, `zlib`, `lz4`, `gnutls`, `p11-kit`, `nettle`, and `gmp` development packages
 - `pkexec` and `gnome-keyring` (or `pam_kwallet` on KDE)
 - `nodejs` and `pnpm` (optional)
 

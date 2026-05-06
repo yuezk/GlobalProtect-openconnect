@@ -8,9 +8,9 @@ pkgdesc="A GUI client for GlobalProtect VPN, based on OpenConnect, supports the 
 arch=('x86_64' 'aarch64')
 url="https://github.com/yuezk/GlobalProtect-openconnect"
 license=('GPL3')
-makedepends=('make' 'pkg-config' 'cargo' 'file')
+makedepends=('make' 'pkg-config' 'cargo' 'file' 'autoconf' 'automake' 'gettext' 'libtool' 'patch')
 depends=('webkit2gtk-4.1' 'libappindicator-gtk3' 'librsvg' 'libsecret' 'openssl' 'appmenu-gtk-module'
-         'gnutls' 'libxml2' 'lz4' 'libp11-kit' 'nettle' 'xdg-utils')
+         'gnutls' 'libxml2' 'zlib' 'lz4' 'libp11-kit' 'nettle' 'gmp' 'xdg-utils')
 optdepends=('wmctrl: for window management')
 
 provides=('globalprotect-openconnect' 'gpclient' 'gpservice' 'gpauth' 'gpgui')
