@@ -15,7 +15,6 @@ BuildRequires:  automake
 BuildRequires:  gcc-c++
 BuildRequires:  cargo
 BuildRequires:  pkg-config
-BuildRequires:  openconnect-devel
 BuildRequires:  (openssl-devel or libopenssl-devel)
 BuildRequires:  wget
 BuildRequires:  file
@@ -30,9 +29,6 @@ BuildRequires:  webkit2gtk4.1-devel
 BuildRequires:  (libappindicator-gtk3-devel or libappindicator3-1)
 BuildRequires:  (librsvg2-devel or librsvg-devel)
 
-# Still requires openconnect because of the latest vpnc-script it provides on
-# some distros (e.g., opensuse)
-Requires:       openconnect >= 8.20
 Requires:       (libappindicator-gtk3 or libayatana-appindicator)
 Conflicts:      globalprotect-openconnect-snapshot
 
@@ -58,6 +54,7 @@ make build
 %files
 %defattr(-,root,root)
 %{_bindir}/*
+%{_libexecdir}/gpclient/vpnc-script
 %{_libexecdir}/gpclient/hipreport.sh
 %{_datadir}/applications/gpgui.desktop
 %{_datadir}/icons/hicolor/32x32/apps/gpgui.png

@@ -125,7 +125,7 @@ install:
 		install -Dm755 .build/gpgui/gpgui_*/gpgui $(DESTDIR)/usr/bin/gpgui; \
 	fi
 
-	# Install the HIP report script
+	install -Dm755 packaging/files/usr/libexec/gpclient/vpnc-script $(DESTDIR)/usr/libexec/gpclient/vpnc-script
 	install -Dm755 packaging/files/usr/libexec/gpclient/hipreport.sh $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
 
 	# Install the disconnect hooks
@@ -148,6 +148,7 @@ uninstall:
 	rm -f $(DESTDIR)/usr/bin/gpgui-helper
 	rm -f $(DESTDIR)/usr/bin/gpgui
 
+	rm -f $(DESTDIR)/usr/libexec/gpclient/vpnc-script
 	rm -f $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
 
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down

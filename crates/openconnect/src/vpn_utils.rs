@@ -3,6 +3,8 @@ use std::{io, path::Path};
 use is_executable::IsExecutable;
 
 const VPNC_SCRIPT_LOCATIONS: &[&str] = &[
+  "/usr/libexec/gpclient/vpnc-script",
+  "/usr/lib/gpclient/vpnc-script",
   "/usr/local/share/vpnc-scripts/vpnc-script",
   "/usr/local/sbin/vpnc-script",
   "/usr/share/vpnc-scripts/vpnc-script",

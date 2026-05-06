@@ -59,7 +59,6 @@
           buildInputs =
             with pkgs;
             [
-              vpnc-scripts
               libxml2
               zlib
               lz4
@@ -103,9 +102,8 @@
             {
               postPatch = ''
                 substituteInPlace crates/openconnect/src/vpn_utils.rs \
-                  --replace-fail /etc/vpnc/vpnc-script ${pkgs.vpnc-scripts}/bin/vpnc-script \
-                  --replace-fail /usr/libexec/gpclient/hipreport.sh $out/libexec/gpclient/hipreport.sh \
-                  --replace-fail /usr/lib/openconnect/hipreport.sh ${pkgs.openconnect}/libexec/openconnect/hipreport.sh
+                  --replace-fail /usr/libexec/gpclient/vpnc-script $out/libexec/gpclient/vpnc-script \
+                  --replace-fail /usr/libexec/gpclient/hipreport.sh $out/libexec/gpclient/hipreport.sh
 
                 substituteInPlace crates/common/src/constants.rs \
                   --replace-fail /usr/bin/gpclient $out/bin/gpclient \
