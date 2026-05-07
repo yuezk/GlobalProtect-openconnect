@@ -1,6 +1,15 @@
 name: Build
 on:
   workflow_dispatch:
+    inputs:
+      gp_branch:
+        description: 'GlobalProtect-openconnect branch to use for the snapshot release'
+        required: true
+        default: dev
+      gpgui_branch:
+        description: 'gpgui branch to use for the snapshot release'
+        required: true
+        default: dev
   push:
     paths-ignore:
       - LICENSE
@@ -9,7 +18,6 @@ on:
       - .devcontainer
     branches:
       - main
-      - dev
       - hotfix/*
       - feature/*
       - release/*
@@ -21,7 +29,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Include arm64 if ref is a tag
+  # Include arm64 for tagged releases and manual snapshot releases.
   setup-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -30,8 +38,8 @@ jobs:
       - name: Set up matrix
         id: set-matrix
         run: |
-          # Set the matrix to include arm64 if the ref is a tag or is the dev branch
-          if [[ "${{ github.ref }}" == "refs/tags/"* || "${{ github.ref }}" == "refs/heads/dev" ]]; then
+          # Set the matrix to include arm64 for tagged releases and manual snapshot releases.
+          if [[ "${{ github.ref }}" == "refs/tags/"* || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "ubuntu-24.04-arm", "arch": "ubuntu-24.04-arm"}]' >> $GITHUB_OUTPUT
           else
             echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}]' >> $GITHUB_OUTPUT
@@ -52,7 +60,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.ref }}
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
         path: source/gp
         submodules: recursive
 
@@ -69,7 +77,7 @@ jobs:
 
     - name: Generate RPM spec file
       env:
-        RELEASE_TAG: ${{ github.ref == 'refs/heads/dev' && 'snapshot' || github.ref_name }}
+        RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && 'snapshot' || github.ref_name }}
       run: |
         cd source/gp
 
@@ -88,7 +96,7 @@ jobs:
           source/artifacts/*
 
   tarball-offline:
-    if: ${{ github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     needs:
     - tarball
@@ -195,15 +203,15 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.ref }}
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
         path: gpgui-source/gp
         submodules: recursive
-    - name: Checkout gpgui@${{ github.ref_name }}
+    - name: Checkout gpgui
       uses: actions/checkout@v6
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/gpgui
-        ref: ${{ github.ref_name }}
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
         path: gpgui-source/gpgui
     - name: Tarball
       run: |
@@ -234,7 +242,7 @@ jobs:
           gpgui-source/*.bin.tar.xz.sha256
 
   gh-release:
-    if: ${{ github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     needs:
       - tarball
@@ -251,7 +259,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.ref }}
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
         path: gh-release/gp
         submodules: recursive
 
@@ -263,6 +271,6 @@ jobs:
     - name: Create GH release
       env:
         GH_TOKEN: ${{ secrets.GH_PAT }}
-        RELEASE_TAG: ${{ github.ref == 'refs/heads/dev' && 'snapshot' || github.ref_name }}
+        RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && 'snapshot' || github.ref_name }}
       run: |
         cd gh-release/gp/scripts && ./gh-release.sh "$RELEASE_TAG"

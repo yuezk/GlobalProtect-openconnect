@@ -11,12 +11,7 @@ on:
         required: false
         default: "1"
       series:
-        description: 'Ubuntu series to publish'
-        type: "string"
-        required: false
-        default: ""
-      excluded_series:
-        description: 'Additional Ubuntu series to exclude from publishing'
+        description: 'Space-separated Ubuntu series. Leave empty to publish all supported series.'
         type: "string"
         required: false
         default: ""
@@ -30,20 +25,63 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Check tag exists
-      uses: mukunku/tag-exists-action@v1.6.0
-      id: check-tag
-      with:
-        tag: ${{ inputs.tag }}
-    - name: Exit if tag does not exist
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ inputs.tag }}
       run: |
-        if [[ "${{ steps.check-tag.outputs.exists }}" == "false" ]]; then
-          echo "Tag ${{ inputs.tag }} does not exist"
+        if ! gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" >/dev/null 2>&1; then
+          echo "Tag $TAG does not exist"
           exit 1
         fi
 
-  publish-ppa:
+  resolve-series:
     needs: check
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+    steps:
+    - name: Resolve Ubuntu series
+      id: resolve
+      env:
+        INPUT_SERIES: ${{ inputs.series }}
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y distro-info distro-info-data
+
+        if [[ "$INPUT_SERIES" == *","* ]]; then
+          echo "Use space-separated series, for example: jammy noble" >&2
+          exit 1
+        fi
+
+        series=()
+        if [[ -z "${INPUT_SERIES// }" ]]; then
+          while IFS= read -r item; do
+            [[ -n "$item" ]] && series+=("$item")
+          done < <(ubuntu-distro-info --supported)
+        else
+          read -r -a series <<< "$INPUT_SERIES"
+        fi
+
+        if [[ "${#series[@]}" -eq 0 ]]; then
+          echo "No Ubuntu series resolved" >&2
+          exit 1
+        fi
+
+        for item in "${series[@]}"; do
+          ubuntu-distro-info --series "$item" >/dev/null
+        done
+
+        matrix="$(printf '%s\n' "${series[@]}" | jq -R . | jq -s -c '{series: .}')"
+        echo "Resolved matrix: $matrix"
+        echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  publish-ppa:
+    needs: [check, resolve-series]
+    name: publish-ppa (${{ matrix.series }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve-series.outputs.matrix) }}
     steps:
     - uses: pnpm/action-setup@v5
       with:
@@ -94,10 +132,8 @@ jobs:
         gpg_passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
         tarball: publish-ppa/globalprotect-openconnect-*.tar.gz
         debian_dir: publish-ppa/globalprotect-openconnect-*/.build/debian
-        deb_email: "k3vinyue@gmail.com"
-        deb_fullname: "Kevin Yue"
+        deb_email: ${{ vars.DEB_EMAIL }}
+        deb_fullname: ${{ vars.DEB_FULLNAME }}
         extra_ppa: "yuezk/globalprotect-openconnect"
-        # Ubuntu 18.04 and 20.04 are excluded because tauri2 no longer supports them
-        excluded_series: "bionic focal ${{ inputs.excluded_series }}"
-        series: ${{ inputs.series }}
+        series: ${{ matrix.series }}
         revision: ${{ inputs.revision }}
