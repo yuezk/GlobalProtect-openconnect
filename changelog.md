@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.3 - 2026-05-08
+
+- Fix systemd-resolved DNS routing when no split-DNS domains are provided (fix [#604](https://github.com/yuezk/GlobalProtect-openconnect/issues/604)).
+- Log whether systemd-resolved uses server-provided split DNS or global VPN DNS.
+
 ## 2.5.2 - 2026-05-06
 
 - Experimental: GUI/CLI add session expiry warnings and support automatic session extension when allowed by the portal.
