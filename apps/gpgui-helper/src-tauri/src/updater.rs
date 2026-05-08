@@ -15,6 +15,12 @@ const SNAPSHOT: &str = match option_env!("SNAPSHOT") {
   None => "false",
 };
 
+#[cfg(target_env = "musl")]
+const GUI_LIBC_SUFFIX: &str = "-musl";
+
+#[cfg(not(target_env = "musl"))]
+const GUI_LIBC_SUFFIX: &str = "";
+
 pub struct ProgressNotifier {
   win: WebviewWindow,
 }
@@ -110,8 +116,8 @@ impl GuiUpdater {
     };
 
     let file_url = format!(
-      "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{}/gpgui_{}.bin.tar.xz",
-      release_tag, arch
+      "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{}/gpgui_{}{}.bin.tar.xz",
+      release_tag, arch, GUI_LIBC_SUFFIX
     );
     let checksum_url = format!("{}.sha256", file_url);
 

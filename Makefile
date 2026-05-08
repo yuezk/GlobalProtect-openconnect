@@ -7,6 +7,7 @@ RUST_VERSION ?= 1.89
 IGNORE_RUST_VERSION ?= 0
 
 VERSION = $(shell grep '^version' Cargo.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')
+GUI_LIBC_SUFFIX ?= $(shell ldd --version 2>&1 | grep -qi musl && echo -musl || true)
 REVISION ?= 1
 RPM_SOURCE ?= %{name}.tar.gz
 
@@ -77,8 +78,8 @@ download-gui:
 	if [ $(INCLUDE_GUI) -eq 1 ]; then \
 		echo "Downloading GlobalProtect GUI..."; \
 		mkdir -p .build/gpgui; \
-		curl -sSL https://github.com/yuezk/GlobalProtect-openconnect/releases/download/$(RELEASE_TAG)/gpgui_$(shell uname -m).bin.tar.xz \
-			-o .build/gpgui/gpgui_$(shell uname -m).bin.tar.xz; \
+		curl -sSL https://github.com/yuezk/GlobalProtect-openconnect/releases/download/$(RELEASE_TAG)/gpgui_$(shell uname -m)$(GUI_LIBC_SUFFIX).bin.tar.xz \
+			-o .build/gpgui/gpgui_$(shell uname -m)$(GUI_LIBC_SUFFIX).bin.tar.xz; \
 		tar -xJf .build/gpgui/*.tar.xz -C .build/gpgui; \
 	else \
 		echo "Skipping GlobalProtect GUI download (INCLUDE_GUI=0)"; \

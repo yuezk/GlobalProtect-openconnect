@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.4 - 2026-05-08
+
+- Add Alpine/musl gpgui release assets for x86_64 and aarch64.
+- Use the musl gpgui asset when the helper or package build runs on musl Linux.
+
 ## 2.5.3 - 2026-05-08
 
 - Fix systemd-resolved DNS routing when no split-DNS domains are provided (fix [#604](https://github.com/yuezk/GlobalProtect-openconnect/issues/604)).

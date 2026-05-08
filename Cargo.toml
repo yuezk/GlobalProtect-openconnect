@@ -11,7 +11,7 @@ members = [
 
 [workspace.package]
 rust-version = "1.89"
-version = "2.5.3"
+version = "2.5.4"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
 edition = "2024"
