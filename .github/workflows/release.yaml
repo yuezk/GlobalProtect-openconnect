@@ -151,12 +151,23 @@ jobs:
       uses: actions/download-artifact@v8
       with:
         path: gh-release
+    - name: Rename APK artifacts
+      run: |
+        shopt -s nullglob
+
+        for file in gh-release/artifact-ubuntu-latest-apk/*.apk; do
+          mv "$file" "${file%.apk}-x86_64.apk"
+        done
+        for file in gh-release/artifact-ubuntu-24.04-arm-apk/*.apk; do
+          mv "$file" "${file%.apk}-aarch64.apk"
+        done
     - name: Update release
       uses: softprops/action-gh-release@v1
       with:
         token: ${{ secrets.GH_PAT }}
         prerelease: ${{ contains(github.ref, 'snapshot') }}
         fail_on_unmatched_files: true
+        overwrite_files: true
         tag_name: ${{ inputs.tag }}
         files: |
           gh-release/artifact-*/*
