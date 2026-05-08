@@ -135,6 +135,7 @@ jobs:
     - setup-matrix
     - tarball
     strategy:
+      fail-fast: false
       matrix:
         os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
         package: [deb, rpm, pkg, apk, binary, ubuntu-rolling]
