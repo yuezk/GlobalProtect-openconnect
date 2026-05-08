@@ -194,7 +194,7 @@ jobs:
             builder: gpgui-alpine-builder-tauri2
             artifact_suffix: "-musl"
     runs-on: ${{ matrix.os.runner }}
-    name: ${{ matrix.libc.name == 'glibc' && format('build-gpgui ({0})', matrix.os.arch) || format('build-gpgui-musl ({0})', matrix.os.arch) }}
+    name: build-gpgui (${{ matrix.libc.name }}, ${{ matrix.os.arch }})
     steps:
     - uses: pnpm/action-setup@v5
       with:
