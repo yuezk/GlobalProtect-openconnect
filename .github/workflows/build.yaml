@@ -183,6 +183,7 @@ jobs:
     needs:
     - setup-matrix
     strategy:
+      fail-fast: false
       matrix:
         os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
     runs-on: ${{ matrix.os.runner }}
@@ -240,6 +241,7 @@ jobs:
     needs:
     - setup-matrix
     strategy:
+      fail-fast: false
       matrix:
         os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
     runs-on: ${{ matrix.os.runner }}
