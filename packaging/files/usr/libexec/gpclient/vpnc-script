@@ -93,6 +93,18 @@ OS="`uname -s`"
 
 HOOKS_DIR=/etc/vpnc
 
+log_info() {
+	case "${LOG_LEVEL:-0}" in
+		''|*[!0-9]*)
+			return
+			;;
+	esac
+
+	if [ "$LOG_LEVEL" -ge 1 ]; then
+		echo "$SCRIPTNAME: $*" 1>&2
+	fi
+}
+
 # Use the PID of the controlling process (vpnc or OpenConnect) to
 # uniquely identify this VPN connection. Normally, the parent process
 # is a shell, and the grandparent's PID is the relevant one.
@@ -891,6 +903,12 @@ modify_resolved_manager() {
 	local if_index split_dns_list
 	if_index=$(get_if_index $TUNDEV)
 	split_dns_list=$(echo $CISCO_SPLIT_DNS | tr ',' ' ')
+	if [ -z "$split_dns_list" ]; then
+		split_dns_list='~.'
+		log_info "no split DNS domains provided; using VPN DNS as the default DNS route"
+	else
+		log_info "using server-provided split DNS domains"
+	fi
 	resolvectl_set_nameservers $if_index $INTERNAL_IP4_DNS
 	if [ -n "$CISCO_DEF_DOMAIN" ] || [ -n "$split_dns_list" ]; then
 		resolvectl_set_search $if_index $CISCO_DEF_DOMAIN $split_dns_list
