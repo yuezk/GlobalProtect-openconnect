@@ -35,7 +35,7 @@
 
         src = pkgs.fetchzip {
           url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/globalprotect-openconnect-${version}.tar.gz";
-          hash = "sha256-MUkZSXaIFJJK8wD1jI8wk79TkB6tGa1bwBKdGhjQ/p4=";
+          hash = "sha256-KgmWKp04jXsQuptXbxAdRP92Bgn46cm8+PboJ+lRc20=";
         };
 
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
@@ -43,8 +43,8 @@
         gpgui = pkgs.fetchzip {
           url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/gpgui_${cpu}.bin.tar.xz";
           hash = {
-            x86_64 = "sha256-t21j1bPq8QrQh7tN6epCk9VASGKrdHBB7vMXsHK2Pqk=";
-            aarch64 = "sha256-jA8Zpev56iNJrbxYM1t1zRor+lX4kHxuSrzuwntWlwA=";
+            x86_64 = "sha256-hBiEreTOqfCudXNM4FZnQEdUT3mHenTodqGONx03YUA=";
+            aarch64 = "sha256-9gLCRE0gA0PxX4yKoV51aiJa31VuAGiHck429iMY7rA=";
           }.${cpu};
         };
       in
