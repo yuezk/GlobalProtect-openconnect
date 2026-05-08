@@ -20,6 +20,7 @@ A modern GlobalProtect VPN client for Linux, built on OpenConnect with full supp
   - [Fedora 38+ / Rawhide](#fedora-38--rawhide)
   - [openSUSE Leap 15.6+ / Tumbleweed](#opensuse-leap-156--tumbleweed)
   - [Other RPM-based Distributions](#other-rpm-based-distributions)
+  - [Alpine Linux](#alpine-linux)
   - [Gentoo](#gentoo)
   - [NixOS](#nixos)
   - [Other Distributions](#other-distributions)
@@ -185,6 +186,16 @@ Download the latest RPM package from the [releases](https://github.com/yuezk/Glo
 ```bash
 sudo rpm -i globalprotect-openconnect-*.rpm
 ```
+
+### Alpine Linux
+
+Download the latest `.apk` package from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page, then install:
+
+```bash
+sudo apk add --allow-untrusted globalprotect-openconnect-*.apk
+```
+
+The package uses Alpine's native musl build. Make sure the `community` repository is enabled so GUI dependencies such as `webkit2gtk-4.1`, `libsecret`, and `libayatana-appindicator` can be resolved. GUI-launched connections use polkit, and VPN tunnel creation requires `/dev/net/tun`.
 
 ### Gentoo
 

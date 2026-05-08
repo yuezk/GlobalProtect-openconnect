@@ -30,6 +30,11 @@ on:
         description: 'Build PKG package'
         required: true
         default: true
+      release-apk:
+        type: boolean
+        description: 'Build APK package'
+        required: true
+        default: true
       release-binary:
         type: boolean
         description: 'Build binary package'

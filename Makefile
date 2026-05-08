@@ -270,6 +270,26 @@ init-pkgbuild: clean-pkgbuild tarball
 pkgbuild: init-pkgbuild
 	cd .build/pkgbuild && makepkg -s --noconfirm
 
+clean-apk:
+	rm -rf .build/apk
+
+init-apk: clean-apk tarball
+	mkdir -p .build/apk
+
+	cp .build/tarball/${PKG}.tar.gz .build/apk
+	cp packaging/apk/APKBUILD.in .build/apk/APKBUILD
+
+	sed -i "s/@PKG_NAME@/$(PKG_NAME)/g" .build/apk/APKBUILD
+	sed -i "s/@VERSION@/$(VERSION)/g" .build/apk/APKBUILD
+	sed -i "s/@REVISION@/$(REVISION)/g" .build/apk/APKBUILD
+	checksum=$$(sha512sum .build/apk/${PKG}.tar.gz | cut -d' ' -f1); \
+		sed -i "s/@SHA512@/$$checksum/g" .build/apk/APKBUILD
+
+apk: init-apk
+	cd .build/apk && abuild -r -P "$(CURDIR)/.build/apk/packages"
+
+	find .build/apk/packages -type f -name "$(PKG_NAME)-*.apk" -exec cp {} .build/apk \;
+
 clean-binary:
 	rm -rf .build/binary
 

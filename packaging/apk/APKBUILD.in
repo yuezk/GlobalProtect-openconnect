@@ -1,0 +1,74 @@
+# Maintainer: Kevin Yue <k3vinyue@gmail.com>
+
+pkgname=@PKG_NAME@
+pkgver=@VERSION@
+pkgrel=@REVISION@
+pkgdesc="A GUI client for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method."
+url="https://github.com/yuezk/GlobalProtect-openconnect"
+arch="x86_64 aarch64"
+license="GPL-3.0-only"
+depends="
+	gmp
+	gnutls
+	libayatana-appindicator
+	libsecret
+	libxml2
+	lz4
+	nettle
+	openssl
+	p11-kit
+	polkit
+	webkit2gtk-4.1
+	xdg-utils
+	zlib
+	"
+makedepends="
+	autoconf
+	automake
+	cargo
+	file
+	gettext-dev
+	gmp-dev
+	gnutls-dev
+	gtk+3.0-dev
+	libayatana-appindicator-dev
+	libsecret-dev
+	librsvg-dev
+	libtool
+	libxml2-dev
+	lz4-dev
+	make
+	nettle-dev
+	openssl-dev
+	p11-kit-dev
+	patch
+	pkgconf
+	zlib-dev
+	"
+source="$pkgname-$pkgver.tar.gz"
+builddir="$srcdir/$pkgname-$pkgver"
+options="!check"
+
+build() {
+	cd "$builddir"
+
+	unset CFLAGS
+	unset RUSTFLAGS
+
+	make build \
+		INCLUDE_GUI="${INCLUDE_GUI:-0}" \
+		BUILD_GUI_HELPER="${BUILD_GUI_HELPER:-1}" \
+		LIBXML2_STATIC="${LIBXML2_STATIC:-1}"
+}
+
+package() {
+	cd "$builddir"
+
+	make install \
+		DESTDIR="$pkgdir" \
+		BUILD_GUI_HELPER="${BUILD_GUI_HELPER:-1}"
+}
+
+sha512sums="
+@SHA512@  $pkgname-$pkgver.tar.gz
+"
