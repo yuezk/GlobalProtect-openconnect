@@ -29,7 +29,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Include arm64 for tagged releases and manual snapshot releases.
   setup-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -38,12 +37,7 @@ jobs:
       - name: Set up matrix
         id: set-matrix
         run: |
-          # Set the matrix to include arm64 for tagged releases and manual snapshot releases.
-          if [[ "${{ github.ref }}" == "refs/tags/"* || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "ubuntu-24.04-arm", "arch": "ubuntu-24.04-arm"}]' >> $GITHUB_OUTPUT
-          else
-            echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}]' >> $GITHUB_OUTPUT
-          fi
+          echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "ubuntu-24.04-arm", "arch": "ubuntu-24.04-arm"}]' >> $GITHUB_OUTPUT
 
   tarball:
     runs-on: ubuntu-latest
