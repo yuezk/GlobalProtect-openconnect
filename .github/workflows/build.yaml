@@ -186,8 +186,15 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
+        libc:
+          - name: glibc
+            builder: gpgui-builder-tauri2
+            artifact_suffix: ""
+          - name: musl
+            builder: gpgui-alpine-builder-tauri2
+            artifact_suffix: "-musl"
     runs-on: ${{ matrix.os.runner }}
-    name: build-gpgui (${{ matrix.os.arch }})
+    name: build-gpgui (${{ matrix.libc.name }}, ${{ matrix.os.arch }})
     steps:
     - uses: pnpm/action-setup@v5
       with:
@@ -219,77 +226,19 @@ jobs:
       run: |
         docker run --pull=always --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
-          -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:gpgui-builder-tauri2
+          -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:${{ matrix.libc.builder }}
     - name: Install gpgui in Docker
       run: |
         cd gpgui-source
         tar -xJf *.bin.tar.xz
         docker run --pull=always --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
-          -v $(pwd):/workspace yuezk/gpdev:gpgui-builder-tauri2 \
+          -v $(pwd):/workspace yuezk/gpdev:${{ matrix.libc.builder }} \
           bash -c "cd /workspace/gpgui_*/ && ./gpgui --version"
     - name: Upload gpgui
       uses: actions/upload-artifact@v7
       with:
-        name: artifact-gpgui-${{ matrix.os.arch }}
-        if-no-files-found: error
-        path: |
-          gpgui-source/*.bin.tar.xz
-          gpgui-source/*.bin.tar.xz.sha256
-
-  build-gpgui-musl:
-    needs:
-    - setup-matrix
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
-    runs-on: ${{ matrix.os.runner }}
-    name: build-gpgui-musl (${{ matrix.os.arch }})
-    steps:
-    - uses: pnpm/action-setup@v5
-      with:
-        version: 9
-    - name: Prepare workspace
-      run: rm -rf gpgui-source && mkdir gpgui-source
-    - name: Checkout GlobalProtect-openconnect
-      uses: actions/checkout@v6
-      with:
-        token: ${{ secrets.GH_PAT }}
-        repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
-        path: gpgui-source/gp
-        submodules: recursive
-    - name: Checkout gpgui
-      uses: actions/checkout@v6
-      with:
-        token: ${{ secrets.GH_PAT }}
-        repository: yuezk/gpgui
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
-        path: gpgui-source/gpgui
-    - name: Tarball
-      run: |
-        cd gpgui-source
-        tar -czf gpgui.tar.gz gpgui gp
-    - name: Docker Login
-      run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
-    - name: Build gpgui in Docker
-      run: |
-        docker run --pull=always --rm \
-          -e COREPACK_INTEGRITY_KEYS=0 \
-          -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:gpgui-alpine-builder-tauri2
-    - name: Install gpgui in Docker
-      run: |
-        cd gpgui-source
-        tar -xJf *.bin.tar.xz
-        docker run --pull=always --rm \
-          -e COREPACK_INTEGRITY_KEYS=0 \
-          -v $(pwd):/workspace yuezk/gpdev:gpgui-alpine-builder-tauri2 \
-          bash -c "cd /workspace/gpgui_*/ && ./gpgui --version"
-    - name: Upload gpgui
-      uses: actions/upload-artifact@v7
-      with:
-        name: artifact-gpgui-musl-${{ matrix.os.arch }}
+        name: artifact-gpgui${{ matrix.libc.artifact_suffix }}-${{ matrix.os.arch }}
         if-no-files-found: error
         path: |
           gpgui-source/*.bin.tar.xz
@@ -303,7 +252,6 @@ jobs:
       - tarball-offline
       - build-gp
       - build-gpgui
-      - build-gpgui-musl
 
     steps:
     - name: Prepare workspace
