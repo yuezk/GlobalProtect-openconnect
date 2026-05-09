@@ -23,6 +23,7 @@ A modern GlobalProtect VPN client for Linux, built on OpenConnect with full supp
   - [Alpine Linux](#alpine-linux)
   - [Gentoo](#gentoo)
   - [NixOS](#nixos)
+  - [Official Docker Image](#official-docker-image)
   - [Other Distributions](#other-distributions)
 - [Building from Source](#building-from-source)
 - [Frequently Asked Questions](#frequently-asked-questions)
@@ -197,26 +198,6 @@ sudo apk add --allow-untrusted globalprotect-openconnect-*.apk
 
 The package uses Alpine's native musl build. Make sure the `community` repository is enabled so GUI dependencies such as `webkit2gtk-4.1`, `libsecret`, and `libayatana-appindicator` can be resolved. GUI-launched connections use polkit, and VPN tunnel creation requires `/dev/net/tun`.
 
-#### Minimal CLI Docker Image
-
-For a container that only needs `gpclient`, build the Alpine CLI image from source:
-
-```bash
-git clone https://github.com/yuezk/GlobalProtect-openconnect.git
-cd GlobalProtect-openconnect
-git submodule update --init --recursive
-docker build -f packaging/docker/cli-alpine/Dockerfile -t gpclient-alpine .
-```
-
-Run it with access to the TUN device:
-
-```bash
-docker run --rm -it --cap-add=NET_ADMIN --device=/dev/net/tun gpclient-alpine \
-  connect <portal> --cookie-on-stdin
-```
-
-The image uses `BUILD_GUI_HELPER=0` and `INCLUDE_GUI=0`, so it does not build or install `gpgui-helper` or `gpgui`.
-
 ### Gentoo
 
 Available via the `guru` and `lamdness` overlays:
@@ -281,6 +262,36 @@ If you want it managed as part of your NixOS system configuration, use the steps
     ```bash
     sudo nixos-rebuild switch
     ```
+
+### Official Docker Image
+
+The official Docker image provides the CLI tools on Alpine Linux:
+
+```bash
+docker pull yuezk/globalprotect-openconnect:<version>
+```
+
+Release images are tagged as `vX.Y.Z`, `X.Y.Z`, and `latest`.
+
+Run it with access to the TUN device:
+
+```bash
+docker run --rm -it --cap-add=NET_ADMIN --device=/dev/net/tun \
+  yuezk/globalprotect-openconnect:<version> \
+  connect <portal> --cookie-on-stdin
+```
+
+For browser authentication in a headless environment, pipe `gpauth` remote-browser output into `gpclient`:
+
+```bash
+docker run --rm -it --entrypoint gpauth yuezk/globalprotect-openconnect:<version> \
+  <portal> --browser remote 2>/dev/null \
+  | docker run --rm -i --cap-add=NET_ADMIN --device=/dev/net/tun \
+      yuezk/globalprotect-openconnect:<version> \
+      connect <portal> --cookie-on-stdin
+```
+
+The image includes `gpclient` and `gpauth` only. It does not include embedded webview authentication, `gpgui-helper`, or `gpgui`.
 
 ### Other Distributions
 

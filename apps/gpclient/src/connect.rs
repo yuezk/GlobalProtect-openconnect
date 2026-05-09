@@ -15,7 +15,7 @@ use gpapi::{
   error::PortalError,
   gateway::{GatewayLogin, SessionExtensionAuth, gateway_login},
   gp_params::{ClientOs, GpParams},
-  portal::{Prelogin, SamlPrelogin, StandardPrelogin, prelogin, retrieve_config},
+  portal::{Prelogin, StandardPrelogin, prelogin, retrieve_config},
   process::{
     auth_launcher::SamlAuthLauncher,
     users::{get_non_root_user, get_user_by_name},
@@ -154,7 +154,6 @@ pub(crate) struct ConnectArgs {
   #[arg(long, help = "Deprecated: Use the `--browser` option instead")]
   default_browser: bool,
 
-  #[cfg(feature = "webview-auth")]
   #[arg(
     long,
     help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`.\nOr the path to the browser executable.\nUse 'remote' for headless servers.",
@@ -184,36 +183,6 @@ impl ConnectArgs {
       Os::Windows => host_utils::get_windows_os_string(),
       Os::Mac => host_utils::get_macos_os_string(),
     }
-  }
-
-  fn saml_auth_browser<'a>(&'a self, prelogin: &SamlPrelogin) -> anyhow::Result<Option<&'a str>> {
-    if prelogin.support_default_browser() {
-      return Ok(self.default_browser_saml_auth_browser());
-    }
-
-    self.embedded_saml_auth_browser()
-  }
-
-  #[cfg(feature = "webview-auth")]
-  fn default_browser_saml_auth_browser(&self) -> Option<&str> {
-    self.browser.as_deref()
-  }
-
-  #[cfg(not(feature = "webview-auth"))]
-  fn default_browser_saml_auth_browser(&self) -> Option<&str> {
-    None
-  }
-
-  #[cfg(feature = "webview-auth")]
-  fn embedded_saml_auth_browser(&self) -> anyhow::Result<Option<&str>> {
-    Ok(None)
-  }
-
-  #[cfg(not(feature = "webview-auth"))]
-  fn embedded_saml_auth_browser(&self) -> anyhow::Result<Option<&str>> {
-    bail!(
-      "The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature"
-    );
   }
 }
 
@@ -569,7 +538,15 @@ impl<'a> ConnectHandler<'a> {
 
     match prelogin {
       Prelogin::Saml(prelogin) => {
-        let browser = self.args.saml_auth_browser(prelogin)?;
+        let browser = if prelogin.support_default_browser() {
+          self.args.browser.as_deref()
+        } else if !cfg!(feature = "webview-auth") {
+          bail!(
+            "The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature"
+          );
+        } else {
+          None
+        };
         let os_version = self.args.os_version();
         let verbose = self.shared_args.verbose.to_verbose_arg();
         let user_agent = self.user_agent();

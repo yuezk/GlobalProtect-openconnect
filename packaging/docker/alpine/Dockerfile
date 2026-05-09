@@ -35,6 +35,7 @@ RUN make build \
     LIBXML2_STATIC=1
 
 RUN install -Dm755 target/release/gpclient /out/usr/bin/gpclient \
+    && install -Dm755 target/release/gpauth /out/usr/bin/gpauth \
     && install -Dm755 packaging/files/usr/libexec/gpclient/vpnc-script /out/usr/libexec/gpclient/vpnc-script \
     && install -Dm755 packaging/files/usr/libexec/gpclient/hipreport.sh /out/usr/libexec/gpclient/hipreport.sh
 
