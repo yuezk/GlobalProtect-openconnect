@@ -197,6 +197,26 @@ sudo apk add --allow-untrusted globalprotect-openconnect-*.apk
 
 The package uses Alpine's native musl build. Make sure the `community` repository is enabled so GUI dependencies such as `webkit2gtk-4.1`, `libsecret`, and `libayatana-appindicator` can be resolved. GUI-launched connections use polkit, and VPN tunnel creation requires `/dev/net/tun`.
 
+#### Minimal CLI Docker Image
+
+For a container that only needs `gpclient`, build the Alpine CLI image from source:
+
+```bash
+git clone https://github.com/yuezk/GlobalProtect-openconnect.git
+cd GlobalProtect-openconnect
+git submodule update --init --recursive
+docker build -f packaging/docker/cli-alpine/Dockerfile -t gpclient-alpine .
+```
+
+Run it with access to the TUN device:
+
+```bash
+docker run --rm -it --cap-add=NET_ADMIN --device=/dev/net/tun gpclient-alpine \
+  connect <portal> --cookie-on-stdin
+```
+
+The image uses `BUILD_GUI_HELPER=0` and `INCLUDE_GUI=0`, so it does not build or install `gpgui-helper` or `gpgui`.
+
 ### Gentoo
 
 Available via the `guru` and `lamdness` overlays:
@@ -318,7 +338,7 @@ This project includes a DevContainer configuration that provides a consistent, r
      --tty -v "$(pwd)":/workspace -w /workspace gpoc-devcontainer \
      bash -c "export PATH=/usr/local/cargo/bin:\$PATH && make build"
    ```
-   To build without the GUI helper run the same command as above, but with `BUILD_GUI=0` passed as an argument to `make`.
+   To build without the GUI helper run the same command as above, but with `BUILD_GUI_HELPER=0` passed as an argument to `make`.
 
 5. **Locate build artifacts:**
 

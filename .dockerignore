@@ -1,0 +1,6 @@
+.build
+.git
+.vendor
+apps/gpgui-helper/node_modules
+target
+vendor.tar.xz

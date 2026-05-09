@@ -540,7 +540,15 @@ impl<'a> ConnectHandler<'a> {
     match prelogin {
       Prelogin::Saml(prelogin) => {
         let browser = if prelogin.support_default_browser() {
-          self.args.browser.as_deref()
+          #[cfg(feature = "webview-auth")]
+          {
+            self.args.browser.as_deref()
+          }
+
+          #[cfg(not(feature = "webview-auth"))]
+          {
+            None
+          }
         } else if !cfg!(feature = "webview-auth") {
           bail!(
             "The server does not support authentication via the default browser and the gpclient is not built with the `webview-auth` feature"
