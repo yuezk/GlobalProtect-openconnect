@@ -197,6 +197,7 @@ jobs:
       run: |
         docker run --rm "$IMAGE@$DIGEST" --help
         docker run --rm --entrypoint gpauth "$IMAGE@$DIGEST" --help
+        docker run --rm --entrypoint sh "$IMAGE@$DIGEST" -lc 'test "$(id -u gp)" = "1000" && test "$SUDO_UID" = "1000"'
     - name: Export digest
       run: |
         mkdir -p /tmp/digests

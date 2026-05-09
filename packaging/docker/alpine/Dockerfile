@@ -42,6 +42,9 @@ RUN install -Dm755 target/release/gpclient /out/usr/bin/gpclient \
 
 FROM alpine:${ALPINE_VERSION}
 
+ENV SUDO_UID=1000 \
+    HOME=/root
+
 RUN apk add --no-cache \
     ca-certificates \
     gmp \
@@ -55,6 +58,8 @@ RUN apk add --no-cache \
     openssl \
     p11-kit \
     zlib \
+    && addgroup -g 1000 gp \
+    && adduser -D -u 1000 -G gp gp \
     && update-ca-certificates
 
 COPY --from=builder /out/ /

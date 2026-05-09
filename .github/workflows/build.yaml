@@ -223,6 +223,7 @@ jobs:
       run: |
         docker run --rm "$IMAGE@$DIGEST" --help
         docker run --rm --entrypoint gpauth "$IMAGE@$DIGEST" --help
+        docker run --rm --entrypoint sh "$IMAGE@$DIGEST" -lc 'test "$(id -u gp)" = "1000" && test "$SUDO_UID" = "1000"'
     - name: Export digest
       run: |
         mkdir -p /tmp/digests
@@ -328,6 +329,17 @@ jobs:
       uses: actions/download-artifact@v8
       with:
         path: gh-release/gp/.build/artifacts
+
+    - name: Rename APK artifacts
+      run: |
+        shopt -s nullglob
+
+        for file in gh-release/gp/.build/artifacts/artifact-gp-apk-amd64/*.apk; do
+          mv "$file" "${file%.apk}-x86_64.apk"
+        done
+        for file in gh-release/gp/.build/artifacts/artifact-gp-apk-ubuntu-24.04-arm/*.apk; do
+          mv "$file" "${file%.apk}-aarch64.apk"
+        done
 
     - name: Create GH release
       env:

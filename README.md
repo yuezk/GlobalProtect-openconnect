@@ -281,7 +281,25 @@ docker run --rm -it --cap-add=NET_ADMIN --device=/dev/net/tun \
   connect <portal> --cookie-on-stdin
 ```
 
-For browser authentication in a headless environment, pipe `gpauth` remote-browser output into `gpclient`:
+For browser authentication in a headless environment, use remote browser authentication:
+
+```bash
+docker run --rm -it --cap-add=NET_ADMIN --device=/dev/net/tun \
+  yuezk/globalprotect-openconnect:<version> \
+  connect <portal> --browser remote
+```
+
+On a Linux host, add host networking if the VPN routes should affect the host network namespace:
+
+```bash
+docker run --rm -it --network host --cap-add=NET_ADMIN --device=/dev/net/tun \
+  yuezk/globalprotect-openconnect:<version> \
+  connect <portal> --browser remote
+```
+
+Without `--network host`, the VPN connection stays inside the container's network namespace. Docker Desktop on macOS and Windows does not make the host use the VPN through `--network host`; run `gpclient` on the host or use a container gateway setup for host traffic.
+
+Alternatively, pipe `gpauth` remote-browser output into `gpclient`:
 
 ```bash
 docker run --rm -it --entrypoint gpauth yuezk/globalprotect-openconnect:<version> \
