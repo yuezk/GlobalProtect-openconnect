@@ -48,8 +48,9 @@ RUN apk add --no-cache \
     gnutls \
     iproute2 \
     iputils \
+    libgcc \
     libxml2 \
-    lz4 \
+    lz4-libs \
     nettle \
     openssl \
     p11-kit \
