@@ -79,13 +79,24 @@ jobs:
     needs: [check, resolve-series]
     name: publish-ppa (${{ matrix.series }})
     runs-on: ubuntu-latest
+    container:
+      image: ubuntu:${{ matrix.series }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.resolve-series.outputs.matrix) }}
     steps:
-    - uses: pnpm/action-setup@v5
-      with:
-        version: 9
+    - name: Install container tools
+      run: |
+        apt-get update
+        apt-get install -y ca-certificates curl gpg sudo
+        mkdir -p /etc/apt/keyrings
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+          | gpg --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+        chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+          > /etc/apt/sources.list.d/github-cli.list
+        apt-get update
+        apt-get install -y gh
     - name: Prepare workspace
       run: rm -rf publish-ppa && mkdir publish-ppa
     - name: Download ${{ inputs.tag }} offline source code

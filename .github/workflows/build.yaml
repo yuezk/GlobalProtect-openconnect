@@ -179,6 +179,63 @@ jobs:
         path: |
           build-gp-${{ matrix.package }}/artifacts/*
 
+  build-docker-image:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - name: Prepare
+      run: |
+        platform=${{ matrix.platform }}
+        echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
+    - name: Checkout GlobalProtect-openconnect
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        submodules: recursive
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+    - name: Login to Docker Hub
+      uses: docker/login-action@v4
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+    - name: Build and push by digest
+      id: build
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: packaging/docker/alpine/Dockerfile
+        platforms: ${{ matrix.platform }}
+        outputs: type=image,name=yuezk/globalprotect-openconnect,push-by-digest=true,name-canonical=true,push=true
+    - name: Verify CLI tools
+      env:
+        IMAGE: yuezk/globalprotect-openconnect
+        DIGEST: ${{ steps.build.outputs.digest }}
+      run: |
+        docker run --rm "$IMAGE@$DIGEST" --help
+        docker run --rm --entrypoint gpauth "$IMAGE@$DIGEST" --help
+    - name: Export digest
+      run: |
+        mkdir -p /tmp/digests
+        digest="${{ steps.build.outputs.digest }}"
+        touch "/tmp/digests/${digest#sha256:}"
+    - name: Upload digest
+      uses: actions/upload-artifact@v7
+      with:
+        name: digests-${{ env.PLATFORM_PAIR }}
+        path: /tmp/digests/*
+        if-no-files-found: error
+        retention-days: 1
+
   build-gpgui:
     needs:
     - setup-matrix
@@ -251,6 +308,7 @@ jobs:
       - tarball
       - tarball-offline
       - build-gp
+      - build-docker-image
       - build-gpgui
 
     steps:
@@ -277,3 +335,33 @@ jobs:
         RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && 'snapshot' || github.ref_name }}
       run: |
         cd gh-release/gp/scripts && ./gh-release.sh "$RELEASE_TAG"
+
+  publish-docker-image:
+    needs:
+      - build-docker-image
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download digests
+      uses: actions/download-artifact@v8
+      with:
+        path: /tmp/digests
+        pattern: digests-*
+        merge-multiple: true
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+    - name: Login to Docker Hub
+      uses: docker/login-action@v4
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+    - name: Publish Docker manifest
+      working-directory: /tmp/digests
+      env:
+        IMAGE: yuezk/globalprotect-openconnect
+        RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && 'snapshot' || github.ref_name }}
+      run: |
+        docker buildx imagetools create -t "$IMAGE:$RELEASE_TAG" \
+          $(printf "$IMAGE@sha256:%s " *)
+
+        docker buildx imagetools inspect "$IMAGE:$RELEASE_TAG"
