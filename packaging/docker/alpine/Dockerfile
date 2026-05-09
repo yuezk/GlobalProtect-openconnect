@@ -29,7 +29,8 @@ RUN apk add --no-cache \
 
 COPY . .
 
-RUN make build \
+RUN RUSTFLAGS="-C target-feature=-crt-static" \
+    make build \
     BUILD_GUI_HELPER=0 \
     INCLUDE_GUI=0 \
     LIBXML2_STATIC=1
