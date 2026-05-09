@@ -51,10 +51,10 @@ os_info = { version = "3", default-features = false }
 
 # Dependencies for Linux and other OSes only
 [target.'cfg(not(any(target_os="macos", target_os="windows")))'.dependencies]
-gtk = "0.18"
+gtk = { version = "0.18", optional = true }
 
 [features]
-tauri = ["dep:tauri"]
+tauri = ["dep:tauri", "dep:gtk"]
 clap = ["dep:clap", "dep:clap-verbosity-flag"]
 webview-auth = []
 logger = ["dep:env_logger", "dep:log-reload"]
