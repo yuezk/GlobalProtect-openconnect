@@ -36,6 +36,7 @@ machine-uid.workspace = true
 uuid = { workspace = true, features = ["v5"] }
 chrono.workspace = true
 humantime.workspace = true
+netdev.workspace = true
 
 # Optional dependencies for features
 tauri = { workspace = true, optional = true }

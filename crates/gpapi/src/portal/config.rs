@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::bail;
 use dns_lookup::lookup_addr;
 use log::{debug, info, warn};
@@ -13,6 +15,8 @@ use crate::{
   gp_params::GpParams,
   utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::ElementExt},
 };
+
+use super::csc;
 
 #[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -123,12 +127,8 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   let url = format!("{}/global-protect/getconfig.esp", portal);
   let client = Client::try_from(gp_params)?;
 
-  let mut params = cred.to_params();
-  let extra_params = gp_params.to_params();
-
-  params.extend(extra_params);
-  params.insert("server", &server);
-  params.insert("host", &server);
+  let swg_nonce = csc::swg_nonce();
+  let params = build_config_params(cred, gp_params, &server, &swg_nonce);
 
   info!("Retrieve the portal config, user_agent: {}", gp_params.user_agent());
 
@@ -157,6 +157,70 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   debug!("Portal config response: {}", res_xml);
   let root = Element::parse(res_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
 
+  if csc::is_config_criteria(&root) {
+    info!("Portal returned CSC criteria, retrieving CSC portal config");
+    let csc_xml = retrieve_csc_config(&client, &portal, &root, cred.username(), gp_params).await?;
+    debug!("Portal CSC config response: {}", csc_xml);
+    let root = Element::parse(csc_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
+    return parse_portal_config(&server, cred, root);
+  }
+
+  parse_portal_config(&server, cred, root)
+}
+
+fn build_config_params<'a>(
+  cred: &'a Credential,
+  gp_params: &'a GpParams,
+  server: &'a str,
+  swg_nonce: &'a str,
+) -> HashMap<&'a str, &'a str> {
+  let mut params = cred.to_params();
+  let extra_params = gp_params.to_params();
+
+  params.extend(extra_params);
+  params.insert("server", server);
+  params.insert("host", server);
+  params.insert("csc-digest", "");
+  params.insert("config-digest", "");
+  params.insert("csc-support", "yes");
+  params.insert("swg-auth-token", "0");
+  params.insert("swg-nonce", swg_nonce);
+
+  params
+}
+
+async fn retrieve_csc_config(
+  client: &Client,
+  portal: &str,
+  root: &Element,
+  username: &str,
+  gp_params: &GpParams,
+) -> anyhow::Result<String> {
+  let csc_req = csc::build_csc_request(root, username, gp_params)?;
+  let swg_nonce = csc::swg_nonce();
+  let params = csc::csc_params(&csc_req, username, gp_params, &swg_nonce);
+  let url = format!("{}/global-protect/getconfig_csc.esp", portal);
+
+  let res = client.post(&url).form(&params).send().await.map_err(|e| {
+    warn!("Network error: {:?}", e);
+    anyhow::anyhow!(PortalError::NetworkError(e))
+  })?;
+
+  parse_gp_response(res).await.or_else(|err| {
+    if err.status == StatusCode::NOT_FOUND {
+      bail!(PortalError::ConfigError("CSC config endpoint not found".to_string()));
+    }
+
+    if err.is_status_error() {
+      warn!("{err}");
+      bail!("Portal CSC config error: {}", err.reason);
+    }
+
+    Err(anyhow::anyhow!(PortalError::ConfigError(err.reason)))
+  })
+}
+
+fn parse_portal_config(server: &str, cred: &Credential, root: Element) -> anyhow::Result<PortalConfig> {
   let mut ihd_enabled = false;
   let mut prefer_internal = false;
   if let Some(ihd_node) = root.descendant("internal-host-detection") {
@@ -255,6 +319,20 @@ mod tests {
   }
 
   #[test]
+  fn getconfig_params_include_csc_support_fields() {
+    let cred = Credential::from(crate::credential::PasswordCredential::new("alice", "secret"));
+    let gp_params = GpParams::builder().build();
+    let params = build_config_params(&cred, &gp_params, "vpn.example.com", "123");
+
+    assert_eq!(params.get("csc-support"), Some(&"yes"));
+    assert_eq!(params.get("csc-digest"), Some(&""));
+    assert_eq!(params.get("config-digest"), Some(&""));
+    assert_eq!(params.get("swg-auth-token"), Some(&"0"));
+    assert_eq!(params.get("swg-nonce"), Some(&"123"));
+    assert_eq!(params.get("host"), Some(&"vpn.example.com"));
+  }
+
+  #[test]
   fn parses_allow_extend_session_yes() {
     let root = parse_xml("<response><allow-extend-session>yes</allow-extend-session></response>");
 
@@ -287,5 +365,31 @@ mod tests {
     let root = parse_xml("<policy><connect-method>on-demand</connect-method></policy>");
 
     assert_eq!(parse_connect_method(&root).as_deref(), Some("on-demand"));
+  }
+
+  #[test]
+  fn parses_csc_policy_response_as_portal_config() {
+    let root = parse_xml(
+      r#"<policy>
+        <portal-userauthcookie>user-cookie</portal-userauthcookie>
+        <portal-prelogonuserauthcookie>prelogon-cookie</portal-prelogonuserauthcookie>
+        <gateways>
+          <external>
+            <list>
+              <entry name="US_East">
+                <description>us1.vpn.example.com</description>
+              </entry>
+            </list>
+          </external>
+        </gateways>
+      </policy>"#,
+    );
+    let cred = Credential::from(crate::credential::PasswordCredential::new("alice", "secret"));
+
+    let config = parse_portal_config("vpn.example.com", &cred, root).unwrap();
+
+    assert_eq!(config.auth_cookie().user_auth_cookie(), "user-cookie");
+    assert_eq!(config.auth_cookie().prelogon_user_auth_cookie(), "prelogon-cookie");
+    assert_eq!(config.gateways().len(), 1);
   }
 }

@@ -1702,6 +1702,7 @@ dependencies = [
  "log-reload",
  "machine-uid",
  "md5",
+ "netdev",
  "openssl",
  "os_info",
  "pem",
