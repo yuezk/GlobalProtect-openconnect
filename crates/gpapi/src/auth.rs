@@ -122,6 +122,10 @@ impl SamlAuthData {
     self.prelogin_cookie.as_deref()
   }
 
+  pub fn portal_userauthcookie(&self) -> Option<&str> {
+    self.portal_userauthcookie.as_deref()
+  }
+
   pub fn token(&self) -> Option<&str> {
     self.token.as_deref()
   }
@@ -160,11 +164,12 @@ mod tests {
 
   #[test]
   fn auth_data_from_gpcallback_non_cas() {
-    let auth_data = "PGh0bWw+PCEtLSA8c2FtbC1hdXRoLXN0YXR1cz4xPC9zYW1sLWF1dGgtc3RhdHVzPjxwcmVsb2dpbi1jb29raWU+cHJlbG9naW4tY29va2llPC9wcmVsb2dpbi1jb29raWU+PHNhbWwtdXNlcm5hbWU+eHl6QGVtYWlsLmNvbTwvc2FtbC11c2VybmFtZT48c2FtbC1zbG8+bm88L3NhbWwtc2xvPjxzYW1sLVNlc3Npb25Ob3RPbk9yQWZ0ZXI+PC9zYW1sLVNlc3Npb25Ob3RPbk9yQWZ0ZXI+IC0tPjwvaHRtbD4=";
+    let auth_data = "PGh0bWw+PCEtLSA8c2FtbC1hdXRoLXN0YXR1cz4xPC9zYW1sLWF1dGgtc3RhdHVzPjxwcmVsb2dpbi1jb29raWU+cHJlbG9naW4tY29va2llPC9wcmVsb2dpbi1jb29raWU+PHBvcnRhbC11c2VyYXV0aGNvb2tpZT5wb3J0YWwtdXNlcmF1dGhjb29raWU8L3BvcnRhbC11c2VyYXV0aGNvb2tpZT48c2FtbC11c2VybmFtZT54eXpAZW1haWwuY29tPC9zYW1sLXVzZXJuYW1lPjxzYW1sLXNsbz5ubzwvc2FtbC1zbG8+IC0tPjwvaHRtbD4=";
 
     let auth_data = SamlAuthData::from_gpcallback(auth_data).unwrap();
 
     assert_eq!(auth_data.username(), "xyz@email.com");
     assert_eq!(auth_data.prelogin_cookie(), Some("prelogin-cookie"));
+    assert_eq!(auth_data.portal_userauthcookie(), Some("portal-userauthcookie"));
   }
 }
