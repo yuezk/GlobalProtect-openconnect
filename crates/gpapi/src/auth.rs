@@ -72,7 +72,11 @@ impl SamlAuthData {
         let prelogin_cookie = parse_xml_tag(html, "prelogin-cookie");
         let portal_userauthcookie = parse_xml_tag(html, "portal-userauthcookie");
 
-        SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie).map_err(AuthDataParseError::Invalid)
+        let auth_data =
+          SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie).map_err(AuthDataParseError::Invalid)?;
+        auth_data.log_summary("html");
+
+        Ok(auth_data)
       }
       Some(status) => Err(AuthDataParseError::Invalid(anyhow::anyhow!(
         "SAML auth status: {}",
@@ -102,6 +106,7 @@ impl SamlAuthData {
         AuthDataParseError::Invalid(anyhow::anyhow!(e))
       })?;
 
+      auth_data.log_summary("gpcallback-cas");
       return Ok(auth_data);
     }
 
@@ -129,6 +134,21 @@ impl SamlAuthData {
   pub fn token(&self) -> Option<&str> {
     self.token.as_deref()
   }
+
+  fn log_summary(&self, source: &str) {
+    info!(
+      "Parsed SAML auth data: source={}, username_present={}, prelogin_cookie_len={}, portal_userauthcookie_len={}, token_len={}",
+      source,
+      !self.username.is_empty(),
+      optional_len(self.prelogin_cookie.as_deref()),
+      optional_len(self.portal_userauthcookie.as_deref()),
+      optional_len(self.token.as_deref())
+    );
+  }
+}
+
+fn optional_len(value: Option<&str>) -> usize {
+  value.unwrap_or_default().len()
 }
 
 fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
