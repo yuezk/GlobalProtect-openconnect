@@ -23,6 +23,7 @@ pub(crate) struct PriorityRule {
 pub struct Gateway {
   pub(crate) name: String,
   pub(crate) address: String,
+  #[serde(default)]
   pub(crate) kind: GatewayKind,
   pub(crate) priority: u32,
   pub(crate) priority_rules: Vec<PriorityRule>,
@@ -44,6 +45,12 @@ impl GatewayKind {
   }
 }
 
+impl Default for GatewayKind {
+  fn default() -> Self {
+    Self::External
+  }
+}
+
 #[derive(Debug, Serialize, Deserialize, Type, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum GatewaySelection {
@@ -57,6 +64,12 @@ impl GatewaySelection {
       GatewaySelection::Auto => "auto",
       GatewaySelection::Manual => "manual",
     }
+  }
+}
+
+impl Default for GatewaySelection {
+  fn default() -> Self {
+    Self::Auto
   }
 }
 
@@ -161,5 +174,25 @@ impl Gateway {
 
   pub fn kind(&self) -> GatewayKind {
     self.kind
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn deserializes_gateway_without_kind_as_external() {
+    let gateway: Gateway = serde_json::from_str(
+      r#"{
+        "name": "US East",
+        "address": "us-east.example.com",
+        "priority": 1,
+        "priorityRules": []
+      }"#,
+    )
+    .unwrap();
+
+    assert_eq!(gateway.kind(), GatewayKind::External);
   }
 }
