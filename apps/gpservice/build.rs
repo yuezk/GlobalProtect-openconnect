@@ -4,23 +4,21 @@ const UNKNOWN_COMMIT: &str = "unknown";
 const DISPLAY_COMMIT_LEN: usize = 9;
 
 fn main() {
-  println!("cargo:rerun-if-env-changed=GPGUI_HELPER_GIT_COMMIT");
+  println!("cargo:rerun-if-env-changed=GPSERVICE_GIT_COMMIT");
   println!("cargo:rerun-if-env-changed=SOURCE_GIT_COMMIT");
   println!("cargo:rerun-if-env-changed=GITHUB_SHA");
 
-  let repo_root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set")).join("../../..");
+  let repo_root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set")).join("../..");
   let source_commit = repo_root.join("SOURCE_COMMIT");
   println!("cargo:rerun-if-changed={}", source_commit.display());
   println!(
-    "cargo:rustc-env=GPGUI_HELPER_GIT_COMMIT={}",
+    "cargo:rustc-env=GPSERVICE_GIT_COMMIT={}",
     resolve_commit(&repo_root, &source_commit)
   );
-
-  tauri_build::build()
 }
 
 fn resolve_commit(repo_root: &PathBuf, source_commit: &PathBuf) -> String {
-  env_commit("GPGUI_HELPER_GIT_COMMIT")
+  env_commit("GPSERVICE_GIT_COMMIT")
     .or_else(|| env_commit("SOURCE_GIT_COMMIT"))
     .or_else(|| env_commit("GITHUB_SHA"))
     .or_else(|| file_commit(source_commit))

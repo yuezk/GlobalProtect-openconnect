@@ -11,7 +11,14 @@ use log::info;
 use serde_json::json;
 use tempfile::NamedTempFile;
 
-const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
+const VERSION: &str = concat!(
+  env!("CARGO_PKG_VERSION"),
+  " (",
+  env!("GPAUTH_GIT_COMMIT"),
+  " ",
+  compile_time::date_str!(),
+  ")"
+);
 
 #[derive(Parser)]
 #[command(

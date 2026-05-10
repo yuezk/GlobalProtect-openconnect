@@ -19,7 +19,14 @@ use crate::{
   launch_gui::{LaunchGuiArgs, LaunchGuiHandler},
 };
 
-const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
+const VERSION: &str = concat!(
+  env!("CARGO_PKG_VERSION"),
+  " (",
+  env!("GPCLIENT_GIT_COMMIT"),
+  " ",
+  compile_time::date_str!(),
+  ")"
+);
 
 pub(crate) struct SharedArgs<'a> {
   pub(crate) fix_openssl: bool,

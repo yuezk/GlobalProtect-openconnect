@@ -7,7 +7,14 @@ use log::info;
 
 use crate::app::App;
 
-const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
+const VERSION: &str = concat!(
+  env!("CARGO_PKG_VERSION"),
+  " (",
+  env!("GPGUI_HELPER_GIT_COMMIT"),
+  " ",
+  compile_time::date_str!(),
+  ")"
+);
 const GP_API_KEY: &[u8; 32] = &[0; 32];
 
 #[derive(Parser)]

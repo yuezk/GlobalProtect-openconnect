@@ -7,6 +7,16 @@ RUST_VERSION ?= 1.89
 IGNORE_RUST_VERSION ?= 0
 
 VERSION = $(shell grep '^version' Cargo.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')
+SOURCE_COMMIT_VALUE := $(shell \
+	if [ -n "$$SOURCE_GIT_COMMIT" ]; then \
+		printf '%s' "$$SOURCE_GIT_COMMIT" | cut -c1-9; \
+	elif [ -n "$$GITHUB_SHA" ]; then \
+		printf '%s' "$$GITHUB_SHA" | cut -c1-9; \
+	elif [ -f SOURCE_COMMIT ]; then \
+		head -n1 SOURCE_COMMIT | tr -d '[:space:]' | cut -c1-9; \
+	else \
+		git rev-parse --short=9 HEAD 2>/dev/null || printf unknown; \
+	fi)
 GUI_LIBC_SUFFIX ?= $(shell ldd --version 2>&1 | grep -qi musl && echo -musl || true)
 REVISION ?= 1
 RPM_SOURCE ?= %{name}.tar.gz
@@ -55,11 +65,13 @@ clean-tarball:
 	rm -rf .vendor
 	rm -rf vendor.tar.xz
 	rm -rf .cargo
+	rm -f SOURCE_COMMIT
 
 # Create a tarball, include the cargo dependencies if OFFLINE is set to 1
 tarball: clean-tarball
 	mkdir -p .cargo
 	mkdir -p .build/tarball
+	printf '%s\n' "$(SOURCE_COMMIT_VALUE)" > SOURCE_COMMIT
 
 	# If OFFLINE is set to 1, vendor all cargo dependencies
 	# Generate a OFFLINE_BUILD file to indicate offline build
