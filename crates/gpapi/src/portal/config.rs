@@ -13,7 +13,7 @@ use crate::{
   error::PortalError,
   gateway::{Gateway, parse_gateways},
   gp_params::GpParams,
-  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::ElementExt},
+  utils::{normalize_server, parse_gp_response, redact::redact_form_params, remove_url_scheme, xml::ElementExt},
 };
 
 use super::csc;
@@ -131,6 +131,7 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   let params = build_config_params(cred, gp_params, &server, &swg_nonce);
 
   info!("Retrieve the portal config, user_agent: {}", gp_params.user_agent());
+  info!("Portal config request params: {}", redact_params(&params));
 
   let res = client.post(&url).form(&params).send().await.map_err(|e| {
     warn!("Network error: {:?}", e);
@@ -158,13 +159,14 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   let root = Element::parse(res_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
 
   if csc::is_config_criteria(&root) {
-    info!("Portal returned CSC criteria, retrieving CSC portal config");
+    info!("Portal returned CSC criteria: {}", csc_criteria_summary(&root));
     let csc_xml = retrieve_csc_config(&client, &portal, &root, cred.username(), gp_params).await?;
     debug!("Portal CSC config response: {}", csc_xml);
     let root = Element::parse(csc_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
     return parse_portal_config(&server, cred, root);
   }
 
+  info!("Portal did not return CSC criteria");
   parse_portal_config(&server, cred, root)
 }
 
@@ -201,6 +203,8 @@ async fn retrieve_csc_config(
   let params = csc::csc_params(&csc_req, username, gp_params, &swg_nonce);
   let url = format!("{}/global-protect/getconfig_csc.esp", portal);
 
+  info!("Portal CSC config request params: {}", redact_params(&params));
+
   let res = client.post(&url).form(&params).send().await.map_err(|e| {
     warn!("Network error: {:?}", e);
     anyhow::anyhow!(PortalError::NetworkError(e))
@@ -218,6 +222,29 @@ async fn retrieve_csc_config(
 
     Err(anyhow::anyhow!(PortalError::ConfigError(err.reason)))
   })
+}
+
+fn redact_params(params: &HashMap<&str, &str>) -> String {
+  let params = params.iter().map(|(key, value)| (*key, *value)).collect::<Vec<_>>();
+  redact_form_params(&params)
+}
+
+fn csc_criteria_summary(root: &Element) -> String {
+  let auth_cookie = present(root.descendant_text("portal-csc-auth-cookie").as_deref());
+  let config_digest = present(root.descendant_text("config-digest").as_deref());
+  let custom_check_entries = root
+    .descendant("custom-checks")
+    .map(|custom_checks| custom_checks.descendants("entry").len())
+    .unwrap_or_default();
+
+  format!("auth_cookie={auth_cookie}, config_digest={config_digest}, custom_check_entries={custom_check_entries}")
+}
+
+fn present(value: Option<&str>) -> &'static str {
+  match value {
+    Some(value) if !value.is_empty() => "present",
+    _ => "empty",
+  }
 }
 
 fn parse_portal_config(server: &str, cred: &Credential, root: Element) -> anyhow::Result<PortalConfig> {

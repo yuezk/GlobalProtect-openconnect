@@ -123,6 +123,46 @@ pub fn redact_uri(uri: &str) -> String {
   url.to_string()
 }
 
+pub fn redact_form_params(params: &[(&str, &str)]) -> String {
+  let mut pairs = params
+    .iter()
+    .map(|(key, value)| (*key, redact_form_value(key, value)))
+    .collect::<Vec<_>>();
+
+  pairs.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+  form_urlencoded::Serializer::new(String::new())
+    .extend_pairs(pairs)
+    .finish()
+}
+
+fn redact_form_value(key: &str, value: &str) -> String {
+  if value.is_empty() || is_safe_form_param(key) {
+    return value.to_string();
+  }
+
+  format!("redacted-{}", value.len())
+}
+
+fn is_safe_form_param(key: &str) -> bool {
+  matches!(
+    key,
+    "clientVer"
+      | "clientos"
+      | "config-digest"
+      | "csc-digest"
+      | "csc-support"
+      | "direct"
+      | "ipv6-support"
+      | "jnlpReady"
+      | "ok"
+      | "os-version"
+      | "prot"
+      | "swg-auth-token"
+      | "swg-nonce"
+  )
+}
+
 fn redact_query(query: Option<&str>) -> Option<String> {
   let query = query?;
 
@@ -188,6 +228,20 @@ mod tests {
 
     let uri = "https://foo.bar/baz?qux=quux";
     assert_eq!(redact_uri(uri), "https://f**********r/baz?qux=q**********x");
+  }
+
+  #[test]
+  fn it_should_redact_form_params() {
+    let params = [
+      ("portal-userauthcookie", "secret-cookie"),
+      ("csc-support", "yes"),
+      ("prelogin-cookie", ""),
+    ];
+
+    assert_eq!(
+      redact_form_params(&params),
+      "csc-support=yes&portal-userauthcookie=redacted-13&prelogin-cookie="
+    );
   }
 
   #[test]
