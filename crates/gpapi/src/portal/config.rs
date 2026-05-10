@@ -21,6 +21,7 @@ pub struct PortalConfig {
   auth_cookie: AuthCookieCredential,
   config_cred: Credential,
   gateways: Vec<Gateway>,
+  connect_method: Option<String>,
   config_digest: Option<String>,
   /**
    * Variants:
@@ -58,6 +59,10 @@ impl PortalConfig {
 
   pub fn internal_host_detection(&self) -> Option<bool> {
     self.internal_host_detection
+  }
+
+  pub fn connect_method(&self) -> Option<&str> {
+    self.connect_method.as_deref()
   }
 
   pub fn version(&self) -> Option<&str> {
@@ -169,6 +174,7 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     .descendant_text("portal-prelogonuserauthcookie")
     .unwrap_or_default();
   let config_digest = root.descendant_text("config-digest");
+  let connect_method = parse_connect_method(&root);
 
   if gateways.is_empty() {
     gateways.push(Gateway::new(server.to_string(), server.to_string()));
@@ -183,6 +189,7 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
     auth_cookie: AuthCookieCredential::new(cred.username(), &user_auth_cookie, &prelogon_user_auth_cookie),
     config_cred: cred.clone(),
     gateways,
+    connect_method,
     config_digest: config_digest.map(|s| s.to_string()),
     internal_host_detection: if ihd_enabled { Some(prefer_internal) } else { None },
     version,
@@ -196,6 +203,13 @@ fn parse_allow_extend_session(root: &Element) -> Option<bool> {
     "no" => Some(false),
     _ => None,
   }
+}
+
+fn parse_connect_method(root: &Element) -> Option<String> {
+  root
+    .descendant_text("connect-method")
+    .filter(|s| !s.is_empty())
+    .map(|s| s.to_string())
 }
 
 // Perform DNS lookup and compare the result with the expected hostname
@@ -266,5 +280,12 @@ mod tests {
     let root = parse_xml("<response><allow-extend-session>true</allow-extend-session></response>");
 
     assert_eq!(parse_allow_extend_session(&root), None);
+  }
+
+  #[test]
+  fn parses_connect_method() {
+    let root = parse_xml("<policy><connect-method>on-demand</connect-method></policy>");
+
+    assert_eq!(parse_connect_method(&root).as_deref(), Some("on-demand"));
   }
 }

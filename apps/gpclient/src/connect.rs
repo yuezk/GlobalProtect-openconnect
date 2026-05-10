@@ -13,7 +13,10 @@ use gpapi::{
   clap::{ToVerboseArg, args::Os},
   credential::{Credential, PasswordCredential},
   error::PortalError,
-  gateway::{GatewayLogin, SessionExtensionAuth, gateway_login},
+  gateway::{
+    GatewayLogin, GatewayLoginContext, GatewaySelection, SessionExtensionAuth, gateway_login,
+    gateway_login_with_context,
+  },
   gp_params::{ClientOs, GpParams},
   portal::{Prelogin, StandardPrelogin, prelogin, retrieve_config},
   process::{
@@ -294,7 +297,7 @@ impl<'a> ConnectHandler<'a> {
     if as_gateway {
       info!("Treating the server as a gateway");
       return self
-        .connect_gateway_with_prelogin(server, server, self.args.client_version.as_deref(), false)
+        .connect_gateway_with_prelogin(server, server, self.args.client_version.as_deref(), false, None)
         .await;
     }
 
@@ -306,7 +309,7 @@ impl<'a> ConnectHandler<'a> {
     if err.root_cause().downcast_ref::<PortalError>().is_some() {
       info!("Trying the gateway authentication workflow...");
       self
-        .connect_gateway_with_prelogin(server, server, self.args.client_version.as_deref(), false)
+        .connect_gateway_with_prelogin(server, server, self.args.client_version.as_deref(), false, None)
         .await?;
 
       eprintln!("\nNOTE: the server may be a gateway, not a portal.");
@@ -326,6 +329,11 @@ impl<'a> ConnectHandler<'a> {
     let cred = self.obtain_credential(&prelogin, portal).await?;
     let mut portal_config = retrieve_config(portal, &cred, &gp_params).await?;
 
+    let gateway_selection = if self.args.gateway.is_some() {
+      GatewaySelection::Manual
+    } else {
+      GatewaySelection::Auto
+    };
     let selected_gateway = match &self.args.gateway {
       Some(gateway) => portal_config
         .find_gateway(gateway)
@@ -349,22 +357,33 @@ impl<'a> ConnectHandler<'a> {
 
     let gateway = selected_gateway.server();
     let cred = portal_config.auth_cookie().into();
+    let client_version = self.args.client_version.as_deref().or_else(|| portal_config.version());
+    let gateway_context = GatewayLoginContext::new(selected_gateway, gateway_selection)
+      .with_connect_method(portal_config.connect_method())
+      .with_client_version(client_version);
 
-    let login_session = match self.login_gateway(gateway, &cred, &gp_params).await {
+    let login_session = match self
+      .login_gateway(gateway, &cred, &gp_params, Some(&gateway_context))
+      .await
+    {
       Ok(login_session) => login_session,
       Err(err) => {
         info!("Gateway login failed: {}", err);
-        let client_version = self.args.client_version.as_deref().or_else(|| portal_config.version());
         let allow_extend_session = portal_config.allow_extend_session().unwrap_or(false);
         return self
-          .connect_gateway_with_prelogin(portal, gateway, client_version, allow_extend_session)
+          .connect_gateway_with_prelogin(
+            portal,
+            gateway,
+            client_version,
+            allow_extend_session,
+            Some(gateway_context),
+          )
           .await;
       }
     };
 
     // Use the client version from the command line argument if specified, otherwise
     // use the version from the portal config if available
-    let client_version = self.args.client_version.as_deref().or_else(|| portal_config.version());
     let allow_extend_session = portal_config.allow_extend_session().unwrap_or(false);
 
     self
@@ -385,6 +404,7 @@ impl<'a> ConnectHandler<'a> {
     gateway: &str,
     client_version: Option<&str>,
     allow_extend_session: bool,
+    gateway_context: Option<GatewayLoginContext>,
   ) -> anyhow::Result<()> {
     info!("Performing the gateway authentication...");
 
@@ -394,7 +414,9 @@ impl<'a> ConnectHandler<'a> {
     let prelogin = prelogin(gateway, &gp_params).await?;
     let cred = self.obtain_credential(&prelogin, gateway).await?;
 
-    let login_session = self.login_gateway(gateway, &cred, &gp_params).await?;
+    let login_session = self
+      .login_gateway(gateway, &cred, &gp_params, gateway_context.as_ref())
+      .await?;
 
     self
       .connect_gateway(
@@ -413,11 +435,17 @@ impl<'a> ConnectHandler<'a> {
     gateway: &str,
     cred: &Credential,
     gp_params: &GpParams,
+    gateway_context: Option<&GatewayLoginContext>,
   ) -> anyhow::Result<GatewayLoginSession> {
     let mut gp_params = gp_params.clone();
 
     loop {
-      match gateway_login(gateway, cred, &gp_params).await? {
+      let login = match gateway_context {
+        Some(context) => gateway_login_with_context(gateway, cred, &gp_params, context).await?,
+        None => gateway_login(gateway, cred, &gp_params).await?,
+      };
+
+      match login {
         GatewayLogin::Cookie(cookie) => {
           return Ok(GatewayLoginSession {
             cookie,
