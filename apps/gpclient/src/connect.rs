@@ -11,6 +11,7 @@ use common::constants::{GP_CLIENT_VERSION, GP_USER_AGENT};
 use gpapi::{
   auth::SamlAuthResult,
   clap::{ToVerboseArg, args::Os},
+  cookie_store,
   credential::{Credential, PasswordCredential},
   error::PortalError,
   gateway::{GatewayLogin, SessionExtensionAuth, gateway_login},
@@ -54,6 +55,15 @@ pub(crate) struct ConnectArgs {
 
   #[arg(long, help = "Read the cookie from standard input")]
   cookie_on_stdin: bool,
+
+  #[arg(
+    long,
+    help = "Path to the portal-cookie cache file. Defaults to $HOME/.config/gpclient/cookie.json"
+  )]
+  cookie_file: Option<String>,
+
+  #[arg(long, help = "Do not read or write the portal-cookie cache")]
+  no_cookie_cache: bool,
 
   #[arg(long, short, help = "The VPNC script to use", required_if_eq("script_tun", "true"))]
   script: Option<String>,
@@ -298,6 +308,12 @@ impl<'a> ConnectHandler<'a> {
         .await;
     }
 
+    if !self.args.no_cookie_cache && !self.args.cookie_on_stdin {
+      if let Some(()) = self.try_cached_cookie(server).await {
+        return Ok(());
+      }
+    }
+
     let Err(err) = self.connect_portal_with_prelogin(server).await else {
       return Ok(());
     };
@@ -315,6 +331,50 @@ impl<'a> ConnectHandler<'a> {
       Ok(())
     } else {
       Err(err)
+    }
+  }
+
+  async fn try_cached_cookie(&self, server: &str) -> Option<()> {
+    let path = cookie_store::cookie_path(self.args.cookie_file.as_deref());
+    let stored = cookie_store::load(&path, server)?;
+    info!(
+      "Using cached portal cookie for {} (saved_at={}, gateway={})",
+      stored.server, stored.saved_at, stored.last_gateway
+    );
+
+    let cred: Credential = (&stored.auth_cookie).into();
+    let mut gp_params = self.build_gp_params();
+    gp_params.set_is_gateway(true);
+
+    let login_session = match self.login_gateway(&stored.last_gateway, &cred, &gp_params).await {
+      Ok(s) => s,
+      Err(err) => {
+        warn!(
+          "Cached cookie rejected by gateway {}: {}. Clearing cache and falling back to SAML.",
+          stored.last_gateway, err
+        );
+        cookie_store::clear(&path);
+        return None;
+      }
+    };
+
+    let result = self
+      .connect_gateway(
+        server,
+        &stored.last_gateway,
+        &login_session.cookie,
+        self.args.client_version.as_deref(),
+        false,
+        login_session.extension_auth,
+      )
+      .await;
+
+    match result {
+      Ok(()) => Some(()),
+      Err(err) => {
+        warn!("Gateway connect failed after cached-cookie login: {}", err);
+        None
+      }
     }
   }
 
@@ -348,7 +408,21 @@ impl<'a> ConnectHandler<'a> {
     };
 
     let gateway = selected_gateway.server();
-    let cred = portal_config.auth_cookie().into();
+    let cred: Credential = portal_config.auth_cookie().into();
+
+    if !self.args.no_cookie_cache {
+      let path = cookie_store::cookie_path(self.args.cookie_file.as_deref());
+      let stored = cookie_store::StoredCookie::new(
+        portal.to_string(),
+        cred.username().to_string(),
+        gateway.to_string(),
+        portal_config.auth_cookie().clone(),
+      );
+      match cookie_store::save(&path, &stored) {
+        Ok(()) => info!("Saved portal cookie cache to {}", path.display()),
+        Err(e) => warn!("Failed to save cookie cache to {}: {}", path.display(), e),
+      }
+    }
 
     let login_session = match self.login_gateway(gateway, &cred, &gp_params).await {
       Ok(login_session) => login_session,
