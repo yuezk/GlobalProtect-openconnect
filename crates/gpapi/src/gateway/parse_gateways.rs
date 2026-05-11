@@ -35,7 +35,7 @@ pub(crate) fn parse_gateways(element: &Element, prefer_internal: bool) -> Option
       let priority = parse_priority(gateway_item);
       let priority_rules = gateway_item
         .child("priority-rule")
-        .map(|n| parse_priority_rules(n))
+        .map(parse_priority_rules)
         .unwrap_or_default();
 
       Gateway {

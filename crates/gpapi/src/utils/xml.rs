@@ -46,10 +46,10 @@ impl ElementExt for Element {
     }
 
     for child in &self.children {
-      if let Some(element) = child.as_element() {
-        if let Some(found) = element.descendant(name) {
-          return Some(found);
-        }
+      if let Some(element) = child.as_element()
+        && let Some(found) = element.descendant(name)
+      {
+        return Some(found);
       }
     }
 

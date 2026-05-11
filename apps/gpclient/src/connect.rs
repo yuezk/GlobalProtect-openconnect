@@ -2,6 +2,7 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   fs,
+  str::FromStr,
   sync::{Arc, Mutex},
 };
 
@@ -39,6 +40,36 @@ use crate::{
 struct GatewayLoginSession {
   cookie: String,
   extension_auth: SessionExtensionAuth,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CscPreferenceArg {
+  domain: String,
+  key: String,
+  value: String,
+}
+
+impl FromStr for CscPreferenceArg {
+  type Err = String;
+
+  fn from_str(input: &str) -> Result<Self, Self::Err> {
+    let (name, value) = input
+      .split_once('=')
+      .ok_or_else(|| "expected <domain>:<key>=<value>".to_string())?;
+    let (domain, key) = name
+      .split_once(':')
+      .ok_or_else(|| "expected <domain>:<key>=<value>".to_string())?;
+
+    if domain.is_empty() || key.is_empty() || value.is_empty() {
+      return Err("domain, key, and value must be non-empty".to_string());
+    }
+
+    Ok(Self {
+      domain: domain.to_string(),
+      key: key.to_string(),
+      value: value.to_string(),
+    })
+  }
 }
 
 #[derive(Args)]
@@ -132,6 +163,13 @@ pub(crate) struct ConnectArgs {
     help = "Same as the '--local-hostname' option in the openconnect command"
   )]
   local_hostname: Option<String>,
+
+  #[arg(
+    long = "csc-preference",
+    help = "Override a Mac CSC plist preference value, in the form <domain>:<key>=<value>",
+    value_name = "DOMAIN:KEY=VALUE"
+  )]
+  csc_preferences: Vec<CscPreferenceArg>,
 
   #[arg(
     long = "force-dpd",
@@ -235,6 +273,10 @@ impl<'a> ConnectHandler<'a> {
 
     if let Some(local_hostname) = self.args.local_hostname.as_deref() {
       builder.computer(local_hostname);
+    }
+
+    for preference in &self.args.csc_preferences {
+      builder.csc_preference_override(&preference.domain, &preference.key, &preference.value);
     }
 
     builder.build()
@@ -583,7 +625,7 @@ impl<'a> ConnectHandler<'a> {
           .saml_request(prelogin.saml_request())
           .user_agent(&user_agent)
           .os(self.args.os.as_str())
-          .os_version(Some(&os_version))
+          .os_version(Some(os_version))
           .fix_openssl(self.shared_args.fix_openssl)
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
           .browser(browser)
@@ -703,5 +745,33 @@ fn get_uid(user: &Option<String>) -> anyhow::Result<u32> {
     get_user_by_name(user).map(|user| user.uid())
   } else {
     get_non_root_user().map_or_else(|_| Ok(0), |user| Ok(user.uid()))
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn parses_csc_preference_override() {
+    let preference = CscPreferenceArg::from_str("com.example.settings:ExampleKey=ExampleValue").unwrap();
+
+    assert_eq!(
+      preference,
+      CscPreferenceArg {
+        domain: "com.example.settings".to_string(),
+        key: "ExampleKey".to_string(),
+        value: "ExampleValue".to_string(),
+      }
+    );
+  }
+
+  #[test]
+  fn rejects_invalid_csc_preference_override() {
+    assert!(CscPreferenceArg::from_str("com.example.settings:ExampleKey").is_err());
+    assert!(CscPreferenceArg::from_str("com.example.settings=ExampleValue").is_err());
+    assert!(CscPreferenceArg::from_str(":ExampleKey=ExampleValue").is_err());
+    assert!(CscPreferenceArg::from_str("com.example.settings:=ExampleValue").is_err());
+    assert!(CscPreferenceArg::from_str("com.example.settings:ExampleKey=").is_err());
   }
 }

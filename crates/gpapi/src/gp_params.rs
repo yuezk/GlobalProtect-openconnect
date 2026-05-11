@@ -58,6 +58,7 @@ pub struct GpParams {
   certificate: Option<String>,
   sslkey: Option<String>,
   key_password: Option<String>,
+  csc_preference_overrides: HashMap<String, String>,
   // Used for MFA
   input_str: Option<String>,
   otp: Option<String>,
@@ -98,6 +99,13 @@ impl GpParams {
 
   pub fn client_version(&self) -> Option<&str> {
     self.client_version.as_deref()
+  }
+
+  pub fn csc_preference_override(&self, domain: &str, key: &str) -> Option<&str> {
+    self
+      .csc_preference_overrides
+      .get(&csc_preference_key(domain, key))
+      .map(String::as_str)
   }
 
   pub fn set_input_str(&mut self, input_str: &str) {
@@ -152,6 +160,7 @@ pub struct GpParamsBuilder {
   certificate: Option<String>,
   sslkey: Option<String>,
   key_password: Option<String>,
+  csc_preference_overrides: HashMap<String, String>,
 }
 
 impl GpParamsBuilder {
@@ -169,6 +178,7 @@ impl GpParamsBuilder {
       certificate: Default::default(),
       sslkey: Default::default(),
       key_password: Default::default(),
+      csc_preference_overrides: Default::default(),
     }
   }
 
@@ -222,6 +232,13 @@ impl GpParamsBuilder {
     self
   }
 
+  pub fn csc_preference_override(&mut self, domain: &str, key: &str, value: &str) -> &mut Self {
+    self
+      .csc_preference_overrides
+      .insert(csc_preference_key(domain, key), value.to_string());
+    self
+  }
+
   pub fn build(&self) -> GpParams {
     GpParams {
       is_gateway: self.is_gateway,
@@ -234,10 +251,15 @@ impl GpParamsBuilder {
       certificate: self.certificate.clone(),
       sslkey: self.sslkey.clone(),
       key_password: self.key_password.clone(),
+      csc_preference_overrides: self.csc_preference_overrides.clone(),
       input_str: Default::default(),
       otp: Default::default(),
     }
   }
+}
+
+fn csc_preference_key(domain: &str, key: &str) -> String {
+  format!("{domain}:{key}")
 }
 
 impl Default for GpParamsBuilder {

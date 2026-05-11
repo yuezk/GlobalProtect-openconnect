@@ -262,6 +262,18 @@ impl From<PasswordCredential> for Credential {
   }
 }
 
+impl From<&AuthCookieCredential> for Credential {
+  fn from(value: &AuthCookieCredential) -> Self {
+    Self::AuthCookie(value.clone())
+  }
+}
+
+impl From<&CachedCredential> for Credential {
+  fn from(value: &CachedCredential) -> Self {
+    Self::Cached(value.clone())
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -298,17 +310,5 @@ mod tests {
     assert_eq!(params.get("portal-userauthcookie"), Some(&""));
     assert_eq!(params.get("portal-prelogonuserauthcookie"), Some(&""));
     assert_eq!(params.get("token"), Some(&"cas-token"));
-  }
-}
-
-impl From<&AuthCookieCredential> for Credential {
-  fn from(value: &AuthCookieCredential) -> Self {
-    Self::AuthCookie(value.clone())
-  }
-}
-
-impl From<&CachedCredential> for Credential {
-  fn from(value: &CachedCredential) -> Self {
-    Self::Cached(value.clone())
   }
 }

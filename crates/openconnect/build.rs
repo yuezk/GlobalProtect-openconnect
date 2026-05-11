@@ -1,6 +1,10 @@
-use std::{env, path::PathBuf, process::Command};
+use std::{
+  env,
+  path::{Path, PathBuf},
+  process::Command,
+};
 
-fn apply_patches(patches_dir: &PathBuf, build_src: &PathBuf) {
+fn apply_patches(patches_dir: &Path, build_src: &Path) {
   let patches = std::fs::read_dir(patches_dir)
     .expect("Failed to read patches directory")
     .filter_map(|entry| entry.ok())
@@ -30,7 +34,7 @@ fn apply_patches(patches_dir: &PathBuf, build_src: &PathBuf) {
   }
 }
 
-fn build_libxml2(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
+fn build_libxml2(deps_dir: &Path, out_dir: &Path) -> PathBuf {
   let libxml2_dir = deps_dir.join("libxml2");
 
   // The temporary location where we will build
@@ -89,7 +93,7 @@ fn build_libxml2(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
   dst
 }
 
-fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
+fn build_openconnect(deps_dir: &Path, out_dir: &Path) -> PathBuf {
   let openconnect_dir = deps_dir.join("openconnect");
   let patches_dir = deps_dir.join("patches");
 
@@ -200,6 +204,6 @@ fn main() {
   cc::Build::new()
     .file("src/ffi/vpn.c")
     .include("src/ffi")
-    .include(&oc_dst.join("include"))
+    .include(oc_dst.join("include"))
     .compile("vpn");
 }

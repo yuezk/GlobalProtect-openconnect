@@ -154,11 +154,11 @@ fn init_logger(cli: &Cli) {
   // Output the log messages to a file if the command is the auth callback
   if let CliCommand::LaunchGui(args) = &cli.command {
     let auth_data = args.auth_data.as_deref().unwrap_or_default();
-    if !auth_data.is_empty() {
-      if let Ok(log_file) = File::create(temp_dir().join("gpcallback.log")) {
-        let target = Box::new(log_file);
-        builder.target(env_logger::Target::Pipe(target));
-      }
+    if !auth_data.is_empty()
+      && let Ok(log_file) = File::create(temp_dir().join("gpcallback.log"))
+    {
+      let target = Box::new(log_file);
+      builder.target(env_logger::Target::Pipe(target));
     }
   }
 

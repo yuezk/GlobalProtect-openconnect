@@ -44,11 +44,11 @@ fn find_executable(locations: &[&'static str]) -> Option<&'static str> {
 }
 
 pub fn find_vpnc_script() -> Option<&'static str> {
-  find_executable(&VPNC_SCRIPT_LOCATIONS)
+  find_executable(VPNC_SCRIPT_LOCATIONS)
 }
 
 pub fn find_csd_wrapper() -> Option<&'static str> {
-  find_executable(&CSD_WRAPPER_LOCATIONS)
+  find_executable(CSD_WRAPPER_LOCATIONS)
 }
 
 /// If file exists, check if it is executable
