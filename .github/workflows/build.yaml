@@ -29,19 +29,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  setup-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Set up matrix
-        id: set-matrix
-        run: |
-          echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "ubuntu-24.04-arm", "arch": "ubuntu-24.04-arm"}]' >> $GITHUB_OUTPUT
-
   tarball:
     runs-on: ubuntu-latest
-    needs: [setup-matrix]
     steps:
     - uses: pnpm/action-setup@v5
       with:
@@ -132,12 +121,15 @@ jobs:
 
   build-gp:
     needs:
-    - setup-matrix
     - tarball
     strategy:
       fail-fast: false
       matrix:
-        os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
+        os:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: ubuntu-24.04-arm
         package: [deb, rpm, pkg, apk, binary, ubuntu-rolling]
     runs-on: ${{ matrix.os.runner }}
     name: build-gp (${{ matrix.package }}, ${{ matrix.os.arch }})
@@ -238,12 +230,14 @@ jobs:
         retention-days: 1
 
   build-gpgui:
-    needs:
-    - setup-matrix
     strategy:
       fail-fast: false
       matrix:
-        os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
+        os:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: ubuntu-24.04-arm
         libc:
           - name: glibc
             builder: gpgui-builder-tauri2
