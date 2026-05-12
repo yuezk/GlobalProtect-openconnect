@@ -42,6 +42,26 @@ struct GatewayLoginSession {
   extension_auth: SessionExtensionAuth,
 }
 
+#[derive(Default)]
+struct CleanAuthState {
+  requested: bool,
+}
+
+impl CleanAuthState {
+  fn new(requested: bool) -> Self {
+    Self { requested }
+  }
+
+  fn consume_for_webview(&mut self, webview_auth: bool) -> bool {
+    if !webview_auth || !self.requested {
+      return false;
+    }
+
+    self.requested = false;
+    true
+  }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CscPreferenceArg {
   domain: String,
@@ -233,16 +253,23 @@ pub(crate) struct ConnectHandler<'a> {
   latest_key_password: RefCell<Option<String>>,
   password_from_stdin: RefCell<Option<String>>,
   cookie_from_stdin: RefCell<Option<String>>,
+  clean_auth_state: RefCell<CleanAuthState>,
 }
 
 impl<'a> ConnectHandler<'a> {
   pub(crate) fn new(args: &'a ConnectArgs, shared_args: &'a SharedArgs) -> Self {
+    #[cfg(feature = "webview-auth")]
+    let clean_auth = args.clean;
+    #[cfg(not(feature = "webview-auth"))]
+    let clean_auth = false;
+
     Self {
       args,
       shared_args,
       latest_key_password: Default::default(),
       password_from_stdin: Default::default(),
       cookie_from_stdin: Default::default(),
+      clean_auth_state: RefCell::new(CleanAuthState::new(clean_auth)),
     }
   }
 
@@ -634,9 +661,28 @@ impl<'a> ConnectHandler<'a> {
         #[cfg(feature = "webview-auth")]
         let use_default_browser = prelogin.support_default_browser() && self.args.default_browser;
         #[cfg(feature = "webview-auth")]
+        let browser_kind = if browser.is_some() || use_default_browser {
+          "external"
+        } else {
+          "embedded"
+        };
+        #[cfg(not(feature = "webview-auth"))]
+        let browser_kind = "external";
+
+        let clean_auth = self
+          .clean_auth_state
+          .borrow_mut()
+          .consume_for_webview(browser_kind == "embedded");
+
+        info!(
+          "SAML auth launch: gateway={}, clean={}, browser={}",
+          is_gateway, clean_auth, browser_kind
+        );
+
+        #[cfg(feature = "webview-auth")]
         let auth_launcher = auth_launcher
           .hidpi(self.args.hidpi)
-          .clean(self.args.clean)
+          .clean(clean_auth)
           .default_browser(use_default_browser);
 
         let cred = auth_launcher.launch().await?;
@@ -773,5 +819,29 @@ mod tests {
     assert!(CscPreferenceArg::from_str(":ExampleKey=ExampleValue").is_err());
     assert!(CscPreferenceArg::from_str("com.example.settings:=ExampleValue").is_err());
     assert!(CscPreferenceArg::from_str("com.example.settings:ExampleKey=").is_err());
+  }
+
+  #[test]
+  fn clean_auth_state_is_consumed_once_for_webview() {
+    let mut state = CleanAuthState::new(true);
+
+    assert!(state.consume_for_webview(true));
+    assert!(!state.consume_for_webview(true));
+  }
+
+  #[test]
+  fn clean_auth_state_is_not_consumed_by_external_browser() {
+    let mut state = CleanAuthState::new(true);
+
+    assert!(!state.consume_for_webview(false));
+    assert!(state.consume_for_webview(true));
+  }
+
+  #[test]
+  fn clean_auth_state_remains_false_when_not_requested() {
+    let mut state = CleanAuthState::new(false);
+
+    assert!(!state.consume_for_webview(true));
+    assert!(!state.consume_for_webview(false));
   }
 }
