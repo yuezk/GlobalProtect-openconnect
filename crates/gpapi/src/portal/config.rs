@@ -270,6 +270,8 @@ fn parse_portal_config(server: &str, cred: &Credential, root: Element) -> anyhow
 
   if gateways.is_empty() {
     gateways.push(Gateway::new(server.to_string(), server.to_string()));
+  } else {
+    info!("Found {} gateways in portal config", gateways.len());
   }
 
   let version = root.descendant_text("version").map(|s| s.to_string());
