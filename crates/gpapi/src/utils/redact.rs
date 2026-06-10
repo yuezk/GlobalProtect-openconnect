@@ -142,9 +142,9 @@ mod tests {
 
   #[test]
   fn it_should_not_redact_value() {
-    let text = "fo";
+    let text = "fo"; // codespell:ignore fo
 
-    assert_eq!(redact_value(text), "fo");
+    assert_eq!(redact_value(text), "fo"); // codespell:ignore fo
   }
 
   #[test]
