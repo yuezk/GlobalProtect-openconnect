@@ -20,6 +20,7 @@ inquire = "0.9"
 log.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 sysinfo.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 serde_urlencoded.workspace = true
 whoami.workspace = true

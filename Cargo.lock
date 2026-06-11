@@ -1764,6 +1764,7 @@ dependencies = [
  "netdev",
  "openconnect",
  "reqwest 0.12.28",
+ "serde",
  "serde_json",
  "serde_urlencoded",
  "sysinfo",

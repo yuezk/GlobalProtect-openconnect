@@ -2,7 +2,9 @@ use askama::Template;
 use clap::Args;
 use gpapi::{clap::args::Os, utils::host_utils};
 use log::debug;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::process::Command;
 use xmltree::Element;
 
 #[derive(Template)]
@@ -16,6 +18,25 @@ struct HipReportTemplate<'a> {
   user_name: &'a str,
   host_info: HostInfo<'a>,
   md5: &'a str,
+}
+
+/// Information about Microsoft Defender (mdatp) installation and status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DefenderInfo {
+  #[serde(rename = "appVersion")]
+  app_version: String,
+  #[serde(rename = "engineVersion")]
+  engine_version: String,
+  #[serde(rename = "definitionsVersion")]
+  definitions_version: String,
+  #[serde(rename = "realTimeProtectionEnabled")]
+  real_time_protection_enabled: RealTimeProtection,
+}
+
+/// Wrapper for realTimeProtectionEnabled field which has a nested structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RealTimeProtection {
+  value: bool,
 }
 
 /// Host information for HIP reporting
@@ -32,6 +53,8 @@ struct HostInfo<'a> {
   software_version: &'a str,
   domain: String,
   network_interfaces: Vec<NetworkInterface>,
+  /// Linux only: Microsoft Defender (mdatp) information if available
+  defender: Option<DefenderInfo>,
 }
 
 impl<'a> HostInfo<'a> {
@@ -238,6 +261,9 @@ impl<'a> HostInfoCollector<'a> {
       ipv6: iface.ipv6,
     };
 
+    // Try to detect Microsoft Defender on Linux
+    let defender = detect_microsoft_defender_blocking();
+
     HostInfo {
       os_vendor: "Linux",
       os_version: &self.args.os_version,
@@ -246,6 +272,7 @@ impl<'a> HostInfoCollector<'a> {
       software_version: "",
       domain: String::new(),
       network_interfaces: vec![iface],
+      defender,
     }
   }
 
@@ -284,6 +311,7 @@ impl<'a> HostInfoCollector<'a> {
       software_version: host_utils::get_macos_version(),
       domain: self.get_domain(),
       network_interfaces: vec![iface],
+      defender: None,
     }
   }
 
@@ -334,8 +362,38 @@ impl<'a> HostInfoCollector<'a> {
       software_version: host_utils::get_windows_version(),
       domain: self.get_domain(),
       network_interfaces: ifaces,
+      defender: None,
     }
   }
+}
+
+// ============================================================================
+// Microsoft Defender Detection
+// ============================================================================
+
+/// Detect Microsoft Defender (mdatp) on Linux systems
+/// Executes 'mdatp health --output json' and parses the result
+fn detect_microsoft_defender_blocking() -> Option<DefenderInfo> {
+  // Try to execute 'mdatp health --output json'
+  let output = Command::new("mdatp")
+    .arg("health")
+    .arg("--output")
+    .arg("json")
+    .output()
+    .ok()?;
+
+  // Check if command executed successfully
+  if !output.status.success() {
+    debug!("mdatp health command failed");
+    return None;
+  }
+
+  // Parse JSON output
+  let json_str = String::from_utf8(output.stdout).ok()?;
+  let defender_info: DefenderInfo = serde_json::from_str(&json_str).ok()?;
+
+  debug!("Detected Microsoft Defender: {:?}", defender_info);
+  Some(defender_info)
 }
 
 // ============================================================================

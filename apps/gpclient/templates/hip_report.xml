@@ -218,7 +218,20 @@
 		</entry>
     {% elif host_info.os_vendor == "Linux" -%}
 		<entry name="anti-malware">
+			{% if let Some(defender) = &host_info.defender -%}
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="Microsoft Defender ATP" version="{{ defender.app_version }}" defver="{{ defender.definitions_version }}" prodType="3" engver="{{ defender.engine_version }}" osType="1" vendor="Microsoft Corporation" dateday="{{ day }}" dateyear="{{ year }}" datemon="{{ month }}">
+						</Prod>
+						<real-time-protection>{% if defender.real_time_protection_enabled.value %}yes{% else %}no{% endif %}</real-time-protection>
+						<last-full-scan-time>n/a</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+			</list>
+			{% else -%}
 			<list/>
+			{% endif -%}
 		</entry>
 		<entry name="disk-backup">
 			<list/>
