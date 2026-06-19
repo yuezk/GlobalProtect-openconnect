@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, net::UdpSocket};
 
 use anyhow::bail;
 use log::{debug, info, warn};
@@ -9,7 +9,9 @@ use xmltree::Element;
 use crate::{
   credential::Credential,
   error::PortalError,
+  gateway::GatewayLoginContext,
   gp_params::GpParams,
+  params::gateway_login::{self, GatewayLoginInput},
   utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::ElementExt},
 };
 
@@ -19,7 +21,16 @@ pub enum GatewayLogin {
 }
 
 pub async fn gateway_login(gateway: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<GatewayLogin> {
-  gateway_login_with_options(gateway, cred, gp_params, false).await
+  gateway_login_with_options(gateway, cred, gp_params, None, false).await
+}
+
+pub async fn gateway_login_with_context(
+  gateway: &str,
+  cred: &Credential,
+  gp_params: &GpParams,
+  context: &GatewayLoginContext,
+) -> anyhow::Result<GatewayLogin> {
+  gateway_login_with_options(gateway, cred, gp_params, Some(context), false).await
 }
 
 pub async fn gateway_login_with_extend_lifetime(
@@ -27,13 +38,14 @@ pub async fn gateway_login_with_extend_lifetime(
   cred: &Credential,
   gp_params: &GpParams,
 ) -> anyhow::Result<GatewayLogin> {
-  gateway_login_with_options(gateway, cred, gp_params, true).await
+  gateway_login_with_options(gateway, cred, gp_params, None, true).await
 }
 
 async fn gateway_login_with_options(
   gateway: &str,
   cred: &Credential,
   gp_params: &GpParams,
+  context: Option<&GatewayLoginContext>,
   extend_lifetime: bool,
 ) -> anyhow::Result<GatewayLogin> {
   let url = normalize_server(gateway)?;
@@ -42,14 +54,33 @@ async fn gateway_login_with_options(
   let login_url = format!("{}/ssl-vpn/login.esp", url);
   let client = Client::try_from(gp_params)?;
 
-  let params = build_gateway_login_params(&gateway, cred, gp_params, extend_lifetime);
+  let client_ip = context.and_then(|context| {
+    context
+      .client_ip()
+      .map(|ip| ip.to_string())
+      .or_else(|| detect_local_ipv4(context.host()))
+  });
+  let request_params = gateway_login::build(&GatewayLoginInput {
+    gp_params,
+    cred,
+    gateway_host: &gateway,
+    context,
+    client_ip: client_ip.as_deref(),
+    extend_lifetime,
+  });
 
   info!("Perform gateway login, user_agent: {}", gp_params.user_agent());
+  log_gateway_login_context(context, client_ip.as_deref(), gp_params);
 
-  let res = client.post(&login_url).form(&params).send().await.map_err(|e| {
-    warn!("Network error: {:?}", e);
-    anyhow::anyhow!(PortalError::NetworkError(e))
-  })?;
+  let res = client
+    .post(&login_url)
+    .form(&request_params.body)
+    .send()
+    .await
+    .map_err(|e| {
+      warn!("Network error: {:?}", e);
+      anyhow::anyhow!(PortalError::NetworkError(e))
+    })?;
 
   let res = parse_gp_response(res).await.map_err(|err| {
     warn!("{err}");
@@ -80,31 +111,29 @@ async fn gateway_login_with_options(
   Ok(GatewayLogin::Cookie(cookie))
 }
 
-fn build_gateway_login_params(
-  gateway: &str,
-  cred: &Credential,
-  gp_params: &GpParams,
-  extend_lifetime: bool,
-) -> HashMap<String, String> {
-  let mut params = cred
-    .to_params()
-    .into_iter()
-    .map(|(key, value)| (key.to_string(), value.to_string()))
-    .collect::<HashMap<_, _>>();
+fn detect_local_ipv4(host: &str) -> Option<String> {
+  let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+  socket.connect((host, 443)).ok()?;
+  let ip = socket.local_addr().ok()?.ip();
 
-  params.extend(
-    gp_params
-      .to_params()
-      .into_iter()
-      .map(|(key, value)| (key.to_string(), value.to_string())),
+  if ip.is_ipv4() { Some(ip.to_string()) } else { None }
+}
+
+fn log_gateway_login_context(context: Option<&GatewayLoginContext>, client_ip: Option<&str>, gp_params: &GpParams) {
+  let Some(context) = context else {
+    return;
+  };
+
+  info!(
+    "Gateway login context: host_present={}, gateway_name_present={}, connect_method_present={}, selection_type={}, internal={}, clientgpversion_present={}, client_ip_present={}",
+    !context.host().is_empty(),
+    !context.name().is_empty(),
+    context.connect_method().is_some(),
+    context.selection().as_login_param(),
+    context.kind().as_login_param(),
+    gp_params.client_version().is_some(),
+    client_ip.is_some()
   );
-  params.insert("server".to_string(), gateway.to_string());
-
-  if extend_lifetime {
-    params.insert("extend-lifetime".to_string(), "true".to_string());
-  }
-
-  params
 }
 
 fn build_gateway_token(element: &Element, computer: &str) -> anyhow::Result<String> {
@@ -203,26 +232,6 @@ thisForm.inputStr.value = "5ef64e83000119ed";"#;
     let (message, input_str) = parse_mfa(res).unwrap();
     assert_eq!(message, "MFA message");
     assert_eq!(input_str, "5ef64e83000119ed");
-  }
-
-  #[test]
-  fn normal_gateway_login_params_do_not_extend_lifetime() {
-    let cred = Credential::Password(crate::credential::PasswordCredential::new("alice", "secret"));
-    let gp_params = GpParams::builder().build();
-
-    let params = build_gateway_login_params("vpn.example.com", &cred, &gp_params, false);
-
-    assert!(!params.contains_key("extend-lifetime"));
-  }
-
-  #[test]
-  fn extension_gateway_login_params_extend_lifetime() {
-    let cred = Credential::Password(crate::credential::PasswordCredential::new("alice", "secret"));
-    let gp_params = GpParams::builder().build();
-
-    let params = build_gateway_login_params("vpn.example.com", &cred, &gp_params, true);
-
-    assert_eq!(params.get("extend-lifetime").map(String::as_str), Some("true"));
   }
 
   #[test]

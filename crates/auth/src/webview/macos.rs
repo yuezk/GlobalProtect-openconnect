@@ -1,7 +1,8 @@
+use anyhow::bail;
 use block2::RcBlock;
 use log::warn;
 use objc2::runtime::AnyObject;
-use objc2_foundation::{NSError, NSString, NSURL, NSURLRequest};
+use objc2_foundation::{NSError, NSObject, NSObjectNSKeyValueCoding, NSString, NSURL, NSURLRequest};
 use objc2_web_kit::WKWebView;
 use tauri::webview::PlatformWebview;
 
@@ -10,6 +11,29 @@ use super::webview_auth::PlatformWebviewExt;
 impl PlatformWebviewExt for PlatformWebview {
   fn ignore_tls_errors(&self) -> anyhow::Result<()> {
     warn!("Ignoring TLS errors is not supported on macOS");
+    Ok(())
+  }
+
+  fn user_agent(&self) -> anyhow::Result<String> {
+    unsafe {
+      let wv: &NSObject = &*self.inner().cast();
+      let Some(value) = wv.valueForKey(&NSString::from_str("userAgent")) else {
+        bail!("Failed to get webview user agent");
+      };
+      let Some(user_agent) = value.downcast_ref::<NSString>() else {
+        bail!("Webview user agent is not a string");
+      };
+
+      Ok(user_agent.to_string())
+    }
+  }
+
+  fn set_user_agent(&self, user_agent: &str) -> anyhow::Result<()> {
+    unsafe {
+      let wv: &WKWebView = &*self.inner().cast();
+      wv.setCustomUserAgent(Some(&NSString::from_str(user_agent)));
+    }
+
     Ok(())
   }
 

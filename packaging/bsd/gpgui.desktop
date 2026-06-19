@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=GP Connect
+Comment=A GUI client for GlobalProtect VPN
+GenericName=GlobalProtect VPN Client
+Categories=Network;Dialup;
+Exec=/usr/local/bin/gpclient launch-gui %u
+MimeType=x-scheme-handler/globalprotectcallback;
+Icon=gpgui
+Keywords=GlobalProtect;Openconnect;SAML;connection;VPN;

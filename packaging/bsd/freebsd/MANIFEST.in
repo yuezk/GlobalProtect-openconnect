@@ -1,0 +1,53 @@
+name: "@PKG_NAME@"
+version: "@VERSION@"
+origin: "security/@PKG_NAME@"
+comment: "GlobalProtect VPN client based on OpenConnect"
+maintainer: "Kevin Yue <k3vinyue@gmail.com>"
+www: "https://github.com/yuezk/GlobalProtect-openconnect"
+abi: "@ABI@"
+arch: "@ARCH@"
+prefix: "@PREFIX@"
+licenselogic: single
+licenses: ["GPLv3"]
+categories: ["security", "net"]
+deps: {
+  "gmp": {
+    origin: "math/gmp"
+    version: "*"
+  }
+  "gnome-keyring": {
+    origin: "security/gnome-keyring"
+    version: "*"
+  }
+  "gnutls": {
+    origin: "security/gnutls"
+    version: "*"
+  }
+  "libayatana-appindicator": {
+    origin: "devel/libayatana-appindicator"
+    version: "*"
+  }
+  "libxml2": {
+    origin: "textproc/libxml2"
+    version: "*"
+  }
+  "nettle": {
+    origin: "security/nettle"
+    version: "*"
+  }
+  "p11-kit": {
+    origin: "security/p11-kit"
+    version: "*"
+  }
+  "polkit": {
+    origin: "sysutils/polkit"
+    version: "*"
+  }
+  "webkit2-gtk_41": {
+    origin: "www/webkit2-gtk"
+    version: "*"
+  }
+}
+desc: <<EOD
+A GlobalProtect VPN client based on OpenConnect.
+EOD

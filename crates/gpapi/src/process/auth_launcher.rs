@@ -4,7 +4,7 @@ use anyhow::bail;
 use common::constants::GP_AUTH_BINARY;
 use tokio::process::Command;
 
-use crate::{auth::SamlAuthResult, credential::Credential};
+use crate::{auth::SamlAuthResult, credential::Credential, os_profile::OsProfile};
 
 use super::command_traits::CommandExt;
 
@@ -13,9 +13,9 @@ pub struct SamlAuthLauncher<'a> {
   auth_executable: Option<&'a str>,
   gateway: bool,
   saml_request: Option<&'a str>,
-  user_agent: Option<&'a str>,
   os: Option<&'a str>,
-  os_version: Option<&'a str>,
+  host_id: Option<&'a str>,
+  client_version: Option<&'a str>,
   fix_openssl: bool,
   ignore_tls_errors: bool,
   #[cfg(feature = "webview-auth")]
@@ -35,9 +35,9 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_executable: None,
       gateway: false,
       saml_request: None,
-      user_agent: None,
       os: None,
-      os_version: None,
+      host_id: None,
+      client_version: None,
       fix_openssl: false,
       ignore_tls_errors: false,
       #[cfg(feature = "webview-auth")]
@@ -66,18 +66,10 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
-  pub fn user_agent(mut self, user_agent: &'a str) -> Self {
-    self.user_agent = Some(user_agent);
-    self
-  }
-
-  pub fn os(mut self, os: &'a str) -> Self {
-    self.os = Some(os);
-    self
-  }
-
-  pub fn os_version(mut self, os_version: Option<&'a str>) -> Self {
-    self.os_version = os_version;
+  pub fn os_profile(mut self, profile: &'a OsProfile) -> Self {
+    self.os = Some(profile.client_os().as_str());
+    self.host_id = Some(profile.host_identity().host_id());
+    self.client_version = Some(profile.client_version());
     self
   }
 
@@ -133,16 +125,16 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--saml-request").arg(saml_request);
     }
 
-    if let Some(user_agent) = self.user_agent {
-      auth_cmd.arg("--user-agent").arg(user_agent);
-    }
-
     if let Some(os) = self.os {
       auth_cmd.arg("--os").arg(os);
     }
 
-    if let Some(os_version) = self.os_version {
-      auth_cmd.arg("--os-version").arg(os_version);
+    if let Some(host_id) = self.host_id {
+      auth_cmd.arg("--host-id").arg(host_id);
+    }
+
+    if let Some(client_version) = self.client_version {
+      auth_cmd.arg("--client-version").arg(client_version);
     }
 
     if self.fix_openssl {
@@ -193,5 +185,38 @@ impl<'a> SamlAuthLauncher<'a> {
     };
 
     Credential::try_from(auth_result)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::os_profile::{ClientOs, OsProfileBuilder};
+
+  #[test]
+  fn os_profile_sets_os_from_profile() {
+    let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
+
+    let launcher = SamlAuthLauncher::new("portal.example.com").os_profile(&profile);
+
+    assert_eq!(launcher.os, Some("Linux"));
+  }
+
+  #[test]
+  fn os_profile_sets_host_id_from_profile_runtime_identity() {
+    let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
+
+    let launcher = SamlAuthLauncher::new("portal.example.com").os_profile(&profile);
+
+    assert_eq!(launcher.host_id, Some(profile.host_identity().host_id()));
+  }
+
+  #[test]
+  fn os_profile_sets_client_version_from_profile() {
+    let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
+
+    let launcher = SamlAuthLauncher::new("portal.example.com").os_profile(&profile);
+
+    assert_eq!(launcher.client_version, Some("6.0.0"));
   }
 }

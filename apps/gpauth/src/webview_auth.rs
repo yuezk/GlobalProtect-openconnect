@@ -13,6 +13,8 @@ pub async fn authenticate(
   clean: bool,
   mut openssl_conf: Option<NamedTempFile>,
 ) -> anyhow::Result<()> {
+  let auth_host_id = gp_params.os_profile().host_identity().host_id().to_string();
+
   tauri::Builder::default()
     .setup(move |app| {
       let app_handle = app.handle().clone();
@@ -20,10 +22,11 @@ pub async fn authenticate(
       tauri::async_runtime::spawn(async move {
         let authenticator = WebviewAuthenticator::new(&server, &gp_params)
           .with_auth_request(&auth_request)
+          .with_webview_user_agent(gp_params.os_profile().webview_user_agent())
           .with_clean(clean);
 
         let auth_result = authenticator.authenticate(&app_handle).await;
-        print_auth_result(auth_result);
+        print_auth_result(auth_result, Some(&auth_host_id));
 
         // Ensure the app exits after the authentication process
         app_handle.exit(0);

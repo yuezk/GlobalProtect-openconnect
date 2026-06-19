@@ -129,6 +129,7 @@ jobs:
         cp -v packaging/deb/postrm .build/debian/postrm
 
         sed -i "s/@BUILD_GUI_HELPER@/1/g" .build/debian/rules
+        sed -i "s/@BUILD_WEBVIEW_AUTH@/1/g" .build/debian/rules
 
         # Update the control file with the correct Rust version
         sed -i "s/@RUST_VERSION@/${{ inputs.rust }}/g" .build/debian/control

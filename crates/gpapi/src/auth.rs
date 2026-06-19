@@ -9,7 +9,7 @@ use crate::{error::AuthDataParseError, utils::base64::decode_to_string};
 
 pub type AuthDataParseResult = anyhow::Result<SamlAuthData, AuthDataParseError>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SamlAuthData {
   #[serde(alias = "un")]
@@ -17,9 +17,11 @@ pub struct SamlAuthData {
   prelogin_cookie: Option<String>,
   portal_userauthcookie: Option<String>,
   token: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  host_id: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum SamlAuthResult {
   Success(SamlAuthData),
@@ -31,6 +33,13 @@ impl SamlAuthResult {
     match self {
       SamlAuthResult::Success(_) => true,
       SamlAuthResult::Failure(_) => false,
+    }
+  }
+
+  pub fn host_id(&self) -> Option<&str> {
+    match self {
+      SamlAuthResult::Success(auth_data) => auth_data.host_id(),
+      SamlAuthResult::Failure(_) => None,
     }
   }
 }
@@ -62,7 +71,14 @@ impl SamlAuthData {
       prelogin_cookie: Some(prelogin_cookie),
       portal_userauthcookie: Some(portal_userauthcookie),
       token: None,
+      host_id: None,
     })
+  }
+
+  pub fn with_host_id(mut self, host_id: impl Into<String>) -> Self {
+    let host_id = host_id.into();
+    self.host_id = (!host_id.trim().is_empty()).then_some(host_id);
+    self
   }
 
   pub fn from_html(html: &str) -> AuthDataParseResult {
@@ -72,7 +88,11 @@ impl SamlAuthData {
         let prelogin_cookie = parse_xml_tag(html, "prelogin-cookie");
         let portal_userauthcookie = parse_xml_tag(html, "portal-userauthcookie");
 
-        SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie).map_err(AuthDataParseError::Invalid)
+        let auth_data =
+          SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie).map_err(AuthDataParseError::Invalid)?;
+        auth_data.log_summary("html");
+
+        Ok(auth_data)
       }
       Some(status) => Err(AuthDataParseError::Invalid(anyhow::anyhow!(
         "SAML auth status: {}",
@@ -102,6 +122,7 @@ impl SamlAuthData {
         AuthDataParseError::Invalid(anyhow::anyhow!(e))
       })?;
 
+      auth_data.log_summary("gpcallback-cas");
       return Ok(auth_data);
     }
 
@@ -122,9 +143,32 @@ impl SamlAuthData {
     self.prelogin_cookie.as_deref()
   }
 
+  pub fn portal_userauthcookie(&self) -> Option<&str> {
+    self.portal_userauthcookie.as_deref()
+  }
+
   pub fn token(&self) -> Option<&str> {
     self.token.as_deref()
   }
+
+  pub fn host_id(&self) -> Option<&str> {
+    self.host_id.as_deref()
+  }
+
+  fn log_summary(&self, source: &str) {
+    info!(
+      "Parsed SAML auth data: source={}, username_present={}, prelogin_cookie_len={}, portal_userauthcookie_len={}, token_len={}",
+      source,
+      !self.username.is_empty(),
+      optional_len(self.prelogin_cookie.as_deref()),
+      optional_len(self.portal_userauthcookie.as_deref()),
+      optional_len(self.token.as_deref())
+    );
+  }
+}
+
+fn optional_len(value: Option<&str>) -> usize {
+  value.unwrap_or_default().len()
 }
 
 fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
@@ -160,11 +204,46 @@ mod tests {
 
   #[test]
   fn auth_data_from_gpcallback_non_cas() {
-    let auth_data = "PGh0bWw+PCEtLSA8c2FtbC1hdXRoLXN0YXR1cz4xPC9zYW1sLWF1dGgtc3RhdHVzPjxwcmVsb2dpbi1jb29raWU+cHJlbG9naW4tY29va2llPC9wcmVsb2dpbi1jb29raWU+PHNhbWwtdXNlcm5hbWU+eHl6QGVtYWlsLmNvbTwvc2FtbC11c2VybmFtZT48c2FtbC1zbG8+bm88L3NhbWwtc2xvPjxzYW1sLVNlc3Npb25Ob3RPbk9yQWZ0ZXI+PC9zYW1sLVNlc3Npb25Ob3RPbk9yQWZ0ZXI+IC0tPjwvaHRtbD4=";
+    let auth_data = "PGh0bWw+PCEtLSA8c2FtbC1hdXRoLXN0YXR1cz4xPC9zYW1sLWF1dGgtc3RhdHVzPjxwcmVsb2dpbi1jb29raWU+cHJlbG9naW4tY29va2llPC9wcmVsb2dpbi1jb29raWU+PHBvcnRhbC11c2VyYXV0aGNvb2tpZT5wb3J0YWwtdXNlcmF1dGhjb29raWU8L3BvcnRhbC11c2VyYXV0aGNvb2tpZT48c2FtbC11c2VybmFtZT54eXpAZW1haWwuY29tPC9zYW1sLXVzZXJuYW1lPjxzYW1sLXNsbz5ubzwvc2FtbC1zbG8+IC0tPjwvaHRtbD4=";
 
     let auth_data = SamlAuthData::from_gpcallback(auth_data).unwrap();
 
     assert_eq!(auth_data.username(), "xyz@email.com");
     assert_eq!(auth_data.prelogin_cookie(), Some("prelogin-cookie"));
+    assert_eq!(auth_data.portal_userauthcookie(), Some("portal-userauthcookie"));
+  }
+
+  #[test]
+  fn auth_result_success_can_carry_host_id() {
+    let auth_data = SamlAuthData::new(
+      Some("alice@example.com".to_string()),
+      Some("prelogin-cookie".to_string()),
+      None,
+    )
+    .unwrap()
+    .with_host_id("host-seed");
+    let result = SamlAuthResult::Success(auth_data);
+
+    assert_eq!(result.host_id(), Some("host-seed"));
+
+    let value = serde_json::to_value(result).unwrap();
+    assert_eq!(value["success"]["hostId"], "host-seed");
+  }
+
+  #[test]
+  fn auth_result_success_omits_empty_host_id() {
+    let auth_data = SamlAuthData::new(
+      Some("alice@example.com".to_string()),
+      Some("prelogin-cookie".to_string()),
+      None,
+    )
+    .unwrap()
+    .with_host_id(" ");
+    let result = SamlAuthResult::Success(auth_data);
+
+    assert_eq!(result.host_id(), None);
+
+    let value = serde_json::to_value(result).unwrap();
+    assert!(value["success"].get("hostId").is_none());
   }
 }

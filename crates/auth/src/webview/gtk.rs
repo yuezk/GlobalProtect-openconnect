@@ -5,8 +5,8 @@ use gpapi::utils::redact::redact_uri;
 use log::warn;
 use tauri::webview::PlatformWebview;
 use webkit2gtk::{
-  LoadEvent, TLSErrorsPolicy, URIResponseExt, WebResource, WebResourceExt, WebViewExt, WebsiteDataManagerExt,
-  gio::Cancellable, glib::GString,
+  LoadEvent, SettingsExt, TLSErrorsPolicy, URIResponseExt, WebResource, WebResourceExt, WebViewExt,
+  WebsiteDataManagerExt, gio::Cancellable, glib::GString,
 };
 
 use super::{
@@ -31,6 +31,26 @@ impl PlatformWebviewExt for PlatformWebview {
       return Ok(());
     }
     bail!("Failed to get website data manager");
+  }
+
+  fn user_agent(&self) -> anyhow::Result<String> {
+    let Some(settings) = self.inner().settings() else {
+      bail!("Failed to get webview settings");
+    };
+
+    settings
+      .user_agent()
+      .map(GString::into)
+      .ok_or_else(|| anyhow::anyhow!("Failed to get webview user agent"))
+  }
+
+  fn set_user_agent(&self, user_agent: &str) -> anyhow::Result<()> {
+    let Some(settings) = self.inner().settings() else {
+      bail!("Failed to get webview settings");
+    };
+
+    settings.set_user_agent(Some(user_agent));
+    Ok(())
   }
 
   fn load_url(&self, url: &str) -> anyhow::Result<()> {

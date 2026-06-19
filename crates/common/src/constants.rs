@@ -1,5 +1,7 @@
 pub const GP_USER_AGENT: &str = "PAN GlobalProtect";
-pub const GP_CLIENT_VERSION: &str = "6.3.0-33";
+pub const GP_CLIENT_VERSION_LINUX: &str = "6.3.3-619";
+pub const GP_CLIENT_VERSION_WINDOWS: &str = "6.3.3-650";
+pub const GP_CLIENT_VERSION_MACOS: &str = "6.3.3-915";
 pub const GP_SERVICE_LOCK_FILE: &str = "/var/run/gpservice.lock";
 pub const GP_CALLBACK_PORT_FILENAME: &str = "gpcallback.port";
 
@@ -27,16 +29,43 @@ pub const GP_GUI_HELPER_BINARY: &str = "/usr/local/bin/gpgui-helper";
 #[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "x86_64"))]
 pub const GP_AUTH_BINARY: &str = "/usr/local/bin/gpauth";
 
+// Release binaries - BSD package layout
+#[cfg(all(not(debug_assertions), any(target_os = "freebsd", target_os = "openbsd")))]
+pub const GP_CLIENT_BINARY: &str = "/usr/local/bin/gpclient";
+#[cfg(all(not(debug_assertions), any(target_os = "freebsd", target_os = "openbsd")))]
+pub const GP_SERVICE_BINARY: &str = "/usr/local/bin/gpservice";
+#[cfg(all(not(debug_assertions), any(target_os = "freebsd", target_os = "openbsd")))]
+pub const GP_GUI_BINARY: &str = "/usr/local/bin/gpgui";
+#[cfg(all(not(debug_assertions), any(target_os = "freebsd", target_os = "openbsd")))]
+pub const GP_GUI_HELPER_BINARY: &str = "/usr/local/bin/gpgui-helper";
+#[cfg(all(not(debug_assertions), any(target_os = "freebsd", target_os = "openbsd")))]
+pub const GP_AUTH_BINARY: &str = "/usr/local/bin/gpauth";
+
 // Release binaries - Linux
-#[cfg(all(not(debug_assertions), not(target_os = "macos")))]
+#[cfg(all(
+  not(debug_assertions),
+  not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))
+))]
 pub const GP_CLIENT_BINARY: &str = "/usr/bin/gpclient";
-#[cfg(all(not(debug_assertions), not(target_os = "macos")))]
+#[cfg(all(
+  not(debug_assertions),
+  not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))
+))]
 pub const GP_SERVICE_BINARY: &str = "/usr/bin/gpservice";
-#[cfg(all(not(debug_assertions), not(target_os = "macos")))]
+#[cfg(all(
+  not(debug_assertions),
+  not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))
+))]
 pub const GP_GUI_BINARY: &str = "/usr/bin/gpgui";
-#[cfg(all(not(debug_assertions), not(target_os = "macos")))]
+#[cfg(all(
+  not(debug_assertions),
+  not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))
+))]
 pub const GP_GUI_HELPER_BINARY: &str = "/usr/bin/gpgui-helper";
-#[cfg(all(not(debug_assertions), not(target_os = "macos")))]
+#[cfg(all(
+  not(debug_assertions),
+  not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))
+))]
 pub const GP_AUTH_BINARY: &str = "/usr/bin/gpauth";
 
 // Debug binaries are set in build.rs via environment variables

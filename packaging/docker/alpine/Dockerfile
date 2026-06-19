@@ -32,6 +32,7 @@ COPY . .
 RUN RUSTFLAGS="-C target-feature=-crt-static" \
     make build \
     BUILD_GUI_HELPER=0 \
+    BUILD_WEBVIEW_AUTH=0 \
     INCLUDE_GUI=0 \
     LIBXML2_STATIC=1
 

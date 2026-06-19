@@ -1,9 +1,8 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use common::constants::GP_CLIENT_VERSION;
 use gpapi::{
   gateway::{SessionContext, SessionExtensionAuth, extend_session},
-  gp_params::ClientOs,
+  os_profile::OsProfile,
   session::{SessionInfo, SessionRequestArgs, SessionWarning},
 };
 use log::{info, warn};
@@ -21,10 +20,7 @@ pub(crate) struct SessionContextInput {
   pub(crate) portal: String,
   pub(crate) gateway: String,
   pub(crate) cookie: String,
-  pub(crate) user_agent: String,
-  pub(crate) os: ClientOs,
-  pub(crate) os_version: String,
-  pub(crate) client_version: Option<String>,
+  pub(crate) os_profile: OsProfile,
   pub(crate) certificate: Option<String>,
   pub(crate) sslkey: Option<String>,
   pub(crate) key_password: Option<String>,
@@ -34,12 +30,7 @@ pub(crate) struct SessionContextInput {
 
 pub(crate) fn build_session_context(input: SessionContextInput) -> SessionContext {
   let session_args = SessionRequestArgs::new(input.cookie)
-    .with_user_agent(Some(input.user_agent))
-    .with_os(Some(input.os))
-    .with_os_version(Some(input.os_version))
-    .with_client_version(Some(
-      input.client_version.unwrap_or_else(|| GP_CLIENT_VERSION.to_string()),
-    ))
+    .with_user_agent(input.os_profile.user_agent().to_string())
     .with_certificate(input.certificate)
     .with_sslkey(input.sslkey)
     .with_key_password(input.key_password)
@@ -181,15 +172,17 @@ mod tests {
   }
 
   #[test]
-  fn builds_session_context_from_cli_runtime_values() {
+  fn builds_session_context_from_os_profile() {
+    let profile = OsProfile::builder(gpapi::os_profile::ClientOs::Mac)
+      .client_version("6.3.1-12".to_string())
+      .build();
+    let expected_user_agent = profile.user_agent().to_string();
+
     let ctx = build_session_context(SessionContextInput {
       portal: "portal.example.com".to_string(),
       gateway: "vpn.example.com".to_string(),
       cookie: "authcookie=AUTH".to_string(),
-      user_agent: "UA".to_string(),
-      os: ClientOs::Mac,
-      os_version: "macOS 15.0".to_string(),
-      client_version: Some("6.3.1-12".to_string()),
+      os_profile: profile,
       certificate: Some("/tmp/client.pem".to_string()),
       sslkey: Some("/tmp/client.key".to_string()),
       key_password: Some("secret".to_string()),
@@ -200,10 +193,10 @@ mod tests {
     assert_eq!(ctx.portal(), "portal.example.com");
     assert_eq!(ctx.server(), "vpn.example.com");
     assert_eq!(ctx.session_args().cookie(), "authcookie=AUTH");
-    assert_eq!(ctx.session_args().user_agent().as_deref(), Some("UA"));
-    assert!(matches!(ctx.session_args().os(), Some(ClientOs::Mac)));
-    assert_eq!(ctx.session_args().os_version().as_deref(), Some("macOS 15.0"));
-    assert_eq!(ctx.session_args().client_version().as_deref(), Some("6.3.1-12"));
+    assert_eq!(
+      ctx.session_args().user_agent().as_deref(),
+      Some(expected_user_agent.as_str())
+    );
     assert_eq!(ctx.session_args().certificate().as_deref(), Some("/tmp/client.pem"));
     assert_eq!(ctx.session_args().sslkey().as_deref(), Some("/tmp/client.key"));
     assert_eq!(ctx.session_args().key_password().as_deref(), Some("secret"));

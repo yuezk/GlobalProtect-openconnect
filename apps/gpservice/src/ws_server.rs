@@ -3,7 +3,13 @@ use std::sync::Arc;
 use axum::extract::ws::Message;
 use common::constants::GP_AUTH_BINARY;
 use gpapi::{
-  service::{event::WsEvent, request::WsRequest, vpn_env::VpnEnv, vpn_state::VpnState},
+  os_profile::HostIdentity,
+  service::{
+    event::WsEvent,
+    request::WsRequest,
+    vpn_env::{HostInfo, VpnEnv},
+    vpn_state::VpnState,
+  },
   utils::{crypto::Crypto, lock_file::LockFile, redact::Redaction},
 };
 use log::{info, warn};
@@ -59,11 +65,16 @@ impl WsServerContext {
 
     // Send current VPN state to new client
     info!("Sending current environment to new client");
+    let host_info = HostInfo {
+      host_identity: HostIdentity::collect(),
+    };
+
     let vpn_env = VpnEnv {
       vpn_state: self.vpn_state_rx.borrow().clone(),
       vpnc_script: find_vpnc_script().map(|s| s.to_owned()),
       csd_wrapper: find_csd_wrapper().map(|s| s.to_owned()),
       auth_executable: GP_AUTH_BINARY.to_owned(),
+      host_info,
     };
 
     if let Err(err) = conn.send_event(&WsEvent::VpnEnv(vpn_env)).await {

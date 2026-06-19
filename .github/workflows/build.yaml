@@ -10,6 +10,16 @@ on:
         description: 'gpgui branch to use for the snapshot release'
         required: true
         default: dev
+      build_bsd:
+        description: 'Build FreeBSD/OpenBSD packages for the snapshot release'
+        required: true
+        default: false
+        type: boolean
+      build_bsd_arm64:
+        description: 'Build optional FreeBSD/OpenBSD arm64 packages for the snapshot release. Slow and disabled by default'
+        required: true
+        default: false
+        type: boolean
   push:
     paths-ignore:
       - LICENSE
@@ -29,19 +39,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  setup-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Set up matrix
-        id: set-matrix
-        run: |
-          echo 'matrix=[{"runner": "ubuntu-latest", "arch": "amd64"}, {"runner": "ubuntu-24.04-arm", "arch": "ubuntu-24.04-arm"}]' >> $GITHUB_OUTPUT
-
   tarball:
     runs-on: ubuntu-latest
-    needs: [setup-matrix]
     steps:
     - uses: pnpm/action-setup@v5
       with:
@@ -132,12 +131,15 @@ jobs:
 
   build-gp:
     needs:
-    - setup-matrix
     - tarball
     strategy:
       fail-fast: false
       matrix:
-        os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
+        os:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: ubuntu-24.04-arm
         package: [deb, rpm, pkg, apk, binary, ubuntu-rolling]
     runs-on: ${{ matrix.os.runner }}
     name: build-gp (${{ matrix.package }}, ${{ matrix.os.arch }})
@@ -238,12 +240,14 @@ jobs:
         retention-days: 1
 
   build-gpgui:
-    needs:
-    - setup-matrix
     strategy:
       fail-fast: false
       matrix:
-        os: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
+        os:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: ubuntu-24.04-arm
         libc:
           - name: glibc
             builder: gpgui-builder-tauri2
@@ -302,17 +306,274 @@ jobs:
           gpgui-source/*.bin.tar.xz
           gpgui-source/*.bin.tar.xz.sha256
 
-  gh-release:
-    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+  setup-bsd-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.matrix.outputs.enabled }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+    - name: Build matrix
+      id: matrix
+      env:
+        IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+        BUILD_BSD: ${{ github.event_name == 'workflow_dispatch' && inputs.build_bsd }}
+        BUILD_BSD_ARM64: ${{ github.event_name == 'workflow_dispatch' && inputs.build_bsd_arm64 }}
+      run: |
+        python3 - <<'PY'
+        import json
+        import os
+
+        build_bsd = os.environ["IS_TAG"] == "true" or os.environ["BUILD_BSD"] == "true"
+        build_bsd_arm64 = os.environ["BUILD_BSD_ARM64"] == "true"
+        include = []
+
+        def add(os_name, arch):
+            include.append({
+                "os": os_name,
+                "arch": arch,
+                "workspace": f"{os_name}-{arch}-source",
+                "artifact": f"artifact-bsd-{os_name}-{arch}",
+                "package_target": f"package-{os_name}",
+                "artifact_dir": os_name,
+            })
+
+        if build_bsd:
+            add("freebsd", "x86_64")
+            add("openbsd", "x86_64")
+        if build_bsd_arm64:
+            add("freebsd", "arm64")
+            add("openbsd", "arm64")
+
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            output.write(f"enabled={str(bool(include)).lower()}\n")
+            output.write(f"matrix={json.dumps({'include': include}, separators=(',', ':'))}\n")
+        PY
+
+  build-gpgui-frontend:
+    needs: setup-bsd-matrix
+    if: ${{ needs.setup-bsd-matrix.outputs.enabled == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: pnpm/action-setup@v5
+      with:
+        version: 9
+    - name: Prepare workspace
+      run: rm -rf gpgui-frontend && mkdir gpgui-frontend
+    - name: Checkout GlobalProtect-openconnect
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        path: gpgui-frontend/gp
+        submodules: recursive
+    - name: Checkout gpgui
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/gpgui
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+        path: gpgui-frontend/gpgui
+    - name: Build gpgui frontend
+      run: |
+        cd gpgui-frontend/gpgui/app
+        pnpm install --frozen-lockfile
+        pnpm build
+    - name: Upload gpgui frontend
+      uses: actions/upload-artifact@v7
+      with:
+        name: bsd-gpgui-frontend
+        if-no-files-found: error
+        path: gpgui-frontend/gpgui/app/dist/**
+
+  build-bsd:
+    needs:
+      - setup-bsd-matrix
+      - build-gpgui-frontend
+    if: ${{ needs.setup-bsd-matrix.outputs.enabled == 'true' }}
+    runs-on: ubuntu-latest
+    name: build-${{ matrix.os }} (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup-bsd-matrix.outputs.matrix) }}
+    steps:
+    - name: Prepare workspace
+      run: rm -rf "${{ matrix.workspace }}" && mkdir "${{ matrix.workspace }}"
+    - name: Checkout GlobalProtect-openconnect
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        path: ${{ matrix.workspace }}/gp
+        submodules: recursive
+    - name: Checkout gpgui
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/gpgui
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+        path: ${{ matrix.workspace }}/gpgui
+    - name: Download gpgui frontend
+      uses: actions/download-artifact@v8
+      with:
+        name: bsd-gpgui-frontend
+        path: ${{ matrix.workspace }}/gpgui/app/dist
+    - name: Build on FreeBSD
+      if: ${{ matrix.os == 'freebsd' }}
+      uses: vmactions/freebsd-vm@v1
+      with:
+        release: "14.3"
+        arch: ${{ matrix.arch }}
+        usesh: true
+        prepare: |
+          pkg install -y \
+            git \
+            rust \
+            libiconv \
+            gettext-tools \
+            autoconf \
+            automake \
+            libtool \
+            patch \
+            gmake \
+            pkgconf \
+            libxml2 \
+            gnutls \
+            p11-kit \
+            nettle \
+            gmp \
+            gnome-keyring \
+            libayatana-appindicator \
+            polkit \
+            webkit2-gtk_41
+        run: |
+          set -eu
+
+          cd "${{ matrix.workspace }}/gp"
+          cargo build --release --workspace
+
+          cd ../gpgui/app/src-tauri
+          cargo build --release --workspace
+
+          cd ../../../gp
+          gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
+          pkg install -y ".build/${{ matrix.artifact_dir }}"/artifacts/*.pkg
+          gpclient --version
+          gpauth --version
+          gpgui --version
+          rm -rf target ../gpgui/target
+          find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+    - name: Build on OpenBSD
+      if: ${{ matrix.os == 'openbsd' }}
+      uses: vmactions/openbsd-vm@v1
+      with:
+        release: "7.9"
+        arch: ${{ matrix.arch }}
+        usesh: true
+        prepare: |
+          pkg_add -z \
+            git \
+            rust \
+            libiconv \
+            gettext-tools \
+            autoconf-2.72 \
+            automake-1.17 \
+            libtool \
+            patch \
+            gmake \
+            pkgconf \
+            libxml \
+            gnutls \
+            p11-kit \
+            nettle \
+            gmp \
+            gnome-keyring \
+            polkit \
+            webkitgtk41
+          ln -sf /usr/local/bin/autoreconf-2.72 /usr/local/bin/autoreconf
+          ln -sf /usr/local/bin/autoconf-2.72 /usr/local/bin/autoconf
+          ln -sf /usr/local/bin/autoheader-2.72 /usr/local/bin/autoheader
+          ln -sf /usr/local/bin/autom4te-2.72 /usr/local/bin/autom4te
+          ln -sf /usr/local/bin/aclocal-1.17 /usr/local/bin/aclocal
+          ln -sf /usr/local/bin/automake-1.17 /usr/local/bin/automake
+        run: |
+          set -eu
+          export AUTOCONF_VERSION=2.72
+          export AUTOMAKE_VERSION=1.17
+
+          cd "${{ matrix.workspace }}/gp"
+          cargo build --release --workspace
+
+          cd ../gpgui/app/src-tauri
+          cargo build --release --workspace
+
+          cd ../../../gp
+          gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
+          pkg_add -D unsigned ".build/${{ matrix.artifact_dir }}"/artifacts/*.tgz
+          gpclient --version
+          gpauth --version
+          gpgui --version
+          rm -rf target ../gpgui/target
+          find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+    - name: Upload BSD package
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ matrix.artifact }}
+        if-no-files-found: error
+        path: |
+          ${{ matrix.workspace }}/gp/.build/${{ matrix.artifact_dir }}/artifacts/*
+
+  gh-release:
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     needs:
       - tarball
       - tarball-offline
       - build-gp
       - build-docker-image
       - build-gpgui
+      - setup-bsd-matrix
+      - build-gpgui-frontend
+      - build-bsd
 
     steps:
+    - name: Check required jobs
+      env:
+        NEEDS_JSON: ${{ toJson(needs) }}
+        BSD_MATRIX_ENABLED: ${{ needs.setup-bsd-matrix.outputs.enabled }}
+      run: |
+        python3 - <<'PY'
+        import json
+        import os
+        import sys
+
+        needs = json.loads(os.environ["NEEDS_JSON"])
+        bsd_matrix_enabled = os.environ["BSD_MATRIX_ENABLED"] == "true"
+        failed = []
+
+        for name, data in needs.items():
+            result = data["result"]
+            if result in {"failure", "cancelled"}:
+                failed.append(f"{name}: {result}")
+            elif name in {"build-gpgui-frontend", "build-bsd"} and result == "skipped" and not bsd_matrix_enabled:
+                continue
+            elif result == "skipped":
+                failed.append(f"{name}: {result}")
+
+        if failed:
+            print("Required jobs did not complete successfully:")
+            for item in failed:
+                print(f"  - {item}")
+            sys.exit(1)
+        PY
+
     - name: Prepare workspace
       run: rm -rf gh-release && mkdir gh-release
 
@@ -340,6 +601,27 @@ jobs:
         for file in gh-release/gp/.build/artifacts/artifact-gp-apk-ubuntu-24.04-arm/*.apk; do
           mv "$file" "${file%.apk}-aarch64.apk"
         done
+
+    - name: Generate release asset checksums
+      env:
+        RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && 'snapshot' || github.ref_name }}
+      run: |
+        cd gh-release/gp
+        mkdir -p .build
+        scripts/release-assets.sh "$RELEASE_TAG" > .build/release-assets.txt
+        if [ ! -s .build/release-assets.txt ]; then
+          echo "No release assets found"
+          exit 1
+        fi
+        while IFS= read -r file; do
+          digest=$(sha256sum "$file" | cut -d ' ' -f 1)
+          printf '%s  %s\n' "$digest" "$(basename "$file")"
+        done < .build/release-assets.txt > .build/release-assets.sha256
+
+    - name: Attest release assets
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-checksums: gh-release/gp/.build/release-assets.sha256
 
     - name: Create GH release
       env:

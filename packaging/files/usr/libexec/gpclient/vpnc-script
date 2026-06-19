@@ -336,7 +336,11 @@ if [ -n "$IPROUTE" ]; then
 	del_vpngateway_route() {
 		echo "$VPNGATEWAY" | grep -q : && FAMILY=-6 || FAMILY=-4
 
-		$IPROUTE route $route_syntax_del "$VPNGATEWAY"
+		# iproute2 deletes only one matching route at a time. The connect path may
+		# add one host route per matching uplink, so remove them until none remain.
+		while $IPROUTE $FAMILY route $route_syntax_del "$VPNGATEWAY" 2>/dev/null ; do
+			:
+		done
 		if [ $FAMILY != -4 ]; then
 			$IPROUTE $FAMILY route flush cache 2>/dev/null
 		fi

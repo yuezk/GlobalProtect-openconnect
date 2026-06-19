@@ -13,7 +13,7 @@ use crate::{
   gateway::login::{GatewayLogin, gateway_login_with_extend_lifetime},
   gp_params::GpParams,
   session::SessionRequestArgs,
-  utils::{normalize_server, parse_gp_response, xml::ElementExt},
+  utils::{normalize_server, parse_gp_response, request::create_identity, xml::ElementExt},
 };
 
 const EXTEND_SESSION_MESSAGE: &str = "User Session Extension";
@@ -120,16 +120,19 @@ fn validate_extension_login(login: GatewayLogin) -> anyhow::Result<()> {
 }
 
 fn build_session_client(args: &SessionRequestArgs) -> anyhow::Result<Client> {
-  let mut builder = GpParams::builder();
-  builder.user_agent(args.user_agent().as_deref().unwrap_or_default());
-  builder.client_os(args.os().unwrap_or_default());
-  builder.os_version(args.os_version());
-  builder.client_version(args.client_version());
-  builder.certificate(args.certificate());
-  builder.sslkey(args.sslkey());
-  builder.key_password(args.key_password());
+  let mut builder = Client::builder();
 
-  Client::try_from(&builder.build())
+  if let Some(user_agent) = args.user_agent() {
+    builder = builder.user_agent(user_agent);
+  }
+
+  if let Some(cert) = args.certificate() {
+    info!("Using client certificate authentication...");
+    let identity = create_identity(&cert, args.sslkey().as_deref(), args.key_password().as_deref())?;
+    builder = builder.identity(identity);
+  }
+
+  Ok(builder.build()?)
 }
 
 fn parse_cookie_form(args: &SessionRequestArgs) -> anyhow::Result<HashMap<String, String>> {
@@ -165,15 +168,25 @@ fn unix_timestamp() -> u64 {
 
 #[cfg(test)]
 mod tests {
-  use crate::{gp_params::ClientOs, session::SessionRequestArgs};
+  use crate::{
+    os_profile::{ClientOs, HostIdentity, OsProfile},
+    session::SessionRequestArgs,
+  };
 
   use super::*;
 
   fn build_session_args() -> SessionRequestArgs {
+    let profile = OsProfile::builder(ClientOs::Mac)
+      .host_identity(HostIdentity::new(
+        "test-mac".to_string(),
+        "host-id".to_string(),
+        "serial".to_string(),
+        "aa:bb:cc:dd:ee:ff".to_string(),
+      ))
+      .client_version("6.3.1-12".to_string())
+      .build();
     SessionRequestArgs::new("authcookie=AUTH&portal=vpn.example.com&user=alice&preferred-ip=10.0.0.10".to_string())
-      .with_os(Some(ClientOs::Mac))
-      .with_os_version(Some("macOS 15.0".to_string()))
-      .with_client_version(Some("6.3.1-12".to_string()))
+      .with_user_agent(profile.user_agent().to_string())
       .with_disable_ipv6(true)
   }
 

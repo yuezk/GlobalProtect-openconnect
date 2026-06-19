@@ -143,6 +143,13 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
     config.env("LIBS", "-liconv");
   }
 
+  #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+  {
+    config.ldflag("-L/usr/local/lib");
+    config.ldflag("-liconv");
+    config.env("LIBS", "-liconv");
+  }
+
   let dst = config.build();
 
   let lib_dir = dst.join("lib");
@@ -189,6 +196,12 @@ fn main() {
   // Compile the vpn.c file
   println!("cargo:rerun-if-changed=src/ffi/vpn.c");
   println!("cargo:rerun-if-changed=src/ffi/vpn.h");
+
+  #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+  {
+    println!("cargo:rustc-link-search=native=/usr/local/lib");
+    println!("cargo:rustc-link-lib=iconv");
+  }
 
   // Prevent silent fallback to dynamic libraries
   #[cfg(target_os = "linux")]

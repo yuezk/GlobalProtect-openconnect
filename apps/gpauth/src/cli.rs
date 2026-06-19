@@ -1,17 +1,24 @@
 use auth::{BrowserAuthenticator, auth_prelogin};
 use clap::Parser;
-use common::constants::GP_USER_AGENT;
 use gpapi::{
   auth::{SamlAuthData, SamlAuthResult},
   clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
-  gp_params::{ClientOs, GpParams},
+  gp_params::GpParams,
+  os_profile::{ClientOs, OsProfile},
   utils::{normalize_server, openssl},
 };
 use log::info;
 use serde_json::json;
 use tempfile::NamedTempFile;
 
-const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
+const VERSION: &str = concat!(
+  env!("CARGO_PKG_VERSION"),
+  " (",
+  env!("GPAUTH_GIT_COMMIT"),
+  " ",
+  compile_time::date_str!(),
+  ")"
+);
 
 #[derive(Parser)]
 #[command(
@@ -41,14 +48,14 @@ struct Cli {
   #[arg(long, help = "The SAML authentication request")]
   saml_request: Option<String>,
 
-  #[arg(long, default_value = GP_USER_AGENT, help = "The user agent to use")]
-  user_agent: String,
-
-  #[arg(long, default_value = "Linux")]
+  #[arg(long, value_enum, default_value_t = Os::default())]
   os: Os,
 
-  #[arg(long)]
-  os_version: Option<String>,
+  #[arg(long, help = "Use this runtime host ID when building the OS profile")]
+  host_id: Option<String>,
+
+  #[arg(long, help = "Override the GlobalProtect client version reported to the server")]
+  client_version: Option<String>,
 
   #[arg(long, help = "Get around the OpenSSL `unsafe legacy renegotiation` error")]
   fix_openssl: bool,
@@ -114,10 +121,14 @@ impl Cli {
 
     let server = normalize_server(&self.server)?;
     let gp_params = self.build_gp_params();
+    info!(
+      "gpauth auth host-id: {}",
+      gp_params.os_profile().host_identity().host_id()
+    );
 
     let auth_request = match self.saml_request.as_deref() {
       Some(auth_request) => auth_request.to_string(),
-      None => auth_prelogin(&server, &gp_params).await?,
+      None => auth_prelogin(&server, &gp_params, self.external_browser_requested()).await?,
     };
 
     #[cfg(feature = "webview-auth")]
@@ -130,10 +141,11 @@ impl Cli {
     let browser = self.browser.as_deref().or(Some("default"));
 
     if let Some(browser) = browser {
+      let auth_host_id = gp_params.os_profile().host_identity().host_id().to_string();
       let authenticator = BrowserAuthenticator::new(&auth_request, browser);
       let auth_result = authenticator.authenticate().await;
 
-      print_auth_result(auth_result);
+      print_auth_result(auth_result, Some(&auth_host_id));
 
       // explicitly drop openssl_conf to avoid the unused variable warning
       drop(openssl_conf);
@@ -147,15 +159,33 @@ impl Cli {
   }
 
   fn build_gp_params(&self) -> GpParams {
-    let gp_params = GpParams::builder()
-      .user_agent(&self.user_agent)
-      .client_os(ClientOs::from(&self.os))
-      .os_version(self.os_version.clone())
+    GpParams::builder(self.build_os_profile())
       .ignore_tls_errors(self.ignore_tls_errors)
       .is_gateway(self.gateway)
-      .build();
+      .build()
+  }
 
-    gp_params
+  fn build_os_profile(&self) -> OsProfile {
+    let mut builder = OsProfile::builder(ClientOs::from(self.os));
+    if let Some(host_id) = self.host_id.as_deref() {
+      builder = builder.host_id_override(host_id);
+    }
+    if let Some(client_version) = self.client_version.as_deref() {
+      builder = builder.client_version(client_version);
+    }
+    builder.build()
+  }
+
+  fn external_browser_requested(&self) -> bool {
+    #[cfg(feature = "webview-auth")]
+    {
+      self.default_browser || self.browser.is_some()
+    }
+
+    #[cfg(not(feature = "webview-auth"))]
+    {
+      true
+    }
   }
 }
 
@@ -177,11 +207,56 @@ pub async fn run() {
   }
 }
 
-pub fn print_auth_result(auth_result: anyhow::Result<SamlAuthData>) {
+pub fn print_auth_result(auth_result: anyhow::Result<SamlAuthData>, host_id: Option<&str>) {
   let auth_result = match auth_result {
-    Ok(auth_data) => SamlAuthResult::Success(auth_data),
+    Ok(auth_data) => {
+      let auth_data = match host_id {
+        Some(host_id) => auth_data.with_host_id(host_id),
+        None => auth_data,
+      };
+      SamlAuthResult::Success(auth_data)
+    }
     Err(err) => SamlAuthResult::Failure(format!("{}", err)),
   };
 
   println!("{}", json!(auth_result));
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn os_defaults_to_runtime_os() {
+    let cli = Cli::try_parse_from(["gpauth", "portal.example.com"]).expect("gpauth args should parse");
+
+    assert_eq!(cli.os, Os::default());
+  }
+
+  #[test]
+  fn host_id_arg_sets_profile_host_id_seed() {
+    let cli = Cli::try_parse_from(["gpauth", "portal.example.com", "--host-id", "host-seed"])
+      .expect("gpauth args should parse");
+    let profile = cli.build_os_profile();
+
+    assert_eq!(profile.host_identity().host_id(), "host-seed");
+  }
+
+  #[test]
+  fn browser_arg_requests_external_browser() {
+    let cli =
+      Cli::try_parse_from(["gpauth", "portal.example.com", "--browser", "firefox"]).expect("gpauth args should parse");
+
+    assert!(cli.external_browser_requested());
+  }
+
+  #[test]
+  fn client_version_arg_sets_profile_client_version() {
+    let cli = Cli::try_parse_from(["gpauth", "portal.example.com", "--client-version", "legacy-client"])
+      .expect("gpauth args should parse");
+    let profile = cli.build_os_profile();
+
+    assert_eq!(profile.client_version(), "legacy-client");
+    assert!(profile.user_agent().contains("legacy-client"));
+  }
 }
