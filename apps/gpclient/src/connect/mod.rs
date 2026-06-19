@@ -159,7 +159,7 @@ impl<'a> ConnectHandler<'a> {
 
     let prelogin = prelogin(portal, &gp_params, self.prelogin_options(false)).await?;
 
-    let cred = self.obtain_credential(&prelogin, portal).await?;
+    let cred = self.obtain_credential(&prelogin, portal, false).await?;
     let mut portal_config = retrieve_config(portal, &cred, &gp_params).await?;
 
     portal_config.sort_gateways(prelogin.region());

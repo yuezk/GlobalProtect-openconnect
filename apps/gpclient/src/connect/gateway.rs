@@ -140,7 +140,7 @@ impl ConnectHandler<'_> {
     gp_params.set_is_gateway(true);
 
     let prelogin = prelogin(gateway, &gp_params, self.prelogin_options(false)).await?;
-    let cred = self.obtain_credential(&prelogin, gateway).await?;
+    let cred = self.obtain_credential(&prelogin, gateway, false).await?;
 
     let login_session = self
       .login_gateway(gateway, &cred, &gp_params, gateway_context.as_ref())
@@ -218,7 +218,10 @@ impl ConnectHandler<'_> {
       info!("Portal config did not provide gateway auth cookies; using gateway prelogin flow");
     }
 
-    let gateway_cred = match self.obtain_credential(&gateway_prelogin, gateway).await {
+    let gateway_cred = match self
+      .obtain_credential(&gateway_prelogin, gateway, portal_default_browser_enabled)
+      .await
+    {
       Ok(cred) => cred,
       Err(err) => {
         self.print_direct_gateway_recommendation(gateway);

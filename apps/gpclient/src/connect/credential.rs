@@ -44,7 +44,12 @@ impl ConnectHandler<'_> {
     Ok(())
   }
 
-  pub(super) async fn obtain_credential(&self, prelogin: &Prelogin, server: &str) -> anyhow::Result<Credential> {
+  pub(super) async fn obtain_credential(
+    &self,
+    prelogin: &Prelogin,
+    server: &str,
+    portal_default_browser_enabled: bool,
+  ) -> anyhow::Result<Credential> {
     if should_read_stdin_credential(self.args.cookie_on_stdin, self.args.as_gateway, prelogin.is_gateway()) {
       return self.read_cookie_from_stdin();
     }
@@ -53,7 +58,12 @@ impl ConnectHandler<'_> {
 
     match prelogin {
       Prelogin::Saml(prelogin) => {
-        let browser = if prelogin.support_default_browser() {
+        let external_browser_supported = default_browser_auth_allowed(
+          prelogin.support_default_browser(),
+          is_gateway,
+          portal_default_browser_enabled,
+        );
+        let browser = if external_browser_supported {
           self.args.browser.as_deref()
         } else if !cfg!(feature = "webview-auth") {
           bail!(
@@ -74,7 +84,7 @@ impl ConnectHandler<'_> {
           .verbose(verbose);
 
         #[cfg(feature = "webview-auth")]
-        let use_default_browser = prelogin.support_default_browser() && self.args.default_browser;
+        let use_default_browser = external_browser_supported && self.args.default_browser;
         #[cfg(feature = "webview-auth")]
         let browser_kind = if browser.is_some() || use_default_browser {
           "external"
@@ -174,6 +184,14 @@ fn should_read_stdin_credential(cookie_on_stdin: bool, as_gateway: bool, prelogi
   cookie_on_stdin && (!prelogin_is_gateway || as_gateway)
 }
 
+fn default_browser_auth_allowed(
+  saml_support_default_browser: bool,
+  is_gateway: bool,
+  portal_default_browser_enabled: bool,
+) -> bool {
+  saml_support_default_browser && (!is_gateway || portal_default_browser_enabled)
+}
+
 fn log_stdin_host_id(host_id: Option<&str>) {
   match host_id {
     Some(host_id) => info!("stdin auth result host-id: {}", host_id),
@@ -228,5 +246,22 @@ mod tests {
   fn stdin_credential_is_not_used_when_flag_is_disabled() {
     assert!(!should_read_stdin_credential(false, false, false));
     assert!(!should_read_stdin_credential(false, true, true));
+  }
+
+  #[test]
+  fn portal_saml_can_use_default_browser_when_supported() {
+    assert!(default_browser_auth_allowed(true, false, false));
+  }
+
+  #[test]
+  fn gateway_saml_requires_portal_default_browser_policy() {
+    assert!(!default_browser_auth_allowed(true, true, false));
+    assert!(default_browser_auth_allowed(true, true, true));
+  }
+
+  #[test]
+  fn default_browser_auth_requires_saml_support() {
+    assert!(!default_browser_auth_allowed(false, false, true));
+    assert!(!default_browser_auth_allowed(false, true, true));
   }
 }

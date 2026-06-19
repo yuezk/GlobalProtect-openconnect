@@ -1,7 +1,7 @@
 use std::io::Cursor;
 
 use log::info;
-use tiny_http::{Header, Response, Server};
+use tiny_http::{Header, Method, Response, Server};
 use uuid::Uuid;
 
 pub(super) struct AuthServer {
@@ -30,6 +30,10 @@ impl AuthServer {
       if req.url() != format!("/{}", self.auth_id) {
         let forbidden = Response::from_string("forbidden").with_status_code(403);
         let _ = req.respond(forbidden);
+      } else if req.method() == &Method::Head {
+        if let Err(err) = req.respond(Response::empty(200)) {
+          info!("failed to respond to HEAD request: {}", err);
+        }
       } else {
         let auth_response = build_auth_response(auth_request);
         if let Err(err) = req.respond(auth_response) {
