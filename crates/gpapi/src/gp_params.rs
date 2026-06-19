@@ -6,6 +6,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+use crate::utils::host_utils;
 use crate::utils::request::create_identity;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
@@ -54,6 +55,10 @@ pub struct GpParams {
   os_version: Option<String>,
   client_version: Option<String>,
   computer: String,
+  // Endpoint identifier. PAN-OS binds the portal's authentication-override cookie
+  // (portal-userauthcookie) to this value; without it the portal returns an empty
+  // cookie and the gateway then rejects SAML with saml-auth-status=-1 (issue #491).
+  host_id: String,
   ignore_tls_errors: bool,
   certificate: Option<String>,
   sslkey: Option<String>,
@@ -121,6 +126,7 @@ impl GpParams {
     params.insert("clientVer", "4100");
     params.insert("clientos", client_os);
     params.insert("computer", &self.computer);
+    params.insert("host-id", &self.host_id);
 
     // MFA
     params.insert("inputStr", self.input_str.as_deref().unwrap_or_default());
@@ -148,6 +154,7 @@ pub struct GpParamsBuilder {
   os_version: Option<String>,
   client_version: Option<String>,
   computer: String,
+  host_id: String,
   ignore_tls_errors: bool,
   certificate: Option<String>,
   sslkey: Option<String>,
@@ -165,6 +172,8 @@ impl GpParamsBuilder {
       os_version: Default::default(),
       client_version: Default::default(),
       computer,
+      // Stable per-machine UUID (same derivation the HIP report uses)
+      host_id: host_utils::derive_uuid(&[]),
       ignore_tls_errors: false,
       certificate: Default::default(),
       sslkey: Default::default(),
@@ -202,6 +211,11 @@ impl GpParamsBuilder {
     self
   }
 
+  pub fn host_id(&mut self, host_id: &str) -> &mut Self {
+    self.host_id = host_id.to_string();
+    self
+  }
+
   pub fn ignore_tls_errors(&mut self, ignore_tls_errors: bool) -> &mut Self {
     self.ignore_tls_errors = ignore_tls_errors;
     self
@@ -230,6 +244,7 @@ impl GpParamsBuilder {
       os_version: self.os_version.clone(),
       client_version: self.client_version.clone(),
       computer: self.computer.clone(),
+      host_id: self.host_id.clone(),
       ignore_tls_errors: self.ignore_tls_errors,
       certificate: self.certificate.clone(),
       sslkey: self.sslkey.clone(),
