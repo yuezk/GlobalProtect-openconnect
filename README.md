@@ -214,45 +214,41 @@ This repository includes a flake for NixOS integration.
 
 #### Installation Steps
 
-1. Add the flake to your `flake.nix`:
+Add the flake input and package to your `flake.nix`:
 
-    ```nix
-    {
-      inputs = {
-        # ... other inputs
-        globalprotect-openconnect.url = "github:yuezk/GlobalProtect-openconnect";
+```nix
+{
+  inputs = {
+    # ... other inputs
+    globalprotect-openconnect.url = "github:yuezk/GlobalProtect-openconnect";
+  };
+
+  outputs = { self, nixpkgs, globalprotect-openconnect, ... }:
+    let
+      system = "x86_64-linux"; # or "aarch64-linux" for ARM64
+      hostname = "<your-host>";
+    in {
+      nixosConfigurations.${hostname} = nixpkgs.lib.nixosSystem {
+        inherit system;
+
+        modules = [
+          ./configuration.nix
+          {
+            environment.systemPackages = [
+              globalprotect-openconnect.packages.${system}.default
+            ];
+          }
+        ];
       };
+    };
+}
+```
 
-      outputs = { nixpkgs, ... }@inputs: {
-        nixosConfigurations.<your-host> = nixpkgs.lib.nixosSystem {
-          specialArgs = { inherit inputs; };
-          modules = [
-            ./configuration.nix
-          ];
-        };
-      };
-    }
-    ```
+Apply:
 
-2. Add the package to your `configuration.nix`:
-
-    ```nix
-    { pkgs, inputs, ... }:
-
-    {
-      # ... other configurations
-      environment.systemPackages = with pkgs; [
-        # ... other packages
-        inputs.globalprotect-openconnect.packages.${pkgs.stdenv.hostPlatform.system}.default
-      ];
-    }
-    ```
-
-3. Apply the changes:
-
-    ```bash
-    sudo nixos-rebuild switch
-    ```
+```bash
+sudo nixos-rebuild switch
+```
 
 ### Official Docker Image
 
