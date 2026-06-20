@@ -306,6 +306,51 @@ jobs:
           gpgui-source/*.bin.tar.xz
           gpgui-source/*.bin.tar.xz.sha256
 
+  build-nix-prebuilt:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            nixpkgs: nixos-25.11
+          - runner: ubuntu-latest
+            nixpkgs: nixos-26.05
+          - runner: ubuntu-24.04-arm
+            nixpkgs: nixos-25.11
+          - runner: ubuntu-24.04-arm
+            nixpkgs: nixos-26.05
+    name: build-nix-prebuilt (${{ matrix.nixpkgs }}, ${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - name: Checkout GlobalProtect-openconnect
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        submodules: recursive
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+
+    - name: Build prebuilt Nix package
+      run: |
+        nix build .#prebuilt \
+          --override-input nixpkgs "github:NixOS/nixpkgs/${{ matrix.nixpkgs }}" \
+          --extra-experimental-features "nix-command flakes" \
+          --print-build-logs
+
+    - name: Smoke test prebuilt Nix package
+      run: |
+        result/bin/gpclient --version
+        result/bin/gpauth --version
+        result/bin/gpservice --version
+        result/bin/gpgui-helper --version
+        result/bin/gpgui --version
+
+        ! grep -R '/usr/bin/gp' result/share result/libexec
+
   setup-bsd-matrix:
     runs-on: ubuntu-latest
     outputs:

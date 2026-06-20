@@ -73,18 +73,26 @@ release_url() {
 source_hash="$(prefetch_hash "$(release_url "globalprotect-openconnect-$version.tar.gz")")"
 gpgui_x86_64_hash="$(prefetch_hash "$(release_url "gpgui_x86_64.bin.tar.xz")")"
 gpgui_aarch64_hash="$(prefetch_hash "$(release_url "gpgui_aarch64.bin.tar.xz")")"
+binary_x86_64_hash="$(prefetch_hash "$(release_url "globalprotect-openconnect_${version}_x86_64.bin.tar.xz")")"
+binary_aarch64_hash="$(prefetch_hash "$(release_url "globalprotect-openconnect_${version}_aarch64.bin.tar.xz")")"
 
 SOURCE_HASH="$source_hash" \
 GPGUI_X86_64_HASH="$gpgui_x86_64_hash" \
 GPGUI_AARCH64_HASH="$gpgui_aarch64_hash" \
+BINARY_X86_64_HASH="$binary_x86_64_hash" \
+BINARY_AARCH64_HASH="$binary_aarch64_hash" \
 perl -0pi -e '
   s|(url = "https://github\.com/yuezk/GlobalProtect-openconnect/releases/download/v\$\{version\}/globalprotect-openconnect-\$\{version\}\.tar\.gz";\n\s*hash = ")[^"]+(";)|$1 . $ENV{"SOURCE_HASH"} . $2|e;
-  s|(x86_64 = ")[^"]+(";)|$1 . $ENV{"GPGUI_X86_64_HASH"} . $2|e;
-  s|(aarch64 = ")[^"]+(";)|$1 . $ENV{"GPGUI_AARCH64_HASH"} . $2|e;
+  s|(gpguiHashes = \{\n\s*x86_64 = ")[^"]+(";)|$1 . $ENV{"GPGUI_X86_64_HASH"} . $2|e;
+  s|(gpguiHashes = \{\n\s*x86_64 = "[^"]+";\n\s*aarch64 = ")[^"]+(";)|$1 . $ENV{"GPGUI_AARCH64_HASH"} . $2|e;
+  s|(binaryHashes = \{\n\s*x86_64 = ")[^"]+(";)|$1 . $ENV{"BINARY_X86_64_HASH"} . $2|e;
+  s|(binaryHashes = \{\n\s*x86_64 = "[^"]+";\n\s*aarch64 = ")[^"]+(";)|$1 . $ENV{"BINARY_AARCH64_HASH"} . $2|e;
 ' "$FLAKE_FILE"
 
 grep -F "$source_hash" "$FLAKE_FILE" > /dev/null
 grep -F "$gpgui_x86_64_hash" "$FLAKE_FILE" > /dev/null
 grep -F "$gpgui_aarch64_hash" "$FLAKE_FILE" > /dev/null
+grep -F "$binary_x86_64_hash" "$FLAKE_FILE" > /dev/null
+grep -F "$binary_aarch64_hash" "$FLAKE_FILE" > /dev/null
 
 echo "Updated flake.nix hashes for v$version"

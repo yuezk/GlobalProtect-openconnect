@@ -1,7 +1,7 @@
-use std::process::Stdio;
+use std::{path::PathBuf, process::Stdio};
 
 use anyhow::bail;
-use common::constants::GP_AUTH_BINARY;
+use common::binary_paths;
 use tokio::process::Command;
 
 use crate::{auth::SamlAuthResult, credential::Credential, os_profile::OsProfile};
@@ -113,8 +113,11 @@ impl<'a> SamlAuthLauncher<'a> {
 
   /// Launch the authenticator binary as the current user or SUDO_USER if available.
   pub async fn launch(self) -> anyhow::Result<Credential> {
-    let program = self.auth_executable.unwrap_or(GP_AUTH_BINARY);
-    let mut auth_cmd = Command::new(program);
+    let program = self
+      .auth_executable
+      .map(PathBuf::from)
+      .unwrap_or_else(binary_paths::gpauth);
+    let mut auth_cmd = Command::new(&program);
     auth_cmd.arg(self.server);
 
     if self.gateway {
@@ -174,7 +177,7 @@ impl<'a> SamlAuthLauncher<'a> {
     let child = match child {
       Ok(child) => child,
       Err(err) => {
-        bail!("Failed to spawn {}: {}", program, err);
+        bail!("Failed to spawn {}: {}", program.display(), err);
       }
     };
 

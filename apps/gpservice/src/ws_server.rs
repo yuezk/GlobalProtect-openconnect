@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::extract::ws::Message;
-use common::constants::GP_AUTH_BINARY;
+use common::binary_paths;
 use gpapi::{
   os_profile::HostIdentity,
   service::{
@@ -73,7 +73,7 @@ impl WsServerContext {
       vpn_state: self.vpn_state_rx.borrow().clone(),
       vpnc_script: find_vpnc_script().map(|s| s.to_owned()),
       csd_wrapper: find_csd_wrapper().map(|s| s.to_owned()),
-      auth_executable: GP_AUTH_BINARY.to_owned(),
+      auth_executable: binary_paths::gpauth().to_string_lossy().into_owned(),
       host_info,
     };
 

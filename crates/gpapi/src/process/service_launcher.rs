@@ -4,7 +4,7 @@ use std::{
   process::{ExitStatus, Stdio},
 };
 
-use common::constants::GP_SERVICE_BINARY;
+use common::binary_paths;
 use tokio::process::Command;
 
 use super::command_traits::CommandExt;
@@ -26,7 +26,7 @@ impl Default for ServiceLauncher<'_> {
 impl<'a> ServiceLauncher<'a> {
   pub fn new() -> Self {
     Self {
-      program: GP_SERVICE_BINARY.into(),
+      program: binary_paths::gpservice(),
       minimized: false,
       env_file: None,
       log_file: None,

@@ -21,6 +21,7 @@
           inherit system;
           overlays = [ (import rust-overlay) ];
         };
+        inherit (pkgs) lib;
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         pname = "globalprotect-openconnect";
@@ -40,41 +41,76 @@
 
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
+        gpguiHashes = {
+          x86_64 = "sha256-jLMErGlfbzhRk8onqqiRXOMeNhdFWBZGOqPPEh9vLyM=";
+          aarch64 = "sha256-YSjn2oxDaKTtdfK7rsmuMZfD9n1bitVbScIW0fyedXI=";
+        };
+
         gpgui = pkgs.fetchzip {
           url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/gpgui_${cpu}.bin.tar.xz";
-          hash = {
-            x86_64 = "sha256-jLMErGlfbzhRk8onqqiRXOMeNhdFWBZGOqPPEh9vLyM=";
-            aarch64 = "sha256-YSjn2oxDaKTtdfK7rsmuMZfD9n1bitVbScIW0fyedXI=";
-          }.${cpu};
+          hash = gpguiHashes.${cpu};
         };
-      in
-      {
-        # For `nix build`
-        packages.default = naersk'.buildPackage {
+
+        binaryHashes = {
+          x86_64 = "sha256-atZRM7v5areQTDkrJrOczSz0tc3P6aGU+BE4VblNE08=";
+          aarch64 = "sha256-ENE0fHlLSt493QIlotaIMf11MszJszl4ZZAsYWuFJeE=";
+        };
+
+        binaryPackage = pkgs.fetchzip {
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/globalprotect-openconnect_${version}_${cpu}.bin.tar.xz";
+          hash = binaryHashes.${cpu};
+        };
+
+        linuxRuntimeDependencies = with pkgs; [
+          glib-networking
+          libappindicator-gtk3
+        ];
+
+        linuxBuildInputs =
+          with pkgs;
+          [
+            libxml2
+            zlib
+            lz4
+            gnutls
+            p11-kit
+            nettle
+            gmp
+          ]
+          ++ lib.optionals stdenv.isLinux [
+            glib
+            gtk3
+            libsoup_3
+            webkitgtk_4_1
+            glib-networking
+            openssl
+            libsecret
+            libappindicator-gtk3
+          ];
+
+        rewriteInstallPaths = ''
+          substituteInPlace $out/share/applications/gpgui.desktop \
+            --replace-fail /usr/bin/gpclient $out/bin/gpclient
+
+          substituteInPlace $out/libexec/gpclient/hipreport.sh \
+            --replace-fail /usr/bin/gpclient $out/bin/gpclient
+
+          substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
+            --replace-fail /usr/bin/gpservice $out/bin/gpservice
+
+          if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
+            substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
+              --replace-fail /usr/bin/gpclient $out/bin/gpclient
+          fi
+        '';
+
+        fromSource = naersk'.buildPackage {
           inherit pname version src;
 
           # Must be set to true to avoid issues with the Tauri build process
           singleStep = true;
 
-          buildInputs =
-            with pkgs;
-            [
-              libxml2
-              zlib
-              lz4
-              gnutls
-              p11-kit
-              nettle
-              gmp
-            ]
-            ++ lib.optionals stdenv.isLinux [
-              glib
-              gtk3
-              libsoup_3
-              webkitgtk_4_1
-              glib-networking
-              openssl
-            ];
+          buildInputs = linuxBuildInputs;
 
           nativeBuildInputs =
             with pkgs;
@@ -89,13 +125,7 @@
               wrapGAppsHook4
             ];
 
-          runtimeDependencies =
-            with pkgs;
-            [ ]
-            ++ lib.optionals stdenv.isLinux [
-              libappindicator-gtk3
-              glib-networking
-            ];
+          runtimeDependencies = lib.optionals pkgs.stdenv.isLinux linuxRuntimeDependencies;
 
           overrideMain =
             { ... }:
@@ -124,22 +154,55 @@
             cp -r packaging/files/usr/lib $out/lib
             cp -r packaging/files/usr/libexec $out/libexec
 
-            # Change the `/usr/bin/gpclient` path in the desktop file
-            substituteInPlace $out/share/applications/gpgui.desktop \
-              --replace-fail /usr/bin/gpclient $out/bin/gpclient
-
-            substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
-              --replace-fail /usr/bin/gpclient $out/bin/gpclient
-
-            substituteInPlace $out/libexec/gpclient/hipreport.sh \
-              --replace-fail /usr/bin/gpclient $out/bin/gpclient
-
-            # Change the `/usr/bin/gpservice` path in the polkit policy file
-            substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
-              --replace-fail /usr/bin/gpservice $out/bin/gpservice
-
+            ${rewriteInstallPaths}
           '';
         };
+
+        prebuilt = pkgs.stdenv.mkDerivation {
+          inherit pname version;
+
+          src = binaryPackage;
+          dontBuild = true;
+
+          nativeBuildInputs = with pkgs; [
+            autoPatchelfHook
+            wrapGAppsHook4
+          ];
+
+          buildInputs = linuxBuildInputs;
+          runtimeDependencies = linuxRuntimeDependencies;
+
+          installPhase = ''
+            runHook preInstall
+
+            mkdir -p $out
+            cp -r artifacts/usr/bin $out/bin
+            cp -r artifacts/usr/libexec $out/libexec
+            cp -r artifacts/usr/share $out/share
+
+            if [ -d artifacts/usr/lib ]; then
+              cp -r artifacts/usr/lib $out/lib
+            fi
+
+            ${rewriteInstallPaths}
+
+            runHook postInstall
+          '';
+        };
+      in
+      {
+        # For `nix build`
+        packages =
+          {
+            fromSource = fromSource;
+          }
+          // lib.optionalAttrs pkgs.stdenv.isLinux {
+            default = prebuilt;
+            prebuilt = prebuilt;
+          }
+          // lib.optionalAttrs (!pkgs.stdenv.isLinux) {
+            default = fromSource;
+          };
 
         apps.default = {
           type = "app";

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, process::Stdio};
 
 use anyhow::bail;
-use common::constants::GP_GUI_HELPER_BINARY;
+use common::binary_paths;
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
 
@@ -17,7 +17,7 @@ pub struct GuiHelperLauncher<'a> {
 impl<'a> GuiHelperLauncher<'a> {
   pub fn new(api_key: &'a [u8]) -> Self {
     Self {
-      program: GP_GUI_HELPER_BINARY.into(),
+      program: binary_paths::gpgui_helper(),
       envs: None,
       api_key,
       gui_version: None,
