@@ -3,6 +3,7 @@ use std::{io, path::Path};
 use is_executable::IsExecutable;
 
 const VPNC_SCRIPT_LOCATIONS: &[&str] = &[
+  "/usr/local/libexec/gpclient/vpnc-script",
   "/usr/libexec/gpclient/vpnc-script",
   "/usr/lib/gpclient/vpnc-script",
   "/usr/local/share/vpnc-scripts/vpnc-script",
@@ -19,6 +20,7 @@ const VPNC_SCRIPT_LOCATIONS: &[&str] = &[
 ];
 
 const CSD_WRAPPER_LOCATIONS: &[&str] = &[
+  "/usr/local/libexec/gpclient/hipreport.sh",
   "/usr/libexec/gpclient/hipreport.sh",
   #[cfg(target_arch = "x86_64")]
   "/usr/lib/x86_64-linux-gnu/openconnect/hipreport.sh",
@@ -44,11 +46,11 @@ fn find_executable(locations: &[&'static str]) -> Option<&'static str> {
 }
 
 pub fn find_vpnc_script() -> Option<&'static str> {
-  find_executable(&VPNC_SCRIPT_LOCATIONS)
+  find_executable(VPNC_SCRIPT_LOCATIONS)
 }
 
 pub fn find_csd_wrapper() -> Option<&'static str> {
-  find_executable(&CSD_WRAPPER_LOCATIONS)
+  find_executable(CSD_WRAPPER_LOCATIONS)
 }
 
 /// If file exists, check if it is executable

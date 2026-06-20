@@ -253,9 +253,23 @@ jobs:
     - build
     runs-on: ubuntu-latest
     if: ${{ inputs.gh-release }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
     - name: Prepare workspace
       run: rm -rf gh-release && mkdir gh-release
+    - name: Checkout GlobalProtect-openconnect
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.ref }}
+        path: gh-release/gp
+        submodules: recursive
     - name: Download artifact
       uses: actions/download-artifact@v8
       with:
@@ -270,6 +284,29 @@ jobs:
         for file in gh-release/artifact-ubuntu-24.04-arm-apk/*.apk; do
           mv "$file" "${file%.apk}-aarch64.apk"
         done
+    - name: Generate release asset checksums
+      id: release-assets
+      run: |
+        cd gh-release/gp
+        mkdir -p .build
+        scripts/release-assets.sh all "$GITHUB_WORKSPACE/gh-release" > .build/release-assets.txt
+        if [ ! -s .build/release-assets.txt ]; then
+          echo "No release assets found"
+          exit 1
+        fi
+        while IFS= read -r file; do
+          digest=$(sha256sum "$file" | cut -d ' ' -f 1)
+          printf '%s  %s\n' "$digest" "$(basename "$file")"
+        done < .build/release-assets.txt > .build/release-assets.sha256
+        {
+          echo 'files<<EOF'
+          cat .build/release-assets.txt
+          echo EOF
+        } >> "$GITHUB_OUTPUT"
+    - name: Attest release assets
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-checksums: gh-release/gp/.build/release-assets.sha256
     - name: Update release
       uses: softprops/action-gh-release@v1
       with:
@@ -277,5 +314,4 @@ jobs:
         prerelease: ${{ contains(github.ref, 'snapshot') }}
         fail_on_unmatched_files: true
         tag_name: ${{ inputs.tag }}
-        files: |
-          gh-release/artifact-*/*
+        files: ${{ steps.release-assets.outputs.files }}

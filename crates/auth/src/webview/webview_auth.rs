@@ -1,7 +1,12 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::bail;
-use gpapi::{auth::SamlAuthData, gp_params::GpParams, utils::redact::redact_uri};
+use gpapi::{
+  auth::SamlAuthData,
+  gp_params::GpParams,
+  os_profile::{WebviewUserAgent, WebviewUserAgentTransform},
+  utils::redact::redact_uri,
+};
 use log::{info, warn};
 use tauri::{
   AppHandle, WebviewUrl, WebviewWindow, WindowEvent,
@@ -15,6 +20,10 @@ use super::auth_messenger::{AuthError, AuthEvent, AuthMessenger};
 
 pub trait PlatformWebviewExt {
   fn ignore_tls_errors(&self) -> anyhow::Result<()>;
+
+  fn user_agent(&self) -> anyhow::Result<String>;
+
+  fn set_user_agent(&self, user_agent: &str) -> anyhow::Result<()>;
 
   fn load_url(&self, url: &str) -> anyhow::Result<()>;
 
@@ -33,7 +42,7 @@ pub trait PlatformWebviewExt {
   }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 pub trait GetHeader {
   fn get_header(&self, key: &str) -> Option<String>;
 }
@@ -42,6 +51,7 @@ pub struct WebviewAuthenticator<'a> {
   server: &'a str,
   gp_params: &'a GpParams,
   auth_request: Option<&'a str>,
+  webview_user_agent: Option<WebviewUserAgent>,
   clean: bool,
 
   is_retrying: tokio::sync::RwLock<bool>,
@@ -53,6 +63,7 @@ impl<'a> WebviewAuthenticator<'a> {
       server,
       gp_params,
       auth_request: None,
+      webview_user_agent: None,
       clean: false,
       is_retrying: Default::default(),
     }
@@ -60,6 +71,11 @@ impl<'a> WebviewAuthenticator<'a> {
 
   pub fn with_auth_request(mut self, auth_request: &'a str) -> Self {
     self.auth_request = Some(auth_request);
+    self
+  }
+
+  pub fn with_webview_user_agent(mut self, user_agent: WebviewUserAgent) -> Self {
+    self.webview_user_agent = Some(user_agent);
     self
   }
 
@@ -116,7 +132,7 @@ impl<'a> WebviewAuthenticator<'a> {
       match auth_messenger.subscribe().await? {
         AuthEvent::Close => bail!("Authentication cancelled"),
         AuthEvent::RaiseWindow => self.raise_window(&auth_window),
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
         AuthEvent::Error(AuthError::TlsError) => bail!(gpapi::error::PortalError::TlsError),
         AuthEvent::Error(AuthError::NotFound(location)) => {
           info!(
@@ -168,15 +184,16 @@ impl<'a> WebviewAuthenticator<'a> {
 
     let auth_request = match self.auth_request {
       Some(auth_request) => auth_request.to_string(),
-      None => auth_prelogin(&self.server, &self.gp_params).await?,
+      None => auth_prelogin(&self.server, &self.gp_params, false).await?,
     };
 
     let (tx, rx) = oneshot::channel::<anyhow::Result<()>>();
     let ignore_tls_errors = self.gp_params.ignore_tls_errors();
+    let webview_user_agent = self.webview_user_agent.clone();
 
     // Set up webview
     auth_window.with_webview(move |wv| {
-      #[cfg(not(target_os = "macos"))]
+      #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
       {
         use super::platform_impl::PlatformWebviewOnResponse;
         wv.on_response(Box::new(move |response| match response {
@@ -190,7 +207,7 @@ impl<'a> WebviewAuthenticator<'a> {
           wv.ignore_tls_errors()?;
         }
 
-        wv.load_auth_request(&auth_request)
+        load_auth_request_with_user_agent(&wv, webview_user_agent.as_ref(), &auth_request)
       }();
 
       if let Err(result) = tx.send(result) {
@@ -240,10 +257,15 @@ impl<'a> WebviewAuthenticator<'a> {
       document.body.appendChild(loading);
     "#)?;
 
-    let auth_request = auth_prelogin(&self.server, &self.gp_params).await?;
+    let auth_request = auth_prelogin(&self.server, &self.gp_params, false).await?;
+
     let (tx, rx) = oneshot::channel::<anyhow::Result<()>>();
+    let webview_user_agent = self.webview_user_agent.clone();
     auth_window.with_webview(move |wv| {
-      let result = wv.load_auth_request(&auth_request);
+      let result = || -> anyhow::Result<()> {
+        load_auth_request_with_user_agent(&wv, webview_user_agent.as_ref(), &auth_request)
+      }();
+
       if let Err(result) = tx.send(result) {
         warn!("Failed to send retry auth result: {:?}", result);
       }
@@ -265,7 +287,7 @@ impl<'a> WebviewAuthenticator<'a> {
     #[cfg(target_os = "macos")]
     let result = auth_window.show();
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
     let result = {
       use gpapi::utils::window::WindowExt;
       auth_window.raise()
@@ -274,5 +296,177 @@ impl<'a> WebviewAuthenticator<'a> {
     if let Err(err) = result {
       warn!("Failed to raise window: {}", err);
     }
+  }
+}
+
+fn load_auth_request_with_user_agent(
+  wv: &impl PlatformWebviewExt,
+  plan: Option<&WebviewUserAgent>,
+  auth_request: &str,
+) -> anyhow::Result<()> {
+  if let Some(plan) = plan {
+    let user_agent = compose_webview_user_agent(plan, || wv.user_agent())?;
+    wv.set_user_agent(&user_agent)?;
+  }
+
+  wv.load_auth_request(auth_request)
+}
+
+fn compose_webview_user_agent(
+  plan: &WebviewUserAgent,
+  native_user_agent: impl FnOnce() -> anyhow::Result<String>,
+) -> anyhow::Result<String> {
+  let (prefix, default_user_agent, transform) = match plan {
+    WebviewUserAgent::Native { prefix, transform } => (prefix.as_str(), native_user_agent()?, *transform),
+    WebviewUserAgent::Projected {
+      prefix,
+      default_user_agent,
+    } => (
+      prefix.as_str(),
+      default_user_agent.clone(),
+      WebviewUserAgentTransform::None,
+    ),
+  };
+
+  let default_user_agent = apply_webview_user_agent_transform(transform, &default_user_agent);
+  prepend_webview_user_agent_prefix(prefix, &default_user_agent)
+}
+
+fn apply_webview_user_agent_transform(transform: WebviewUserAgentTransform, user_agent: &str) -> String {
+  match transform {
+    WebviewUserAgentTransform::None => user_agent.to_string(),
+    WebviewUserAgentTransform::LinuxPanGpuiVersion => linux_pan_gpui_user_agent(user_agent),
+  }
+}
+
+fn linux_pan_gpui_user_agent(user_agent: &str) -> String {
+  if user_agent.contains("PanGPUI Version/10.0") {
+    return user_agent.to_string();
+  }
+
+  let Some(start) = user_agent.find("Version/") else {
+    return user_agent.to_string();
+  };
+  let end = user_agent[start..]
+    .find(char::is_whitespace)
+    .map(|offset| start + offset)
+    .unwrap_or(user_agent.len());
+
+  format!("{}PanGPUI Version/10.0{}", &user_agent[..start], &user_agent[end..])
+}
+
+fn prepend_webview_user_agent_prefix(prefix: &str, default_user_agent: &str) -> anyhow::Result<String> {
+  let prefix = prefix.trim();
+  if prefix.is_empty() {
+    return Ok(default_user_agent.to_string());
+  }
+
+  let default_user_agent = default_user_agent.trim();
+  if default_user_agent.is_empty() {
+    bail!("Failed to read default webview user agent");
+  }
+
+  if default_user_agent.starts_with(prefix) {
+    return Ok(default_user_agent.to_string());
+  }
+
+  Ok(format!("{} {}", prefix, default_user_agent))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn prepends_prefix_to_default_user_agent() {
+    let user_agent = prepend_webview_user_agent_prefix("PAN GlobalProtect/6.3.3", "Mozilla/5.0").unwrap();
+
+    assert_eq!(user_agent, "PAN GlobalProtect/6.3.3 Mozilla/5.0");
+  }
+
+  #[test]
+  fn leaves_already_prefixed_user_agent_unchanged() {
+    let user_agent =
+      prepend_webview_user_agent_prefix("PAN GlobalProtect/6.3.3", "PAN GlobalProtect/6.3.3 Mozilla/5.0").unwrap();
+
+    assert_eq!(user_agent, "PAN GlobalProtect/6.3.3 Mozilla/5.0");
+  }
+
+  #[test]
+  fn blank_prefix_leaves_default_user_agent_unchanged() {
+    let user_agent = prepend_webview_user_agent_prefix(" ", "Mozilla/5.0").unwrap();
+
+    assert_eq!(user_agent, "Mozilla/5.0");
+  }
+
+  #[test]
+  fn non_blank_prefix_requires_default_user_agent() {
+    let err = prepend_webview_user_agent_prefix("PAN GlobalProtect/6.3.3", " ").unwrap_err();
+
+    assert!(err.to_string().contains("default webview user agent"));
+  }
+
+  #[test]
+  fn native_plan_reads_native_default_user_agent() {
+    let plan = WebviewUserAgent::Native {
+      prefix: "PAN GlobalProtect/6.3.3".to_string(),
+      transform: WebviewUserAgentTransform::None,
+    };
+    let user_agent = compose_webview_user_agent(&plan, || Ok("Mozilla/5.0".to_string())).unwrap();
+
+    assert_eq!(user_agent, "PAN GlobalProtect/6.3.3 Mozilla/5.0");
+  }
+
+  #[test]
+  fn linux_transform_replaces_version_token_with_pan_gpui_version() {
+    let user_agent = linux_pan_gpui_user_agent(
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+    );
+
+    assert_eq!(
+      user_agent,
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) PanGPUI Version/10.0 Safari/605.1.15"
+    );
+  }
+
+  #[test]
+  fn linux_transform_does_not_duplicate_pan_gpui_version() {
+    let user_agent = linux_pan_gpui_user_agent(
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/602.1 (KHTML, like Gecko) PanGPUI Version/10.0 Safari/602.1",
+    );
+
+    assert_eq!(
+      user_agent,
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/602.1 (KHTML, like Gecko) PanGPUI Version/10.0 Safari/602.1"
+    );
+  }
+
+  #[test]
+  fn native_linux_plan_applies_pan_gpui_transform_before_prefix() {
+    let plan = WebviewUserAgent::Native {
+      prefix: "PAN GlobalProtect/6.3.3".to_string(),
+      transform: WebviewUserAgentTransform::LinuxPanGpuiVersion,
+    };
+    let user_agent =
+      compose_webview_user_agent(&plan, || Ok("Mozilla/5.0 Version/60.5 Safari/605.1.15".to_string())).unwrap();
+
+    assert_eq!(
+      user_agent,
+      "PAN GlobalProtect/6.3.3 Mozilla/5.0 PanGPUI Version/10.0 Safari/605.1.15"
+    );
+  }
+
+  #[test]
+  fn projected_plan_uses_profile_default_user_agent() {
+    let plan = WebviewUserAgent::Projected {
+      prefix: "PAN GlobalProtect/6.3.3".to_string(),
+      default_user_agent: "Mozilla/5.0 projected".to_string(),
+    };
+    let user_agent = compose_webview_user_agent(&plan, || {
+      panic!("projected webview user agent should not read the native default")
+    })
+    .unwrap();
+
+    assert_eq!(user_agent, "PAN GlobalProtect/6.3.3 Mozilla/5.0 projected");
   }
 }

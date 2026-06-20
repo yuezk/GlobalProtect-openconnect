@@ -7,7 +7,7 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Debug)]
 pub(crate) enum AuthDataLocation {
-  #[cfg(not(target_os = "macos"))]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   Headers,
   Body,
 }
@@ -15,7 +15,7 @@ pub(crate) enum AuthDataLocation {
 #[derive(Debug)]
 pub(crate) enum AuthError {
   /// Failed to load page due to TLS error
-  #[cfg(not(target_os = "macos"))]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   TlsError,
   /// 1. Found auth data in headers/body but it's invalid
   /// 2. Loaded an empty page, failed to load page. etc.
@@ -34,7 +34,7 @@ impl AuthError {
   }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 impl AuthError {
   pub fn not_found_in_headers() -> Self {
     Self::NotFound(AuthDataLocation::Headers)
@@ -155,7 +155,7 @@ impl AuthMessenger {
     }
   }
 
-  #[cfg(not(target_os = "macos"))]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   pub fn read_from_response(&self, auth_response: &impl super::webview_auth::GetHeader) {
     use log::warn;
 

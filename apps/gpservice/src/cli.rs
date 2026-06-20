@@ -16,7 +16,14 @@ use tokio::sync::{mpsc, watch};
 
 use crate::{vpn_task::VpnTask, ws_server::WsServer};
 
-const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", compile_time::date_str!(), ")");
+const VERSION: &str = concat!(
+  env!("CARGO_PKG_VERSION"),
+  " (",
+  env!("GPSERVICE_GIT_COMMIT"),
+  " ",
+  compile_time::date_str!(),
+  ")"
+);
 
 #[derive(Parser)]
 #[command(version = VERSION)]

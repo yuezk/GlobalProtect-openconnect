@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.6.0
+
+### Added
+
+- Added automatic gateway selection with fallback to the next available gateway when early gateway connection steps fail.
+- Added optional cookie cache support for faster reconnects.
+- Added Microsoft Defender status reporting in HIP reports.
+- Added support for portals that require client-side checks before connection.
+- Added FreeBSD and OpenBSD package builds and release artifacts.
+- Added build provenance attestations for release assets.
+
+### Changed
+
+- Improved compatibility with official GlobalProtect client request behavior.
+- Improved SAML authentication behavior in the embedded webview.
+- Improved default browser authentication handling.
+- Improved host identity consistency across authentication, connection, and HIP flows.
+- Improved GUI gateway selection behavior and made the selection list more compact.
+- Updated NixOS installation instructions.
+
+### Fixed
+
+- Fixed a crash when opening settings on KDE/Wayland.
+- Fixed browser authentication when `gpclient` is started with `sudo`.
+- Fixed gateway fallback behavior when using `gpauth | gpclient --cookie-on-stdin`.
+- Fixed inconsistent host ID handling between GUI, CLI, OpenConnect, and HIP.
+- Fixed portal and gateway authentication cookie handling in several edge cases.
+- Fixed GUI connection state issues around gateway switching and cached credentials.
+
 ## 2.5.4 - 2026-05-08
 
 - Add Alpine/musl gpgui release assets for x86_64 and aarch64.

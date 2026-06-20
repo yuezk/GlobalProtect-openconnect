@@ -4,8 +4,6 @@ use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::gp_params::ClientOs;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct SessionWarning {
   pub prior_secs: u32,
@@ -16,9 +14,6 @@ pub struct SessionWarning {
 pub struct SessionRequestArgs {
   cookie: String,
   user_agent: Option<String>,
-  os: Option<ClientOs>,
-  os_version: Option<String>,
-  client_version: Option<String>,
   certificate: Option<String>,
   sslkey: Option<String>,
   key_password: Option<String>,
@@ -30,9 +25,6 @@ impl SessionRequestArgs {
     Self {
       cookie,
       user_agent: None,
-      os: None,
-      os_version: None,
-      client_version: None,
       certificate: None,
       sslkey: None,
       key_password: None,
@@ -42,21 +34,6 @@ impl SessionRequestArgs {
 
   pub fn with_user_agent<T: Into<Option<String>>>(mut self, user_agent: T) -> Self {
     self.user_agent = user_agent.into();
-    self
-  }
-
-  pub fn with_os<T: Into<Option<ClientOs>>>(mut self, os: T) -> Self {
-    self.os = os.into();
-    self
-  }
-
-  pub fn with_os_version<T: Into<Option<String>>>(mut self, os_version: T) -> Self {
-    self.os_version = os_version.into();
-    self
-  }
-
-  pub fn with_client_version<T: Into<Option<String>>>(mut self, client_version: T) -> Self {
-    self.client_version = client_version.into();
     self
   }
 
@@ -86,18 +63,6 @@ impl SessionRequestArgs {
 
   pub fn user_agent(&self) -> Option<String> {
     self.user_agent.clone()
-  }
-
-  pub fn os(&self) -> Option<ClientOs> {
-    self.os.clone()
-  }
-
-  pub fn os_version(&self) -> Option<String> {
-    self.os_version.clone()
-  }
-
-  pub fn client_version(&self) -> Option<String> {
-    self.client_version.clone()
   }
 
   pub fn certificate(&self) -> Option<String> {
@@ -298,5 +263,12 @@ mod tests {
   #[test]
   fn reschedule_after_extension_requires_lifetime() {
     assert!(SessionInfo::default().rescheduled_after_extension().is_none());
+  }
+
+  #[test]
+  fn with_user_agent_sets_session_user_agent() {
+    let args = SessionRequestArgs::new("cookie".to_string()).with_user_agent("agent/1.0".to_string());
+
+    assert_eq!(args.user_agent(), Some("agent/1.0".to_string()));
   }
 }

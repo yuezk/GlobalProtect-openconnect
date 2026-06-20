@@ -11,7 +11,7 @@ members = [
 
 [workspace.package]
 rust-version = "1.89"
-version = "2.5.4"
+version = "2.6.0"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
 edition = "2024"
@@ -19,7 +19,7 @@ license = "GPL-3.0"
 
 [workspace.dependencies]
 anyhow = "1.0"
-askama = "0.14"
+askama = "0.16"
 base64 = "0.22"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
@@ -31,10 +31,10 @@ env_logger = "0.11"
 is_executable = "1.0"
 log = "0.4"
 regex = "1"
-reqwest = { version = "0.12", features = ["native-tls", "json"] }
+reqwest = { version = "0.13", features = ["native-tls", "json", "form", "query"] }
 openssl = "0.10"
 pem = "3"
-xmltree = "0.12"
+xmltree = { version = "0.12", features = ["attribute-order"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # Use 0.36 as newer versions requires Rust 1.88+
@@ -48,7 +48,7 @@ axum = "0.8"
 futures = "0.3"
 futures-util = "0.3"
 uzers = "0.12"
-whoami = "1"
+whoami = "2"
 thiserror = "2"
 redact-engine = "0.1"
 compile-time = "0.2"
@@ -58,12 +58,12 @@ sha256 = "1"
 which = "8"
 uuid = "1"
 netdev = "0.40"
-machine-uid = "0.5"
 humantime = "2"
 
 # Tauri dependencies
 tauri = { version = "2" }
 specta = "=2.0.0-rc.20"
+proptest = "1"
 
 [profile.release]
 opt-level = 'z'   # Optimize for size

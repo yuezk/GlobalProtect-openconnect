@@ -1,4 +1,5 @@
-.SHELLFLAGS += -e
+SHELL := /bin/sh
+.SHELLFLAGS := -ec
 
 INCLUDE_GUI ?= 0
 CARGO ?= cargo
@@ -7,6 +8,16 @@ RUST_VERSION ?= 1.89
 IGNORE_RUST_VERSION ?= 0
 
 VERSION = $(shell grep '^version' Cargo.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')
+SOURCE_COMMIT_VALUE := $(shell \
+	if [ -n "$$SOURCE_GIT_COMMIT" ]; then \
+		printf '%s' "$$SOURCE_GIT_COMMIT" | cut -c1-9; \
+	elif [ -n "$$GITHUB_SHA" ]; then \
+		printf '%s' "$$GITHUB_SHA" | cut -c1-9; \
+	elif [ -f SOURCE_COMMIT ]; then \
+		head -n1 SOURCE_COMMIT | tr -d '[:space:]' | cut -c1-9; \
+	else \
+		git rev-parse --short=9 HEAD 2>/dev/null || printf unknown; \
+	fi)
 GUI_LIBC_SUFFIX ?= $(shell ldd --version 2>&1 | grep -qi musl && echo -musl || true)
 REVISION ?= 1
 RPM_SOURCE ?= %{name}.tar.gz
@@ -19,6 +30,12 @@ PUBLISH ?= 0
 
 # Indicates whether to build the GUI components
 BUILD_GUI_HELPER ?= 1
+
+# Indicates whether to build embedded webview auth support into gpauth
+BUILD_WEBVIEW_AUTH ?= 1
+PREFIX ?= /usr/local
+BSD_FLAVOR ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+GPGUI_BINARY ?= ../gpgui/target/release/gpgui
 
 export DEBEMAIL = k3vinyue@gmail.com
 export DEBFULLNAME = Kevin Yue
@@ -55,11 +72,13 @@ clean-tarball:
 	rm -rf .vendor
 	rm -rf vendor.tar.xz
 	rm -rf .cargo
+	rm -f SOURCE_COMMIT
 
 # Create a tarball, include the cargo dependencies if OFFLINE is set to 1
 tarball: clean-tarball
 	mkdir -p .cargo
 	mkdir -p .build/tarball
+	printf '%s\n' "$(SOURCE_COMMIT_VALUE)" > SOURCE_COMMIT
 
 	# If OFFLINE is set to 1, vendor all cargo dependencies
 	# Generate a OFFLINE_BUILD file to indicate offline build
@@ -97,11 +116,18 @@ build-rs:
 		rm -vf rust-toolchain.toml; \
 	fi
 
+	$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice
+
+	# Build gpauth with or without embedded webview auth support
+	if [ $(BUILD_WEBVIEW_AUTH) -eq 1 ]; then \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpauth; \
+	else \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpauth --no-default-features; \
+	fi
+
 	# Only build the GUI components if BUILD_GUI_HELPER is set to 1
 	if [ $(BUILD_GUI_HELPER) -eq 1 ]; then \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth -p gpgui-helper; \
-	else \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice -p gpauth --no-default-features; \
+		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpgui-helper; \
 	fi
 
 clean:
@@ -139,6 +165,98 @@ install:
 	install -Dm644 packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
 	install -Dm644 packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
 	install -Dm644 packaging/files/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
+
+install-bsd:
+	@echo "Installing $(PKG_NAME) for BSD under $(PREFIX)..."
+
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 755 target/release/gpclient $(DESTDIR)$(PREFIX)/bin/gpclient
+	install -m 755 target/release/gpauth $(DESTDIR)$(PREFIX)/bin/gpauth
+	install -m 755 target/release/gpservice $(DESTDIR)$(PREFIX)/bin/gpservice
+
+	if [ "$(BUILD_GUI_HELPER)" = "1" ]; then \
+		install -m 755 target/release/gpgui-helper $(DESTDIR)$(PREFIX)/bin/gpgui-helper; \
+	fi
+
+	if [ -x "$(GPGUI_BINARY)" ]; then \
+		install -m 755 "$(GPGUI_BINARY)" $(DESTDIR)$(PREFIX)/bin/gpgui; \
+	fi
+
+	install -d $(DESTDIR)$(PREFIX)/libexec/gpclient
+	install -m 755 packaging/files/usr/libexec/gpclient/vpnc-script $(DESTDIR)$(PREFIX)/libexec/gpclient/vpnc-script
+	install -m 755 packaging/files/usr/libexec/gpclient/hipreport.sh $(DESTDIR)$(PREFIX)/libexec/gpclient/hipreport.sh
+
+	install -d $(DESTDIR)$(PREFIX)/share/applications
+	install -m 644 packaging/bsd/gpgui.desktop $(DESTDIR)$(PREFIX)/share/applications/gpgui.desktop
+	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
+	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/32x32/apps
+	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps
+	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256@2/apps
+	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/gpgui.svg
+	install -m 644 packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/32x32/apps/gpgui.png
+	install -m 644 packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps/gpgui.png
+	install -m 644 packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256@2/apps/gpgui.png
+	install -d $(DESTDIR)$(PREFIX)/share/polkit-1/actions
+	install -m 644 packaging/bsd/com.yuezk.gpgui.policy $(DESTDIR)$(PREFIX)/share/polkit-1/actions/com.yuezk.gpgui.policy
+
+clean-bsd-package:
+	rm -rf .build/$(BSD_FLAVOR)
+
+bsd-gpgui-tarball:
+	test -x "$(GPGUI_BINARY)"
+	rm -rf .build/$(BSD_FLAVOR)/gpgui
+	mkdir -p .build/$(BSD_FLAVOR)/artifacts .build/$(BSD_FLAVOR)/gpgui/gpgui_$(VERSION)
+	cp "$(GPGUI_BINARY)" .build/$(BSD_FLAVOR)/gpgui/gpgui_$(VERSION)/
+	tar -cf - -C .build/$(BSD_FLAVOR)/gpgui gpgui_$(VERSION) | xz -c > .build/$(BSD_FLAVOR)/artifacts/gpgui_$(BSD_FLAVOR)_$(shell uname -m).bin.tar.xz
+	file=.build/$(BSD_FLAVOR)/artifacts/gpgui_$(BSD_FLAVOR)_$(shell uname -m).bin.tar.xz; \
+		if command -v sha256sum >/dev/null 2>&1; then sha256sum "$$file" | cut -d ' ' -f 1; \
+		elif command -v sha256 >/dev/null 2>&1; then sha256 -q "$$file"; \
+		else cksum -a sha256 "$$file" | awk '{print $$1}'; fi > "$$file.sha256"
+
+package-freebsd: BSD_FLAVOR=freebsd
+package-freebsd: clean-bsd-package
+	test -x "$(GPGUI_BINARY)"
+	mkdir -p .build/freebsd/pkgroot .build/freebsd/artifacts
+	$(MAKE) install-bsd DESTDIR=$(CURDIR)/.build/freebsd/pkgroot PREFIX=$(PREFIX) GPGUI_BINARY="$(GPGUI_BINARY)"
+	find .build/freebsd/pkgroot$(PREFIX) -type f -print | sed 's|^.build/freebsd/pkgroot$(PREFIX)/||' | sort > .build/freebsd/PLIST
+	freebsd_major=$$(freebsd-version -u | sed 's/\..*//'); \
+	freebsd_arch=$$(uname -m | sed -e 's/x86_64/amd64/' -e 's/arm64/aarch64/'); \
+	sed \
+		-e 's/@PKG_NAME@/$(PKG_NAME)/g' \
+		-e 's/@VERSION@/$(VERSION)/g' \
+		-e "s/@ABI@/FreeBSD:$$freebsd_major:$$freebsd_arch/g" \
+		-e "s/@ARCH@/freebsd:$$freebsd_major:$$freebsd_arch/g" \
+		-e 's|@PREFIX@|$(PREFIX)|g' \
+		packaging/bsd/freebsd/MANIFEST.in > .build/freebsd/+MANIFEST
+	pkg create -r .build/freebsd/pkgroot -M .build/freebsd/+MANIFEST -p .build/freebsd/PLIST -o .build/freebsd/artifacts
+	freebsd_arch=$$(uname -m | sed -e 's/x86_64/amd64/' -e 's/arm64/aarch64/'); \
+		mv .build/freebsd/artifacts/$(PKG_NAME)-$(VERSION).pkg .build/freebsd/artifacts/$(PKG_NAME)-$(VERSION)-freebsd-$$freebsd_arch.pkg
+	$(MAKE) bsd-gpgui-tarball BSD_FLAVOR=freebsd GPGUI_BINARY="$(GPGUI_BINARY)"
+
+package-openbsd: BSD_FLAVOR=openbsd
+package-openbsd: clean-bsd-package
+	test -x "$(GPGUI_BINARY)"
+	mkdir -p .build/openbsd/pkgroot .build/openbsd/artifacts
+	$(MAKE) install-bsd DESTDIR=$(CURDIR)/.build/openbsd/pkgroot PREFIX=$(PREFIX) GPGUI_BINARY="$(GPGUI_BINARY)"
+	cp packaging/bsd/openbsd/COMMENT .build/openbsd/+COMMENT
+	cp packaging/bsd/openbsd/DESC .build/openbsd/+DESC
+	find .build/openbsd/pkgroot$(PREFIX) -type f -print | sed 's|^.build/openbsd/pkgroot$(PREFIX)/||' | sort > .build/openbsd/PLIST
+	comment=$$(cat .build/openbsd/+COMMENT); \
+		openbsd_arch=$$(uname -m | sed 's/x86_64/amd64/'); \
+		gnome_keyring_pkg=$$(pkg_info -e 'gnome-keyring-*' | sed 's/^inst://' | head -n 1); \
+		polkit_pkg=$$(pkg_info -e 'polkit-*' | sed 's/^inst://' | head -n 1); \
+		webkitgtk_pkg=$$(pkg_info -e 'webkitgtk41-*' | sed 's/^inst://' | head -n 1); \
+		pkg_create \
+			-B .build/openbsd/pkgroot \
+			-D COMMENT="$$comment" \
+			-d .build/openbsd/+DESC \
+			-f .build/openbsd/PLIST \
+			-p $(PREFIX) \
+			-P x11/gnome/keyring:gnome-keyring-*:$$gnome_keyring_pkg \
+			-P sysutils/polkit:polkit-*:$$polkit_pkg \
+			-P www/webkitgtk4,webkitgtk41:webkitgtk41-*:$$webkitgtk_pkg \
+			.build/openbsd/artifacts/$(PKG_NAME)-$(VERSION)-openbsd-$$openbsd_arch.tgz
+	$(MAKE) bsd-gpgui-tarball BSD_FLAVOR=openbsd GPGUI_BINARY="$(GPGUI_BINARY)"
 
 uninstall:
 	@echo "Uninstalling $(PKG_NAME)..."
@@ -185,10 +303,15 @@ init-debian: clean-debian tarball
 		sed -i "/libsecret-1-0/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/libayatana-appindicator3-1/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/gnome-keyring/d" .build/deb/$(PKG)/debian/control; \
+	fi
+
+	# Remove the WebKitGTK build dependency only if neither gpauth webview auth nor gpgui-helper needs it
+	if [ $(BUILD_GUI_HELPER) -eq 0 ] && [ $(BUILD_WEBVIEW_AUTH) -eq 0 ]; then \
 		sed -i "/libwebkit2gtk-4.1-dev/d" .build/deb/$(PKG)/debian/control; \
 	fi
 
 	sed -i "s/@BUILD_GUI_HELPER@/$(BUILD_GUI_HELPER)/g" .build/deb/$(PKG)/debian/rules
+	sed -i "s/@BUILD_WEBVIEW_AUTH@/$(BUILD_WEBVIEW_AUTH)/g" .build/deb/$(PKG)/debian/rules
 	sed -i "s/@RUST_VERSION@/$(RUST_VERSION)/g" .build/deb/$(PKG)/debian/rules
 
 	rm -f .build/deb/$(PKG)/debian/changelog

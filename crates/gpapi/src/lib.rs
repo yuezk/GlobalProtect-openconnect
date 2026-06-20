@@ -4,6 +4,8 @@ pub mod credential;
 pub mod error;
 pub mod gateway;
 pub mod gp_params;
+pub mod os_profile;
+pub mod params;
 pub mod portal;
 pub mod process;
 pub mod service;

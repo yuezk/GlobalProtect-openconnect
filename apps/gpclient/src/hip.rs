@@ -1,8 +1,11 @@
 use askama::Template;
 use clap::Args;
-use gpapi::{clap::args::Os, utils::host_utils};
+use gpapi::{
+  clap::args::Os,
+  os_profile::{ClientOs, OsProfile, OsProfileBuilder},
+};
 use log::debug;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::process::Command;
 use xmltree::Element;
@@ -16,12 +19,11 @@ struct HipReportTemplate<'a> {
   month: String,
   year: String,
   user_name: &'a str,
-  host_info: HostInfo<'a>,
+  host_info: HostInfo,
   md5: &'a str,
 }
 
-/// Information about Microsoft Defender (mdatp) installation and status
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct DefenderInfo {
   #[serde(rename = "appVersion")]
   app_version: String,
@@ -33,31 +35,29 @@ struct DefenderInfo {
   real_time_protection_enabled: RealTimeProtection,
 }
 
-/// Wrapper for realTimeProtectionEnabled field which has a nested structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct RealTimeProtection {
   value: bool,
 }
 
 /// Host information for HIP reporting
-struct HostInfo<'a> {
+struct HostInfo {
   /// Common for all OSes, e.g., "Apple", "Microsoft", "Linux"
-  os_vendor: &'a str,
+  os_vendor: String,
   /// Common for all OSes, e.g., "Linux Ubuntu 20.04", "Apple Mac OS X 10.15.7", etc.
-  os_version: &'a str,
-  /// Only for macOS and Windows
+  os_version: String,
+  /// Per-OS machine identifier (UUID for Linux/Windows, MAC for macOS)
   host_id: String,
   /// Common for all OSes
   host_name: String,
   /// Only for macOS and Windows, e.g., "10.15.7", "10.0.19044.2130"
-  software_version: &'a str,
+  software_version: String,
   domain: String,
   network_interfaces: Vec<NetworkInterface>,
-  /// Linux only: Microsoft Defender (mdatp) information if available
   defender: Option<DefenderInfo>,
 }
 
-impl<'a> HostInfo<'a> {
+impl HostInfo {
   /// Get the first available IPv4 address from network interfaces
   pub fn default_ipv4(&self) -> &str {
     self
@@ -126,8 +126,11 @@ pub(crate) struct HipArgs {
   #[arg(long, value_enum, help = "The client OS")]
   client_os: Os,
 
-  #[arg(long, help = "The OS version string, e.g., Apple Mac OS X 10.15.7")]
-  os_version: String,
+  #[arg(long, hide = true)]
+  os_version: Option<String>,
+
+  #[arg(long, help = "Use this runtime host ID when building the OS profile")]
+  host_id: Option<String>,
 
   #[arg(long, help = "The authentication cookie")]
   cookie: String,
@@ -144,11 +147,13 @@ pub(crate) struct HipArgs {
 
 pub(crate) struct HipHandler<'a> {
   args: &'a HipArgs,
+  profile: OsProfile,
 }
 
 impl<'a> HipHandler<'a> {
   pub(crate) fn new(args: &'a HipArgs) -> Self {
-    Self { args }
+    let profile = build_os_profile(args);
+    Self { args, profile }
   }
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
@@ -187,34 +192,57 @@ impl<'a> HipHandler<'a> {
     format_xml(&report)
   }
 
-  /// Collect host information based on the client OS
-  fn collect_host_info(&self, cookie_params: &'a HashMap<String, String>) -> HostInfo<'a> {
-    let collector = HostInfoCollector::new(self.args, cookie_params);
-
-    match self.args.client_os {
-      Os::Linux => collector.collect_linux(),
-      Os::Mac => collector.collect_macos(),
-      Os::Windows => collector.collect_windows(),
-    }
+  /// Collect host information using the configured OsProfile.
+  fn collect_host_info(&self, cookie_params: &'a HashMap<String, String>) -> HostInfo {
+    HostInfoCollector::new(&self.profile, self.args, cookie_params).collect()
   }
+}
+
+/// Construct an `OsProfile` from CLI args, falling back to per-OS defaults
+/// for any value not supplied on the command line.
+fn build_os_profile(args: &HipArgs) -> OsProfile {
+  let client_os = ClientOs::from(args.client_os);
+  let mut builder = OsProfileBuilder::new(client_os).client_version(args.client_version.clone());
+  if let Some(host_id) = args.host_id.as_deref() {
+    debug!("HIP host-id override supplied: {}", host_id);
+    builder = builder.host_id_override(host_id);
+  }
+  let profile = builder.build();
+  debug!(
+    "HIP OS profile host-id: runtime={}, projected={}, client_os={}",
+    profile.host_identity().host_id(),
+    profile.host_id(),
+    client_os.as_str()
+  );
+  profile
 }
 
 // ============================================================================
 // Host Information Collector
 // ============================================================================
 
-/// Helper struct for collecting host information
-struct HostInfoCollector<'a> {
+/// Helper struct for collecting host information.
+///
+/// Identity values (vendor, host_id, computer name, software version) come
+/// from the configured `OsProfile`, while runtime state (network interfaces,
+/// IP addresses) is enumerated here from the underlying machine.
+struct HostInfoCollector<'p, 'a> {
+  profile: &'p OsProfile,
   args: &'a HipArgs,
   cookie_params: &'a HashMap<String, String>,
 }
 
-impl<'a> HostInfoCollector<'a> {
-  fn new(args: &'a HipArgs, cookie_params: &'a HashMap<String, String>) -> Self {
-    Self { args, cookie_params }
+impl<'p, 'a> HostInfoCollector<'p, 'a> {
+  fn new(profile: &'p OsProfile, args: &'a HipArgs, cookie_params: &'a HashMap<String, String>) -> Self {
+    Self {
+      profile,
+      args,
+      cookie_params,
+    }
   }
 
-  /// Get domain from cookie parameters
+  /// Domain belongs to the runtime user/session, not the simulated OS, so
+  /// it is sourced from the auth cookie when available.
   fn get_domain(&self) -> String {
     self
       .cookie_params
@@ -240,141 +268,80 @@ impl<'a> HostInfoCollector<'a> {
     }
   }
 
-  /// Collect Linux-specific host information
-  fn collect_linux(&self) -> HostInfo<'a> {
-    let iface = self.collect_network_interface();
+  /// Single entry point for collecting host info — dispatches per-OS
+  /// behavior via `OsProfile` methods rather than `#[cfg(target_os)]`.
+  fn collect(&self) -> HostInfo {
+    let runtime_iface = self.collect_network_interface();
+    let primary = self.adapt_primary_interface(&runtime_iface);
 
-    // Use the fixed interface name enp1s0f0 for Linux if it is not on Linux
-    let iface = NetworkInterface {
-      #[cfg(target_os = "linux")]
-      name: iface.name,
-      #[cfg(target_os = "linux")]
-      description: iface.description,
-
-      #[cfg(not(target_os = "linux"))]
-      name: "enp1s0f0".to_string(),
-      #[cfg(not(target_os = "linux"))]
-      description: "enp1s0f0".to_string(),
-
-      mac_address: iface.mac_address,
-      ipv4: iface.ipv4,
-      ipv6: iface.ipv6,
-    };
-
-    // Try to detect Microsoft Defender on Linux
-    let defender = detect_microsoft_defender_blocking();
+    let mut interfaces = vec![primary.clone()];
+    interfaces.extend(self.extra_interfaces(&primary));
 
     HostInfo {
-      os_vendor: "Linux",
-      os_version: &self.args.os_version,
-      host_id: host_utils::derive_uuid(&[]),
-      host_name: whoami::devicename(),
-      software_version: "",
-      domain: String::new(),
-      network_interfaces: vec![iface],
-      defender,
+      os_vendor: self.profile.os_vendor().to_string(),
+      os_version: self.profile.os_version().to_string(),
+      host_id: self.profile.host_id().to_string(),
+      host_name: self.profile.computer().to_string(),
+      software_version: self.profile.software_version().to_string(),
+      domain: self.domain_for_profile(),
+      network_interfaces: interfaces,
+      defender: self.defender_for_profile(),
     }
   }
 
-  /// Collect macOS-specific host information
-  fn collect_macos(&self) -> HostInfo<'a> {
-    let iface = self.collect_network_interface();
-    // macOS use the mac address as host ID
-    let host_id = iface
-      .mac_address
-      .as_ref()
-      .map(|s| s.to_string())
-      .unwrap_or_else(|| "00:00:00:00:00:00".to_string());
-
-    // Use the fixed interface name en0 for macOS if it is not on macOS
-    let iface = NetworkInterface {
-      #[cfg(target_os = "macos")]
-      name: iface.name,
-      #[cfg(target_os = "macos")]
-      description: iface.description,
-
-      #[cfg(not(target_os = "macos"))]
-      name: "en0".to_string(),
-      #[cfg(not(target_os = "macos"))]
-      description: "en0".to_string(),
-
-      mac_address: iface.mac_address,
-      ipv4: iface.ipv4,
-      ipv6: iface.ipv6,
+  /// Build the primary network interface with OS-appropriate naming and
+  /// MAC formatting. When emulating a different OS, the runtime interface
+  /// name/description are replaced with the canonical placeholder for the
+  /// target OS.
+  fn adapt_primary_interface(&self, runtime: &NetworkInterface) -> NetworkInterface {
+    let (name, description) = if self.profile.is_native() {
+      (runtime.name.clone(), runtime.description.clone())
+    } else {
+      placeholder_interface_for(self.profile, runtime)
     };
 
-    HostInfo {
-      os_vendor: "Apple",
-      os_version: &self.args.os_version,
-      host_id,
-      host_name: whoami::devicename(),
-      software_version: host_utils::get_macos_version(),
-      domain: self.get_domain(),
-      network_interfaces: vec![iface],
-      defender: None,
+    NetworkInterface {
+      name,
+      description,
+      mac_address: format_mac_for(self.profile, runtime.mac_address.clone()),
+      ipv4: runtime.ipv4.clone(),
+      ipv6: runtime.ipv6.clone(),
     }
   }
 
-  /// Collect Windows-specific host information
-  fn collect_windows(&self) -> HostInfo<'a> {
-    // Use the actual machine ID on Windows
-    #[cfg(target_os = "windows")]
-    let host_id = host_utils::get_machine_id().to_string();
-    #[cfg(not(target_os = "windows"))]
-    let host_id = host_utils::derive_uuid(&[]);
+  /// Additional interfaces appended after the primary. Only Windows
+  /// emits the software loopback interface in HIP reports.
+  fn extra_interfaces(&self, primary: &NetworkInterface) -> Vec<NetworkInterface> {
+    match self.profile.client_os() {
+      ClientOs::Windows => vec![NetworkInterface {
+        name: derive_windows_network_name(self.profile.host_id(), primary),
+        description: "Software Loopback Interface 1".to_string(),
+        mac_address: Some(String::new()),
+        ipv4: Some("127.0.0.1".to_string()),
+        ipv6: Some("::1".to_string()),
+      }],
+      ClientOs::Linux | ClientOs::Mac => vec![],
+    }
+  }
 
-    let iface = self.collect_network_interface();
+  /// Linux HIP reports omit the domain field; macOS/Windows include it
+  /// from the auth cookie.
+  fn domain_for_profile(&self) -> String {
+    match self.profile.client_os() {
+      ClientOs::Linux => String::new(),
+      ClientOs::Mac | ClientOs::Windows => self.get_domain(),
+    }
+  }
 
-    // Use the fixed interface name if it is not on Windows
-    let iface = NetworkInterface {
-      #[cfg(target_os = "windows")]
-      name: iface.name,
-      #[cfg(target_os = "windows")]
-      description: iface.description,
-
-      #[cfg(not(target_os = "windows"))]
-      name: derive_windows_network_name(&iface),
-      #[cfg(not(target_os = "windows"))]
-      description: "PANGP Virtual Ethernet Adapter Secure".to_string(),
-
-      // mac address on windows should replace ':' with '-'
-      mac_address: iface.mac_address.map(|mac| mac.replace(':', "-")),
-      ipv4: iface.ipv4,
-      ipv6: iface.ipv6,
-    };
-
-    // Add the local loopback interface
-    let loopback_iface = NetworkInterface {
-      name: derive_windows_network_name(&iface),
-      description: "Software Loopback Interface 1".to_string(),
-      mac_address: Some(String::new()),
-      ipv4: Some("127.0.0.1".to_string()),
-      ipv6: Some("::1".to_string()),
-    };
-
-    let ifaces = vec![iface, loopback_iface];
-
-    HostInfo {
-      os_vendor: "Microsoft",
-      os_version: &self.args.os_version,
-      host_id,
-      host_name: whoami::devicename(),
-      software_version: host_utils::get_windows_version(),
-      domain: self.get_domain(),
-      network_interfaces: ifaces,
-      defender: None,
+  fn defender_for_profile(&self) -> Option<DefenderInfo> {
+    match self.profile.client_os() {
+      ClientOs::Linux => detect_microsoft_defender_blocking(),
+      ClientOs::Mac | ClientOs::Windows => None,
     }
   }
 }
 
-// ============================================================================
-// Microsoft Defender Detection
-// ============================================================================
-
-/// Detect Microsoft Defender (mdatp) on Linux systems
-/// Executes 'mdatp health --output json' and parses the result
 fn detect_microsoft_defender_blocking() -> Option<DefenderInfo> {
-  // Try to execute 'mdatp health --output json'
   let output = Command::new("mdatp")
     .arg("health")
     .arg("--output")
@@ -382,18 +349,47 @@ fn detect_microsoft_defender_blocking() -> Option<DefenderInfo> {
     .output()
     .ok()?;
 
-  // Check if command executed successfully
   if !output.status.success() {
     debug!("mdatp health command failed");
     return None;
   }
 
-  // Parse JSON output
-  let json_str = String::from_utf8(output.stdout).ok()?;
-  let defender_info: DefenderInfo = serde_json::from_str(&json_str).ok()?;
+  let json = String::from_utf8(output.stdout).ok()?;
+  let defender = parse_defender_info(&json)?;
 
-  debug!("Detected Microsoft Defender: {:?}", defender_info);
-  Some(defender_info)
+  debug!("Detected Microsoft Defender: {:?}", defender);
+  Some(defender)
+}
+
+fn parse_defender_info(json: &str) -> Option<DefenderInfo> {
+  serde_json::from_str(json).ok()
+}
+
+// ============================================================================
+// Per-OS interface helpers (selected via OsProfile, not cfg)
+// ============================================================================
+
+/// Canonical interface name/description for the target OS when the runtime
+/// is a different OS (i.e. emulation).
+fn placeholder_interface_for(profile: &OsProfile, runtime: &NetworkInterface) -> (String, String) {
+  match profile.client_os() {
+    ClientOs::Linux => ("enp1s0f0".to_string(), "enp1s0f0".to_string()),
+    ClientOs::Mac => ("en0".to_string(), "en0".to_string()),
+    ClientOs::Windows => (
+      derive_windows_network_name(profile.host_id(), runtime),
+      "PANGP Virtual Ethernet Adapter Secure".to_string(),
+    ),
+  }
+}
+
+/// MAC address formatting per target OS. Windows uses hyphen separators;
+/// Linux and macOS preserve the colon-separated form returned by the
+/// platform.
+fn format_mac_for(profile: &OsProfile, mac: Option<String>) -> Option<String> {
+  match profile.client_os() {
+    ClientOs::Windows => mac.map(|m| m.replace(':', "-")),
+    ClientOs::Linux | ClientOs::Mac => mac,
+  }
 }
 
 // ============================================================================
@@ -422,11 +418,163 @@ fn format_xml(xml_str: &str) -> anyhow::Result<String> {
   Ok(String::from_utf8(xml_buf)?)
 }
 
-fn derive_windows_network_name(iface: &NetworkInterface) -> String {
-  let seeds = [
+fn derive_windows_network_name(host_id: &str, iface: &NetworkInterface) -> String {
+  let seed = format!(
+    "{}-{}-{}",
+    host_id,
     iface.mac_address.as_deref().unwrap_or("00:00:00:00:00:00"),
-    iface.name.as_str(),
-  ];
+    iface.name
+  );
 
-  format!("{{{}}}", host_utils::derive_uuid(&seeds).to_uppercase())
+  format!(
+    "{{{}}}",
+    uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, seed.as_bytes())
+      .to_string()
+      .to_uppercase()
+  )
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use gpapi::os_profile::runtime_client_os;
+
+  fn make_hip_args(client_os: Os) -> HipArgs {
+    HipArgs {
+      client_version: "6.2.4-49".to_string(),
+      client_os,
+      os_version: Some("test-os-version".to_string()),
+      host_id: None,
+      cookie: String::new(),
+      client_ip: None,
+      client_ipv6: None,
+      md5: "deadbeef".to_string(),
+    }
+  }
+
+  fn make_profile(client_os: ClientOs) -> OsProfile {
+    OsProfileBuilder::new(client_os).build()
+  }
+
+  #[test]
+  fn host_info_os_vendor_is_linux_for_linux_profile() {
+    let args = make_hip_args(Os::Linux);
+    let profile = make_profile(ClientOs::Linux);
+    let cookie_params: HashMap<String, String> = HashMap::new();
+
+    let info = HostInfoCollector::new(&profile, &args, &cookie_params).collect();
+
+    assert_eq!(info.os_vendor, "Linux");
+  }
+
+  #[test]
+  fn host_info_os_vendor_is_apple_for_mac_profile() {
+    let args = make_hip_args(Os::Mac);
+    let profile = make_profile(ClientOs::Mac);
+    let cookie_params: HashMap<String, String> = HashMap::new();
+
+    let info = HostInfoCollector::new(&profile, &args, &cookie_params).collect();
+
+    assert_eq!(info.os_vendor, "Apple");
+  }
+
+  #[test]
+  fn host_info_os_vendor_is_microsoft_for_windows_profile() {
+    let args = make_hip_args(Os::Windows);
+    let profile = make_profile(ClientOs::Windows);
+    let cookie_params: HashMap<String, String> = HashMap::new();
+
+    let info = HostInfoCollector::new(&profile, &args, &cookie_params).collect();
+
+    assert_eq!(info.os_vendor, "Microsoft");
+  }
+
+  #[test]
+  fn host_info_host_id_comes_from_os_profile() {
+    let args = make_hip_args(Os::Linux);
+    let profile = make_profile(ClientOs::Linux);
+    let cookie_params: HashMap<String, String> = HashMap::new();
+
+    let info = HostInfoCollector::new(&profile, &args, &cookie_params).collect();
+
+    assert_eq!(info.host_id, profile.host_id());
+  }
+
+  #[test]
+  fn host_info_host_id_independent_of_runtime_for_each_os() {
+    // host_id should reflect the OsProfile's machine identity for every
+    // simulated OS, regardless of the runtime platform.
+    for (client_os, os_arg) in [
+      (ClientOs::Linux, Os::Linux),
+      (ClientOs::Mac, Os::Mac),
+      (ClientOs::Windows, Os::Windows),
+    ] {
+      let args = make_hip_args(os_arg);
+      let profile = make_profile(client_os);
+      let cookie_params: HashMap<String, String> = HashMap::new();
+
+      let info = HostInfoCollector::new(&profile, &args, &cookie_params).collect();
+
+      assert_eq!(info.host_id, profile.host_id());
+    }
+  }
+
+  #[test]
+  fn hip_os_version_argument_is_ignored() {
+    let args = make_hip_args(Os::Linux);
+    let profile = build_os_profile(&args);
+    let cookie_params: HashMap<String, String> = HashMap::new();
+
+    let info = HostInfoCollector::new(&profile, &args, &cookie_params).collect();
+
+    assert_eq!(info.os_version, profile.os_version());
+    assert_ne!(info.os_version, "test-os-version");
+  }
+
+  #[test]
+  fn host_id_argument_sets_profile_runtime_identity() {
+    let mut args = make_hip_args(Os::default());
+    args.host_id = Some("auth-host-id".to_string());
+
+    let profile = build_os_profile(&args);
+
+    assert_eq!(profile.client_os(), runtime_client_os());
+    assert_eq!(profile.host_identity().host_id(), "auth-host-id");
+  }
+
+  #[test]
+  fn host_info_uses_host_id_argument_for_native_profile() {
+    let mut args = make_hip_args(Os::default());
+    args.host_id = Some("auth-host-id".to_string());
+    let profile = build_os_profile(&args);
+    let cookie_params: HashMap<String, String> = HashMap::new();
+
+    let info = HostInfoCollector::new(&profile, &args, &cookie_params).collect();
+
+    assert_eq!(profile.host_identity().host_id(), "auth-host-id");
+    assert_eq!(info.host_id, profile.host_id());
+  }
+
+  #[test]
+  fn parses_microsoft_defender_health_json() {
+    let defender = parse_defender_info(
+      r#"{
+        "appVersion": "101.25042.0000",
+        "engineVersion": "1.1.25040.2",
+        "definitionsVersion": "1.429.201.0",
+        "realTimeProtectionEnabled": { "value": true }
+      }"#,
+    )
+    .expect("defender health json should parse");
+
+    assert_eq!(defender.app_version, "101.25042.0000");
+    assert_eq!(defender.engine_version, "1.1.25040.2");
+    assert_eq!(defender.definitions_version, "1.429.201.0");
+    assert!(defender.real_time_protection_enabled.value);
+  }
+
+  #[test]
+  fn rejects_invalid_microsoft_defender_health_json() {
+    assert!(parse_defender_info("{}").is_none());
+  }
 }

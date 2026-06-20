@@ -46,6 +46,7 @@ impl VpnTaskContext {
       .os(args.openconnect_os())
       .os_version(args.os_version())
       .client_version(args.client_version())
+      .host_id(args.host_id())
       .certificate(args.certificate())
       .sslkey(args.sslkey())
       .key_password(args.key_password())

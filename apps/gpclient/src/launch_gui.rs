@@ -32,7 +32,7 @@ impl<'a> LaunchGuiHandler<'a> {
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
     // `launch-gui`cannot be run as root
-    let user = whoami::username();
+    let user = whoami::username().map_err(|err| anyhow::anyhow!("Failed to resolve current user: {err}"))?;
     if user == "root" {
       anyhow::bail!("`launch-gui` cannot be run as root");
     }

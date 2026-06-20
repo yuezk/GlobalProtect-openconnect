@@ -64,6 +64,7 @@ pub struct Vpn {
   os: CString,
   os_version: Option<CString>,
   client_version: Option<CString>,
+  host_id: Option<CString>,
   local_hostname: Option<CString>,
 
   script: CString,
@@ -124,6 +125,7 @@ impl Vpn {
       os: self.os.as_ptr(),
       os_version: Self::option_to_ptr(&self.os_version),
       client_version: Self::option_to_ptr(&self.client_version),
+      host_id: Self::option_to_ptr(&self.host_id),
       local_hostname: Self::option_to_ptr(&self.local_hostname),
 
       script: self.script.as_ptr(),
@@ -185,6 +187,7 @@ pub struct VpnBuilder {
   os: Option<String>,
   os_version: Option<String>,
   client_version: Option<String>,
+  host_id: Option<String>,
   local_hostname: Option<String>,
 
   certificate: Option<String>,
@@ -217,6 +220,7 @@ impl VpnBuilder {
       os: None,
       os_version: None,
       client_version: None,
+      host_id: None,
       local_hostname: None,
 
       certificate: None,
@@ -268,6 +272,11 @@ impl VpnBuilder {
 
   pub fn client_version<T: Into<Option<String>>>(mut self, client_version: T) -> Self {
     self.client_version = client_version.into();
+    self
+  }
+
+  pub fn host_id<T: Into<Option<String>>>(mut self, host_id: T) -> Self {
+    self.host_id = host_id.into();
     self
   }
 
@@ -378,6 +387,7 @@ impl VpnBuilder {
       os: Self::to_cstring(&os),
       os_version: self.os_version.as_deref().map(Self::to_cstring),
       client_version: self.client_version.as_deref().map(Self::to_cstring),
+      host_id: self.host_id.as_deref().map(Self::to_cstring),
       local_hostname: self.local_hostname.as_deref().map(Self::to_cstring),
 
       script: Self::to_cstring(&script),
@@ -452,5 +462,40 @@ mod tests {
     assert_eq!(info.user_expires, Some(1_776_828_409));
     assert_eq!(info.lifetime_secs, None);
     assert_eq!(info.lifetime_warning, None);
+  }
+
+  #[test]
+  fn connect_options_include_host_id() {
+    let vpn = Vpn {
+      server: CString::new("gateway.example.com").unwrap(),
+      cookie: CString::new("cookie").unwrap(),
+      user_agent: CString::new("agent").unwrap(),
+      os: CString::new("linux").unwrap(),
+      os_version: None,
+      client_version: None,
+      host_id: Some(CString::new("profile-host-id").unwrap()),
+      local_hostname: None,
+      script: CString::new("/bin/true").unwrap(),
+      interface: None,
+      script_tun: false,
+      certificate: None,
+      sslkey: None,
+      key_password: None,
+      servercert: None,
+      csd_uid: 0,
+      csd_wrapper: None,
+      reconnect_timeout: 300,
+      mtu: 0,
+      disable_ipv6: false,
+      no_dtls: false,
+      dpd_interval: 0,
+      no_xmlpost: false,
+      callback: Default::default(),
+    };
+
+    let options = vpn.build_connect_options();
+
+    let host_id = unsafe { CStr::from_ptr(options.host_id) }.to_str().unwrap();
+    assert_eq!(host_id, "profile-host-id");
   }
 }

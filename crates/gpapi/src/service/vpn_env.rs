@@ -1,6 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-use crate::service::vpn_state::VpnState;
+use crate::{os_profile::HostIdentity, service::vpn_state::VpnState};
+
+/// The single DTO carrying all host facts gpservice ships to gpgui.
+///
+/// Populated by gpservice at WS connection time and sent inside `VpnEnv`.
+/// gpgui stores it in a process-wide `OnceLock` and routes `AppSettings`,
+/// `Constants`, and `OsProfile` construction through it.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HostInfo {
+  /// Host identity collected by gpservice for the runtime OS.
+  pub host_identity: HostIdentity,
+}
 
 /// Represents the VPN environment configuration.
 /// When a client connects, the gpservice sends the current VPN environment
@@ -19,4 +30,7 @@ pub struct VpnEnv {
   /// The gpauth executable path
   /// Used by the client to launch gpauth for authentication
   pub auth_executable: String,
+
+  /// Host identity collected by gpservice.
+  pub host_info: HostInfo,
 }

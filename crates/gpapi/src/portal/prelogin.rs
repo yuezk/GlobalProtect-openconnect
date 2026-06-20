@@ -8,19 +8,10 @@ use xmltree::Element;
 use crate::{
   error::PortalError,
   gp_params::GpParams,
+  os_profile::PreloginBrowserMode,
+  params::{gateway_prelogin, portal_prelogin},
   utils::{base64, normalize_server, parse_gp_response, xml::ElementExt},
 };
-
-const REQUIRED_PARAMS: [&str; 8] = [
-  "tmp",
-  "clientVer",
-  "clientos",
-  "os-version",
-  "host-id",
-  "ipv6-support",
-  "default-browser",
-  "cas-support",
-];
 
 #[derive(Debug, Serialize, Type, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -96,27 +87,64 @@ impl Prelogin {
   }
 }
 
-pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prelogin> {
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PreloginOptions {
+  external_browser_requested: bool,
+  portal_default_browser_enabled: bool,
+}
+
+impl PreloginOptions {
+  pub fn external_browser_requested(mut self, external_browser_requested: bool) -> Self {
+    self.external_browser_requested = external_browser_requested;
+    self
+  }
+
+  pub fn portal_default_browser_enabled(mut self, portal_default_browser_enabled: bool) -> Self {
+    self.portal_default_browser_enabled = portal_default_browser_enabled;
+    self
+  }
+
+  fn browser_mode(self, is_gateway: bool) -> PreloginBrowserMode {
+    if self.external_browser_requested && (!is_gateway || self.portal_default_browser_enabled) {
+      PreloginBrowserMode::External
+    } else {
+      PreloginBrowserMode::Embedded
+    }
+  }
+}
+
+pub async fn prelogin(portal: &str, gp_params: &GpParams, options: PreloginOptions) -> anyhow::Result<Prelogin> {
   let user_agent = gp_params.user_agent();
   let is_gateway = gp_params.is_gateway();
   let prelogin_type = if is_gateway { "Gateway" } else { "Portal" };
 
-  info!("{} prelogin with user_agent: {}", prelogin_type, user_agent);
-
   let portal = normalize_server(portal)?;
   let path = if is_gateway { "ssl-vpn" } else { "global-protect" };
   let prelogin_url = format!("{portal}/{}/prelogin.esp", path);
-  let mut params = gp_params.to_params();
+  let browser_mode = options.browser_mode(is_gateway);
+  let request_params = if is_gateway {
+    gateway_prelogin::build(gp_params.os_profile(), browser_mode)
+  } else {
+    portal_prelogin::build(gp_params.os_profile(), browser_mode)
+  };
+  let default_browser = request_param(&request_params, "default-browser").unwrap_or("");
 
-  params.insert("tmp", "tmp");
-  params.insert("default-browser", "1");
-  params.insert("cas-support", "yes");
-
-  params.retain(|k, _| REQUIRED_PARAMS.iter().any(|required_param| required_param == k));
+  info!(
+    "{} prelogin with user_agent: {}, default_browser: {}",
+    prelogin_type, user_agent, default_browser
+  );
 
   let client = Client::try_from(gp_params)?;
 
-  let res = client.post(&prelogin_url).form(&params).send().await.map_err(|e| {
+  let mut request = client.post(&prelogin_url);
+  if !request_params.query.is_empty() {
+    request = request.query(&request_params.query);
+  }
+  if !request_params.body.is_empty() {
+    request = request.form(&request_params.body);
+  }
+
+  let res = request.send().await.map_err(|e| {
     warn!("Network error: {:?}", e);
     anyhow::anyhow!(PortalError::NetworkError(e))
   })?;
@@ -142,6 +170,14 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams) -> anyhow::Result<Prel
   })?;
 
   Ok(prelogin)
+}
+
+fn request_param<'a>(params: &'a crate::params::RequestParams, name: &str) -> Option<&'a str> {
+  params
+    .body
+    .iter()
+    .chain(params.query.iter())
+    .find_map(|(key, value)| (key == name).then_some(value.as_str()))
 }
 
 fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
@@ -202,4 +238,82 @@ fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
   };
 
   Ok(Prelogin::Standard(standard_prelogin))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::PreloginOptions;
+  use crate::{
+    gp_params::GpParams,
+    os_profile::{ClientOs, HostIdentity, OsProfile, PreloginBrowserMode},
+    params::{gateway_prelogin, portal_prelogin},
+  };
+
+  fn gp_params(client_os: ClientOs) -> GpParams {
+    let profile = OsProfile::builder(client_os)
+      .host_identity(HostIdentity::new(
+        "test-computer".to_string(),
+        "host-id".to_string(),
+        "serial".to_string(),
+        "aa:bb:cc:dd:ee:ff".to_string(),
+      ))
+      .build();
+    GpParams::builder(profile).build()
+  }
+
+  #[test]
+  fn portal_prelogin_params_include_official_profile_fields() {
+    let gp_params = gp_params(ClientOs::Linux);
+    let request_params = portal_prelogin::build(gp_params.os_profile(), PreloginBrowserMode::Embedded);
+
+    let body: std::collections::HashMap<&str, &str> = request_params
+      .body
+      .iter()
+      .map(|(k, v)| (k.as_str(), v.as_str()))
+      .collect();
+    let query: std::collections::HashMap<&str, &str> = request_params
+      .query
+      .iter()
+      .map(|(k, v)| (k.as_str(), v.as_str()))
+      .collect();
+
+    assert_eq!(body.get("host-id"), Some(&gp_params.os_profile().host_id()));
+    assert_eq!(body.get("default-browser"), Some(&"-10"));
+    assert_eq!(body.get("cas-support"), Some(&"yes"));
+    assert_eq!(body.get("data"), Some(&r#"eyJjYXNfZW1iZWRkZWRfYnJvd3NlciI6InllcyJ9"#));
+    // Linux does not place kerberos-support in the query string.
+    assert_eq!(query.get("kerberos-support"), None);
+  }
+
+  #[test]
+  fn gateway_prelogin_uses_gateway_default_browser() {
+    let gp_params = gp_params(ClientOs::Mac);
+    let request_params = gateway_prelogin::build(gp_params.os_profile(), PreloginBrowserMode::Embedded);
+
+    let body: std::collections::HashMap<&str, &str> = request_params
+      .body
+      .iter()
+      .map(|(k, v)| (k.as_str(), v.as_str()))
+      .collect();
+
+    assert_eq!(body.get("default-browser"), Some(&"0"));
+  }
+
+  #[test]
+  fn browser_mode_uses_external_for_portal_when_requested() {
+    let options = PreloginOptions::default().external_browser_requested(true);
+
+    assert_eq!(options.browser_mode(false), PreloginBrowserMode::External);
+  }
+
+  #[test]
+  fn browser_mode_requires_portal_policy_for_gateway_external() {
+    let options = PreloginOptions::default().external_browser_requested(true);
+
+    assert_eq!(options.browser_mode(true), PreloginBrowserMode::Embedded);
+
+    let options = options.portal_default_browser_enabled(true);
+
+    assert_eq!(options.browser_mode(true), PreloginBrowserMode::External);
+  }
 }

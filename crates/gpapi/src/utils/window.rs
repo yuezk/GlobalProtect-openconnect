@@ -24,26 +24,49 @@ mod unix {
   use anyhow::bail;
   use gtk::{
     EventBox,
-    glib::Cast,
+    glib::{self, Cast},
     traits::{EventBoxExt, GtkWindowExt, WidgetExt},
   };
   use log::info;
   use tauri::WebviewWindow;
   use tokio::process::Command;
 
+  /// Wrapper to mark a non-Send closure as Send for dispatch to the GTK main thread.
+  ///
+  /// SAFETY: The caller must ensure the closure is only executed on the GTK main
+  /// thread. This is guaranteed by `glib::MainContext::default().invoke()`.
+  struct SendFn(Box<dyn FnOnce()>);
+  unsafe impl Send for SendFn {}
+
+  impl SendFn {
+    fn invoke(self) {
+      (self.0)();
+    }
+  }
+
   pub fn raise_window(win: &WebviewWindow) -> anyhow::Result<()> {
     let is_wayland = std::env::var("XDG_SESSION_TYPE").unwrap_or_default() == "wayland";
 
     if is_wayland {
       let gtk_win = win.gtk_window()?;
-      if let Some(header) = gtk_win.titlebar() {
-        let _ = header.downcast::<EventBox>().map(|event_box| {
-          event_box.set_above_child(false);
-        });
-      }
 
-      gtk_win.hide();
-      gtk_win.show_all();
+      // GTK operations must run on the main thread. When this function is called
+      // from a background thread (e.g., rspc handler on a tokio worker), calling
+      // GTK widget methods directly causes crashes in GTK's CSS subsystem
+      // (gtk_css_value_inherit_free assertion failure). Dispatch to the main
+      // thread via glib::MainContext to ensure thread safety.
+      let send_fn = SendFn(Box::new(move || {
+        if let Some(header) = gtk_win.titlebar() {
+          let _ = header.downcast::<EventBox>().map(|event_box| {
+            event_box.set_above_child(false);
+          });
+        }
+
+        gtk_win.hide();
+        gtk_win.show_all();
+      }));
+
+      glib::MainContext::default().invoke(move || send_fn.invoke());
     } else {
       if !win.is_visible()? {
         win.show()?;

@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{gateway::Gateway, gp_params::ClientOs};
+use crate::{
+  gateway::Gateway,
+  os_profile::{ClientOs, OsProfile},
+};
 
 use super::vpn_state::ConnectInfo;
 
@@ -36,6 +39,7 @@ pub struct ConnectArgs {
   os: Option<ClientOs>,
   os_version: Option<String>,
   client_version: Option<String>,
+  host_id: Option<String>,
 
   certificate: Option<String>,
   sslkey: Option<String>,
@@ -65,6 +69,7 @@ impl ConnectArgs {
       os: None,
       os_version: None,
       client_version: None,
+      host_id: None,
       certificate: None,
       sslkey: None,
       key_password: None,
@@ -108,6 +113,10 @@ impl ConnectArgs {
 
   pub fn client_version(&self) -> Option<String> {
     self.client_version.clone()
+  }
+
+  pub fn host_id(&self) -> Option<String> {
+    self.host_id.clone()
   }
 
   pub fn certificate(&self) -> Option<String> {
@@ -201,23 +210,12 @@ impl ConnectRequest {
     self
   }
 
-  pub fn with_user_agent<T: Into<Option<String>>>(mut self, user_agent: T) -> Self {
-    self.args.user_agent = user_agent.into();
-    self
-  }
-
-  pub fn with_os<T: Into<Option<ClientOs>>>(mut self, os: T) -> Self {
-    self.args.os = os.into();
-    self
-  }
-
-  pub fn with_os_version<T: Into<Option<String>>>(mut self, os_version: T) -> Self {
-    self.args.os_version = os_version.into();
-    self
-  }
-
-  pub fn with_client_version(mut self, client_version: &str) -> Self {
-    self.args.client_version = Some(client_version.to_string());
+  pub fn with_os_profile(mut self, profile: &OsProfile) -> Self {
+    self.args.os = Some(profile.client_os());
+    self.args.os_version = Some(profile.os_version().to_string());
+    self.args.client_version = Some(profile.client_version().to_string());
+    self.args.host_id = Some(profile.host_identity().host_id().to_string());
+    self.args.user_agent = Some(profile.user_agent().to_string());
     self
   }
 
@@ -314,6 +312,12 @@ mod tests {
   use serde_json::json;
 
   use super::*;
+  use crate::os_profile::OsProfileBuilder;
+
+  fn test_connect_info() -> ConnectInfo {
+    let gateway = Gateway::new("Gateway".to_string(), "vpn.example.com".to_string());
+    ConnectInfo::new("portal.example.com".to_string(), gateway.clone(), vec![gateway])
+  }
 
   #[test]
   fn connect_request_serializes_allow_extend_session() {
@@ -323,5 +327,26 @@ mod tests {
     let value = serde_json::to_value(req).unwrap();
 
     assert_eq!(value["args"]["allowExtendSession"], json!(true));
+  }
+
+  #[test]
+  fn with_os_profile_sets_user_agent_from_profile() {
+    let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
+
+    let req = ConnectRequest::new(test_connect_info(), "cookie".to_string()).with_os_profile(&profile);
+
+    assert_eq!(req.args().user_agent(), Some(profile.user_agent().to_string()));
+  }
+
+  #[test]
+  fn with_os_profile_sets_host_id_from_profile_runtime_identity() {
+    let profile = OsProfileBuilder::new(ClientOs::Linux).build();
+
+    let req = ConnectRequest::new(test_connect_info(), "cookie".to_string()).with_os_profile(&profile);
+
+    assert_eq!(
+      req.args().host_id(),
+      Some(profile.host_identity().host_id().to_string())
+    );
   }
 }
