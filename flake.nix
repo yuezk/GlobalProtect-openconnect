@@ -88,11 +88,24 @@
             libappindicator-gtk3
           ];
 
-        rewriteInstallPaths = ''
+        rewriteSourceInstallPaths = ''
           substituteInPlace $out/share/applications/gpgui.desktop \
             --replace-fail /usr/bin/gpclient $out/bin/gpclient
 
           substituteInPlace $out/libexec/gpclient/hipreport.sh \
+            --replace-fail /usr/bin/gpclient $out/bin/gpclient
+
+          substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
+            --replace-fail /usr/bin/gpservice $out/bin/gpservice
+
+          if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
+            substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
+              --replace-fail /usr/bin/gpclient $out/bin/gpclient
+          fi
+        '';
+
+        rewriteHostInstallPaths = ''
+          substituteInPlace $out/share/applications/gpgui.desktop \
             --replace-fail /usr/bin/gpclient $out/bin/gpclient
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
@@ -154,11 +167,11 @@
             cp -r packaging/files/usr/lib $out/lib
             cp -r packaging/files/usr/libexec $out/libexec
 
-            ${rewriteInstallPaths}
+            ${rewriteSourceInstallPaths}
           '';
         };
 
-        prebuilt = pkgs.stdenv.mkDerivation {
+        prebuiltFiles = pkgs.stdenv.mkDerivation {
           inherit pname version;
 
           src = binaryPackage;
@@ -184,7 +197,55 @@
               cp -r artifacts/usr/lib $out/lib
             fi
 
-            ${rewriteInstallPaths}
+            runHook postInstall
+          '';
+        };
+
+        prebuiltCommand =
+          binaryName:
+          pkgs.buildFHSEnv {
+            name = binaryName;
+            targetPkgs =
+              pkgs:
+              [
+                prebuiltFiles
+              ]
+              ++ linuxBuildInputs
+              ++ linuxRuntimeDependencies;
+            runScript = "/usr/bin/${binaryName}";
+          };
+
+        prebuiltCommands = {
+          gpclient = prebuiltCommand "gpclient";
+          gpservice = prebuiltCommand "gpservice";
+          gpauth = prebuiltCommand "gpauth";
+          gpgui = prebuiltCommand "gpgui";
+          gpgui-helper = prebuiltCommand "gpgui-helper";
+        };
+
+        prebuilt = pkgs.stdenv.mkDerivation {
+          inherit pname version;
+
+          dontUnpack = true;
+
+          installPhase = ''
+            runHook preInstall
+
+            mkdir -p $out/bin
+            ln -s ${prebuiltCommands.gpclient}/bin/gpclient $out/bin/gpclient
+            ln -s ${prebuiltCommands.gpservice}/bin/gpservice $out/bin/gpservice
+            ln -s ${prebuiltCommands.gpauth}/bin/gpauth $out/bin/gpauth
+            ln -s ${prebuiltCommands.gpgui}/bin/gpgui $out/bin/gpgui
+            ln -s ${prebuiltCommands."gpgui-helper"}/bin/gpgui-helper $out/bin/gpgui-helper
+
+            cp -r ${prebuiltFiles}/libexec $out/libexec
+            cp -r ${prebuiltFiles}/share $out/share
+
+            if [ -d ${prebuiltFiles}/lib ]; then
+              cp -r ${prebuiltFiles}/lib $out/lib
+            fi
+
+            ${rewriteHostInstallPaths}
 
             runHook postInstall
           '';
