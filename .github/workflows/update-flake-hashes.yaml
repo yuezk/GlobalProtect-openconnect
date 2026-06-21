@@ -6,9 +6,6 @@ on:
       version:
         description: "Release version. Defaults to Cargo.toml workspace version."
         required: false
-  release:
-    types:
-      - published
 
 permissions:
   contents: write
@@ -26,7 +23,7 @@ jobs:
 
       - name: Update flake hashes
         env:
-          RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.version }}
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
           if [[ -n "$RELEASE_VERSION" ]]; then
             scripts/update-flake-hashes.sh "$RELEASE_VERSION"
@@ -37,33 +34,5 @@ jobs:
       - name: Open pull request
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.version }}
-        run: |
-          if git diff --quiet -- flake.nix; then
-            echo "flake.nix hashes are already up to date"
-            exit 0
-          fi
-
-          version="${RELEASE_VERSION:-$(grep '^version' Cargo.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')}"
-          version="${version#v}"
-          branch="chore/update-flake-hashes-v${version}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$branch"
-          git add flake.nix
-          git commit -m "chore: update flake hashes for v${version}"
-          git push --force-with-lease origin "$branch"
-
-          if gh pr view "$branch" --json number > /tmp/flake-pr.json 2> /dev/null; then
-            pr_number="$(jq -r '.number' /tmp/flake-pr.json)"
-            gh pr edit "$pr_number" \
-              --title "chore: update flake hashes for v${version}" \
-              --body "Updates the Nix flake fetchzip hashes for v${version} release assets."
-          else
-            gh pr create \
-              --title "chore: update flake hashes for v${version}" \
-              --body "Updates the Nix flake fetchzip hashes for v${version} release assets." \
-              --base main \
-              --head "$branch"
-          fi
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: scripts/open-flake-hashes-pr.sh "$RELEASE_VERSION"

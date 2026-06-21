@@ -69,8 +69,8 @@ struct Cli {
 
   #[arg(
     long,
-    help = "The browser to use for authentication, e.g., `default`, `firefox`, `chrome`, `chromium`, or the path to the browser executable",
-    default_missing_value = "default",
+    help = "Use external browser authentication. With no value, auto-select Chrome, Firefox, then system default. Use `default` for the system default browser.",
+    default_missing_value = "auto",
     num_args=0..=1
   )]
   browser: Option<String>,
@@ -247,6 +247,23 @@ mod tests {
     let cli =
       Cli::try_parse_from(["gpauth", "portal.example.com", "--browser", "firefox"]).expect("gpauth args should parse");
 
+    assert!(cli.external_browser_requested());
+  }
+
+  #[test]
+  fn browser_without_value_uses_auto_mode() {
+    let cli = Cli::try_parse_from(["gpauth", "portal.example.com", "--browser"]).expect("gpauth args should parse");
+
+    assert_eq!(cli.browser.as_deref(), Some("auto"));
+    assert!(cli.external_browser_requested());
+  }
+
+  #[test]
+  fn browser_default_keeps_system_default_mode() {
+    let cli =
+      Cli::try_parse_from(["gpauth", "portal.example.com", "--browser", "default"]).expect("gpauth args should parse");
+
+    assert_eq!(cli.browser.as_deref(), Some("default"));
     assert!(cli.external_browser_requested());
   }
 

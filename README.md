@@ -81,6 +81,8 @@ gpauth <portal> --browser 2>/dev/null | sudo gpclient connect <portal> --cookie-
 ```
 
 **Browser Options:**
+- Use `--browser` to auto-select Chrome, Firefox, then the system default browser
+- Use `--browser default` to use the system default browser
 - Use `--browser <browser>` to specify a browser (e.g., `firefox`, `chrome`)
 - Use `--browser remote` for headless servers – this provides a URL you can access from another machine to complete authentication
 

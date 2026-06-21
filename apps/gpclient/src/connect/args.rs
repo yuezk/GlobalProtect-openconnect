@@ -141,8 +141,8 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use the specified browser to authenticate, e.g., `default`, `firefox`, `chrome`, `chromium`, `remote`.\nOr the path to the browser executable.\nUse 'remote' for headless servers.",
-    default_missing_value = "default",
+    help = "Use external browser authentication. With no value, auto-select Chrome, Firefox, then system default. Use `default` for the system default browser or `remote` for headless servers.",
+    default_missing_value = "auto",
     num_args=0..=1
   )]
   pub(super) browser: Option<String>,
@@ -241,6 +241,26 @@ mod tests {
 
     assert!(!cli.args.auto_gateway);
     assert_eq!(cli.args.gateway.as_deref(), Some("gw1"));
+  }
+
+  #[test]
+  fn browser_without_value_uses_auto_mode() {
+    use clap::Parser;
+
+    let cli = ConnectArgsTestCli::try_parse_from(["test", "portal.example.com", "--browser"])
+      .expect("--browser without value should parse");
+
+    assert_eq!(cli.args.browser.as_deref(), Some("auto"));
+  }
+
+  #[test]
+  fn browser_default_keeps_system_default_mode() {
+    use clap::Parser;
+
+    let cli = ConnectArgsTestCli::try_parse_from(["test", "portal.example.com", "--browser", "default"])
+      .expect("--browser default should parse");
+
+    assert_eq!(cli.args.browser.as_deref(), Some("default"));
   }
 
   #[test]

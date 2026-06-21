@@ -11,6 +11,7 @@ use tokio::{
 use crate::browser::auth_server::AuthServer;
 
 pub enum Browser<'a> {
+  Auto,
   Default,
   Chrome,
   Firefox,
@@ -21,6 +22,7 @@ pub enum Browser<'a> {
 impl<'a> Browser<'a> {
   pub fn from_str(browser: &'a str) -> Self {
     match browser.to_lowercase().as_str() {
+      "auto" => Browser::Auto,
       "default" => Browser::Default,
       "chrome" => Browser::Chrome,
       "firefox" => Browser::Firefox,
@@ -31,6 +33,7 @@ impl<'a> Browser<'a> {
 
   fn as_str(&self) -> &str {
     match self {
+      Browser::Auto => "auto",
       Browser::Default => "default",
       Browser::Chrome => "chrome",
       Browser::Firefox => "firefox",
@@ -87,6 +90,15 @@ Note that the URL is only valid for a single use.
         info!("Launching the default browser...");
         webbrowser::open(&auth_url)?;
       }
+      Browser::Auto => {
+        if let Some(app) = find_auto_browser_path() {
+          info!("Launching browser: {}", app);
+          open::with_detached(&auth_url, app)?;
+        } else {
+          info!("No preferred browser found; launching the default browser...");
+          webbrowser::open(&auth_url)?;
+        }
+      }
       _ => {
         let app = find_browser_path(&self.browser);
 
@@ -124,17 +136,23 @@ async fn detect_local_ip() -> anyhow::Result<String> {
 
 fn find_browser_path(browser: &Browser) -> String {
   match browser {
-    Browser::Chrome => {
-      const CHROME_VARIANTS: &[&str] = &["google-chrome-stable", "google-chrome", "chromium"];
-
-      CHROME_VARIANTS
-        .iter()
-        .find_map(|&browser_name| which::which(browser_name).ok())
-        .map(|path| path.to_string_lossy().to_string())
-        .unwrap_or_else(|| browser.as_str().to_string())
-    }
+    Browser::Chrome => find_chrome_path().unwrap_or_else(|| browser.as_str().to_string()),
     _ => browser.as_str().to_string(),
   }
+}
+
+fn find_auto_browser_path() -> Option<String> {
+  find_chrome_path().or_else(|| find_program_path("firefox"))
+}
+
+fn find_chrome_path() -> Option<String> {
+  ["google-chrome-stable", "google-chrome", "chromium"]
+    .iter()
+    .find_map(|browser_name| find_program_path(browser_name))
+}
+
+fn find_program_path(name: &str) -> Option<String> {
+  which::which(name).ok().map(|path| path.to_string_lossy().to_string())
 }
 
 async fn wait_auth_data() -> anyhow::Result<SamlAuthData> {
@@ -175,4 +193,15 @@ fn read_auth_data_from_stdin() -> anyhow::Result<SamlAuthData> {
 
   let auth_data = SamlAuthData::from_gpcallback(data.trim())?;
   Ok(auth_data)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn browser_auto_is_distinct_from_system_default() {
+    assert!(matches!(Browser::from_str("auto"), Browser::Auto));
+    assert!(matches!(Browser::from_str("default"), Browser::Default));
+  }
 }
