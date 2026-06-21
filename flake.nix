@@ -240,7 +240,71 @@
             runHook preInstall
 
             mkdir -p $out/bin
-            ln -s ${prebuiltCommands.gpclient}/bin/gpclient $out/bin/gpclient
+            cat > $out/bin/gpclient <<'EOF'
+            #!${pkgs.runtimeShell}
+            set -eu
+
+            gpclient_fhs='${prebuiltCommands.gpclient}/bin/gpclient'
+            gpservice_fhs='${prebuiltCommands.gpservice}/bin/gpservice'
+
+            if [ "''${1:-}" = "launch-gui" ]; then
+              shift
+
+              auth_data=
+              minimized=
+              for arg in "$@"; do
+                case "$arg" in
+                  --minimized)
+                    minimized=--minimized
+                    ;;
+                  --*)
+                    ;;
+                  *)
+                    auth_data=$arg
+                    ;;
+                esac
+              done
+
+              if [ -z "$auth_data" ]; then
+                if [ -n "''${XDG_DATA_HOME:-}" ]; then
+                  data_home=$XDG_DATA_HOME
+                elif [ -n "''${HOME:-}" ]; then
+                  data_home=$HOME/.local/share
+                else
+                  data_home=/tmp
+                fi
+
+                log_dir="$data_home/gpclient"
+                mkdir -p "$log_dir"
+                log_file="$log_dir/gpclient.log"
+                env_file=$(mktemp)
+
+                env > "$env_file"
+                printf 'GP_LOG_FILE=%s\n' "$log_file" >> "$env_file"
+
+                pkexec_bin=/run/wrappers/bin/pkexec
+                if [ ! -x "$pkexec_bin" ]; then
+                  pkexec_bin=pkexec
+                fi
+
+                set +e
+                if [ -n "$minimized" ]; then
+                  "$pkexec_bin" --user root "$gpservice_fhs" --minimized --env-file "$env_file" 2>"$log_file"
+                else
+                  "$pkexec_bin" --user root "$gpservice_fhs" --env-file "$env_file" 2>"$log_file"
+                fi
+                status=$?
+                set -e
+                rm -f "$env_file"
+                exit "$status"
+              fi
+
+              set -- launch-gui "$@"
+            fi
+
+            exec "$gpclient_fhs" "$@"
+            EOF
+            chmod +x $out/bin/gpclient
             ln -s ${prebuiltCommands.gpservice}/bin/gpservice $out/bin/gpservice
             ln -s ${prebuiltCommands.gpauth}/bin/gpauth $out/bin/gpauth
             ln -s ${prebuiltCommands.gpgui}/bin/gpgui $out/bin/gpgui

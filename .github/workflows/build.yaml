@@ -348,6 +348,8 @@ jobs:
         test -x result/bin/gpservice
         test -x result/bin/gpgui-helper
         test -x result/bin/gpgui
+        head -n1 result/bin/gpclient | grep '^#!'
+        grep -q '/run/wrappers/bin/pkexec' result/bin/gpclient
 
         ! grep -R '/usr/bin/gp' result/share
 
