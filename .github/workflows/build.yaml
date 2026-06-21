@@ -348,10 +348,13 @@ jobs:
         test -x result/bin/gpservice
         test -x result/bin/gpgui-helper
         test -x result/bin/gpgui
+        test ! -L result/bin/gpservice
         head -n1 result/bin/gpclient | grep '^#!'
+        head -n1 result/bin/gpservice | grep '^#!'
         grep -q '/run/wrappers/bin/pkexec' result/bin/gpclient
         grep -q 'gpservice_public=.*/bin/gpservice' result/bin/gpclient
-        ! grep -q '@gpservice_public@\|\$out/bin/gpservice' result/bin/gpclient
+        grep -q 'exec .*/bin/gpservice' result/bin/gpservice
+        ! grep -q '@gpservice_public@\|@gpservice_fhs@\|\$out/bin/gpservice' result/bin/gpclient result/bin/gpservice
 
         ! grep -R '/usr/bin/gp' result/share
 

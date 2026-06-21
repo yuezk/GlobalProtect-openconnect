@@ -33,41 +33,28 @@ mod platform {
     let session_env = collect(user_id);
 
     for key in DESKTOP_SESSION_ENV {
-      if let Some(value) = env_value(key).or_else(|| session_env.get(*key).cloned()) {
+      if let Some(value) = desktop_env_value(&session_env, key) {
         command.env(key, value);
       }
     }
 
-    let runtime_dir = env_value("XDG_RUNTIME_DIR")
-      .or_else(|| session_env.get("XDG_RUNTIME_DIR").cloned())
-      .unwrap_or_else(|| format!("/run/user/{user_id}"));
+    let runtime_dir =
+      desktop_env_value(&session_env, "XDG_RUNTIME_DIR").unwrap_or_else(|| format!("/run/user/{user_id}"));
     command.env("XDG_RUNTIME_DIR", &runtime_dir);
 
-    if env_value("DBUS_SESSION_BUS_ADDRESS")
-      .or_else(|| session_env.get("DBUS_SESSION_BUS_ADDRESS").cloned())
-      .is_none()
-    {
+    if desktop_env_value(&session_env, "DBUS_SESSION_BUS_ADDRESS").is_none() {
       command.env("DBUS_SESSION_BUS_ADDRESS", format!("unix:path={runtime_dir}/bus"));
     }
 
-    if env_value("XDG_DATA_HOME")
-      .or_else(|| session_env.get("XDG_DATA_HOME").cloned())
-      .is_none()
-    {
+    if desktop_env_value(&session_env, "XDG_DATA_HOME").is_none() {
       command.env("XDG_DATA_HOME", home_dir.join(".local/share"));
     }
 
-    if env_value("XDG_CONFIG_HOME")
-      .or_else(|| session_env.get("XDG_CONFIG_HOME").cloned())
-      .is_none()
-    {
+    if desktop_env_value(&session_env, "XDG_CONFIG_HOME").is_none() {
       command.env("XDG_CONFIG_HOME", home_dir.join(".config"));
     }
 
-    if env_value("XDG_DATA_DIRS")
-      .or_else(|| session_env.get("XDG_DATA_DIRS").cloned())
-      .is_none()
-    {
+    if desktop_env_value(&session_env, "XDG_DATA_DIRS").is_none() {
       command.env("XDG_DATA_DIRS", default_xdg_data_dirs());
     }
   }
@@ -160,6 +147,10 @@ mod platform {
     non_empty(env::var(key).ok())
   }
 
+  fn desktop_env_value(session_env: &HashMap<String, String>, key: &str) -> Option<String> {
+    session_env.get(key).cloned().or_else(|| env_value(key))
+  }
+
   fn non_empty(value: Option<String>) -> Option<String> {
     value.filter(|value| !value.trim().is_empty())
   }
@@ -202,6 +193,16 @@ mod platform {
       assert_eq!(non_empty(None), None);
       assert_eq!(non_empty(Some(" ".to_string())), None);
       assert_eq!(non_empty(Some("value".to_string())), Some("value".to_string()));
+    }
+
+    #[test]
+    fn desktop_env_value_prefers_collected_user_session() {
+      let env = HashMap::from([("XDG_DATA_DIRS".to_string(), "/run/current-system/sw/share".to_string())]);
+
+      assert_eq!(
+        desktop_env_value(&env, "XDG_DATA_DIRS"),
+        Some("/run/current-system/sw/share".to_string())
+      );
     }
   }
 }

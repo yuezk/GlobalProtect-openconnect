@@ -63,7 +63,7 @@
 
         linuxRuntimeDependencies = with pkgs; [
           glib-networking
-          libappindicator-gtk3
+          libayatana-appindicator
         ];
 
         linuxBuildInputs =
@@ -85,7 +85,7 @@
             glib-networking
             openssl
             libsecret
-            libappindicator-gtk3
+            libayatana-appindicator
           ];
 
         rewriteSourceInstallPaths = ''
@@ -207,9 +207,7 @@
             name = binaryName;
             targetPkgs =
               pkgs:
-              [
-                prebuiltFiles
-              ]
+              [ prebuiltFiles ]
               ++ linuxBuildInputs
               ++ linuxRuntimeDependencies;
             runScript = "/usr/bin/${binaryName}";
@@ -307,7 +305,16 @@
             substituteInPlace $out/bin/gpclient \
               --replace-fail '@gpservice_public@' "$out/bin/gpservice"
             chmod +x $out/bin/gpclient
-            ln -s ${prebuiltCommands.gpservice}/bin/gpservice $out/bin/gpservice
+
+            cat > $out/bin/gpservice <<'EOF'
+            #!${pkgs.runtimeShell}
+            set -eu
+            exec '@gpservice_fhs@' "$@"
+            EOF
+            substituteInPlace $out/bin/gpservice \
+              --replace-fail '@gpservice_fhs@' '${prebuiltCommands.gpservice}/bin/gpservice'
+            chmod +x $out/bin/gpservice
+
             ln -s ${prebuiltCommands.gpauth}/bin/gpauth $out/bin/gpauth
             ln -s ${prebuiltCommands.gpgui}/bin/gpgui $out/bin/gpgui
             ln -s ${prebuiltCommands."gpgui-helper"}/bin/gpgui-helper $out/bin/gpgui-helper

@@ -234,8 +234,11 @@ Add the flake input and package to your `flake.nix`:
         modules = [
           ./configuration.nix
           {
+            services.ayatana-indicators.enable = true;
+
             environment.systemPackages = [
               globalprotect-openconnect.packages.${system}.default
+              nixpkgs.legacyPackages.${system}.gnomeExtensions.appindicator
             ];
           }
         ];
@@ -248,6 +251,13 @@ Apply:
 
 ```bash
 sudo nixos-rebuild switch
+loginctl terminate-user "$USER"
+```
+
+After logging back in to GNOME, enable AppIndicator support if needed:
+
+```bash
+gnome-extensions enable appindicatorsupport@rgcjonas.gmail.com
 ```
 
 ### Official Docker Image
