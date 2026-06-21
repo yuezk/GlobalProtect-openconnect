@@ -245,7 +245,7 @@
             set -eu
 
             gpclient_fhs='${prebuiltCommands.gpclient}/bin/gpclient'
-            gpservice_fhs='${prebuiltCommands.gpservice}/bin/gpservice'
+            gpservice_public='$out/bin/gpservice'
 
             if [ "''${1:-}" = "launch-gui" ]; then
               shift
@@ -289,9 +289,9 @@
 
                 set +e
                 if [ -n "$minimized" ]; then
-                  "$pkexec_bin" --user root "$gpservice_fhs" --minimized --env-file "$env_file" 2>"$log_file"
+                  "$pkexec_bin" --user root "$gpservice_public" --minimized --env-file "$env_file" 2>"$log_file"
                 else
-                  "$pkexec_bin" --user root "$gpservice_fhs" --env-file "$env_file" 2>"$log_file"
+                  "$pkexec_bin" --user root "$gpservice_public" --env-file "$env_file" 2>"$log_file"
                 fi
                 status=$?
                 set -e

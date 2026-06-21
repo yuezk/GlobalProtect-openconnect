@@ -350,6 +350,7 @@ jobs:
         test -x result/bin/gpgui
         head -n1 result/bin/gpclient | grep '^#!'
         grep -q '/run/wrappers/bin/pkexec' result/bin/gpclient
+        grep -q 'gpservice_public=.*/bin/gpservice' result/bin/gpclient
 
         ! grep -R '/usr/bin/gp' result/share
 
