@@ -101,6 +101,7 @@ jobs:
     needs:
     - setup-matrix
     strategy:
+      max-parallel: 2
       matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -121,7 +122,7 @@ jobs:
     - name: Build ${{ matrix.package }} package in Docker
       # LIBXML2_STATIC is needed to avoid the dynamic linking issue on different distros
       run: |
-        docker run --pull=always --rm \
+        docker run --rm \
           -v $(pwd)/build-${{ matrix.package }}:/workspace \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -e LIBXML2_STATIC=1 \
@@ -130,7 +131,7 @@ jobs:
 
     - name: Install ${{ matrix.package }} package in Docker
       run: |
-        docker run --pull=always --rm \
+        docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -v $(pwd)/build-${{ matrix.package }}:/workspace \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \

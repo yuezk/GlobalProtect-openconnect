@@ -134,6 +134,7 @@ jobs:
     - tarball
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         os:
           - runner: ubuntu-latest
@@ -158,14 +159,14 @@ jobs:
     - name: Build ${{ matrix.package }} package in Docker
       # LIBXML2_STATIC is needed to avoid the dynamic linking issue on different distros
       run: |
-        docker run --pull=always --rm \
+        docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -e LIBXML2_STATIC=1 \
           -v $(pwd)/build-gp-${{ matrix.package }}:/workspace \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2
     - name: Install ${{ matrix.package }} package in Docker
       run: |
-        docker run --pull=always --rm \
+        docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -e GPGUI_INSTALLED=0 \
           -v $(pwd)/build-gp-${{ matrix.package }}:/workspace \
@@ -286,14 +287,14 @@ jobs:
       run: echo ${{ secrets.DOCKER_HUB_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
     - name: Build gpgui in Docker
       run: |
-        docker run --pull=always --rm \
+        docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:${{ matrix.libc.builder }}
     - name: Install gpgui in Docker
       run: |
         cd gpgui-source
         tar -xJf *.bin.tar.xz
-        docker run --pull=always --rm \
+        docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -v $(pwd):/workspace yuezk/gpdev:${{ matrix.libc.builder }} \
           bash -c "cd /workspace/gpgui_*/ && ./gpgui --version"
