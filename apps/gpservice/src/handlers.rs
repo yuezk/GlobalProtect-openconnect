@@ -3,7 +3,6 @@ use std::{
   io::BufReader,
   ops::ControlFlow,
   os::unix::fs::PermissionsExt,
-  path::PathBuf,
   sync::Arc,
 };
 
@@ -17,7 +16,7 @@ use axum::{
   http::StatusCode,
   response::IntoResponse,
 };
-use common::constants::GP_GUI_BINARY;
+use common::binary_paths;
 use futures::{SinkExt, StreamExt};
 use gpapi::{
   service::{event::WsEvent, request::UpdateGuiRequest},
@@ -67,8 +66,8 @@ pub async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) ->
 
 // Unpack GPGUI archive, gpgui_2.0.0_{arch}.bin.tar.xz and install it
 async fn install_gui(src: &str) -> anyhow::Result<()> {
-  let path = PathBuf::from(GP_GUI_BINARY);
-  let Some(dir) = path.parent() else {
+  let target = binary_paths::gpgui();
+  let Some(dir) = target.parent() else {
     bail!("Failed to get parent directory of GUI binary");
   };
 
@@ -81,13 +80,13 @@ async fn install_gui(src: &str) -> anyhow::Result<()> {
 
   for entry in ar.entries()? {
     let mut entry = entry?;
-    let path = entry.path()?;
+    let entry_path = entry.path()?;
 
-    if let Some(name) = path.file_name() {
+    if let Some(name) = entry_path.file_name() {
       let name = name.to_string_lossy();
 
       if name == "gpgui" {
-        let mut file = File::create(GP_GUI_BINARY)?;
+        let mut file = File::create(&target)?;
         std::io::copy(&mut entry, &mut file)?;
         break;
       }
@@ -95,7 +94,7 @@ async fn install_gui(src: &str) -> anyhow::Result<()> {
   }
 
   // Make the binary executable
-  fs::set_permissions(GP_GUI_BINARY, Permissions::from_mode(0o755)).await?;
+  fs::set_permissions(target, Permissions::from_mode(0o755)).await?;
 
   Ok(())
 }

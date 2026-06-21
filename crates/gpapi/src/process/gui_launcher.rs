@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::bail;
-use common::constants::GP_GUI_BINARY;
+use common::binary_paths;
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
 
@@ -25,7 +25,7 @@ impl<'a> GuiLauncher<'a> {
   pub fn new(version: &'a str, api_key: &'a [u8]) -> Self {
     Self {
       version,
-      program: GP_GUI_BINARY.into(),
+      program: binary_paths::gpgui(),
       api_key,
       minimized: false,
       envs: None,
