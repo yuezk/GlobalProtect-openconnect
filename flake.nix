@@ -213,6 +213,14 @@
               ++ linuxBuildInputs
               ++ linuxRuntimeDependencies;
             runScript = "/usr/bin/${binaryName}";
+            profile = ''
+              export PATH=/run/wrappers/bin:$PATH
+            '';
+            extraBwrapArgs = [
+              "--bind-try"
+              "/run/wrappers"
+              "/run/wrappers"
+            ];
           };
 
         prebuiltCommands = {
