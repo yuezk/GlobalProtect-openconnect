@@ -245,7 +245,7 @@
             set -eu
 
             gpclient_fhs='${prebuiltCommands.gpclient}/bin/gpclient'
-            gpservice_public='$out/bin/gpservice'
+            gpservice_public='@gpservice_public@'
 
             if [ "''${1:-}" = "launch-gui" ]; then
               shift
@@ -304,6 +304,8 @@
 
             exec "$gpclient_fhs" "$@"
             EOF
+            substituteInPlace $out/bin/gpclient \
+              --replace-fail '@gpservice_public@' "$out/bin/gpservice"
             chmod +x $out/bin/gpclient
             ln -s ${prebuiltCommands.gpservice}/bin/gpservice $out/bin/gpservice
             ln -s ${prebuiltCommands.gpauth}/bin/gpauth $out/bin/gpauth
