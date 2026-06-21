@@ -682,33 +682,6 @@ jobs:
       run: |
         cd gh-release/gp/scripts && ./gh-release.sh "$RELEASE_TAG"
 
-  update-flake-hashes:
-    if: ${{ startsWith(github.ref, 'refs/tags/') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    needs:
-      - gh-release
-    steps:
-    - name: Checkout GlobalProtect-openconnect
-      uses: actions/checkout@v6
-      with:
-        token: ${{ secrets.GH_PAT }}
-        repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.ref }}
-
-    - name: Install Nix
-      uses: cachix/install-nix-action@v31
-
-    - name: Update flake hashes
-      run: scripts/update-flake-hashes.sh "${{ github.ref_name }}"
-
-    - name: Open pull request
-      env:
-        GH_TOKEN: ${{ secrets.GH_PAT }}
-      run: scripts/open-flake-hashes-pr.sh "${{ github.ref_name }}"
-
   publish-docker-image:
     needs:
       - build-docker-image

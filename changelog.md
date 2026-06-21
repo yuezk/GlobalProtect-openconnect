@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.6.1
+
+### Changed
+
+- Improved external browser authentication so `--browser` chooses Chrome first, then Firefox, then the system default browser.
+- Improved NixOS prebuilt package integration for launching helper binaries and desktop services.
+- Updated the release process to publish GitHub release notes from the changelog.
+
+### Fixed
+
+- Fixed NixOS GUI launch failures caused by package-local binary paths.
+- Fixed NixOS tray icon setup documentation for GNOME desktops.
+- Fixed release automation so Nix flake hash updates are run manually after release assets are available.
+
 ## 2.6.0
 
 ### Added

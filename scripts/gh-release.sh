@@ -9,9 +9,6 @@ REPO="yuezk/GlobalProtect-openconnect"
 TAG=${1:-}
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-
-RELEASE_NOTES="Release $TAG"
 
 if [ -z "$TAG" ]; then
   echo "Usage: ./scripts/gh-release.sh <tag>"
@@ -36,8 +33,6 @@ release_assets() {
 # For snapshot release, we don't create a release, just clear the existing assets and upload new ones.
 # This is to avoid notification spam.
 release_snapshot() {
-  RELEASE_NOTES='**!!! DO NOT USE THIS RELEASE IN PRODUCTION !!!**'
-
   while IFS= read -r asset; do
     if [ -n "$asset" ]; then
       gh -R "$REPO" release delete-asset "$TAG" "$asset" --yes
@@ -55,11 +50,15 @@ release_tag() {
   gh -R "$REPO" release delete "$TAG" --yes --cleanup-tag || true
 
   echo "Creating release..."
+  local release_notes_file
+  release_notes_file="$(mktemp)"
+  "$SCRIPT_DIR/release-notes.sh" "$TAG" > "$release_notes_file"
+
   # Upload source tarballs, GUI components, and BSD packages. Other Linux
   # packages are built in `release.yml` from the standalone source tarball.
   gh -R "$REPO" release create "$TAG" \
     --title "$TAG" \
-    --notes "$RELEASE_NOTES"
+    --notes-file "$release_notes_file"
 
   mapfile -t files < <(release_assets)
   upload_files "${files[@]}"

@@ -274,6 +274,13 @@ jobs:
       uses: actions/download-artifact@v8
       with:
         path: gh-release
+    - name: Generate release notes
+      id: release-notes
+      run: |
+        cd gh-release/gp
+        mkdir -p .build
+        scripts/release-notes.sh "${{ inputs.tag }}" > .build/release-notes.md
+        echo "path=$GITHUB_WORKSPACE/gh-release/gp/.build/release-notes.md" >> "$GITHUB_OUTPUT"
     - name: Rename APK artifacts
       run: |
         shopt -s nullglob
@@ -314,4 +321,5 @@ jobs:
         prerelease: ${{ contains(github.ref, 'snapshot') }}
         fail_on_unmatched_files: true
         tag_name: ${{ inputs.tag }}
+        body_path: ${{ steps.release-notes.outputs.path }}
         files: ${{ steps.release-assets.outputs.files }}
