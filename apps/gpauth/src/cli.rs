@@ -128,7 +128,7 @@ impl Cli {
 
     let auth_request = match self.saml_request.as_deref() {
       Some(auth_request) => auth_request.to_string(),
-      None => auth_prelogin(&server, &gp_params, self.external_browser_requested()).await?,
+      None => auth_prelogin(&server, &gp_params, self.external_browser_requested(), self.gateway).await?,
     };
 
     #[cfg(feature = "webview-auth")]

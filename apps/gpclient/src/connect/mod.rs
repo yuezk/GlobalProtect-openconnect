@@ -65,10 +65,10 @@ impl<'a> ConnectHandler<'a> {
     builder.build()
   }
 
-  pub(super) fn prelogin_options(&self, portal_default_browser_enabled: bool) -> PreloginOptions {
+  pub(super) fn prelogin_options(&self, gateway_external_browser_allowed: bool) -> PreloginOptions {
     PreloginOptions::default()
       .external_browser_requested(self.external_browser_requested())
-      .portal_default_browser_enabled(portal_default_browser_enabled)
+      .gateway_external_browser_allowed(gateway_external_browser_allowed)
   }
 
   fn external_browser_requested(&self) -> bool {

@@ -139,8 +139,8 @@ impl ConnectHandler<'_> {
     let mut gp_params = self.build_gp_params();
     gp_params.set_is_gateway(true);
 
-    let prelogin = prelogin(gateway, &gp_params, self.prelogin_options(false)).await?;
-    let cred = self.obtain_credential(&prelogin, gateway, false).await?;
+    let prelogin = prelogin(gateway, &gp_params, self.prelogin_options(true)).await?;
+    let cred = self.obtain_credential(&prelogin, gateway, true).await?;
 
     let login_session = self
       .login_gateway(gateway, &cred, &gp_params, gateway_context.as_ref())

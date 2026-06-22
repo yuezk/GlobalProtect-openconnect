@@ -101,7 +101,6 @@ jobs:
     needs:
     - setup-matrix
     strategy:
-      max-parallel: 2
       matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:

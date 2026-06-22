@@ -90,7 +90,7 @@ impl Prelogin {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PreloginOptions {
   external_browser_requested: bool,
-  portal_default_browser_enabled: bool,
+  gateway_external_browser_allowed: bool,
 }
 
 impl PreloginOptions {
@@ -99,13 +99,13 @@ impl PreloginOptions {
     self
   }
 
-  pub fn portal_default_browser_enabled(mut self, portal_default_browser_enabled: bool) -> Self {
-    self.portal_default_browser_enabled = portal_default_browser_enabled;
+  pub fn gateway_external_browser_allowed(mut self, gateway_external_browser_allowed: bool) -> Self {
+    self.gateway_external_browser_allowed = gateway_external_browser_allowed;
     self
   }
 
   fn browser_mode(self, is_gateway: bool) -> PreloginBrowserMode {
-    if self.external_browser_requested && (!is_gateway || self.portal_default_browser_enabled) {
+    if self.external_browser_requested && (!is_gateway || self.gateway_external_browser_allowed) {
       PreloginBrowserMode::External
     } else {
       PreloginBrowserMode::Embedded
@@ -307,12 +307,12 @@ mod tests {
   }
 
   #[test]
-  fn browser_mode_requires_portal_policy_for_gateway_external() {
+  fn browser_mode_requires_gateway_external_browser_allowed_for_gateway_external() {
     let options = PreloginOptions::default().external_browser_requested(true);
 
     assert_eq!(options.browser_mode(true), PreloginBrowserMode::Embedded);
 
-    let options = options.portal_default_browser_enabled(true);
+    let options = options.gateway_external_browser_allowed(true);
 
     assert_eq!(options.browser_mode(true), PreloginBrowserMode::External);
   }

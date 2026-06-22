@@ -48,7 +48,7 @@ impl ConnectHandler<'_> {
     &self,
     prelogin: &Prelogin,
     server: &str,
-    portal_default_browser_enabled: bool,
+    gateway_external_browser_allowed: bool,
   ) -> anyhow::Result<Credential> {
     if should_read_stdin_credential(self.args.cookie_on_stdin, self.args.as_gateway, prelogin.is_gateway()) {
       return self.read_cookie_from_stdin();
@@ -61,7 +61,7 @@ impl ConnectHandler<'_> {
         let external_browser_supported = default_browser_auth_allowed(
           prelogin.support_default_browser(),
           is_gateway,
-          portal_default_browser_enabled,
+          gateway_external_browser_allowed,
         );
         let browser = if external_browser_supported {
           self.args.browser.as_deref()
@@ -187,9 +187,9 @@ fn should_read_stdin_credential(cookie_on_stdin: bool, as_gateway: bool, prelogi
 fn default_browser_auth_allowed(
   saml_support_default_browser: bool,
   is_gateway: bool,
-  portal_default_browser_enabled: bool,
+  gateway_external_browser_allowed: bool,
 ) -> bool {
-  saml_support_default_browser && (!is_gateway || portal_default_browser_enabled)
+  saml_support_default_browser && (!is_gateway || gateway_external_browser_allowed)
 }
 
 fn log_stdin_host_id(host_id: Option<&str>) {

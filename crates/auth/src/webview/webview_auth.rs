@@ -184,7 +184,7 @@ impl<'a> WebviewAuthenticator<'a> {
 
     let auth_request = match self.auth_request {
       Some(auth_request) => auth_request.to_string(),
-      None => auth_prelogin(&self.server, &self.gp_params, false).await?,
+      None => auth_prelogin(&self.server, &self.gp_params, false, false).await?,
     };
 
     let (tx, rx) = oneshot::channel::<anyhow::Result<()>>();
@@ -257,7 +257,7 @@ impl<'a> WebviewAuthenticator<'a> {
       document.body.appendChild(loading);
     "#)?;
 
-    let auth_request = auth_prelogin(&self.server, &self.gp_params, false).await?;
+    let auth_request = auth_prelogin(&self.server, &self.gp_params, false, false).await?;
 
     let (tx, rx) = oneshot::channel::<anyhow::Result<()>>();
     let webview_user_agent = self.webview_user_agent.clone();

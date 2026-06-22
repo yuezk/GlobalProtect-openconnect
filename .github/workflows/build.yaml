@@ -135,7 +135,6 @@ jobs:
     - tarball
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         os:
           - runner: ubuntu-latest
