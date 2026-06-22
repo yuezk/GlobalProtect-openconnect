@@ -242,7 +242,6 @@ jobs:
   build-gpgui:
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         os:
           - runner: ubuntu-latest
