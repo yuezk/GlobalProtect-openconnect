@@ -3,6 +3,7 @@
 set -euo pipefail
 
 release_version="${1:-}"
+release_tag="${2:-}"
 
 if git diff --quiet -- flake.nix; then
   echo "flake.nix hashes are already up to date"
@@ -14,9 +15,21 @@ if [[ -z "$release_version" ]]; then
 fi
 
 version="${release_version#v}"
-branch="chore/update-flake-hashes-v${version}"
+if [[ -z "$release_tag" ]]; then
+  release_tag="v$version"
+fi
+
+branch_suffix="v${version}"
 title="chore: update flake hashes for v${version}"
 body="Updates the Nix flake fetchzip hashes for v${version} release assets."
+
+if [[ "$release_tag" != "v$version" ]]; then
+  branch_suffix="${branch_suffix}-${release_tag}"
+  title="chore: update flake hashes for v${version} from ${release_tag}"
+  body="Updates the Nix flake fetchzip hashes for v${version} using ${release_tag} release assets."
+fi
+
+branch="chore/update-flake-hashes-${branch_suffix}"
 
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

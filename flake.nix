@@ -26,6 +26,7 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         pname = "globalprotect-openconnect";
         version = cargoToml.workspace.package.version;
+        releaseTag = "v${version}";
 
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
@@ -35,7 +36,7 @@
         };
 
         src = pkgs.fetchzip {
-          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/globalprotect-openconnect-${version}.tar.gz";
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect-${version}.tar.gz";
           hash = "sha256-R7wS207jTujDYm4x7ucFY/cLvYw88zIVkVqRrCiEp80=";
         };
 
@@ -47,7 +48,7 @@
         };
 
         gpgui = pkgs.fetchzip {
-          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/gpgui_${cpu}.bin.tar.xz";
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/gpgui_${cpu}.bin.tar.xz";
           hash = gpguiHashes.${cpu};
         };
 
@@ -57,7 +58,7 @@
         };
 
         binaryPackage = pkgs.fetchzip {
-          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/globalprotect-openconnect_${version}_${cpu}.bin.tar.xz";
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect_${version}_${cpu}.bin.tar.xz";
           hash = binaryHashes.${cpu};
         };
 
