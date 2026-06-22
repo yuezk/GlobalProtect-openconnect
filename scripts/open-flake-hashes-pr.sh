@@ -38,6 +38,11 @@ git add flake.nix
 git commit -m "$title"
 git push --force-with-lease origin "$branch"
 
+if [[ "$release_tag" == "snapshot" ]]; then
+  echo "Updated snapshot flake hashes on branch $branch; skipping PR creation"
+  exit 0
+fi
+
 if gh pr view "$branch" --json number > /tmp/flake-pr.json 2> /dev/null; then
   pr_number="$(jq -r '.number' /tmp/flake-pr.json)"
   gh pr edit "$pr_number" --title "$title" --body "$body"

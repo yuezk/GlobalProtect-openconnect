@@ -198,6 +198,8 @@
               cp -r artifacts/usr/lib $out/lib
             fi
 
+            install -Dm755 ${gpgui}/gpgui $out/bin/gpgui
+
             runHook postInstall
           '';
         };
