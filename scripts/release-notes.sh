@@ -10,6 +10,8 @@ if [[ -z "$tag" ]]; then
 fi
 
 version="${tag#v}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+changelog="$script_dir/../changelog.md"
 
 awk -v version="$version" '
   $0 == "## " version {
@@ -27,4 +29,4 @@ awk -v version="$version" '
       exit 1
     }
   }
-' changelog.md
+' "$changelog"
