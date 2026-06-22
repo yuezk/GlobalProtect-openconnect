@@ -139,10 +139,10 @@ impl ConnectHandler<'_> {
     let mut gp_params = self.build_gp_params();
     gp_params.set_is_gateway(true);
 
-    let gateway_external_browser_allowed = true;
+    let gateway_browser_auth_allowed = true;
     let prelogin = prelogin(gateway, &gp_params, self.direct_gateway_prelogin_options()).await?;
     let cred = self
-      .obtain_credential(&prelogin, gateway, gateway_external_browser_allowed)
+      .obtain_credential(&prelogin, gateway, gateway_browser_auth_allowed)
       .await?;
 
     let login_session = self
@@ -177,21 +177,18 @@ impl ConnectHandler<'_> {
     gateway: &str,
     portal_cred: &AuthCookieCredential,
     allow_extend_session: bool,
-    portal_default_browser_enabled: bool,
+    portal_config_default_browser: bool,
     gateway_context: GatewayLoginContext,
   ) -> Result<(), GatewayConnectError> {
     info!("Connecting to gateway with portal-cookie first, gateway prelogin fallback...");
 
     let mut gp_params = self.build_gp_params();
     gp_params.set_is_gateway(true);
+    let gateway_browser_auth_allowed = self.gateway_browser_auth_allowed(portal_config_default_browser);
 
-    let gateway_prelogin = prelogin(
-      gateway,
-      &gp_params,
-      self.prelogin_options(portal_default_browser_enabled),
-    )
-    .await
-    .map_err(GatewayConnectError::before_tunnel)?;
+    let gateway_prelogin = prelogin(gateway, &gp_params, self.prelogin_options(gateway_browser_auth_allowed))
+      .await
+      .map_err(GatewayConnectError::before_tunnel)?;
 
     if portal_cred.can_authenticate_gateway() {
       let portal_cred_for_login: Credential = portal_cred.into();
@@ -222,7 +219,7 @@ impl ConnectHandler<'_> {
     }
 
     let gateway_cred = match self
-      .obtain_credential(&gateway_prelogin, gateway, portal_default_browser_enabled)
+      .obtain_credential(&gateway_prelogin, gateway, gateway_browser_auth_allowed)
       .await
     {
       Ok(cred) => cred,
