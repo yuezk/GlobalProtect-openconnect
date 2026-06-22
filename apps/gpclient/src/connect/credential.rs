@@ -48,7 +48,7 @@ impl ConnectHandler<'_> {
     &self,
     prelogin: &Prelogin,
     server: &str,
-    gateway_external_browser_allowed: bool,
+    gateway_browser_auth_allowed: bool,
   ) -> anyhow::Result<Credential> {
     if should_read_stdin_credential(self.args.cookie_on_stdin, self.args.as_gateway, prelogin.is_gateway()) {
       return self.read_cookie_from_stdin();
@@ -58,10 +58,10 @@ impl ConnectHandler<'_> {
 
     match prelogin {
       Prelogin::Saml(prelogin) => {
-        let external_browser_supported = default_browser_auth_allowed(
+        let external_browser_supported = can_use_external_browser_auth(
           prelogin.support_default_browser(),
           is_gateway,
-          gateway_external_browser_allowed,
+          gateway_browser_auth_allowed,
         );
         let browser = if external_browser_supported {
           self.args.browser.as_deref()
@@ -188,12 +188,12 @@ fn should_read_stdin_credential(cookie_on_stdin: bool, as_gateway: bool, prelogi
   cookie_on_stdin && (!prelogin_is_gateway || as_gateway)
 }
 
-fn default_browser_auth_allowed(
+fn can_use_external_browser_auth(
   saml_support_default_browser: bool,
   is_gateway: bool,
-  gateway_external_browser_allowed: bool,
+  gateway_browser_auth_allowed: bool,
 ) -> bool {
-  saml_support_default_browser && (!is_gateway || gateway_external_browser_allowed)
+  saml_support_default_browser && (!is_gateway || gateway_browser_auth_allowed)
 }
 
 fn log_stdin_host_id(host_id: Option<&str>) {
@@ -254,18 +254,18 @@ mod tests {
 
   #[test]
   fn portal_saml_can_use_default_browser_when_supported() {
-    assert!(default_browser_auth_allowed(true, false, false));
+    assert!(can_use_external_browser_auth(true, false, false));
   }
 
   #[test]
-  fn gateway_saml_requires_portal_default_browser_policy() {
-    assert!(!default_browser_auth_allowed(true, true, false));
-    assert!(default_browser_auth_allowed(true, true, true));
+  fn gateway_saml_requires_gateway_browser_auth_allowance() {
+    assert!(!can_use_external_browser_auth(true, true, false));
+    assert!(can_use_external_browser_auth(true, true, true));
   }
 
   #[test]
   fn default_browser_auth_requires_saml_support() {
-    assert!(!default_browser_auth_allowed(false, false, true));
-    assert!(!default_browser_auth_allowed(false, true, true));
+    assert!(!can_use_external_browser_auth(false, false, true));
+    assert!(!can_use_external_browser_auth(false, true, true));
   }
 }

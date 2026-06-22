@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.6.2
+
+### Fixed
+
+- Fixed gateway fallback browser authentication when external browser authentication is explicitly requested.
+- Added logging for portal config default-browser behavior.
+- Added GUI managed configuration support with `gpgui.conf`, including reset to managed config.
+- Improved GUI config directory migration and managed license auto activation.
+
 ## 2.6.1
 
 ### Changed

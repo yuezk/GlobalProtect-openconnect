@@ -65,14 +65,18 @@ impl<'a> ConnectHandler<'a> {
     builder.build()
   }
 
-  pub(super) fn prelogin_options(&self, gateway_external_browser_allowed: bool) -> PreloginOptions {
+  pub(super) fn prelogin_options(&self, gateway_browser_auth_allowed: bool) -> PreloginOptions {
     PreloginOptions::default()
       .external_browser_requested(self.external_browser_requested())
-      .gateway_external_browser_allowed(gateway_external_browser_allowed)
+      .gateway_external_browser_allowed(gateway_browser_auth_allowed)
   }
 
   pub(super) fn direct_gateway_prelogin_options(&self) -> PreloginOptions {
     self.prelogin_options(true)
+  }
+
+  pub(super) fn gateway_browser_auth_allowed(&self, portal_config_default_browser: bool) -> bool {
+    gateway_browser_auth_allowed(portal_config_default_browser, self.external_browser_requested())
   }
 
   fn external_browser_requested(&self) -> bool {
@@ -173,7 +177,8 @@ impl<'a> ConnectHandler<'a> {
       None => portal_config.auth_cookie().clone(),
     };
     let allow_extend_session = portal_config.allow_extend_session().unwrap_or(false);
-    let portal_default_browser_enabled = portal_config.default_browser().unwrap_or(false);
+    let portal_config_default_browser = portal_config.default_browser().unwrap_or(false);
+    info!("Portal config default-browser: {}", portal_config_default_browser);
 
     if self.args.auto_gateway {
       let gateways = portal_config.gateways();
@@ -198,7 +203,7 @@ impl<'a> ConnectHandler<'a> {
             gateway.server(),
             &auth_cookie,
             allow_extend_session,
-            portal_default_browser_enabled,
+            portal_config_default_browser,
             gateway_context,
           )
           .await
@@ -263,7 +268,7 @@ impl<'a> ConnectHandler<'a> {
         gateway,
         &auth_cookie,
         allow_extend_session,
-        portal_default_browser_enabled,
+        portal_config_default_browser,
         gateway_context,
       )
       .await
@@ -281,5 +286,29 @@ impl<'a> ConnectHandler<'a> {
       "connect profile host-id: {}",
       self.os_profile.borrow().host_identity().host_id()
     );
+  }
+}
+
+fn gateway_browser_auth_allowed(portal_config_default_browser: bool, external_browser_requested: bool) -> bool {
+  portal_config_default_browser || external_browser_requested
+}
+
+#[cfg(test)]
+mod tests {
+  use super::gateway_browser_auth_allowed;
+
+  #[test]
+  fn gateway_browser_auth_is_allowed_by_portal_config() {
+    assert!(gateway_browser_auth_allowed(true, false));
+  }
+
+  #[test]
+  fn gateway_browser_auth_is_allowed_by_explicit_browser_request() {
+    assert!(gateway_browser_auth_allowed(false, true));
+  }
+
+  #[test]
+  fn gateway_browser_auth_is_disabled_without_portal_config_or_user_request() {
+    assert!(!gateway_browser_auth_allowed(false, false));
   }
 }
