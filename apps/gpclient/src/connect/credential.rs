@@ -74,12 +74,16 @@ impl ConnectHandler<'_> {
         };
         let verbose = self.shared_args.verbose.to_verbose_arg();
         let os_profile = self.os_profile.borrow().clone();
+        let key_password = self.latest_key_password.borrow().clone();
         let auth_launcher = SamlAuthLauncher::new(server)
           .gateway(is_gateway)
           .saml_request(prelogin.saml_request())
           .os_profile(&os_profile)
           .fix_openssl(self.shared_args.fix_openssl)
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
+          .certificate(self.args.certificate.as_deref())
+          .sslkey(self.args.sslkey.as_deref())
+          .key_password(key_password.as_deref())
           .browser(browser)
           .verbose(verbose);
 

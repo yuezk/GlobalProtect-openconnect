@@ -71,6 +71,10 @@ impl<'a> ConnectHandler<'a> {
       .gateway_external_browser_allowed(gateway_external_browser_allowed)
   }
 
+  pub(super) fn direct_gateway_prelogin_options(&self) -> PreloginOptions {
+    self.prelogin_options(true)
+  }
+
   fn external_browser_requested(&self) -> bool {
     #[cfg(feature = "webview-auth")]
     {

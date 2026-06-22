@@ -57,6 +57,19 @@ struct Cli {
   #[arg(long, help = "Override the GlobalProtect client version reported to the server")]
   client_version: Option<String>,
 
+  #[arg(
+    short,
+    long,
+    help = "Use SSL client certificate file in pkcs#8 (.pem) or pkcs#12 (.p12, .pfx) format"
+  )]
+  certificate: Option<String>,
+
+  #[arg(short = 'k', long, help = "Use SSL private key file in pkcs#8 (.pem) format")]
+  sslkey: Option<String>,
+
+  #[arg(short = 'p', long, help = "The key passphrase of the private key")]
+  key_password: Option<String>,
+
   #[arg(long, help = "Get around the OpenSSL `unsafe legacy renegotiation` error")]
   fix_openssl: bool,
 
@@ -161,6 +174,9 @@ impl Cli {
   fn build_gp_params(&self) -> GpParams {
     GpParams::builder(self.build_os_profile())
       .ignore_tls_errors(self.ignore_tls_errors)
+      .certificate(self.certificate.clone())
+      .sslkey(self.sslkey.clone())
+      .key_password(self.key_password.clone())
       .is_gateway(self.gateway)
       .build()
   }
@@ -275,5 +291,24 @@ mod tests {
 
     assert_eq!(profile.client_version(), "legacy-client");
     assert!(profile.user_agent().contains("legacy-client"));
+  }
+
+  #[test]
+  fn client_certificate_args_parse() {
+    let cli = Cli::try_parse_from([
+      "gpauth",
+      "portal.example.com",
+      "--certificate",
+      "/tmp/client.pem",
+      "--sslkey",
+      "/tmp/client.key",
+      "--key-password",
+      "secret",
+    ])
+    .expect("gpauth args should parse");
+
+    assert_eq!(cli.certificate.as_deref(), Some("/tmp/client.pem"));
+    assert_eq!(cli.sslkey.as_deref(), Some("/tmp/client.key"));
+    assert_eq!(cli.key_password.as_deref(), Some("secret"));
   }
 }

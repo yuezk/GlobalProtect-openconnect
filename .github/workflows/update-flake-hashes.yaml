@@ -31,6 +31,83 @@ jobs:
             scripts/update-flake-hashes.sh
           fi
 
+      - name: Upload updated flake
+        uses: actions/upload-artifact@v7
+        with:
+          name: updated-flake
+          path: flake.nix
+          if-no-files-found: error
+
+  validate-nix-prebuilt:
+    needs:
+      - update-flake-hashes
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            nixpkgs: nixos-25.11
+          - runner: ubuntu-latest
+            nixpkgs: nixos-26.05
+          - runner: ubuntu-24.04-arm
+            nixpkgs: nixos-25.11
+          - runner: ubuntu-24.04-arm
+            nixpkgs: nixos-26.05
+    name: validate-nix-prebuilt (${{ matrix.nixpkgs }}, ${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout GlobalProtect-openconnect
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Download updated flake
+        uses: actions/download-artifact@v8
+        with:
+          name: updated-flake
+          path: .
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build prebuilt Nix package
+        run: |
+          nix build .#prebuilt \
+            --override-input nixpkgs "github:NixOS/nixpkgs/${{ matrix.nixpkgs }}" \
+            --extra-experimental-features "nix-command flakes" \
+            --print-build-logs
+
+      - name: Inspect prebuilt Nix package
+        run: |
+          test -x result/bin/gpclient
+          test -x result/bin/gpauth
+          test -x result/bin/gpservice
+          test -x result/bin/gpgui-helper
+          test -x result/bin/gpgui
+          test ! -L result/bin/gpservice
+          head -n1 result/bin/gpclient | grep '^#!'
+          head -n1 result/bin/gpservice | grep '^#!'
+          grep -q '/run/wrappers/bin/pkexec' result/bin/gpclient
+          grep -q 'gpservice_public=.*/bin/gpservice' result/bin/gpclient
+          grep -q 'exec .*/bin/gpservice' result/bin/gpservice
+          ! grep -q '@gpservice_public@\|@gpservice_fhs@\|\$out/bin/gpservice' result/bin/gpclient result/bin/gpservice
+
+          ! grep -R '/usr/bin/gp' result/share
+
+  open-pull-request:
+    needs:
+      - validate-nix-prebuilt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GlobalProtect-openconnect
+        uses: actions/checkout@v6
+
+      - name: Download updated flake
+        uses: actions/download-artifact@v8
+        with:
+          name: updated-flake
+          path: .
+
       - name: Open pull request
         env:
           GH_TOKEN: ${{ github.token }}

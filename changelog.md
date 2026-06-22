@@ -12,6 +12,7 @@
 
 - Fixed NixOS GUI launch failures caused by package-local binary paths.
 - Fixed NixOS tray icon setup documentation for GNOME desktops.
+- Fixed browser authentication for portals that require a client certificate.
 - Fixed release automation so Nix flake hash updates are run manually after release assets are available.
 
 ## 2.6.0

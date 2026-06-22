@@ -16,6 +16,9 @@ pub struct SamlAuthLauncher<'a> {
   os: Option<&'a str>,
   host_id: Option<&'a str>,
   client_version: Option<&'a str>,
+  certificate: Option<&'a str>,
+  sslkey: Option<&'a str>,
+  key_password: Option<&'a str>,
   fix_openssl: bool,
   ignore_tls_errors: bool,
   #[cfg(feature = "webview-auth")]
@@ -38,6 +41,9 @@ impl<'a> SamlAuthLauncher<'a> {
       os: None,
       host_id: None,
       client_version: None,
+      certificate: None,
+      sslkey: None,
+      key_password: None,
       fix_openssl: false,
       ignore_tls_errors: false,
       #[cfg(feature = "webview-auth")]
@@ -80,6 +86,21 @@ impl<'a> SamlAuthLauncher<'a> {
 
   pub fn ignore_tls_errors(mut self, ignore_tls_errors: bool) -> Self {
     self.ignore_tls_errors = ignore_tls_errors;
+    self
+  }
+
+  pub fn certificate(mut self, certificate: Option<&'a str>) -> Self {
+    self.certificate = certificate;
+    self
+  }
+
+  pub fn sslkey(mut self, sslkey: Option<&'a str>) -> Self {
+    self.sslkey = sslkey;
+    self
+  }
+
+  pub fn key_password(mut self, key_password: Option<&'a str>) -> Self {
+    self.key_password = key_password;
     self
   }
 
@@ -146,6 +167,18 @@ impl<'a> SamlAuthLauncher<'a> {
 
     if self.ignore_tls_errors {
       auth_cmd.arg("--ignore-tls-errors");
+    }
+
+    if let Some(certificate) = self.certificate {
+      auth_cmd.arg("--certificate").arg(certificate);
+    }
+
+    if let Some(sslkey) = self.sslkey {
+      auth_cmd.arg("--sslkey").arg(sslkey);
+    }
+
+    if let Some(key_password) = self.key_password {
+      auth_cmd.arg("--key-password").arg(key_password);
     }
 
     #[cfg(feature = "webview-auth")]
@@ -221,5 +254,17 @@ mod tests {
     let launcher = SamlAuthLauncher::new("portal.example.com").os_profile(&profile);
 
     assert_eq!(launcher.client_version, Some("6.0.0"));
+  }
+
+  #[test]
+  fn client_certificate_options_are_stored() {
+    let launcher = SamlAuthLauncher::new("portal.example.com")
+      .certificate(Some("/tmp/client.pem"))
+      .sslkey(Some("/tmp/client.key"))
+      .key_password(Some("secret"));
+
+    assert_eq!(launcher.certificate, Some("/tmp/client.pem"));
+    assert_eq!(launcher.sslkey, Some("/tmp/client.key"));
+    assert_eq!(launcher.key_password, Some("secret"));
   }
 }
