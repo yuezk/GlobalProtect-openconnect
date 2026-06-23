@@ -118,6 +118,22 @@
           fi
         '';
 
+        installNixosPolkitRule = ''
+          chmod u+w $out/share $out/share/polkit-1 2>/dev/null || true
+          install -d $out/share/polkit-1/rules.d
+          cat > $out/share/polkit-1/rules.d/49-gpgui.rules <<EOF
+          polkit.addRule(function(action, subject) {
+            if (
+              action.id == "org.freedesktop.policykit.exec" &&
+              action.lookup("program") == "$out/bin/gpservice" &&
+              subject.active
+            ) {
+              return polkit.Result.YES;
+            }
+          });
+          EOF
+        '';
+
         fromSource = naersk'.buildPackage {
           inherit pname version src;
 
@@ -169,6 +185,7 @@
             cp -r packaging/files/usr/libexec $out/libexec
 
             ${rewriteSourceInstallPaths}
+            ${installNixosPolkitRule}
           '';
         };
 
@@ -330,6 +347,7 @@
             fi
 
             ${rewriteHostInstallPaths}
+            ${installNixosPolkitRule}
 
             runHook postInstall
           '';
