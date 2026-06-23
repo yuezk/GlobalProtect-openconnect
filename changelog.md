@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.3
+
+### Fixed
+
+- Fixed NixOS GUI launch authorization after package updates.
+- Fixed disconnect handling so a normal Ctrl+C logout no longer reports an error.
+- Fixed snapshot flake hash update automation for prebuilt Nix packages.
+
 ## 2.6.2
 
 ### Fixed

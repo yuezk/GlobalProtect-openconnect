@@ -9,10 +9,11 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 FLAKE_FILE="$PROJECT_DIR/flake.nix"
 
 usage() {
-  echo "Usage: $0 [version]"
+  echo "Usage: $0 [version] [release-tag]"
   echo
   echo "Updates flake.nix fetchzip hashes from the published GitHub release assets."
   echo "When version is omitted, the workspace package version from Cargo.toml is used."
+  echo "When release-tag is omitted, v<version> is used. Use snapshot to test snapshot assets."
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -35,9 +36,18 @@ if [[ -z "$version" ]]; then
   version="$(grep '^version' "$PROJECT_DIR/Cargo.toml" | head -1 | sed 's/version *= *"\(.*\)"/\1/')"
 fi
 version="${version#v}"
+release_tag="${2:-}"
+if [[ -z "$release_tag" ]]; then
+  release_tag="v$version"
+fi
 
 if [[ -z "$version" ]]; then
   echo "Could not determine release version" >&2
+  exit 1
+fi
+
+if [[ -z "$release_tag" ]]; then
+  echo "Could not determine release tag" >&2
   exit 1
 fi
 
@@ -67,7 +77,7 @@ prefetch_hash() {
 
 release_url() {
   local asset="$1"
-  echo "https://github.com/$REPO/releases/download/v$version/$asset"
+  echo "https://github.com/$REPO/releases/download/$release_tag/$asset"
 }
 
 source_hash="$(prefetch_hash "$(release_url "globalprotect-openconnect-$version.tar.gz")")"
@@ -81,8 +91,10 @@ GPGUI_X86_64_HASH="$gpgui_x86_64_hash" \
 GPGUI_AARCH64_HASH="$gpgui_aarch64_hash" \
 BINARY_X86_64_HASH="$binary_x86_64_hash" \
 BINARY_AARCH64_HASH="$binary_aarch64_hash" \
+RELEASE_TAG="$release_tag" \
 perl -0pi -e '
-  s|(url = "https://github\.com/yuezk/GlobalProtect-openconnect/releases/download/v\$\{version\}/globalprotect-openconnect-\$\{version\}\.tar\.gz";\n\s*hash = ")[^"]+(";)|$1 . $ENV{"SOURCE_HASH"} . $2|e;
+  s|(releaseTag = ")[^"]+(";)|$1 . $ENV{"RELEASE_TAG"} . $2|e;
+  s|(url = "https://github\.com/yuezk/GlobalProtect-openconnect/releases/download/\$\{releaseTag\}/globalprotect-openconnect-\$\{version\}\.tar\.gz";\n\s*hash = ")[^"]+(";)|$1 . $ENV{"SOURCE_HASH"} . $2|e;
   s|(gpguiHashes = \{\n\s*x86_64 = ")[^"]+(";)|$1 . $ENV{"GPGUI_X86_64_HASH"} . $2|e;
   s|(gpguiHashes = \{\n\s*x86_64 = "[^"]+";\n\s*aarch64 = ")[^"]+(";)|$1 . $ENV{"GPGUI_AARCH64_HASH"} . $2|e;
   s|(binaryHashes = \{\n\s*x86_64 = ")[^"]+(";)|$1 . $ENV{"BINARY_X86_64_HASH"} . $2|e;
@@ -94,5 +106,6 @@ grep -F "$gpgui_x86_64_hash" "$FLAKE_FILE" > /dev/null
 grep -F "$gpgui_aarch64_hash" "$FLAKE_FILE" > /dev/null
 grep -F "$binary_x86_64_hash" "$FLAKE_FILE" > /dev/null
 grep -F "$binary_aarch64_hash" "$FLAKE_FILE" > /dev/null
+grep -F "releaseTag = \"$release_tag\";" "$FLAKE_FILE" > /dev/null
 
-echo "Updated flake.nix hashes for v$version"
+echo "Updated flake.nix hashes for v$version assets from $release_tag"

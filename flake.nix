@@ -26,6 +26,7 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         pname = "globalprotect-openconnect";
         version = cargoToml.workspace.package.version;
+        releaseTag = "snapshot";
 
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
@@ -35,29 +36,29 @@
         };
 
         src = pkgs.fetchzip {
-          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/globalprotect-openconnect-${version}.tar.gz";
-          hash = "sha256-R7wS207jTujDYm4x7ucFY/cLvYw88zIVkVqRrCiEp80=";
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect-${version}.tar.gz";
+          hash = "sha256-fBoOcUPaiylhJc3P3x0cdmvUQwYO2e1xIPvq4NZ6hLc=";
         };
 
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
         gpguiHashes = {
-          x86_64 = "sha256-nD7311XzLXWutGcAvDbX3R3pnNiy6A6+fcDcmbP3Bg4=";
-          aarch64 = "sha256-MDQ9DOwZdQvR2q8kU6r5Fjw+nhsKrLyWvyhecJ4YhO8=";
+          x86_64 = "sha256-orhK5844Cebc+IKtYBdc1OekkvJJv1suBzc0n3TNn8g=";
+          aarch64 = "sha256-Lvdefh/ddk1TlWmVTluHFNZQbVAJrSkuYyzzDHcyIm0=";
         };
 
         gpgui = pkgs.fetchzip {
-          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/gpgui_${cpu}.bin.tar.xz";
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/gpgui_${cpu}.bin.tar.xz";
           hash = gpguiHashes.${cpu};
         };
 
         binaryHashes = {
-          x86_64 = "sha256-MTv72Dx767ef+D+0EJZ5onGHdZxzF3AK8TTcxVWD/zM=";
-          aarch64 = "sha256-bKSebUMtRkQPmfP0sCKXcW3fyV2lvkBro6S2tmN2228=";
+          x86_64 = "sha256-/lvi+xF3xR8urBMkBI0R6aVSs34msarzTpkebH17TeU=";
+          aarch64 = "sha256-hMV4xTMC1k3klX5BBRw2ThvjYDDYZkFEld+rDMfd3qU=";
         };
 
         binaryPackage = pkgs.fetchzip {
-          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v${version}/globalprotect-openconnect_${version}_${cpu}.bin.tar.xz";
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect_${version}_${cpu}.bin.tar.xz";
           hash = binaryHashes.${cpu};
         };
 
@@ -117,6 +118,22 @@
           fi
         '';
 
+        installNixosPolkitRule = ''
+          chmod u+w $out/share $out/share/polkit-1 2>/dev/null || true
+          install -d $out/share/polkit-1/rules.d
+          cat > $out/share/polkit-1/rules.d/49-gpgui.rules <<EOF
+          polkit.addRule(function(action, subject) {
+            if (
+              action.id == "org.freedesktop.policykit.exec" &&
+              action.lookup("program") == "$out/bin/gpservice" &&
+              subject.active
+            ) {
+              return polkit.Result.YES;
+            }
+          });
+          EOF
+        '';
+
         fromSource = naersk'.buildPackage {
           inherit pname version src;
 
@@ -168,6 +185,7 @@
             cp -r packaging/files/usr/libexec $out/libexec
 
             ${rewriteSourceInstallPaths}
+            ${installNixosPolkitRule}
           '';
         };
 
@@ -197,6 +215,8 @@
               cp -r artifacts/usr/lib $out/lib
             fi
 
+            install -Dm755 ${gpgui}/gpgui $out/bin/gpgui
+
             runHook postInstall
           '';
         };
@@ -218,6 +238,9 @@
               "--bind-try"
               "/run/wrappers"
               "/run/wrappers"
+              "--ro-bind-try"
+              "/etc/gpgui"
+              "/etc/gpgui"
             ];
           };
 
@@ -327,6 +350,7 @@
             fi
 
             ${rewriteHostInstallPaths}
+            ${installNixosPolkitRule}
 
             runHook postInstall
           '';

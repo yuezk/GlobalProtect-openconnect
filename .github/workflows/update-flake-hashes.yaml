@@ -6,6 +6,9 @@ on:
       version:
         description: "Release version. Defaults to Cargo.toml workspace version."
         required: false
+      release_tag:
+        description: "GitHub release tag to fetch assets from. Defaults to v<version>; use snapshot for snapshot assets."
+        required: false
 
 permissions:
   contents: write
@@ -24,11 +27,12 @@ jobs:
       - name: Update flake hashes
         env:
           RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           if [[ -n "$RELEASE_VERSION" ]]; then
-            scripts/update-flake-hashes.sh "$RELEASE_VERSION"
+            scripts/update-flake-hashes.sh "$RELEASE_VERSION" "$RELEASE_TAG"
           else
-            scripts/update-flake-hashes.sh
+            scripts/update-flake-hashes.sh "" "$RELEASE_TAG"
           fi
 
       - name: Upload updated flake
@@ -112,4 +116,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
-        run: scripts/open-flake-hashes-pr.sh "$RELEASE_VERSION"
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: scripts/open-flake-hashes-pr.sh "$RELEASE_VERSION" "$RELEASE_TAG"
