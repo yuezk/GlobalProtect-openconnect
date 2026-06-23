@@ -28,6 +28,8 @@ use crate::{
 
 use super::{ConnectHandler, args::cookie_cache_path};
 
+const OPENCONNECT_INTERRUPTED_EXIT_CODE: i32 = -4;
+
 struct GatewayLoginSession {
   cookie: String,
   extension_auth: SessionExtensionAuth,
@@ -372,10 +374,13 @@ impl ConnectHandler<'_> {
     let session_ctx_on_connect = Arc::clone(&session_ctx);
     let tunnel_established = Arc::new(AtomicBool::new(false));
     let tunnel_established_on_connect = Arc::clone(&tunnel_established);
+    let disconnect_requested = Arc::new(AtomicBool::new(false));
+    let disconnect_requested_on_signal = Arc::clone(&disconnect_requested);
 
     tokio::spawn(async move {
       shutdown_signal().await;
       info!("Received the interrupt signal, disconnecting...");
+      disconnect_requested_on_signal.store(true, Ordering::SeqCst);
       vpn_clone.disconnect();
     });
 
@@ -403,7 +408,8 @@ impl ConnectHandler<'_> {
       fs::remove_file(GP_CLIENT_LOCK_FILE).map_err(|err| GatewayConnectError::after_tunnel(err.into()))?;
     }
 
-    classify_openconnect_result(connect_result, tunnel_established)
+    let disconnect_requested = disconnect_requested.load(Ordering::SeqCst);
+    classify_openconnect_result(connect_result, tunnel_established, disconnect_requested)
   }
 
   fn determine_hip_script(&self) -> (bool, Option<String>) {
@@ -427,8 +433,16 @@ impl ConnectHandler<'_> {
   }
 }
 
-fn classify_openconnect_result(exit_code: i32, tunnel_established: bool) -> Result<(), GatewayConnectError> {
+fn classify_openconnect_result(
+  exit_code: i32,
+  tunnel_established: bool,
+  disconnect_requested: bool,
+) -> Result<(), GatewayConnectError> {
   if exit_code == 0 {
+    return Ok(());
+  }
+
+  if disconnect_requested && exit_code == OPENCONNECT_INTERRUPTED_EXIT_CODE {
     return Ok(());
   }
 
@@ -477,20 +491,33 @@ mod tests {
 
   #[test]
   fn openconnect_success_is_not_a_gateway_failure() {
-    assert!(classify_openconnect_result(0, false).is_ok());
-    assert!(classify_openconnect_result(0, true).is_ok());
+    assert!(classify_openconnect_result(0, false, false).is_ok());
+    assert!(classify_openconnect_result(0, true, false).is_ok());
   }
 
   #[test]
   fn openconnect_failure_before_callback_is_retryable_gateway_failure() {
-    let err = classify_openconnect_result(1, false).expect_err("nonzero exit should fail");
+    let err = classify_openconnect_result(1, false, false).expect_err("nonzero exit should fail");
 
     assert!(err.is_before_tunnel());
   }
 
   #[test]
   fn openconnect_failure_after_callback_is_terminal_gateway_failure() {
-    let err = classify_openconnect_result(1, true).expect_err("nonzero exit should fail");
+    let err = classify_openconnect_result(1, true, false).expect_err("nonzero exit should fail");
+
+    assert!(!err.is_before_tunnel());
+  }
+
+  #[test]
+  fn interrupted_exit_after_requested_disconnect_is_success() {
+    assert!(classify_openconnect_result(OPENCONNECT_INTERRUPTED_EXIT_CODE, true, true).is_ok());
+  }
+
+  #[test]
+  fn interrupted_exit_without_requested_disconnect_is_failure() {
+    let err = classify_openconnect_result(OPENCONNECT_INTERRUPTED_EXIT_CODE, true, false)
+      .expect_err("unexpected interrupt should fail");
 
     assert!(!err.is_before_tunnel());
   }
