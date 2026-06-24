@@ -72,7 +72,7 @@ For browser-based authentication with the CLI:
 
 **Method 1:** Using sudo with environment preservation:
 ```bash
-sudo -E gpclient connect --browser <portal>
+sudo gpclient connect --browser <portal>
 ```
 
 **Method 2:** Using authentication piping:
@@ -199,6 +199,26 @@ sudo apk add --allow-untrusted globalprotect-openconnect-*.apk
 ```
 
 The package uses Alpine's native musl build. Make sure the `community` repository is enabled so GUI dependencies such as `webkit2gtk-4.1`, `libsecret`, and `libayatana-appindicator` can be resolved. GUI-launched connections use polkit, and VPN tunnel creation requires `/dev/net/tun`.
+
+### FreeBSD
+
+Download the latest FreeBSD package from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page, then install:
+
+```bash
+sudo pkg install ./globalprotect-openconnect-*-freebsd-*.pkg
+```
+
+To build from source, see [Building from Source on FreeBSD and OpenBSD](./docs/bsd-source-build.md).
+
+### OpenBSD
+
+Download the latest OpenBSD package from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page, then install:
+
+```bash
+doas pkg_add -D unsigned ./globalprotect-openconnect-*-openbsd-*.tgz
+```
+
+To build from source, see [Building from Source on FreeBSD and OpenBSD](./docs/bsd-source-build.md).
 
 ### Gentoo
 
