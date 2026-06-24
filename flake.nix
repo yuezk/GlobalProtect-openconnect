@@ -91,7 +91,7 @@
 
         rewriteSourceInstallPaths = ''
           substituteInPlace $out/share/applications/gpgui.desktop \
-            --replace-fail /usr/bin/gpclient $out/bin/gpclient
+            --replace-fail /usr/bin/gpclient /run/current-system/sw/bin/gpclient
 
           substituteInPlace $out/libexec/gpclient/hipreport.sh \
             --replace-fail /usr/bin/gpclient $out/bin/gpclient
@@ -107,7 +107,7 @@
 
         rewriteHostInstallPaths = ''
           substituteInPlace $out/share/applications/gpgui.desktop \
-            --replace-fail /usr/bin/gpclient $out/bin/gpclient
+            --replace-fail /usr/bin/gpclient /run/current-system/sw/bin/gpclient
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice
