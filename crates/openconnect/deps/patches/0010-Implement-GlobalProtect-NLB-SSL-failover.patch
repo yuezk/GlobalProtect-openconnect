@@ -1,0 +1,389 @@
+From 0000000000000000000000000000000000000004 Mon Sep 17 00:00:00 2001
+From: Kevin Yue <yuezk001@gmail.com>
+Date: Wed, 25 Jun 2026 20:00:00 +0800
+Subject: [PATCH 10/10] Implement GlobalProtect NLB SSL failover
+
+Extend gpst_connect for NLB gateways: send install=yes with preferred IPs,
+accept the 110...START_TUNNEL line protocol response, parse VIP/inner GW,
+and install a split-include route for the NLB private gateway IP.
+---
+--- a/gpst.c	2026-06-25 18:35:09
++++ b/gpst.c	2026-06-25 18:35:46
+@@ -789,10 +789,10 @@
+ 
+ static int gpst_connect(struct openconnect_info *vpninfo)
+ {
+-	int ret;
++	int ret, nread;
+ 	struct oc_text_buf *reqbuf;
+ 	static const char start_tunnel[12] __attribute__((nonstring)) = "START_TUNNEL"; /* NOT NUL-terminated */
+-	char buf[256];
++	char buf[512];
+ 
+ 	/* We do NOT actually start the HTTPS tunnel if ESP is enabled and we received
+ 	 * ESP keys, because the ESP keys become invalid as soon as the HTTPS tunnel
+@@ -812,6 +812,13 @@
+ 	reqbuf = buf_alloc();
+ 	buf_append(reqbuf, "GET %s?", vpninfo->urlpath);
+ 	filter_opts(reqbuf, vpninfo->cookie, "user,authcookie", 1);
++	if (vpninfo->gp_nlb.enabled) {
++		append_opt(reqbuf, "install", "yes");
++		if (vpninfo->ip_info.addr)
++			append_opt(reqbuf, "preferred-ip", vpninfo->ip_info.addr);
++		if (vpninfo->ip_info.addr6)
++			append_opt(reqbuf, "preferred-ipv6", vpninfo->ip_info.addr6);
++	}
+ 	buf_append(reqbuf, " HTTP/1.1\r\n\r\n");
+ 	if ((ret = buf_error(reqbuf)))
+ 		goto out;
+@@ -821,36 +828,51 @@
+ 
+ 	vpninfo->ssl_write(vpninfo, reqbuf->data, reqbuf->pos);
+ 
+-	if ((ret = vpninfo->ssl_read(vpninfo, buf, 12)) < 0) {
+-		if (ret == -EINTR)
++	nread = vpninfo->ssl_read(vpninfo, buf, sizeof(buf) - 1);
++	if (nread < 0) {
++		if (nread == -EINTR)
+ 			goto out;
+ 		vpn_progress(vpninfo, PRG_ERR,
+ 		             _("Error fetching GET-tunnel HTTPS response.\n"));
+ 		ret = -EINVAL;
+ 		goto out;
+ 	}
+-
+-	if (!strncmp(buf, start_tunnel, sizeof(start_tunnel))) {
+-		ret = 0;
+-	} else if (ret==0) {
++	if (!nread) {
+ 		vpn_progress(vpninfo, PRG_ERR,
+ 			     _("Gateway disconnected immediately after GET-tunnel request.\n"));
+ 		ret = -EPIPE;
+-	} else {
+-		if (ret==sizeof(start_tunnel)) {
+-			ret = vpninfo->ssl_gets(vpninfo, buf+sizeof(start_tunnel), sizeof(buf)-sizeof(start_tunnel));
+-			ret = (ret>0 ? ret : 0) + sizeof(start_tunnel);
+-			dump_buf(vpninfo, '<', buf);
+-		}
+-		int status = check_http_status(buf, ret);
++		goto out;
++	}
++
++	buf[nread] = '\0';
++	if (nread == (int)sizeof(start_tunnel) && !strstr(buf, start_tunnel)) {
++		int more = vpninfo->ssl_gets(vpninfo, buf + nread, sizeof(buf) - 1 - nread);
++
++		if (more > 0)
++			nread += more;
++		buf[nread] = '\0';
++	}
++
++	if (vpninfo->dump_http_traffic)
++		dump_buf(vpninfo, '<', buf);
++
++	if (!gpst_nlb_handle_ssl_connect_response(vpninfo, buf, nread))
++		ret = 0;
++	else if (nread > 4 && !strncmp(buf, "HTTP", 4)) {
++		int status = check_http_status(buf, nread);
++
+ 		/* XX: GP servers return 502 when they don't like the cookie */
+ 		if (status == 502)
+ 			ret = -EPERM;
+ 		else {
+ 			vpn_progress(vpninfo, PRG_ERR, _("Got unexpected HTTP response: %.*s\n"),
+-				     ret, buf);
++				     nread, buf);
+ 			ret = -EINVAL;
+ 		}
++	} else {
++		vpn_progress(vpninfo, PRG_ERR, _("Got unexpected SSL tunnel response: %.*s\n"),
++			     nread, buf);
++		ret = -EINVAL;
+ 	}
+ 
+ 	if (ret < 0)
+--- a/gpst_nlb.c	2026-06-25 18:35:09
++++ b/gpst_nlb.c	2026-06-25 18:36:07
+@@ -346,23 +346,147 @@
+ 	free(inner);
+ 	free(line);
+ 	return ret;
++}
++
++static struct oc_split_include *gp_nlb_clone_split_list(struct oc_split_include *list,
++							struct oc_vpn_option **opts,
++							const char *optname)
++{
++	struct oc_split_include *head = NULL, **tail = &head;
++
++	for (; list; list = list->next) {
++		struct oc_split_include *inc = malloc(sizeof(*inc));
++
++		if (!inc)
++			return NULL;
++		inc->route = add_option_dup(opts, optname, list->route, -1);
++		if (!inc->route) {
++			free(inc);
++			return NULL;
++		}
++		inc->next = NULL;
++		*tail = inc;
++		tail = &inc->next;
++	}
++	return head;
+ }
+ 
++static int gp_nlb_route_list_contains(struct oc_split_include *list, const char *ip)
++{
++	for (; list; list = list->next) {
++		if (list->route && strstr(list->route, ip))
++			return 1;
++	}
++	return 0;
++}
++
++static int gpst_nlb_update_esp_magic(struct openconnect_info *vpninfo)
++{
++	struct gp_nlb_config *nlb = &vpninfo->gp_nlb;
++	struct in_addr vip;
++
++	if (!nlb->tunnel_vip || inet_pton(AF_INET, nlb->tunnel_vip, &vip) != 1)
++		return 0;
++
++	vpninfo->esp_magic_af = AF_INET;
++	memcpy(vpninfo->esp_magic, &vip, sizeof(vip));
++	return 0;
++}
++
+ int gpst_nlb_apply_routes(struct openconnect_info *vpninfo)
+ {
+ 	struct gp_nlb_config *nlb = &vpninfo->gp_nlb;
++	struct oc_ip_info new_ip_info;
++	struct oc_vpn_option *new_opts = NULL;
++	struct oc_vpn_option *opt;
++	struct oc_split_include *inc;
++	char route[64];
++	int ret = 0;
+ 
+-	if (!nlb->enabled)
++	if (!nlb->enabled || !nlb->inner_gw_ip)
+ 		return 0;
+ 
+-	if (nlb->inner_gw_ip)
+-		vpn_progress(vpninfo, PRG_INFO,
+-			     _("NLB: add an access route for NLB private ip: %s.\n"),
+-			     nlb->inner_gw_ip);
+-	else
+-		vpn_progress(vpninfo, PRG_DEBUG,
+-			     _("NLB route setup deferred: inner gateway IP not yet known\n"));
++	if (gp_nlb_route_list_contains(vpninfo->ip_info.split_includes, nlb->inner_gw_ip))
++		return 0;
+ 
+-	/* Phase 4: install split-include route via install_vpn_opts/script */
++	if (snprintf(route, sizeof(route), "%s/32", nlb->inner_gw_ip) >= (int)sizeof(route))
++		return -EINVAL;
++
++	for (opt = vpninfo->cstp_options; opt; opt = opt->next) {
++		if (!add_option_dup(&new_opts, opt->option, opt->value, -1)) {
++			ret = -ENOMEM;
++			goto err;
++		}
++	}
++
++	inc = malloc(sizeof(*inc));
++	if (!inc) {
++		ret = -ENOMEM;
++		goto err;
++	}
++	inc->route = add_option_dup(&new_opts, "split-include", route, -1);
++	if (!inc->route) {
++		free(inc);
++		ret = -ENOMEM;
++		goto err;
++	}
++	inc->next = NULL;
++
++	new_ip_info = vpninfo->ip_info;
++	new_ip_info.split_includes = gp_nlb_clone_split_list(vpninfo->ip_info.split_includes,
++							     &new_opts, "split-include");
++	new_ip_info.split_excludes = gp_nlb_clone_split_list(vpninfo->ip_info.split_excludes,
++							     &new_opts, "split-exclude");
++	if ((vpninfo->ip_info.split_includes && !new_ip_info.split_includes) ||
++	    (vpninfo->ip_info.split_excludes && !new_ip_info.split_excludes)) {
++		free(inc);
++		ret = -ENOMEM;
++		goto err;
++	}
++
++	inc->next = new_ip_info.split_includes;
++	new_ip_info.split_includes = inc;
++	inc = NULL;
++
++	vpn_progress(vpninfo, PRG_INFO,
++		     _("NLB: add an access route for NLB private ip: %s.\n"),
++		     nlb->inner_gw_ip);
++
++	if (install_vpn_opts(vpninfo, new_opts, &new_ip_info)) {
++		free_split_routes(&new_ip_info);
++		ret = -EINVAL;
++		goto err;
++	}
+ 	return 0;
++
++err:
++	free_optlist(new_opts);
++	free(inc);
++	return ret;
++}
++
++int gpst_nlb_on_ssl_tunnel(struct openconnect_info *vpninfo)
++{
++	gpst_nlb_update_esp_magic(vpninfo);
++	return gpst_nlb_apply_routes(vpninfo);
++}
++
++int gpst_nlb_handle_ssl_connect_response(struct openconnect_info *vpninfo,
++					 const char *buf, int len)
++{
++	static const char start_tunnel[] = "START_TUNNEL";
++
++	if (!buf || len <= 0)
++		return -EINVAL;
++
++	if (len >= 12 && !strncmp(buf, start_tunnel, 12))
++		return gpst_nlb_on_ssl_tunnel(vpninfo);
++
++	if (!strstr(buf, start_tunnel))
++		return -EINVAL;
++
++	if (gpst_nlb_parse_ssl_response(buf, len, &vpninfo->gp_nlb) < 0)
++		return -EINVAL;
++
++	return gpst_nlb_on_ssl_tunnel(vpninfo);
+ }
+\ No newline at end of file
+--- a/openconnect-internal.h	2026-06-25 18:35:09
++++ b/openconnect-internal.h	2026-06-25 18:35:46
+@@ -1431,6 +1431,9 @@
+ int gpst_nlb_esp_decap(struct openconnect_info *vpninfo, struct pkt *pkt, int *len);
+ int gpst_nlb_parse_ssl_response(const char *buf, int len, struct gp_nlb_config *nlb);
+ int gpst_nlb_apply_routes(struct openconnect_info *vpninfo);
++int gpst_nlb_on_ssl_tunnel(struct openconnect_info *vpninfo);
++int gpst_nlb_handle_ssl_connect_response(struct openconnect_info *vpninfo,
++					 const char *buf, int len);
+ int gpst_mainloop(struct openconnect_info *vpninfo, int *timeout, int readable);
+ int gpst_esp_send_probes(struct openconnect_info *vpninfo);
+ int gpst_esp_catch_probe(struct openconnect_info *vpninfo, struct pkt *pkt);
+--- a/tests/gp-nlb-ssl-connect	2026-06-25 18:36:12
++++ b/tests/gp-nlb-ssl-connect	2026-06-25 18:36:07
+@@ -0,0 +1,109 @@
++#!/bin/sh
++# Validate NLB SSL tunnel response detection (issue #526 format)
++set -eu
++cd "$(dirname "$0")/.."
++CC="${CC:-cc}"
++TMP=$(mktemp -d)
++trap 'rm -rf "$TMP"' EXIT
++
++cat > "$TMP/test.c" <<'EOF'
++#include <stdio.h>
++#include <string.h>
++#include <arpa/inet.h>
++#include <ctype.h>
++#include <stdlib.h>
++
++struct gp_nlb_config {
++	char *tunnel_vip;
++	char *inner_gw_ip;
++	char *in_tunnel_gw_cert_chksum;
++	int enabled;
++};
++
++#define GP_NLB_SSL_PROTO_VERSION 110
++
++static int gp_nlb_is_ipv4(const char *s)
++{
++	struct in_addr a;
++	return s && inet_pton(AF_INET, s, &a) == 1;
++}
++
++static int gp_nlb_split_concat_ips(const char *concat, const char *hint_vip,
++				     char **vip, char **inner)
++{
++	size_t vip_len;
++
++	if (!concat || !*concat)
++		return -1;
++
++	if (hint_vip && !strncmp(concat, hint_vip, strlen(hint_vip))) {
++		vip_len = strlen(hint_vip);
++		if (concat[vip_len] && gp_nlb_is_ipv4(concat + vip_len)) {
++			*vip = strdup(hint_vip);
++			*inner = strdup(concat + vip_len);
++			return 0;
++		}
++	}
++	return -1;
++}
++
++static int gpst_nlb_parse_ssl_response(const char *buf, int len, struct gp_nlb_config *nlb)
++{
++	char *line, *vip = NULL, *inner = NULL, *hash, *start, *concat;
++	const char *hint_vip;
++	long version;
++
++	line = strndup(buf, len);
++	start = strstr(line, " START_TUNNEL");
++	if (!start)
++		return -1;
++	*start = '\0';
++	hash = strrchr(line, ' ');
++	if (!hash)
++		return -1;
++	*hash++ = '\0';
++	if (sscanf(line, "%ld", &version) != 1 || version != GP_NLB_SSL_PROTO_VERSION)
++		return -1;
++	concat = strchr(line, ' ') + 1;
++	hint_vip = "127.127.127.127";
++	if (gp_nlb_split_concat_ips(concat, hint_vip, &vip, &inner))
++		return -1;
++	nlb->tunnel_vip = vip;
++	nlb->inner_gw_ip = inner;
++	nlb->in_tunnel_gw_cert_chksum = strdup(hash);
++	nlb->enabled = 1;
++	return 0;
++}
++
++static int gpst_nlb_handle_ssl_connect_response(const char *buf, int len, struct gp_nlb_config *nlb)
++{
++	static const char start_tunnel[] = "START_TUNNEL";
++
++	if (!buf || len <= 0)
++		return -1;
++	if (len >= 12 && !strncmp(buf, start_tunnel, 12))
++		return 0;
++	if (!strstr(buf, start_tunnel))
++		return -1;
++	return gpst_nlb_parse_ssl_response(buf, len, nlb);
++}
++
++int main(void)
++{
++	struct gp_nlb_config nlb = {0};
++	const char *sample = "110 127.127.127.127192.168.255.43 c057fc7f7c6b74f9ac68b639bb056732404cbacf START_TUNNEL";
++	const char *plain = "START_TUNNEL";
++
++	if (gpst_nlb_handle_ssl_connect_response(plain, strlen(plain), &nlb))
++		return 1;
++	if (gpst_nlb_handle_ssl_connect_response(sample, strlen(sample), &nlb))
++		return 1;
++	if (strcmp(nlb.tunnel_vip, "127.127.127.127") ||
++	    strcmp(nlb.inner_gw_ip, "192.168.255.43"))
++		return 1;
++	printf("gp-nlb-ssl-connect: OK\n");
++	return 0;
++}
++EOF
++$CC -o "$TMP/test" "$TMP/test.c"
++"$TMP/test"
+\ No newline at end of file
