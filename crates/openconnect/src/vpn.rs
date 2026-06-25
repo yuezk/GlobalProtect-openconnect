@@ -16,6 +16,8 @@ pub struct VpnSessionInfo {
   pub lifetime_secs: Option<u32>,
   pub user_expires: Option<u32>,
   pub lifetime_warning: Option<VpnSessionWarning>,
+  pub nlb_enabled: bool,
+  pub nlb_connected_gw_ip: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +43,8 @@ pub(crate) fn session_info_from_raw(raw: *const ffi::VpnSessionInfoRaw) -> VpnSe
       (Some(prior_secs), Some(message)) => Some(VpnSessionWarning { prior_secs, message }),
       _ => None,
     },
+    nlb_enabled: raw.nlb_enabled != 0,
+    nlb_connected_gw_ip: unsafe { optional_c_string(raw.nlb_connected_gw_ip) },
   }
 }
 
@@ -426,12 +430,15 @@ mod tests {
   #[test]
   fn maps_session_info_from_callback_payload() {
     let message = CString::new("Session expires soon").unwrap();
+    let connected_gw = CString::new("10.1.2.3").unwrap();
     let raw = ffi::VpnSessionInfoRaw {
       auth_expiration: 0,
       lifetime_secs: 43_200,
       user_expires: 1_776_828_409,
       lifetime_warning_prior: 1_800,
       lifetime_warning_message: message.as_ptr(),
+      nlb_enabled: 1,
+      nlb_connected_gw_ip: connected_gw.as_ptr(),
     };
 
     let info = session_info_from_raw(&raw);
@@ -445,6 +452,8 @@ mod tests {
         message: "Session expires soon".to_string(),
       })
     );
+    assert!(info.nlb_enabled);
+    assert_eq!(info.nlb_connected_gw_ip.as_deref(), Some("10.1.2.3"));
   }
 
   #[test]
@@ -455,6 +464,8 @@ mod tests {
       user_expires: 0,
       lifetime_warning_prior: 0,
       lifetime_warning_message: std::ptr::null(),
+      nlb_enabled: 0,
+      nlb_connected_gw_ip: std::ptr::null(),
     };
 
     let info = session_info_from_raw(&raw);
