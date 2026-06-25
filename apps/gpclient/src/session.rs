@@ -213,6 +213,7 @@ mod tests {
           prior_secs: 1_800,
           message: "Session expires soon".to_string(),
         }),
+        ..Default::default()
       },
       true,
     );
@@ -233,6 +234,7 @@ mod tests {
           prior_secs: 1_800,
           message: "Session expires soon".to_string(),
         }),
+        ..Default::default()
       },
       false,
     );

@@ -59,6 +59,9 @@ static void setup_tun_handler(void *_vpninfo)
 			    openconnect_get_gp_lifetime_notify_prior(_vpninfo),
 			.lifetime_warning_message =
 			    openconnect_get_gp_lifetime_notify_message(_vpninfo),
+			.nlb_enabled = openconnect_get_gp_nlb_enabled(_vpninfo),
+			.nlb_connected_gw_ip =
+			    openconnect_get_gp_nlb_connected_gw_ip(_vpninfo),
 		};
 		on_vpn_connected(g_cmd_pipe_fd, &session_info, g_user_data);
 	}
