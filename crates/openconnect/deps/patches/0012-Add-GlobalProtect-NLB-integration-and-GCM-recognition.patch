@@ -1,22 +1,14 @@
 From 0000000000000000000000000000000000000006 Mon Sep 17 00:00:00 2001
 From: Kevin Yue <yuezk001@gmail.com>
 Date: Wed, 25 Jun 2026 22:00:00 +0800
-Subject: [PATCH 12/12] Add GlobalProtect NLB integration and GCM recognition
+Subject: [PATCH 12/19] Add GlobalProtect NLB integration and GCM recognition
 
 Recognize AES-GCM ESP algorithm strings, extend fake-gp-server with NLB
 mode, wire NLB unit/integration tests into Makefile.am, and add an
 integration test that verifies NLB config parsing from getconfig.esp.
 ---
- gpst.c                      |  2 ++
- openconnect-internal.h      |  2 ++
- tests/Makefile.am           |  8 +++++--
- tests/fake-gp-server.py     | 18 ++++++++++++---
- tests/gp-nlb-auth-and-config | 48 +++++++++++++++++++++++++++++++++++++
- 5 files changed, 74 insertions(+), 4 deletions(-)
- create mode 100755 tests/gp-nlb-auth-and-config
-
 diff --git a/gpst.c b/gpst.c
-index 00000000..00000000 100644
+index ae3c746..4cdbfa6 100644
 --- a/gpst.c
 +++ b/gpst.c
 @@ -369,6 +369,8 @@ static int check_enc_algo(struct openconnect_info *v, const char *s)
@@ -29,10 +21,10 @@ index 00000000..00000000 100644
  	return -ENOENT;
  }
 diff --git a/openconnect-internal.h b/openconnect-internal.h
-index 00000000..00000000 100644
+index df79066..6148d26 100644
 --- a/openconnect-internal.h
 +++ b/openconnect-internal.h
-@@ -1103,6 +1103,8 @@ struct openconnect_info {
+@@ -1103,6 +1103,8 @@ static inline void __monitor_fd_new(struct openconnect_info *vpninfo,
  /* Encryption and HMAC algorithms (matching Juniper/Pulse binary encoding) */
  #define ENC_AES_128_CBC		2
  #define ENC_AES_256_CBC		5
@@ -42,10 +34,10 @@ index 00000000..00000000 100644
  #define HMAC_MD5		1
  #define HMAC_SHA1		2
 diff --git a/tests/Makefile.am b/tests/Makefile.am
-index 00000000..00000000 100644
+index 823928d..8b3cbee 100644
 --- a/tests/Makefile.am
 +++ b/tests/Makefile.am
-@@ -87,7 +87,10 @@
+@@ -87,7 +87,10 @@ endif
  dist_check_SCRIPTS += auth-username-pass auth-certificate auth-nonascii cert-fingerprint \
  	id-test obsolete-server-crypto pfs auth-swtpm auth-hwtpm fortinet-auth-and-config \
  	f5-auth-and-config juniper-auth juniper-sso-auth gp-auth-and-config auth-pkcs11 \
@@ -57,7 +49,7 @@ index 00000000..00000000 100644
  
  if HAVE_CWRAP
  TESTS += auth-username-pass auth-certificate auth-nonascii cert-fingerprint id-test \
-@@ -110,7 +113,8 @@
+@@ -110,7 +113,8 @@ endif
  if HAVE_PYTHON36_FLASK
  TESTS += juniper-sso-auth auth-multicert
  if HAVE_PYTHON37_DATACLASSES
@@ -68,7 +60,7 @@ index 00000000..00000000 100644
  endif
  
 diff --git a/tests/fake-gp-server.py b/tests/fake-gp-server.py
-index 00000000..00000000 100755
+index 908f91c..76a2af4 100755
 --- a/tests/fake-gp-server.py
 +++ b/tests/fake-gp-server.py
 @@ -96,6 +96,7 @@ class TestConfiguration:
@@ -96,7 +88,7 @@ index 00000000..00000000 100755
          return '', 201
      else:
          return 'Current configuration of fake GP server configuration:\n{}\n'.format(C)
-@@ -342,7 +344,14 @@ def check_form_against_session('user', 'portal', 'domain', 'authcookie', 'prefer
+@@ -342,7 +344,14 @@ def gateway_login():
  def getconfig():
      session.update(step='gateway-config')
      addrs = '<ip-address>{}</ip-address>'.format(session['preferred_ip'])
@@ -112,7 +104,7 @@ index 00000000..00000000 100755
      addrs += '<gw-address-v6>::1</gw-address-v6>'  # some(?) servers send the IPv6 address even if not otherwise configured for IPv6
      if session['ipv6_support'] == 'yes':
          addrs += '<ip-address-v6>{}</ip-address-v6>'.format(session['preferred_ipv6'])
-@@ -380,6 +389,9 @@ def getconfig():
+@@ -380,6 +389,9 @@ def hipcheck():
  def tunnel():
      assert 'user' in request.args and 'authcookie' in request.args
      session.update(step='GET-tunnel')
@@ -124,7 +116,7 @@ index 00000000..00000000 100755
  
 diff --git a/tests/gp-nlb-auth-and-config b/tests/gp-nlb-auth-and-config
 new file mode 100755
-index 00000000..00000000
+index 0000000..4ed2c09
 --- /dev/null
 +++ b/tests/gp-nlb-auth-and-config
 @@ -0,0 +1,48 @@
@@ -176,3 +168,10 @@ index 00000000..00000000
 +cleanup
 +
 +exit 0
+-- 
+ gpst.c                      |  2 ++
+ openconnect-internal.h      |  2 ++
+ tests/Makefile.am           |  8 +++++--
+ tests/fake-gp-server.py     | 18 ++++++++++++---
+ tests/gp-nlb-auth-and-config | 48 +++++++++++++++++++++++++++++++++++++
+ 5 files changed, 74 insertions(+), 4 deletions(-)
