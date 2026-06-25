@@ -37,14 +37,14 @@
 
         src = pkgs.fetchzip {
           url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect-${version}.tar.gz";
-          hash = "sha256-cp7KRUwVJsyg8m7O70k/uo6WwLqCPbFCnWtXzHn1GgU=";
+          hash = "sha256-CVgHh2jKQSMxw6QNQZCIbXC2eMvi0zu4F2JmZotxz1U=";
         };
 
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
         gpguiHashes = {
-          x86_64 = "sha256-7va5dBhmamOqJYbsHUtjWYFnoM8q5ZshB2CyK0NW6fE=";
-          aarch64 = "sha256-uBzBKx39te5R4PloDusjSjUf1Y2iF/xO4dXUX2K4P8o=";
+          x86_64 = "sha256-TOyP5/LmuNQeDpEWhVKFyUmkVqGUG010IqubtVyW3gQ=";
+          aarch64 = "sha256-7sPajJ8bBKpbN9m32NSEAz8KKdSrLziWdsR+0VMNhAc=";
         };
 
         gpgui = pkgs.fetchzip {
@@ -53,8 +53,8 @@
         };
 
         binaryHashes = {
-          x86_64 = "sha256-AqF+mwxmXxF/dFxmMXbtT2PONVArKKfMpwmX+3cYr5o=";
-          aarch64 = "sha256-Ul77xppKrrQQDRl/zKjrrj2+8CRjrMagJbLqmDlfz9U=";
+          x86_64 = "sha256-qD+NdMZ5zVtQm5JR3OPY514sbo4hoNX4+aYTAjpd+JY=";
+          aarch64 = "sha256-DRIFyzTHjNpPnETnRFdBQTDfg9GA8pFxquCTvO8T3L4=";
         };
 
         binaryPackage = pkgs.fetchzip {
