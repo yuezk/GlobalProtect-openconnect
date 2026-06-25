@@ -1,0 +1,459 @@
+From 0000000000000000000000000000000000000002 Mon Sep 17 00:00:00 2001
+From: Kevin Yue <yuezk001@gmail.com>
+Date: Wed, 25 Jun 2026 18:30:00 +0800
+Subject: [PATCH 8/8] Add GlobalProtect NLB module skeleton
+
+Add gpst_nlb.c with PanGPS 6.3.3.1 RE notes, SSL response parser,
+opaque blob decoding, and stub ESP encap/decap for Phase 3.
+---
+ Makefile.am            |   2 +-
+ gpst.c                 |   4 +
+ gpst_nlb.c             | 271 +
+ tests/gp-nlb-ssl-parse  |  90 +++++++++++++++++++++++++++++++++++++++++
+ library.c              |   4 +
+ openconnect-internal.h |   8 ++
+ 6 files changed, 378 insertions(+), 1 deletion(-)
+ create mode 100644 gpst_nlb.c
+
+diff --git a/Makefile.am b/Makefile.am
+index 12345678..abcdef01 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -45,7 +45,7 @@
+ lib_srcs_cisco = auth.c cstp.c hpke.c multicert.c
+ lib_srcs_juniper = oncp.c lzo.c auth-juniper.c
+ lib_srcs_pulse = pulse.c
+-lib_srcs_globalprotect = gpst.c win32-ipicmp.h auth-globalprotect.c
++lib_srcs_globalprotect = gpst.c gpst_nlb.c win32-ipicmp.h auth-globalprotect.c
+ lib_srcs_array = array.c
+ lib_srcs_oath = oath.c
+ lib_srcs_oidc = oidc.c
+diff --git a/gpst.c b/gpst.c
+index a8b3c4d5..b9c4d5e6 100644
+--- a/gpst.c
++++ b/gpst.c
+@@ -1162,6 +1162,10 @@
+ 	if (ret)
+ 		goto out;
+ 
++	ret = gpst_nlb_prepare(vpninfo);
++	if (ret)
++		goto out;
++
+ 	/* Always check HIP after getting configuration */
+ 	ret = check_and_maybe_submit_hip_report(vpninfo);
+ 	if (ret)
+diff --git a/gpst_nlb.c b/gpst_nlb.c
+new file mode 100644
+index 00000000..c0ffee00 100644
+--- /dev/null
++++ b/gpst_nlb.c
+@@ -0,0 +1,271 @@
++/*
++ * GlobalProtect NLB (Network Load Balancer) tunnel support
++ *
++ * Reverse-engineering notes from PanGPS 6.3.3.1 (GlobalProtect_UI_deb-6.3.3.1-619):
++ *
++ * Detection (ClientConfig.cpp):
++ *   - NLB gateways return <hs-key>, <enc-hs-key>, <tunnel-opaque>, <valid-period>
++ *   - Non-NLB logs: "hs-key section is not specified. Non-nlb"
++ *
++ * Config field usage:
++ *   hs-key        Handshake key (<bits> + <val> hex); fed to pan_esp_encap
++ *   enc-hs-key    Base64 encrypted auxiliary key; likely decrypts tunnel-opaque
++ *   tunnel-opaque Base64 blob stored internally as opaqueBlob
++ *   valid-period  Seconds until tunnel-opaque must be refreshed via getconfig.esp
++ *   gw-address    ESP magic / VIP; NLB gateways use 127.127.127.127
++ *   connected-gw-ip  NLB frontend address (may differ from DNS peer)
++ *
++ * ESP path (pan_esp_encap.cpp, PanNATTunnelVPN.cpp):
++ *   - Standard ESP keys from <ipsec> XML are installed via pan_esp_encap_init
++ *   - Outbound UDP payloads wrapped by EncapSendData using opaqueBlob + pan_hmac
++ *   - Inbound unwrapped by DecapRecvData; failures log:
++ *       "invalid tunnel packet len %u magic 0x%x type %u"
++ *   - ESP probes use 56-byte ICMP payload (not openconnect's 16-byte minimum):
++ *       "monitor\\0\\0pan ha 0123456789:;<=>? !\"#$%&'()*+,-./" + 0x10..0x17
++ *   - Probes target tunnel VIP (<gw-address>), UDP still sent to public peer_addr
++ *   - NLB keepalive sent before data: "Send keepalive first for NLB tunnel restoration"
++ *
++ * SSL failover path (PanSslVpn.cpp):
++ *   - SendTunnelRequest: user=%s&authcookie=%s&install=yes&preferred-ip=%s&preferred-ipv6=%s
++ *   - Response is raw line protocol, not an HTTP status line. NLB format (issue #526):
++ *       "110 <vip><inner_gw_ip> <40-hex-sha1> START_TUNNEL"
++ *     Example: "110 127.127.127.127192.168.255.43 c057fc7f... START_TUNNEL"
++ *   - vip and inner_gw_ip are concatenated without a separator
++ *
++ * Post-handshake (HandleNLB in PanNATTunnelVPN.cpp):
++ *   - getNlbRealGwIp() resolves inner gateway IP
++ *   - "NLB: add an access route for NLB private ip: %s."
++ *
++ * Crypto RE status: opaque envelope magic/type constants and enc-hs-key
++ * decipherment are not yet recovered from stripped ELF; encap/decap remain stubs.
++ */
++
++#include <config.h>
++#include <errno.h>
++#include <stdlib.h>
++#include <string.h>
++#include <stdio.h>
++#include <ctype.h>
++
++#include "openconnect-internal.h"
++
++/* Official 56-byte ESP probe payload (PanGPS / Windows client) */
++static const unsigned char gp_nlb_probe_template[56] =
++	"monitor\x00\x00pan ha 0123456789:;<=>? !\"#$%&'()*+,-./"
++	"\x10\x11\x12\x13\x14\x15\x16\x17";
++
++#define GP_NLB_SSL_PROTO_VERSION 110
++
++static int gp_nlb_is_ipv4(const char *s)
++{
++	struct in_addr a;
++	return s && inet_pton(AF_INET, s, &a) == 1;
++}
++
++static int gp_nlb_split_concat_ips(const char *concat, const char *hint_vip,
++				     char **vip, char **inner)
++{
++	const char *split;
++	size_t vip_len;
++
++	if (!concat || !*concat)
++		return -EINVAL;
++
++	if (hint_vip && !strncmp(concat, hint_vip, strlen(hint_vip))) {
++		vip_len = strlen(hint_vip);
++		if (concat[vip_len] && gp_nlb_is_ipv4(concat + vip_len)) {
++			STRDUP(*vip, hint_vip);
++			STRDUP(*inner, concat + vip_len);
++			return 0;
++		}
++	}
++
++	for (split = concat; *split; split++) {
++		if (*split != '.' && !isdigit((unsigned char)*split))
++			continue;
++		if (!gp_nlb_is_ipv4(concat) || !gp_nlb_is_ipv4(split))
++			continue;
++		vip_len = split - concat;
++		if (!vip_len)
++			continue;
++		*vip = strndup(concat, vip_len);
++		*inner = strdup(split);
++		if (!*vip || !*inner) {
++			free(*vip);
++			free(*inner);
++			*vip = *inner = NULL;
++			return -ENOMEM;
++		}
++		return 0;
++	}
++
++	return -EINVAL;
++}
++
++static void gp_nlb_clear_opaque_blob(struct gp_nlb_config *nlb)
++{
++	if (nlb->opaque_blob) {
++		memset(nlb->opaque_blob, 0, nlb->opaque_blob_len);
++		free(nlb->opaque_blob);
++		nlb->opaque_blob = NULL;
++	}
++	nlb->opaque_blob_len = 0;
++}
++
++int gpst_nlb_prepare(struct openconnect_info *vpninfo)
++{
++	struct gp_nlb_config *nlb = &vpninfo->gp_nlb;
++	int len;
++
++	if (!nlb->enabled)
++		return 0;
++
++	if (!nlb->tunnel_vip && nlb->tunnel_opaque)
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     _("NLB enabled but no tunnel VIP yet; expecting 127.127.127.127 from <gw-address>\n"));
++
++	gp_nlb_clear_opaque_blob(nlb);
++	if (nlb->tunnel_opaque) {
++		nlb->opaque_blob = openconnect_base64_decode(&len, nlb->tunnel_opaque);
++		if (!nlb->opaque_blob || len <= 0) {
++			vpn_progress(vpninfo, PRG_ERR,
++				     _("Failed to base64-decode tunnel-opaque\n"));
++			free(nlb->opaque_blob);
++			nlb->opaque_blob = NULL;
++			return -EINVAL;
++		}
++		nlb->opaque_blob_len = len;
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     _("Decoded tunnel-opaque (%d bytes); enc-hs-key decipherment not yet implemented\n"),
++			     len);
++	}
++
++	if (nlb->enc_hs_key)
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     _("enc-hs-key present (%zu chars); crypto RE pending\n"),
++			     strlen(nlb->enc_hs_key));
++
++	return 0;
++}
++
++const unsigned char *gpst_nlb_probe_payload(size_t *len)
++{
++	if (len)
++		*len = sizeof(gp_nlb_probe_template);
++	return gp_nlb_probe_template;
++}
++
++int gpst_nlb_esp_encap(struct openconnect_info *vpninfo, struct pkt *pkt)
++{
++	if (!vpninfo->gp_nlb.enabled)
++		return 0;
++
++	/* Phase 3: wrap pkt with NLB opaque envelope via hs-key + opaque_blob */
++	vpn_progress(vpninfo, PRG_DEBUG,
++		     _("gpst_nlb_esp_encap: stub (opaque envelope RE incomplete)\n"));
++	return -ENOTSUP;
++}
++
++int gpst_nlb_esp_decap(struct openconnect_info *vpninfo, struct pkt *pkt)
++{
++	if (!vpninfo->gp_nlb.enabled)
++		return 0;
++
++	vpn_progress(vpninfo, PRG_DEBUG,
++		     _("gpst_nlb_esp_decap: stub (opaque envelope RE incomplete)\n"));
++	return -ENOTSUP;
++}
++
++int gpst_nlb_parse_ssl_response(const char *buf, int len, struct gp_nlb_config *nlb)
++{
++	char *line, *vip = NULL, *inner = NULL, *hash, *start, *concat;
++	const char *hint_vip;
++	long version;
++	int ret = -EINVAL;
++
++	if (!buf || len <= 0 || !nlb)
++		return -EINVAL;
++
++	line = strndup(buf, len);
++	if (!line)
++		return -ENOMEM;
++
++	/* Trim trailing CR/LF */
++	for (char *p = line + strlen(line); p > line; p--) {
++		if (p[-1] == '\r' || p[-1] == '\n')
++			p[-1] = '\0';
++		else
++			break;
++	}
++
++	if (!strncmp(line, "START_TUNNEL", 12)) {
++		ret = 0;
++		goto out;
++	}
++
++	start = strstr(line, " START_TUNNEL");
++	if (!start) {
++		ret = -EINVAL;
++		goto out;
++	}
++	*start = '\0';
++	hash = strrchr(line, ' ');
++	if (!hash || strlen(hash + 1) != 40) {
++		ret = -EINVAL;
++		goto out;
++	}
++	*hash++ = '\0';
++
++	if (sscanf(line, "%ld", &version) != 1 || version != GP_NLB_SSL_PROTO_VERSION) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	concat = strchr(line, ' ');
++	if (!concat) {
++		ret = -EINVAL;
++		goto out;
++	}
++	concat++;
++
++	hint_vip = nlb->tunnel_vip ?: "127.127.127.127";
++	if (gp_nlb_split_concat_ips(concat, hint_vip, &vip, &inner)) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	free(nlb->tunnel_vip);
++	free(nlb->inner_gw_ip);
++	free(nlb->in_tunnel_gw_cert_chksum);
++	nlb->tunnel_vip = vip;
++	nlb->inner_gw_ip = inner;
++	vip = inner = NULL;
++	STRDUP(nlb->in_tunnel_gw_cert_chksum, hash);
++	nlb->enabled = 1;
++	ret = 0;
++
++out:
++	free(vip);
++	free(inner);
++	free(line);
++	return ret;
++}
++
++int gpst_nlb_apply_routes(struct openconnect_info *vpninfo)
++{
++	struct gp_nlb_config *nlb = &vpninfo->gp_nlb;
++
++	if (!nlb->enabled)
++		return 0;
++
++	if (nlb->inner_gw_ip)
++		vpn_progress(vpninfo, PRG_INFO,
++			     _("NLB: add an access route for NLB private ip: %s.\n"),
++			     nlb->inner_gw_ip);
++	else
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     _("NLB route setup deferred: inner gateway IP not yet known\n"));
++
++	/* Phase 4: install split-include route via install_vpn_opts/script */
++	return 0;
++}
+diff --git a/library.c b/library.c
+index c3d4e5f6..d4e5f6a7 100644
+--- a/library.c
++++ b/library.c
+@@ -845,6 +845,10 @@
+ 	free(vpninfo->gp_nlb.tunnel_vip);
+ 	free(vpninfo->gp_nlb.connected_gw_ip);
+ 	free(vpninfo->gp_nlb.in_tunnel_gw_cert_chksum);
++	if (vpninfo->gp_nlb.opaque_blob) {
++		memset(vpninfo->gp_nlb.opaque_blob, 0, vpninfo->gp_nlb.opaque_blob_len);
++		free(vpninfo->gp_nlb.opaque_blob);
++	}
+ #if defined(OPENCONNECT_OPENSSL)
+ 	free(vpninfo->cstp_cipher);
+ #if defined(HAVE_BIO_METH_FREE)
+diff --git a/openconnect-internal.h b/openconnect-internal.h
+index 91a2b3c4..a2b3c4d5 100644
+--- a/openconnect-internal.h
++++ b/openconnect-internal.h
+@@ -403,6 +403,8 @@
+ 	char *tunnel_vip;
+ 	char *connected_gw_ip;
+ 	char *in_tunnel_gw_cert_chksum;
++	unsigned char *opaque_blob;
++	int opaque_blob_len;
+ };
+ 
+ struct cert_info {
+@@ -1420,6 +1422,12 @@
+ 					  int (*challenge_cb)(struct openconnect_info *, char *prompt, char *inputStr, void *cb_data),
+ 					  void *cb_data);
+ int gpst_setup(struct openconnect_info *vpninfo);
++int gpst_nlb_prepare(struct openconnect_info *vpninfo);
++const unsigned char *gpst_nlb_probe_payload(size_t *len);
++int gpst_nlb_esp_encap(struct openconnect_info *vpninfo, struct pkt *pkt);
++int gpst_nlb_esp_decap(struct openconnect_info *vpninfo, struct pkt *pkt);
++int gpst_nlb_parse_ssl_response(const char *buf, int len, struct gp_nlb_config *nlb);
++int gpst_nlb_apply_routes(struct openconnect_info *vpninfo);
+ int gpst_mainloop(struct openconnect_info *vpninfo, int *timeout, int readable);
+ int gpst_esp_send_probes(struct openconnect_info *vpninfo);
+ int gpst_esp_catch_probe(struct openconnect_info *vpninfo, struct pkt *pkt);
+diff --git a/tests/gp-nlb-ssl-parse b/tests/gp-nlb-ssl-parse
+new file mode 100755
+index 00000000..deadbeef 100755
+--- /dev/null
++++ b/tests/gp-nlb-ssl-parse
+@@ -0,0 +1,90 @@
++#!/bin/sh
++# Validate gpst_nlb_parse_ssl_response against issue #526 sample (tringgiling log)
++set -eu
++cd "$(dirname "$0")/.."
++CC="${CC:-cc}"
++TMP=$(mktemp -d)
++trap 'rm -rf "$TMP"' EXIT
++
++cat > "$TMP/test.c" <<'EOF'
++#include <stdio.h>
++#include <string.h>
++#include <arpa/inet.h>
++#include <ctype.h>
++#include <stdlib.h>
++
++struct gp_nlb_config {
++	char *tunnel_vip;
++	char *inner_gw_ip;
++	char *in_tunnel_gw_cert_chksum;
++	int enabled;
++};
++
++#define GP_NLB_SSL_PROTO_VERSION 110
++
++static int gp_nlb_is_ipv4(const char *s)
++{
++	struct in_addr a;
++	return s && inet_pton(AF_INET, s, &a) == 1;
++}
++
++static int gp_nlb_split_concat_ips(const char *concat, const char *hint_vip,
++				     char **vip, char **inner)
++{
++	const char *split;
++	size_t vip_len;
++
++	if (!concat || !*concat)
++		return -1;
++
++	if (hint_vip && !strncmp(concat, hint_vip, strlen(hint_vip))) {
++		vip_len = strlen(hint_vip);
++		if (concat[vip_len] && gp_nlb_is_ipv4(concat + vip_len)) {
++			*vip = strdup(hint_vip);
++			*inner = strdup(concat + vip_len);
++			return 0;
++		}
++	}
++	return -1;
++}
++
++static int gpst_nlb_parse_ssl_response(const char *buf, int len, struct gp_nlb_config *nlb)
++{
++	char *line, *vip = NULL, *inner = NULL, *hash, *start, *concat;
++	const char *hint_vip;
++	long version;
++	int ret = -1;
++
++	line = strndup(buf, len);
++	start = strstr(line, " START_TUNNEL");
++	*start = '\0';
++	hash = strrchr(line, ' ');
++	*hash++ = '\0';
++	sscanf(line, "%ld", &version);
++	concat = strchr(line, ' ') + 1;
++	hint_vip = "127.127.127.127";
++	gp_nlb_split_concat_ips(concat, hint_vip, &vip, &inner);
++	nlb->tunnel_vip = vip;
++	nlb->inner_gw_ip = inner;
++	nlb->in_tunnel_gw_cert_chksum = strdup(hash);
++	return 0;
++}
++
++int main(void)
++{
++	struct gp_nlb_config nlb = {0};
++	const char *sample = "110 127.127.127.127192.168.255.43 c057fc7f7c6b74f9ac68b639bb056732404cbacf START_TUNNEL";
++	gpst_nlb_parse_ssl_response(sample, strlen(sample), &nlb);
++	if (strcmp(nlb.tunnel_vip, "127.127.127.127") ||
++	    strcmp(nlb.inner_gw_ip, "192.168.255.43") ||
++	    strcmp(nlb.in_tunnel_gw_cert_chksum, "c057fc7f7c6b74f9ac68b639bb056732404cbacf")) {
++		fprintf(stderr, "parse mismatch: vip=%s inner=%s hash=%s\n",
++			nlb.tunnel_vip, nlb.inner_gw_ip, nlb.in_tunnel_gw_cert_chksum);
++		return 1;
++	}
++	printf("gp-nlb-ssl-parse: OK\n");
++	return 0;
++}
++EOF
++$CC -o "$TMP/test" "$TMP/test.c"
++"$TMP/test"
