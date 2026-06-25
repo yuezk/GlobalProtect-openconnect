@@ -1,0 +1,453 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kevin Yue <yuezk001@gmail.com>
+Date: Thu, 25 Jun 2026 23:30:00 +0800
+Subject: [PATCH 14/14] Implement exact PanGPS do_ssl_decrypt handling
+
+Match PanGPS decrypt_data: TLS 1.2 key expansion server write key/IV,
+AES-CBC with PKCS padding on ciphertext after the 28-byte blob prefix.
+Use decrypted enc-hs-key with TLS IV for tunnel-opaque body decryption.
+---
+diff --git a/gnutls.c b/gnutls.c
+--- a/gnutls.c
++++ b/gnutls.c
+@@ -3604,17 +3604,17 @@
+ 	return ret;
+ }
+ 
+-static int gp_tls12_cbc_decrypt(struct openconnect_info *vpninfo,
+-				const unsigned char *key, size_t key_size,
+-				const unsigned char *iv, size_t iv_size,
+-				const unsigned char *in, int inlen,
+-				unsigned char *out, int *outlen)
++static int gp_aes_cbc_decrypt(const unsigned char *key, size_t key_size,
++			      const unsigned char *iv, size_t iv_size,
++			      const unsigned char *in, int inlen,
++			      unsigned char *out, int *outlen)
+ {
+ 	gnutls_cipher_hd_t hd = NULL;
+ 	gnutls_datum_t enc_key, iv_d;
+-	int err;
++	unsigned char pad;
++	int err, padlen;
+ 
+-	if (inlen <= (int)iv_size || inlen % iv_size)
++	if (!key_size || !iv_size || inlen <= 0 || (inlen % (int)iv_size))
+ 		return -EINVAL;
+ 
+ 	enc_key.data = (unsigned char *)key;
+@@ -3627,56 +3627,108 @@
+ 	if (err)
+ 		return -EINVAL;
+ 
+-	inlen -= iv_size;
+-	memcpy(out, in + iv_size, inlen);
+-	*outlen = inlen;
++	memcpy(out, in, inlen);
+ 	err = gnutls_cipher_decrypt(hd, out, inlen);
+ 	gnutls_cipher_deinit(hd);
+-	return err ? -EINVAL : 0;
++	if (err)
++		return -EINVAL;
++
++	pad = out[inlen - 1];
++	if (pad <= 0 || pad > (int)iv_size || pad > inlen)
++		return -EINVAL;
++	for (padlen = 1; padlen <= pad; padlen++) {
++		if (out[inlen - padlen] != pad)
++			return -EINVAL;
++	}
++	*outlen = inlen - pad;
++	return 0;
+ }
+ 
+-int gp_ssl_decrypt_blob(struct openconnect_info *vpninfo,
+-			const unsigned char *in, int inlen,
+-			unsigned char *out, int *outlen)
++static int gp_tls12_expand_keys(gnutls_session_t sess,
++				unsigned char *key_block, size_t key_block_len,
++				size_t *key_size, size_t *mac_size, size_t *iv_size,
++				const unsigned char **srv_key, const unsigned char **srv_iv)
+ {
+-	gnutls_session_t sess = vpninfo->https_sess;
+ 	gnutls_cipher_algorithm_t cipher_algo;
+ 	gnutls_mac_algorithm_t mac_algo;
+-	size_t key_size, mac_size, iv_size, needed;
+-	unsigned char key_block[128];
+-	const unsigned char *srv_key;
+-	int ret;
++	size_t needed;
+ 
+-	if (!sess || !in || inlen <= 0 || !out || !outlen)
+-		return -EINVAL;
+-
+ 	cipher_algo = gnutls_cipher_get(sess);
+ 	mac_algo = gnutls_mac_get(sess);
+-	key_size = gnutls_cipher_get_key_size(cipher_algo);
+-	mac_size = gnutls_hmac_get_len(mac_algo);
+-	iv_size = gnutls_cipher_get_iv_size(cipher_algo);
++	*key_size = gnutls_cipher_get_key_size(cipher_algo);
++	*mac_size = gnutls_hmac_get_len(mac_algo);
++	*iv_size = gnutls_cipher_get_iv_size(cipher_algo);
+ 
+-	if (!key_size || !mac_size || !iv_size)
++	if (!*key_size || !*mac_size || !*iv_size)
+ 		return -EINVAL;
+ 
+-	needed = 2 * mac_size + 2 * key_size + 2 * iv_size;
+-	if (needed > sizeof(key_block))
++	needed = 2 * *mac_size + 2 * *key_size + 2 * *iv_size;
++	if (needed > key_block_len)
+ 		return -EINVAL;
+ 
+ 	if (gnutls_prf(sess, 13, "key expansion", 1, 0, NULL, needed,
+ 		       (char *)key_block) < 0)
+ 		return -EINVAL;
+ 
+-	srv_key = key_block + 2 * mac_size + key_size;
+-	ret = gp_tls12_cbc_decrypt(vpninfo, srv_key, key_size, in, iv_size,
+-				   in, inlen, out, outlen);
+-	if (!ret)
+-		return 0;
++	*srv_key = key_block + 2 * *mac_size + *key_size;
++	*srv_iv = key_block + 2 * *mac_size + 2 * *key_size + *iv_size;
++	return 0;
++}
+ 
+-	/* PanGPS may pass only the ciphertext portion without explicit IV */
+-	if (inlen < (int)iv_size)
++int gp_ssl_decrypt_blob(struct openconnect_info *vpninfo,
++			const unsigned char *in, int inlen,
++			unsigned char *out, int *outlen)
++{
++	gnutls_session_t sess = vpninfo->https_sess;
++	unsigned char key_block[128];
++	size_t key_size, mac_size, iv_size;
++	const unsigned char *srv_key, *srv_iv;
++
++	if (!sess || !in || inlen <= 0 || !out || !outlen)
+ 		return -EINVAL;
+-	return gp_tls12_cbc_decrypt(vpninfo, srv_key, key_size,
+-				    key_block + needed - iv_size, iv_size,
+-				    in, inlen, out, outlen);
++
++	if (gp_tls12_expand_keys(sess, key_block, sizeof(key_block),
++				 &key_size, &mac_size, &iv_size,
++				 &srv_key, &srv_iv) < 0)
++		return -EINVAL;
++
++	return gp_aes_cbc_decrypt(srv_key, key_size, srv_iv, iv_size,
++				  in, inlen, out, outlen);
+ }
++
++int gp_ssl_decrypt_blob_key(struct openconnect_info *vpninfo,
++			    const unsigned char *key, int key_len,
++			    const unsigned char *iv, int iv_len,
++			    const unsigned char *in, int inlen,
++			    unsigned char *out, int *outlen)
++{
++	gnutls_session_t sess = vpninfo->https_sess;
++	unsigned char key_block[128];
++	size_t key_size, mac_size, iv_size;
++	const unsigned char *srv_key, *srv_iv;
++	const unsigned char *use_key, *use_iv;
++
++	if (!sess || !key || key_len <= 0 || !in || inlen <= 0 || !out || !outlen)
++		return -EINVAL;
++
++	if (gp_tls12_expand_keys(sess, key_block, sizeof(key_block),
++				 &key_size, &mac_size, &iv_size,
++				 &srv_key, &srv_iv) < 0)
++		return -EINVAL;
++
++	use_key = key;
++	use_iv = srv_iv;
++	key_size = key_len;
++	iv_size = gnutls_cipher_get_iv_size(gnutls_cipher_get(sess));
++
++	if (iv && iv_len > 0) {
++		use_iv = iv;
++		iv_size = iv_len;
++	}
++
++	if (key_len != 16 && key_len != 24 && key_len != 32)
++		return -EINVAL;
++
++	return gp_aes_cbc_decrypt(use_key, key_size, use_iv, iv_size,
++				  in, inlen, out, outlen);
++}
+diff --git a/openssl.c b/openssl.c
+--- a/openssl.c
++++ b/openssl.c
+@@ -2796,29 +2796,35 @@
+ 	return ret;
+ }
+ 
+-static int gp_tls12_cbc_decrypt(struct openconnect_info *vpninfo,
+-				const EVP_CIPHER *cipher,
+-				const unsigned char *key,
+-				const unsigned char *iv, size_t iv_size,
+-				const unsigned char *in, int inlen,
+-				unsigned char *out, int *outlen)
++static const EVP_CIPHER *gp_aes_cbc_cipher(size_t key_size)
+ {
++	if (key_size == 32)
++		return EVP_aes_256_cbc();
++	if (key_size == 24)
++		return EVP_aes_192_cbc();
++	return EVP_aes_128_cbc();
++}
++
++static int gp_aes_cbc_decrypt(const EVP_CIPHER *cipher,
++			      const unsigned char *key,
++			      const unsigned char *iv,
++			      const unsigned char *in, int inlen,
++			      unsigned char *out, int *outlen)
++{
+ 	EVP_CIPHER_CTX *ctx;
+ 	int outl = 0, tmplen = 0;
++	size_t iv_size = EVP_CIPHER_iv_length(cipher);
+ 
+-	if (inlen <= (int)iv_size || inlen % (int)iv_size)
++	if (!cipher || inlen <= 0 || (inlen % (int)iv_size))
+ 		return -EINVAL;
+ 
+ 	ctx = EVP_CIPHER_CTX_new();
+ 	if (!ctx)
+ 		return -ENOMEM;
+ 
+-	inlen -= iv_size;
+-	memcpy(out, in + iv_size, inlen);
+-	*outlen = inlen;
+ 	if (!EVP_DecryptInit_ex(ctx, cipher, NULL, key, iv) ||
+ 	    !EVP_CIPHER_CTX_set_padding(ctx, 1) ||
+-	    !EVP_DecryptUpdate(ctx, out, &outl, out, inlen) ||
++	    !EVP_DecryptUpdate(ctx, out, &outl, in, inlen) ||
+ 	    !EVP_DecryptFinal_ex(ctx, out + outl, &tmplen)) {
+ 		EVP_CIPHER_CTX_free(ctx);
+ 		return -EINVAL;
+@@ -2828,24 +2834,18 @@
+ 	return 0;
+ }
+ 
+-int gp_ssl_decrypt_blob(struct openconnect_info *vpninfo,
+-			const unsigned char *in, int inlen,
+-			unsigned char *out, int *outlen)
++static int gp_tls12_expand_keys(SSL *ssl,
++				unsigned char *key_block, size_t key_block_len,
++				size_t *mac_len, size_t *key_len, size_t *iv_len,
++				unsigned char **srv_key, unsigned char **srv_iv)
+ {
+-	SSL *ssl = vpninfo->https_ssl;
+ 	SSL_SESSION *sess;
+ 	const SSL_CIPHER *cipher;
+-	const EVP_CIPHER *evp_cipher;
+ 	const EVP_MD *md;
+-	size_t mac_len, key_len, iv_len, needed;
+-	unsigned char ms[48], crandom[32], srandom[32], seed[64], key_block[128];
+-	unsigned char *srv_key, *srv_iv;
+-	size_t ms_len;
+-	int ret;
++	const EVP_CIPHER *evp_cipher;
++	unsigned char ms[48], crandom[32], srandom[32], seed[64];
++	size_t ms_len, needed;
+ 
+-	if (!ssl || !in || inlen <= 0 || !out || !outlen)
+-		return -EINVAL;
+-
+ 	sess = SSL_get_session(ssl);
+ 	cipher = SSL_SESSION_get_cipher(sess);
+ 	if (!sess || !cipher)
+@@ -2864,11 +2864,11 @@
+ 	if (!md || !evp_cipher)
+ 		return -EINVAL;
+ 
+-	mac_len = EVP_MD_size(md);
+-	key_len = EVP_CIPHER_key_length(evp_cipher);
+-	iv_len = EVP_CIPHER_iv_length(evp_cipher);
+-	needed = 2 * mac_len + 2 * key_len + 2 * iv_len;
+-	if (needed > sizeof(key_block))
++	*mac_len = EVP_MD_size(md);
++	*key_len = EVP_CIPHER_key_length(evp_cipher);
++	*iv_len = EVP_CIPHER_iv_length(evp_cipher);
++	needed = 2 * *mac_len + 2 * *key_len + 2 * *iv_len;
++	if (needed > key_block_len)
+ 		return -EINVAL;
+ 
+ 	memcpy(seed, srandom, 32);
+@@ -2877,14 +2877,59 @@
+ 			 key_block, needed))
+ 		return -EINVAL;
+ 
+-	srv_key = key_block + 2 * mac_len + key_len;
+-	srv_iv = key_block + 2 * mac_len + 2 * key_len + iv_len;
+-	ret = gp_tls12_cbc_decrypt(vpninfo, evp_cipher, srv_key, in, iv_len,
+-				   in, inlen, out, outlen);
+-	if (!ret)
+-		return 0;
++	*srv_key = key_block + 2 * *mac_len + *key_len;
++	*srv_iv = key_block + 2 * *mac_len + 2 * *key_len + *iv_len;
++	return 0;
++}
+ 
+-	return gp_tls12_cbc_decrypt(vpninfo, evp_cipher, srv_key, srv_iv, iv_len,
++int gp_ssl_decrypt_blob(struct openconnect_info *vpninfo,
++			const unsigned char *in, int inlen,
++			unsigned char *out, int *outlen)
++{
++	SSL *ssl = vpninfo->https_ssl;
++	unsigned char key_block[128];
++	size_t mac_len, key_len, iv_len;
++	unsigned char *srv_key, *srv_iv;
++
++	if (!ssl || !in || inlen <= 0 || !out || !outlen)
++		return -EINVAL;
++
++	if (gp_tls12_expand_keys(ssl, key_block, sizeof(key_block),
++				 &mac_len, &key_len, &iv_len,
++				 &srv_key, &srv_iv) < 0)
++		return -EINVAL;
++
++	return gp_aes_cbc_decrypt(gp_aes_cbc_cipher(key_len), srv_key, srv_iv,
+ 				  in, inlen, out, outlen);
+ }
+ 
++int gp_ssl_decrypt_blob_key(struct openconnect_info *vpninfo,
++			    const unsigned char *key, int key_len,
++			    const unsigned char *iv, int iv_len,
++			    const unsigned char *in, int inlen,
++			    unsigned char *out, int *outlen)
++{
++	SSL *ssl = vpninfo->https_ssl;
++	unsigned char key_block[128];
++	size_t mac_len, blk_key_len, blk_iv_len;
++	unsigned char *srv_key, *srv_iv;
++	const unsigned char *use_iv;
++
++	if (!ssl || !key || key_len <= 0 || !in || inlen <= 0 || !out || !outlen)
++		return -EINVAL;
++
++	if (gp_tls12_expand_keys(ssl, key_block, sizeof(key_block),
++				 &mac_len, &blk_key_len, &blk_iv_len,
++				 &srv_key, &srv_iv) < 0)
++		return -EINVAL;
++	use_iv = srv_iv;
++	if (iv && iv_len > 0)
++		use_iv = iv;
++
++	if (key_len != 16 && key_len != 24 && key_len != 32)
++		return -EINVAL;
++
++	return gp_aes_cbc_decrypt(gp_aes_cbc_cipher(key_len), key, use_iv,
++				  in, inlen, out, outlen);
++}
++
+diff --git a/gpst_nlb.c b/gpst_nlb.c
+--- a/gpst_nlb.c
++++ b/gpst_nlb.c
+@@ -51,8 +51,11 @@
+  *  24-27   tunnel session id (cleartext, matches across blobs from same session)
+  *  28+     encrypted payload (enc-hs-key: 36 bytes; tunnel-opaque: 508 bytes)
+  *
+- * enc-hs-key decipherment uses TLS 1.2 key expansion from the active HTTPS
+- * session (PanGPS do_ssl_decrypt). Decrypted material keys tunnel-opaque body.
++ * PanGPS do_ssl_decrypt / decrypt_data (6.3.3.1 RE):
++ *   - TLS 1.2 "key expansion" yields server write key + IV
++ *   - EVP AES-CBC decrypt on ciphertext after the 28-byte cleartext prefix
++ *   - enc-hs-key yields the hs-key material; tunnel-opaque uses that key with
++ *     the same TLS server write IV
+  */
+ 
+ #include <config.h>
+@@ -78,9 +81,8 @@
+ #define GP_NLB_OPAQUE_REFRESH_MARGIN 60
+ #define GP_NLB_BLOB_HDR_LEN		24
+ #define GP_NLB_BLOB_SESSION_OFF		24
+-#define GP_NLB_ENC_HS_KEY_PAYLOAD_OFF	24
+-#define GP_NLB_ENC_HS_KEY_PAYLOAD_LEN	40
+-#define GP_NLB_OPAQUE_PAYLOAD_OFF	28
++#define GP_NLB_BLOB_CIPHER_OFF		28
++#define GP_NLB_ENC_HS_KEY_CIPHER_LEN	36
+ 
+ static int gp_nlb_is_ipv4(const char *s)
+ {
+@@ -177,12 +179,12 @@
+ 
+ 	if (!nlb->enc_hs_key)
+ 		return 0;
+-	if (len < GP_NLB_ENC_HS_KEY_PAYLOAD_OFF + GP_NLB_ENC_HS_KEY_PAYLOAD_LEN)
++	if (len < GP_NLB_BLOB_CIPHER_OFF + GP_NLB_ENC_HS_KEY_CIPHER_LEN)
+ 		return -EINVAL;
+ 
+ 	ret = gp_ssl_decrypt_blob(vpninfo,
+-				  blob + GP_NLB_ENC_HS_KEY_PAYLOAD_OFF,
+-				  GP_NLB_ENC_HS_KEY_PAYLOAD_LEN,
++				  blob + GP_NLB_BLOB_CIPHER_OFF,
++				  GP_NLB_ENC_HS_KEY_CIPHER_LEN,
+ 				  plain, &plain_len);
+ 	if (ret < 0) {
+ 		vpn_progress(vpninfo, PRG_DEBUG,
+@@ -208,19 +210,20 @@
+ 	int payload_len, out_len;
+ 	unsigned char *out;
+ 
+-	if (!nlb->opaque_blob || nlb->opaque_blob_len <= GP_NLB_OPAQUE_PAYLOAD_OFF)
++	if (!nlb->opaque_blob || nlb->opaque_blob_len <= GP_NLB_BLOB_CIPHER_OFF)
+ 		return 0;
+ 	if (!nlb->opaque_key_len)
+ 		return 0;
+ 
+-	payload = nlb->opaque_blob + GP_NLB_OPAQUE_PAYLOAD_OFF;
+-	payload_len = nlb->opaque_blob_len - GP_NLB_OPAQUE_PAYLOAD_OFF;
++	payload = nlb->opaque_blob + GP_NLB_BLOB_CIPHER_OFF;
++	payload_len = nlb->opaque_blob_len - GP_NLB_BLOB_CIPHER_OFF;
+ 	out = malloc(payload_len);
+ 	if (!out)
+ 		return -ENOMEM;
+ 	out_len = payload_len;
+ 
+-	if (gp_ssl_decrypt_blob(vpninfo, payload, payload_len, out, &out_len) < 0) {
++	if (gp_ssl_decrypt_blob_key(vpninfo, nlb->opaque_key, nlb->opaque_key_len,
++				    NULL, 0, payload, payload_len, out, &out_len) < 0) {
+ 		free(out);
+ 		vpn_progress(vpninfo, PRG_DEBUG,
+ 			     _("tunnel-opaque body decipherment failed\n"));
+diff --git a/openconnect-internal.h b/openconnect-internal.h
+--- a/openconnect-internal.h
++++ b/openconnect-internal.h
+@@ -1530,6 +1530,11 @@
+ int gp_ssl_decrypt_blob(struct openconnect_info *vpninfo,
+ 			const unsigned char *in, int inlen,
+ 			unsigned char *out, int *outlen);
++int gp_ssl_decrypt_blob_key(struct openconnect_info *vpninfo,
++			     const unsigned char *key, int key_len,
++			     const unsigned char *iv, int iv_len,
++			     const unsigned char *in, int inlen,
++			     unsigned char *out, int *outlen);
+ 
+ /* {gnutls,openssl}.c */
+ const char *openconnect_get_tls_library_version(void);
+diff --git a/tests/gp-nlb-blob-parse b/tests/gp-nlb-blob-parse
+--- a/tests/gp-nlb-blob-parse
++++ b/tests/gp-nlb-blob-parse
+@@ -14,6 +14,8 @@
+ 
+ #define GP_NLB_BLOB_HDR_LEN 24
+ #define GP_NLB_BLOB_SESSION_OFF 24
++#define GP_NLB_BLOB_CIPHER_OFF 28
++#define GP_NLB_ENC_HS_KEY_CIPHER_LEN 36
+ 
+ static inline uint32_t load_be32(const void *p)
+ {
+@@ -42,6 +44,12 @@
+ 		fprintf(stderr, "session id mismatch: 0x%08x\n", sid);
+ 		return 1;
+ 	}
++	if (GP_NLB_BLOB_CIPHER_OFF + GP_NLB_ENC_HS_KEY_CIPHER_LEN != (int)sizeof(enc_blob)) {
++		fprintf(stderr, "cipher span mismatch\n");
++		return 1;
++	}
++	if (enc_blob[GP_NLB_BLOB_CIPHER_OFF] != 0x70)
++		return 1;
+ 
+ 	printf("gp-nlb-blob-parse: OK\n");
+ 	return 0;
