@@ -1,0 +1,487 @@
+From 0000000000000000000000000000000000000003 Mon Sep 17 00:00:00 2001
+From: Kevin Yue <yuezk001@gmail.com>
+Date: Wed, 25 Jun 2026 19:00:00 +0800
+Subject: [PATCH 9/9] Implement GlobalProtect NLB ESP envelope
+
+Wire the 16-byte NLB UDP envelope around ESP ciphertext for GlobalProtect
+gateways: encap/decap in gpst_nlb.c, hooks in esp.c, 56-byte NLB probes,
+and keepalive-before-data in gpst_esp_send_probes().
+---
+--- a/esp.c	2026-06-25 18:30:22
++++ b/esp.c	2026-06-25 18:29:48
+@@ -184,6 +184,15 @@
+ 		}
+ 
+ 		work_done = 1;
++
++		if (vpninfo->proto->proto == PROTO_GPST && vpninfo->gp_nlb.enabled) {
++			int nlb_ret = gpst_nlb_esp_decap(vpninfo, pkt, &len);
++
++			if (nlb_ret > 0)
++				continue;
++			if (nlb_ret < 0)
++				continue;
++		}
+ 
+ 		/* both supported algos (SHA1 and MD5) have 12-byte MAC lengths (RFC2403 and RFC2404) */
+ 		if (len <= sizeof(pkt->esp) + vpninfo->hmac_out_len)
+@@ -406,6 +415,13 @@
+ 				work_done = 1;
+ 				continue;
+ 			}
++
++			if (vpninfo->proto->proto == PROTO_GPST && vpninfo->gp_nlb.enabled &&
++			    gpst_nlb_esp_encap(vpninfo, this, &len) < 0) {
++				free_pkt(vpninfo, this);
++				work_done = 1;
++				continue;
++			}
+ 		}
+ 
+ 		ret = send(vpninfo->dtls_fd, (void *)&this->esp, len, 0);
+--- a/gpst.c	2026-06-25 18:30:23
++++ b/gpst.c	2026-06-25 18:30:06
+@@ -1534,14 +1534,24 @@
+ 	 *
+ 	 *    Don't blame me. I didn't design this.
+ 	 */
+-	const int icmplen = ICMP_MINLEN + sizeof(magic_ping_payload);
+-	int plen, seq = vpninfo->udp_probes_sent;
++	const unsigned char *probe_payload;
++	size_t probe_payload_len;
++	int icmplen, plen, seq = vpninfo->udp_probes_sent;
++
++	if (vpninfo->gp_nlb.enabled) {
++		probe_payload = gpst_nlb_probe_payload(&probe_payload_len);
++	} else {
++		probe_payload = (const unsigned char *)magic_ping_payload;
++		probe_payload_len = sizeof(magic_ping_payload);
++	}
++	icmplen = ICMP_MINLEN + probe_payload_len;
+ 
+ 	if (vpninfo->esp_magic_af == AF_INET6)
+ 		plen = sizeof(struct ip6_hdr) + icmplen;
+ 	else
+ 		plen = sizeof(struct ip) + icmplen;
+-	struct pkt *pkt = alloc_pkt(vpninfo, plen + vpninfo->pkt_trailer);
++	struct pkt *pkt = alloc_pkt(vpninfo, plen + vpninfo->pkt_trailer +
++				    gpst_nlb_pkt_slack(vpninfo));
+ 	if (!pkt)
+ 		return -ENOMEM;
+ 
+@@ -1559,6 +1569,11 @@
+ 		monitor_except_fd(vpninfo, dtls);
+ 	}
+ 
++	if (vpninfo->gp_nlb.enabled && !vpninfo->gp_nlb.keepalive_sent) {
++		gpst_nlb_send_esp_keepalive(vpninfo);
++		vpninfo->gp_nlb.keepalive_sent = 1;
++	}
++
+ 	if (vpninfo->esp_magic_af == AF_INET6) {
+ 		memset(pkt, 0, sizeof(*pkt) + plen);
+ 		pkt->len = plen;
+@@ -1585,7 +1600,7 @@
+ 		icmph->icmp6_data16[1] = htons(seq);            /* sequence */
+ 
+ 		/* required to get gateway to respond */
+-		memcpy(&icmph[1], magic_ping_payload, sizeof(magic_ping_payload));
++		memcpy(&icmph[1], probe_payload, probe_payload_len);
+ 
+ 		/*
+ 		 * IPv6 upper-layer checksums include a pseudo-header
+@@ -1614,7 +1629,7 @@
+ 		 * being just LLLL + NH.
+ 		 */
+ 		sum += IPPROTO_ICMPV6;
+-		sum += ICMP_MINLEN + sizeof(magic_ping_payload);
++		sum += ICMP_MINLEN + probe_payload_len;
+ 
+ 		sum += csum_partial(icmph, icmplen / 2);
+ 		icmph->icmp6_cksum = csum_finish(sum);
+@@ -1641,8 +1656,8 @@
+ 		icmph->icmp_type = ICMP_ECHO;
+ 		icmph->icmp_hun.ih_idseq.icd_id = htons(0x4747);
+ 		icmph->icmp_hun.ih_idseq.icd_seq = htons(seq);
+-		memcpy(pmagic, magic_ping_payload, sizeof(magic_ping_payload)); /* required to get gateway to respond */
+-		icmph->icmp_cksum = csum(icmph, (ICMP_MINLEN+sizeof(magic_ping_payload))/2);
++		memcpy(pmagic, probe_payload, probe_payload_len); /* required to get gateway to respond */
++		icmph->icmp_cksum = csum(icmph, (ICMP_MINLEN + probe_payload_len) / 2);
+ 	}
+ 
+ 	if (vpninfo->dtls_state != DTLS_ESTABLISHED) {
+@@ -1652,8 +1667,12 @@
+ 	}
+ 
+ 	int pktlen = construct_esp_packet(vpninfo, pkt, vpninfo->esp_magic_af == AF_INET6 ? IPPROTO_IPV6 : IPPROTO_IPIP);
+-	if (pktlen < 0 || send(vpninfo->dtls_fd, (void *)&pkt->esp, pktlen, 0) < 0)
++	if (pktlen < 0)
+ 		vpn_progress(vpninfo, PRG_DEBUG, _("Failed to send ESP probe\n"));
++	else if (vpninfo->gp_nlb.enabled && gpst_nlb_esp_encap(vpninfo, pkt, &pktlen) < 0)
++		vpn_progress(vpninfo, PRG_DEBUG, _("Failed to NLB-wrap ESP probe\n"));
++	else if (send(vpninfo->dtls_fd, (void *)&pkt->esp, pktlen, 0) < 0)
++		vpn_progress(vpninfo, PRG_DEBUG, _("Failed to send ESP probe\n"));
+ 
+ 	free_pkt(vpninfo, pkt);
+ 
+@@ -1662,23 +1681,33 @@
+ 
+ int gpst_esp_catch_probe(struct openconnect_info *vpninfo, struct pkt *pkt)
+ {
++	const unsigned char *probe_payload;
++	size_t probe_payload_len;
++
++	if (vpninfo->gp_nlb.enabled)
++		probe_payload = gpst_nlb_probe_payload(&probe_payload_len);
++	else {
++		probe_payload = (const unsigned char *)magic_ping_payload;
++		probe_payload_len = sizeof(magic_ping_payload);
++	}
++
+ 	if (vpninfo->esp_magic_af == AF_INET6) {
+ 		struct ip6_hdr *iph = (void *)(pkt->data);
+ 		return ( pkt->len >= 41 && (ntohl(iph->ip6_flow) >> 28)==6 /* IPv6 header */
+ 			 && iph->ip6_nxt == IPPROTO_ICMPV6 /* IPv6 next header field = ICMPv6 */
+ 			 && !memcmp(&iph->ip6_src, vpninfo->esp_magic, 16) /* source == magic address */
+-			 && pkt->len >= 40 + ICMP_MINLEN + sizeof(magic_ping_payload) /* No short-packet segfaults */
++			 && pkt->len >= 40 + ICMP_MINLEN + probe_payload_len /* No short-packet segfaults */
+ 			 && pkt->data[40]==ICMP6_ECHO_REPLY /* ICMPv6 reply */
+-			 && !memcmp(&pkt->data[40 + ICMP_MINLEN], magic_ping_payload, sizeof(magic_ping_payload)) /* Same magic payload in response */
++			 && !memcmp(&pkt->data[40 + ICMP_MINLEN], probe_payload, probe_payload_len) /* Same magic payload in response */
+ 			 );
+ 	} else {
+ 		struct ip *iph = (void *)(pkt->data);
+ 		return ( pkt->len >= 21 && iph->ip_v==4 /* IPv4 header */
+ 			 && iph->ip_p==IPPROTO_ICMP /* IPv4 protocol field == ICMP */
+ 			 && !memcmp(&iph->ip_src.s_addr, vpninfo->esp_magic, 4) /* source == magic address */
+-			 && pkt->len >= (iph->ip_hl<<2) + ICMP_MINLEN + sizeof(magic_ping_payload) /* No short-packet segfaults */
++			 && pkt->len >= (iph->ip_hl<<2) + ICMP_MINLEN + probe_payload_len /* No short-packet segfaults */
+ 			 && pkt->data[iph->ip_hl<<2]==ICMP_ECHOREPLY /* ICMP reply */
+-			 && !memcmp(&pkt->data[(iph->ip_hl<<2) + ICMP_MINLEN], magic_ping_payload, sizeof(magic_ping_payload)) /* Same magic payload in response */
++			 && !memcmp(&pkt->data[(iph->ip_hl<<2) + ICMP_MINLEN], probe_payload, probe_payload_len) /* Same magic payload in response */
+ 			 );
+ 	}
+ }
+--- a/gpst_nlb.c	2026-06-25 18:30:23
++++ b/gpst_nlb.c	2026-06-25 18:29:42
+@@ -25,6 +25,15 @@
+  *   - Probes target tunnel VIP (<gw-address>), UDP still sent to public peer_addr
+  *   - NLB keepalive sent before data: "Send keepalive first for NLB tunnel restoration"
+  *
++ * NLB UDP envelope (PanGPS 6.3.3.1 RE, outside ESP ciphertext):
++ *   0-3   u32 magic 0x1a2b3c4d (same as GPST SSL tunnel header)
++ *   4-5   u16 (unused on decap for standard types)
++ *   6-7   u16 inner_len BE (= wire_len - 16)
++ *   8     u8 type: 0=keepalive, 1=data
++ *   9     u8 flag
++ *  10-15  reserved (zero)
++ *  16+    inner payload (ESP ciphertext for type 1)
++ *
+  * SSL failover path (PanSslVpn.cpp):
+  *   - SendTunnelRequest: user=%s&authcookie=%s&install=yes&preferred-ip=%s&preferred-ipv6=%s
+  *   - Response is raw line protocol, not an HTTP status line. NLB format (issue #526):
+@@ -36,8 +45,8 @@
+  *   - getNlbRealGwIp() resolves inner gateway IP
+  *   - "NLB: add an access route for NLB private ip: %s."
+  *
+- * Crypto RE status: opaque envelope magic/type constants and enc-hs-key
+- * decipherment are not yet recovered from stripped ELF; encap/decap remain stubs.
++ * Crypto RE status: enc-hs-key decipherment and opaque_blob HMAC fields are not
++ * yet recovered from stripped ELF; the 16-byte envelope wrap/unwrap is implemented.
+  */
+ 
+ #include <config.h>
+@@ -49,6 +58,11 @@
+ 
+ #include "openconnect-internal.h"
+ 
++#define GP_NLB_HDR_LEN		16
++#define GP_NLB_MAGIC		0x1a2b3c4d
++#define GP_NLB_TYPE_KEEPALIVE	0
++#define GP_NLB_TYPE_DATA	1
++
+ /* Official 56-byte ESP probe payload (PanGPS / Windows client) */
+ static const unsigned char gp_nlb_probe_template[56] =
+ 	"monitor\x00\x00pan ha 0123456789:;<=>? !\"#$%&'()*+,-./"
+@@ -112,17 +126,39 @@
+ 	nlb->opaque_blob_len = 0;
+ }
+ 
++static void gp_nlb_write_hdr(unsigned char *hdr, uint16_t inner_len, uint8_t type)
++{
++	store_be32(hdr, GP_NLB_MAGIC);
++	store_be16(hdr + 4, 0);
++	store_be16(hdr + 6, inner_len);
++	hdr[8] = type;
++	hdr[9] = 0;
++	memset(hdr + 10, 0, 6);
++}
++
++int gpst_nlb_pkt_slack(struct openconnect_info *vpninfo)
++{
++	return vpninfo->gp_nlb.enabled ? GP_NLB_HDR_LEN : 0;
++}
++
+ int gpst_nlb_prepare(struct openconnect_info *vpninfo)
+ {
+ 	struct gp_nlb_config *nlb = &vpninfo->gp_nlb;
++	struct in_addr vip;
+ 	int len;
+ 
+ 	if (!nlb->enabled)
+ 		return 0;
+ 
+-	if (!nlb->tunnel_vip && nlb->tunnel_opaque)
++	nlb->keepalive_sent = 0;
++
++	if (nlb->tunnel_vip && inet_pton(AF_INET, nlb->tunnel_vip, &vip) == 1) {
++		vpninfo->esp_magic_af = AF_INET;
++		memcpy(vpninfo->esp_magic, &vip, sizeof(vip));
++	} else if (!nlb->tunnel_vip && nlb->tunnel_opaque) {
+ 		vpn_progress(vpninfo, PRG_DEBUG,
+ 			     _("NLB enabled but no tunnel VIP yet; expecting 127.127.127.127 from <gw-address>\n"));
++	}
+ 
+ 	gp_nlb_clear_opaque_blob(nlb);
+ 	if (nlb->tunnel_opaque) {
+@@ -155,27 +191,88 @@
+ 	return gp_nlb_probe_template;
+ }
+ 
+-int gpst_nlb_esp_encap(struct openconnect_info *vpninfo, struct pkt *pkt)
++int gpst_nlb_send_esp_keepalive(struct openconnect_info *vpninfo)
+ {
+-	if (!vpninfo->gp_nlb.enabled)
++	unsigned char hdr[GP_NLB_HDR_LEN];
++
++	if (!vpninfo->gp_nlb.enabled || vpninfo->dtls_fd < 0)
+ 		return 0;
+ 
+-	/* Phase 3: wrap pkt with NLB opaque envelope via hs-key + opaque_blob */
+-	vpn_progress(vpninfo, PRG_DEBUG,
+-		     _("gpst_nlb_esp_encap: stub (opaque envelope RE incomplete)\n"));
+-	return -ENOTSUP;
++	gp_nlb_write_hdr(hdr, 0, GP_NLB_TYPE_KEEPALIVE);
++	vpn_progress(vpninfo, PRG_DEBUG, _("Send NLB ESP keepalive\n"));
++	if (send(vpninfo->dtls_fd, hdr, sizeof(hdr), 0) < 0) {
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     _("Failed to send NLB ESP keepalive: %s\n"),
++			     strerror(errno));
++		return -errno;
++	}
++	return 0;
+ }
+ 
+-int gpst_nlb_esp_decap(struct openconnect_info *vpninfo, struct pkt *pkt)
++int gpst_nlb_esp_encap(struct openconnect_info *vpninfo, struct pkt *pkt, int *len)
+ {
++	int esplen;
++	unsigned char *wire;
++
+ 	if (!vpninfo->gp_nlb.enabled)
+ 		return 0;
+ 
+-	vpn_progress(vpninfo, PRG_DEBUG,
+-		     _("gpst_nlb_esp_decap: stub (opaque envelope RE incomplete)\n"));
+-	return -ENOTSUP;
++	esplen = *len;
++	wire = (unsigned char *)&pkt->esp;
++
++	if (esplen <= 0)
++		return -EINVAL;
++
++	if ((char *)wire + esplen + GP_NLB_HDR_LEN >
++	    (char *)pkt + sizeof(*pkt) + pkt->alloc_len)
++		return -ENOSPC;
++
++	memmove(wire + GP_NLB_HDR_LEN, wire, esplen);
++	gp_nlb_write_hdr(wire, esplen, GP_NLB_TYPE_DATA);
++	*len = esplen + GP_NLB_HDR_LEN;
++	return 0;
+ }
+ 
++int gpst_nlb_esp_decap(struct openconnect_info *vpninfo, struct pkt *pkt, int *len)
++{
++	unsigned char *wire;
++	uint16_t inner_len;
++	uint8_t type;
++	uint32_t magic;
++	int wire_len;
++
++	if (!vpninfo->gp_nlb.enabled)
++		return 0;
++
++	wire = (unsigned char *)&pkt->esp;
++	wire_len = *len;
++
++	if (wire_len < GP_NLB_HDR_LEN)
++		return -EINVAL;
++
++	magic = load_be32(wire);
++	type = wire[8];
++	inner_len = load_be16(wire + 6);
++
++	if (magic != GP_NLB_MAGIC || type > 8 ||
++	    wire_len != GP_NLB_HDR_LEN + inner_len) {
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     _("invalid tunnel packet len %d magic 0x%x type %u\n"),
++			     wire_len, magic, type);
++		return -EINVAL;
++	}
++
++	if (type == GP_NLB_TYPE_KEEPALIVE) {
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     _("Got NLB ESP keepalive response\n"));
++		return 1;
++	}
++
++	memmove(wire, wire + GP_NLB_HDR_LEN, inner_len);
++	*len = inner_len;
++	return 0;
++}
++
+ int gpst_nlb_parse_ssl_response(const char *buf, int len, struct gp_nlb_config *nlb)
+ {
+ 	char *line, *vip = NULL, *inner = NULL, *hash, *start, *concat;
+@@ -268,4 +365,4 @@
+ 
+ 	/* Phase 4: install split-include route via install_vpn_opts/script */
+ 	return 0;
+-}
++}
+\ No newline at end of file
+--- a/openconnect-internal.h	2026-06-25 18:30:23
++++ b/openconnect-internal.h	2026-06-25 18:29:42
+@@ -405,6 +405,7 @@
+ 	char *in_tunnel_gw_cert_chksum;
+ 	unsigned char *opaque_blob;
+ 	int opaque_blob_len;
++	int keepalive_sent;
+ };
+ 
+ struct cert_info {
+@@ -1423,9 +1424,11 @@
+ 					  void *cb_data);
+ int gpst_setup(struct openconnect_info *vpninfo);
+ int gpst_nlb_prepare(struct openconnect_info *vpninfo);
++int gpst_nlb_pkt_slack(struct openconnect_info *vpninfo);
+ const unsigned char *gpst_nlb_probe_payload(size_t *len);
+-int gpst_nlb_esp_encap(struct openconnect_info *vpninfo, struct pkt *pkt);
+-int gpst_nlb_esp_decap(struct openconnect_info *vpninfo, struct pkt *pkt);
++int gpst_nlb_send_esp_keepalive(struct openconnect_info *vpninfo);
++int gpst_nlb_esp_encap(struct openconnect_info *vpninfo, struct pkt *pkt, int *len);
++int gpst_nlb_esp_decap(struct openconnect_info *vpninfo, struct pkt *pkt, int *len);
+ int gpst_nlb_parse_ssl_response(const char *buf, int len, struct gp_nlb_config *nlb);
+ int gpst_nlb_apply_routes(struct openconnect_info *vpninfo);
+ int gpst_mainloop(struct openconnect_info *vpninfo, int *timeout, int readable);
+--- a/tests/gp-nlb-esp-envelope	2026-06-25 18:31:30
++++ b/tests/gp-nlb-esp-envelope	2026-06-25 18:30:14
+@@ -0,0 +1,107 @@
++#!/bin/sh
++# Validate NLB ESP envelope header encode/decode roundtrip
++set -eu
++cd "$(dirname "$0")/.."
++CC="${CC:-cc}"
++TMP=$(mktemp -d)
++trap 'rm -rf "$TMP"' EXIT
++
++cat > "$TMP/test.c" <<'EOF'
++#include <stdio.h>
++#include <stdint.h>
++#include <string.h>
++#include <arpa/inet.h>
++
++#define GP_NLB_HDR_LEN 16
++#define GP_NLB_MAGIC 0x1a2b3c4d
++#define GP_NLB_TYPE_KEEPALIVE 0
++#define GP_NLB_TYPE_DATA 1
++
++static inline void store_be32(void *p, uint32_t d)
++{
++	uint32_t n = htonl(d);
++	memcpy(p, &n, 4);
++}
++
++static inline void store_be16(void *p, uint16_t d)
++{
++	uint16_t n = htons(d);
++	memcpy(p, &n, 2);
++}
++
++static inline uint32_t load_be32(const void *p)
++{
++	uint32_t n;
++	memcpy(&n, p, 4);
++	return ntohl(n);
++}
++
++static inline uint16_t load_be16(const void *p)
++{
++	uint16_t n;
++	memcpy(&n, p, 2);
++	return ntohs(n);
++}
++
++static void gp_nlb_write_hdr(unsigned char *hdr, uint16_t inner_len, uint8_t type)
++{
++	store_be32(hdr, GP_NLB_MAGIC);
++	store_be16(hdr + 4, 0);
++	store_be16(hdr + 6, inner_len);
++	hdr[8] = type;
++	hdr[9] = 0;
++	memset(hdr + 10, 0, 6);
++}
++
++static int gp_nlb_decap(unsigned char *wire, int *len)
++{
++	int wire_len = *len;
++	uint16_t inner_len;
++	uint8_t type;
++
++	if (wire_len < GP_NLB_HDR_LEN)
++		return -1;
++	if (load_be32(wire) != GP_NLB_MAGIC)
++		return -1;
++	type = wire[8];
++	inner_len = load_be16(wire + 6);
++	if (wire_len != GP_NLB_HDR_LEN + inner_len)
++		return -1;
++	if (type == GP_NLB_TYPE_KEEPALIVE)
++		return 1;
++	memmove(wire, wire + GP_NLB_HDR_LEN, inner_len);
++	*len = inner_len;
++	return 0;
++}
++
++int main(void)
++{
++	unsigned char buf[128];
++	unsigned char esp[] = { 0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04 };
++	int len, ret;
++
++	/* keepalive: header only */
++	gp_nlb_write_hdr(buf, 0, GP_NLB_TYPE_KEEPALIVE);
++	len = GP_NLB_HDR_LEN;
++	ret = gp_nlb_decap(buf, &len);
++	if (ret != 1 || len != GP_NLB_HDR_LEN) {
++		fprintf(stderr, "keepalive decap failed ret=%d len=%d\n", ret, len);
++		return 1;
++	}
++
++	/* data: header + fake ESP payload */
++	memcpy(buf + GP_NLB_HDR_LEN, esp, sizeof(esp));
++	gp_nlb_write_hdr(buf, sizeof(esp), GP_NLB_TYPE_DATA);
++	len = GP_NLB_HDR_LEN + sizeof(esp);
++	ret = gp_nlb_decap(buf, &len);
++	if (ret != 0 || len != (int)sizeof(esp) || memcmp(buf, esp, sizeof(esp))) {
++		fprintf(stderr, "data decap failed ret=%d len=%d\n", ret, len);
++		return 1;
++	}
++
++	printf("gp-nlb-esp-envelope: OK\n");
++	return 0;
++}
++EOF
++$CC -o "$TMP/test" "$TMP/test.c"
++"$TMP/test"
+\ No newline at end of file
