@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.6.4
+
+### Fixed
+
+- Fixed gateway login MFA OTP retries sending duplicate `passwd` form fields, which could cause authentication to fail with HTTP 512 after 2.6.0 (fix [#626](https://github.com/yuezk/GlobalProtect-openconnect/issues/626)).
+
 ## 2.6.3
 
 ### Fixed

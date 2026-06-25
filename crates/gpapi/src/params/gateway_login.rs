@@ -39,7 +39,7 @@ pub(crate) fn build(input: &GatewayLoginInput) -> RequestParams {
     input.gp_params.input_str().unwrap_or_default().into(),
   ));
   if let Some(otp) = input.gp_params.otp() {
-    body.push(("passwd".into(), otp.into()));
+    set_body_param(&mut body, "passwd", otp);
   }
   if let Some(os_version) = input.gp_params.os_version() {
     body.push(("os-version".into(), os_version.into()));
@@ -99,6 +99,15 @@ pub(crate) fn build(input: &GatewayLoginInput) -> RequestParams {
   RequestParams { body, query: vec![] }
 }
 
+fn set_body_param(body: &mut Vec<(String, String)>, key: &str, value: impl Into<String>) {
+  let value = value.into();
+  if let Some(pos) = body.iter().position(|(k, _)| k == key) {
+    body[pos].1 = value;
+  } else {
+    body.push((key.to_string(), value));
+  }
+}
+
 /// Resolve the gateway server to an IPv4 address if the profile requires it.
 ///
 /// Falls back to the original gateway host if resolution fails.
@@ -151,6 +160,40 @@ mod tests {
 
   fn make_credential() -> Credential {
     Credential::Password(PasswordCredential::new("alice", "secret"))
+  }
+
+  fn passwd_values(body: &[(String, String)]) -> Vec<&str> {
+    body
+      .iter()
+      .filter(|(k, _)| k == "passwd")
+      .map(|(_, v)| v.as_str())
+      .collect()
+  }
+
+  #[test]
+  fn otp_retry_replaces_passwd_instead_of_appending_duplicate() {
+    let mut gp_params = make_gp_params();
+    gp_params.set_input_str("challenge-token");
+    gp_params.set_otp("123456");
+
+    let cred = make_credential();
+    let input = GatewayLoginInput {
+      gp_params: &gp_params,
+      cred: &cred,
+      gateway_host: "vpn.example.com",
+      context: None,
+      client_ip: None,
+      extend_lifetime: false,
+    };
+
+    let result = build(&input);
+
+    assert_eq!(passwd_values(&result.body), vec!["123456"]);
+
+    let encoded = serde_urlencoded::to_string(&result.body).expect("form body should encode");
+    assert_eq!(encoded.matches("passwd=").count(), 1);
+    assert!(encoded.contains("passwd=123456"));
+    assert!(!encoded.contains("passwd=secret"));
   }
 
   #[test]
