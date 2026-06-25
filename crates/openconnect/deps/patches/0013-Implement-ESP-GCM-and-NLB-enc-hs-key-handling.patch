@@ -1,0 +1,1324 @@
+From 0000000000000000000000000000000000000007 Mon Sep 17 00:00:00 2001
+From: Kevin Yue <yuezk001@gmail.com>
+Date: Wed, 25 Jun 2026 23:00:00 +0800
+Subject: [PATCH 13/13] Implement ESP GCM and NLB enc-hs-key handling
+
+Add RFC4106 AES-GCM ESP encrypt/decrypt for GlobalProtect gateways,
+recognize aes128gcm8/12/16 ICV variants, and implement NLB enc-hs-key
+blob parsing with TLS 1.2 session-key decipherment for tunnel-opaque.
+---
+diff --git a/esp.c b/esp.c
+index 87d26d7..c0eb14a 100644
+--- a/esp.c
++++ b/esp.c
+@@ -42,18 +42,11 @@ int print_esp_keys(struct openconnect_info *vpninfo, const char *name, struct es
+ 	case ENC_AES_256_CBC:
+ 		enctype = "AES-256-CBC (RFC3602)";
+ 		break;
+-	default:
+-		return -EINVAL;
+-	}
+-	switch (vpninfo->esp_hmac) {
+-	case HMAC_MD5:
+-		mactype = "HMAC-MD5-96 (RFC2403)";
+-		break;
+-	case HMAC_SHA1:
+-		mactype = "HMAC-SHA-1-96 (RFC2404)";
++	case ENC_AES_128_GCM:
++		enctype = "AES-128-GCM (RFC4106)";
+ 		break;
+-	case HMAC_SHA256:
+-		mactype = "HMAC-SHA-256-128 (RFC4868)";
++	case ENC_AES_256_GCM:
++		enctype = "AES-256-GCM (RFC4106)";
+ 		break;
+ 	default:
+ 		return -EINVAL;
+@@ -61,8 +54,6 @@ int print_esp_keys(struct openconnect_info *vpninfo, const char *name, struct es
+ 
+ 	for (i = 0; i < vpninfo->enc_key_len; i++)
+ 		sprintf(enckey + (2 * i), "%02x", esp->enc_key[i]);
+-	for (i = 0; i < vpninfo->hmac_key_len; i++)
+-		sprintf(mackey + (2 * i), "%02x", esp->hmac_key[i]);
+ 
+ 	vpn_progress(vpninfo, PRG_TRACE,
+ 		     _("Parameters for %s ESP: SPI 0x%08x\n"),
+@@ -70,9 +61,30 @@ int print_esp_keys(struct openconnect_info *vpninfo, const char *name, struct es
+ 	vpn_progress(vpninfo, PRG_TRACE,
+ 		     _("ESP encryption type %s key 0x%s\n"),
+ 		     enctype, enckey);
+-	vpn_progress(vpninfo, PRG_TRACE,
+-		     _("ESP authentication type %s key 0x%s\n"),
+-		     mactype, mackey);
++	if (esp_uses_gcm(vpninfo)) {
++		vpn_progress(vpninfo, PRG_TRACE,
++			     _("ESP GCM ICV length %d bytes\n"),
++			     vpninfo->hmac_out_len);
++	} else {
++		switch (vpninfo->esp_hmac) {
++		case HMAC_MD5:
++			mactype = "HMAC-MD5-96 (RFC2403)";
++			break;
++		case HMAC_SHA1:
++			mactype = "HMAC-SHA-1-96 (RFC2404)";
++			break;
++		case HMAC_SHA256:
++			mactype = "HMAC-SHA-256-128 (RFC4868)";
++			break;
++		default:
++			return -EINVAL;
++		}
++		for (i = 0; i < vpninfo->hmac_key_len; i++)
++			sprintf(mackey + (2 * i), "%02x", esp->hmac_key[i]);
++		vpn_progress(vpninfo, PRG_TRACE,
++			     _("ESP authentication type %s key 0x%s\n"),
++			     mactype, mackey);
++	}
+ 	return 0;
+ }
+ 
+@@ -103,7 +115,7 @@ int esp_setup(struct openconnect_info *vpninfo)
+ int construct_esp_packet(struct openconnect_info *vpninfo, struct pkt *pkt, uint8_t next_hdr)
+ {
+ 	const int blksize = 16;
+-	int i, padlen, ret;
++	int i, padlen, ret, crypt_len;
+ 
+ 	if (!next_hdr) {
+ 		if ((pkt->data[0] & 0xf0) == 0x60) /* iph->ip_v */
+@@ -112,23 +124,32 @@ int construct_esp_packet(struct openconnect_info *vpninfo, struct pkt *pkt, uint
+ 			next_hdr = IPPROTO_IPIP;
+ 	}
+ 
+-	/* This gets much more fun if the IV is variable-length */
+ 	pkt->esp.spi = vpninfo->esp_out.spi;
+ 	pkt->esp.seq = htonl(vpninfo->esp_out.seq++);
+ 
+-	padlen = blksize - 1 - ((pkt->len + 1) % blksize);
+-	for (i=0; i<padlen; i++)
+-		pkt->data[pkt->len + i] = i + 1;
+-	pkt->data[pkt->len + padlen] = padlen;
+-	pkt->data[pkt->len + padlen + 1] = next_hdr;
+-
+-	memcpy(pkt->esp.iv, vpninfo->esp_out.iv, sizeof(pkt->esp.iv));
++	if (esp_uses_gcm(vpninfo)) {
++		pkt->data[pkt->len] = next_hdr;
++		crypt_len = pkt->len + 1;
++		if (openconnect_random(pkt->esp.iv, ESP_GCM_IV_LEN)) {
++			vpn_progress(vpninfo, PRG_ERR,
++				     _("Failed to generate ESP GCM IV\n"));
++			return -EIO;
++		}
++	} else {
++		padlen = blksize - 1 - ((pkt->len + 1) % blksize);
++		for (i=0; i<padlen; i++)
++			pkt->data[pkt->len + i] = i + 1;
++		pkt->data[pkt->len + padlen] = padlen;
++		pkt->data[pkt->len + padlen + 1] = next_hdr;
++		crypt_len = pkt->len + padlen + 2;
++		memcpy(pkt->esp.iv, vpninfo->esp_out.iv, sizeof(pkt->esp.iv));
++	}
+ 
+-	ret = encrypt_esp_packet(vpninfo, pkt, pkt->len + padlen + 2);
++	ret = encrypt_esp_packet(vpninfo, pkt, crypt_len);
+ 	if (ret)
+ 		return ret;
+ 
+-	return sizeof(pkt->esp) + pkt->len + padlen + 2 + vpninfo->hmac_out_len;
++	return sizeof(pkt->esp) + crypt_len + vpninfo->hmac_out_len;
+ }
+ 
+ int esp_mainloop(struct openconnect_info *vpninfo, int *timeout, int readable)
+@@ -239,22 +260,30 @@ int esp_mainloop(struct openconnect_info *vpninfo, int *timeout, int readable)
+ 			continue;
+ 		}
+ 
+-		if (len <= 2 + pkt->data[len - 2]) {
+-			vpn_progress(vpninfo, PRG_ERR,
+-				     _("Invalid padding length %02x in ESP\n"),
+-				     pkt->data[len - 2]);
+-			continue;
+-		}
+-		pkt->len = len - 2 - pkt->data[len - 2];
+-		for (i = 0 ; i < pkt->data[len - 2]; i++) {
+-			if (pkt->data[pkt->len + i] != i + 1)
+-				break; /* We can't just 'continue' here because it
+-					* would only break out of this 'for' loop */
+-		}
+-		if (i != pkt->data[len - 2]) {
+-			vpn_progress(vpninfo, PRG_ERR,
+-				     _("Invalid padding bytes in ESP\n"));
+-			continue; /* We can here, though */
++		if (esp_uses_gcm(vpninfo)) {
++			if (len < 1) {
++				vpn_progress(vpninfo, PRG_ERR,
++					     _("Short ESP GCM packet\n"));
++				continue;
++			}
++			pkt->len = len - 1;
++		} else {
++			if (len <= 2 + pkt->data[len - 2]) {
++				vpn_progress(vpninfo, PRG_ERR,
++					     _("Invalid padding length %02x in ESP\n"),
++					     pkt->data[len - 2]);
++				continue;
++			}
++			pkt->len = len - 2 - pkt->data[len - 2];
++			for (i = 0 ; i < pkt->data[len - 2]; i++) {
++				if (pkt->data[pkt->len + i] != i + 1)
++					break;
++			}
++			if (i != pkt->data[len - 2]) {
++				vpn_progress(vpninfo, PRG_ERR,
++					     _("Invalid padding bytes in ESP\n"));
++				continue;
++			}
+ 		}
+ 		vpninfo->dtls_times.last_rx = time(NULL);
+ 
+@@ -505,7 +534,11 @@ int openconnect_setup_esp_keys(struct openconnect_info *vpninfo, int new_keys)
+ 	if (!vpninfo->dtls_addr)
+ 		return -EINVAL;
+ 
+-	if (vpninfo->esp_hmac == HMAC_SHA256)
++	if (esp_uses_gcm(vpninfo)) {
++		if (!vpninfo->esp_gcm_icv)
++			vpninfo->esp_gcm_icv = ESP_GCM_ICV_DEFAULT;
++		vpninfo->hmac_out_len = vpninfo->esp_gcm_icv;
++	} else if (vpninfo->esp_hmac == HMAC_SHA256)
+ 		vpninfo->hmac_out_len = 16;
+ 	else /* MD5 and SHA1 */
+ 		vpninfo->hmac_out_len = 12;
+diff --git a/gnutls-esp.c b/gnutls-esp.c
+index e350ff7..49f7002 100644
+--- a/gnutls-esp.c
++++ b/gnutls-esp.c
+@@ -41,13 +41,17 @@ void destroy_esp_ciphers(struct esp *esp)
+ }
+ 
+ static int init_esp_cipher(struct openconnect_info *vpninfo, struct esp *esp,
+-			   gnutls_mac_algorithm_t macalg, gnutls_cipher_algorithm_t encalg)
++			   gnutls_mac_algorithm_t macalg, gnutls_cipher_algorithm_t encalg,
++			   int gcm)
+ {
+ 	gnutls_datum_t enc_key;
+ 	int err;
+ 
+ 	destroy_esp_ciphers(esp);
+ 
++	if (gcm)
++		return 0;
++
+ 	enc_key.size = gnutls_cipher_get_key_size(encalg);
+ 	enc_key.data = esp->enc_key;
+ 
+@@ -71,10 +75,64 @@ static int init_esp_cipher(struct openconnect_info *vpninfo, struct esp *esp,
+ 	return 0;
+ }
+ 
++static gnutls_cipher_algorithm_t esp_gcm_cipher(const struct openconnect_info *vpninfo)
++{
++	return vpninfo->esp_enc == ENC_AES_256_GCM ?
++		GNUTLS_CIPHER_AES_256_GCM : GNUTLS_CIPHER_AES_128_GCM;
++}
++
++static void esp_gcm_nonce(unsigned char *nonce, const unsigned char *iv, uint32_t seq)
++{
++	memcpy(nonce, iv, ESP_GCM_IV_LEN);
++	memcpy(nonce + ESP_GCM_IV_LEN, &seq, 4);
++}
++
++static int esp_gcm_init(struct openconnect_info *vpninfo, gnutls_cipher_hd_t *hd,
++			const unsigned char *key, const unsigned char *iv, uint32_t seq)
++{
++	gnutls_datum_t enc_key, iv_d;
++	unsigned char nonce[12];
++	gnutls_cipher_algorithm_t encalg = esp_gcm_cipher(vpninfo);
++	int err;
++
++	enc_key.data = (unsigned char *)key;
++	enc_key.size = gnutls_cipher_get_key_size(encalg);
++	esp_gcm_nonce(nonce, iv, seq);
++	iv_d.data = nonce;
++	iv_d.size = sizeof(nonce);
++
++	err = gnutls_cipher_init(hd, encalg, &enc_key, &iv_d);
++	if (err) {
++		vpn_progress(vpninfo, PRG_ERR,
++			     _("Failed to init ESP GCM cipher: %s\n"),
++			     gnutls_strerror(err));
++		return -EIO;
++	}
++	return 0;
++}
++
++static int esp_gcm_aad(struct openconnect_info *vpninfo, gnutls_cipher_hd_t hd,
++		       const struct pkt *pkt)
++{
++	unsigned char aad[8];
++	int err;
++
++	memcpy(aad, &pkt->esp.spi, 8);
++	err = gnutls_cipher_add_auth(hd, aad, sizeof(aad));
++	if (err) {
++		vpn_progress(vpninfo, PRG_ERR,
++			     _("Failed to set ESP GCM AAD: %s\n"),
++			     gnutls_strerror(err));
++		return -EIO;
++	}
++	return 0;
++}
++
+ int init_esp_ciphers(struct openconnect_info *vpninfo, struct esp *esp_out, struct esp *esp_in)
+ {
+-	gnutls_mac_algorithm_t macalg;
++	gnutls_mac_algorithm_t macalg = 0;
+ 	gnutls_cipher_algorithm_t encalg;
++	int gcm = esp_uses_gcm(vpninfo);
+ 	int ret;
+ 
+ 	switch (vpninfo->esp_enc) {
+@@ -84,31 +142,38 @@ int init_esp_ciphers(struct openconnect_info *vpninfo, struct esp *esp_out, stru
+ 	case ENC_AES_256_CBC:
+ 		encalg = GNUTLS_CIPHER_AES_256_CBC;
+ 		break;
++	case ENC_AES_128_GCM:
++	case ENC_AES_256_GCM:
++		encalg = esp_gcm_cipher(vpninfo);
++		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+ 
+-	switch (vpninfo->esp_hmac) {
+-	case HMAC_MD5:
+-		macalg = GNUTLS_MAC_MD5;
+-		break;
+-	case HMAC_SHA1:
+-		macalg = GNUTLS_MAC_SHA1;
+-		break;
+-	case HMAC_SHA256:
+-		macalg = GNUTLS_MAC_SHA256;
+-		break;
+-	default:
+-		return -EINVAL;
++	if (!gcm) {
++		switch (vpninfo->esp_hmac) {
++		case HMAC_MD5:
++			macalg = GNUTLS_MAC_MD5;
++			break;
++		case HMAC_SHA1:
++			macalg = GNUTLS_MAC_SHA1;
++			break;
++		case HMAC_SHA256:
++			macalg = GNUTLS_MAC_SHA256;
++			break;
++		default:
++			return -EINVAL;
++		}
+ 	}
+ 
+-	ret = init_esp_cipher(vpninfo, esp_out, macalg, encalg);
++	ret = init_esp_cipher(vpninfo, esp_out, macalg, encalg, gcm);
+ 	if (ret)
+ 		return ret;
+ 
+-	gnutls_cipher_set_iv(esp_out->cipher, esp_out->iv, sizeof(esp_out->iv));
++	if (!gcm)
++		gnutls_cipher_set_iv(esp_out->cipher, esp_out->iv, sizeof(esp_out->iv));
+ 
+-	ret = init_esp_cipher(vpninfo, esp_in, macalg, encalg);
++	ret = init_esp_cipher(vpninfo, esp_in, macalg, encalg, gcm);
+ 	if (ret) {
+ 		destroy_esp_ciphers(esp_out);
+ 		return ret;
+@@ -117,12 +182,51 @@ int init_esp_ciphers(struct openconnect_info *vpninfo, struct esp *esp_out, stru
+ 	return 0;
+ }
+ 
+-/* pkt->len shall be the *payload* length. Omitting the header and the 12-byte HMAC */
++/* pkt->len shall be the *payload* length. Omitting the header and the ICV/HMAC */
+ int decrypt_esp_packet(struct openconnect_info *vpninfo, struct esp *esp, struct pkt *pkt)
+ {
+ 	unsigned char hmac_buf[MAX_HMAC_SIZE];
++	gnutls_cipher_hd_t hd = NULL;
+ 	int err;
+ 
++	if (verify_packet_seqno(vpninfo, esp, ntohl(pkt->esp.seq)))
++		return -EINVAL;
++
++	if (esp_uses_gcm(vpninfo)) {
++		if (pkt->len < vpninfo->hmac_out_len)
++			return -EINVAL;
++
++		if (esp_gcm_init(vpninfo, &hd, esp->enc_key, pkt->esp.iv, pkt->esp.seq))
++			return -EIO;
++		if (esp_gcm_aad(vpninfo, hd, pkt))
++			goto gcm_fail;
++
++		pkt->len -= vpninfo->hmac_out_len;
++
++		err = gnutls_cipher_decrypt(hd, pkt->data, pkt->len);
++		if (err) {
++			vpn_progress(vpninfo, PRG_DEBUG,
++				     _("Decrypting ESP GCM packet failed: %s\n"),
++				     gnutls_strerror(err));
++			goto gcm_fail;
++		}
++
++		err = gnutls_cipher_tag(hd, hmac_buf, vpninfo->hmac_out_len);
++		if (err ||
++		    memcmp(hmac_buf, pkt->data + pkt->len, vpninfo->hmac_out_len)) {
++			vpn_progress(vpninfo, PRG_DEBUG,
++				     _("Received ESP GCM packet with invalid ICV\n"));
++			goto gcm_fail;
++		}
++
++		gnutls_cipher_deinit(hd);
++		return 0;
++
++	gcm_fail:
++		gnutls_cipher_deinit(hd);
++		return -EINVAL;
++	}
++
+ 	err = gnutls_hmac(esp->hmac, &pkt->esp, sizeof(pkt->esp) + pkt->len);
+ 	if (err) {
+ 		vpn_progress(vpninfo, PRG_ERR,
+@@ -137,9 +241,6 @@ int decrypt_esp_packet(struct openconnect_info *vpninfo, struct esp *esp, struct
+ 		return -EINVAL;
+ 	}
+ 
+-	if (verify_packet_seqno(vpninfo, esp, ntohl(pkt->esp.seq)))
+-		return -EINVAL;
+-
+ 	gnutls_cipher_set_iv(esp->cipher, pkt->esp.iv, sizeof(pkt->esp.iv));
+ 
+ 	err = gnutls_cipher_decrypt(esp->cipher, pkt->data, pkt->len);
+@@ -156,8 +257,40 @@ int decrypt_esp_packet(struct openconnect_info *vpninfo, struct esp *esp, struct
+ int encrypt_esp_packet(struct openconnect_info *vpninfo, struct pkt *pkt, int crypt_len)
+ {
+ 	const int blksize = 16;
++	gnutls_cipher_hd_t hd = NULL;
+ 	int err;
+ 
++	if (esp_uses_gcm(vpninfo)) {
++		if (esp_gcm_init(vpninfo, &hd, vpninfo->esp_out.enc_key,
++				 pkt->esp.iv, pkt->esp.seq))
++			return -EIO;
++		if (esp_gcm_aad(vpninfo, hd, pkt))
++			goto gcm_enc_fail;
++
++		err = gnutls_cipher_encrypt(hd, pkt->data, crypt_len);
++		if (err) {
++			vpn_progress(vpninfo, PRG_ERR,
++				     _("Failed to encrypt ESP GCM packet: %s\n"),
++				     gnutls_strerror(err));
++			goto gcm_enc_fail;
++		}
++
++		err = gnutls_cipher_tag(hd, pkt->data + crypt_len, vpninfo->hmac_out_len);
++		if (err) {
++			vpn_progress(vpninfo, PRG_ERR,
++				     _("Failed to fetch ESP GCM ICV: %s\n"),
++				     gnutls_strerror(err));
++			goto gcm_enc_fail;
++		}
++
++		gnutls_cipher_deinit(hd);
++		return 0;
++
++	gcm_enc_fail:
++		gnutls_cipher_deinit(hd);
++		return -EIO;
++	}
++
+ 	err = gnutls_cipher_encrypt(vpninfo->esp_out.cipher, pkt->data, crypt_len);
+ 	if (err) {
+ 		vpn_progress(vpninfo, PRG_ERR,
+@@ -178,4 +311,4 @@ int encrypt_esp_packet(struct openconnect_info *vpninfo, struct pkt *pkt, int cr
+ 	memcpy(vpninfo->esp_out.iv, pkt->data + crypt_len, blksize);
+ 	gnutls_cipher_encrypt(vpninfo->esp_out.cipher, vpninfo->esp_out.iv, blksize);
+ 	return 0;
+-}
++}
+\ No newline at end of file
+diff --git a/gnutls.c b/gnutls.c
+index 394a333..b04c581 100644
+--- a/gnutls.c
++++ b/gnutls.c
+@@ -3603,3 +3603,80 @@ error:
+ done:
+ 	return ret;
+ }
++
++static int gp_tls12_cbc_decrypt(struct openconnect_info *vpninfo,
++				const unsigned char *key, size_t key_size,
++				const unsigned char *iv, size_t iv_size,
++				const unsigned char *in, int inlen,
++				unsigned char *out, int *outlen)
++{
++	gnutls_cipher_hd_t hd = NULL;
++	gnutls_datum_t enc_key, iv_d;
++	int err;
++
++	if (inlen <= (int)iv_size || inlen % iv_size)
++		return -EINVAL;
++
++	enc_key.data = (unsigned char *)key;
++	enc_key.size = key_size;
++	iv_d.data = (unsigned char *)iv;
++	iv_d.size = iv_size;
++
++	err = gnutls_cipher_init(&hd, key_size == 32 ? GNUTLS_CIPHER_AES_256_CBC :
++				 GNUTLS_CIPHER_AES_128_CBC, &enc_key, &iv_d);
++	if (err)
++		return -EINVAL;
++
++	inlen -= iv_size;
++	memcpy(out, in + iv_size, inlen);
++	*outlen = inlen;
++	err = gnutls_cipher_decrypt(hd, out, inlen);
++	gnutls_cipher_deinit(hd);
++	return err ? -EINVAL : 0;
++}
++
++int gp_ssl_decrypt_blob(struct openconnect_info *vpninfo,
++			const unsigned char *in, int inlen,
++			unsigned char *out, int *outlen)
++{
++	gnutls_session_t sess = vpninfo->https_sess;
++	gnutls_cipher_algorithm_t cipher_algo;
++	gnutls_mac_algorithm_t mac_algo;
++	size_t key_size, mac_size, iv_size, needed;
++	unsigned char key_block[128];
++	const unsigned char *srv_key;
++	int ret;
++
++	if (!sess || !in || inlen <= 0 || !out || !outlen)
++		return -EINVAL;
++
++	cipher_algo = gnutls_cipher_get(sess);
++	mac_algo = gnutls_mac_get(sess);
++	key_size = gnutls_cipher_get_key_size(cipher_algo);
++	mac_size = gnutls_hmac_get_len(mac_algo);
++	iv_size = gnutls_cipher_get_iv_size(cipher_algo);
++
++	if (!key_size || !mac_size || !iv_size)
++		return -EINVAL;
++
++	needed = 2 * mac_size + 2 * key_size + 2 * iv_size;
++	if (needed > sizeof(key_block))
++		return -EINVAL;
++
++	if (gnutls_prf(sess, 13, "key expansion", 1, 0, NULL, needed,
++		       (char *)key_block) < 0)
++		return -EINVAL;
++
++	srv_key = key_block + 2 * mac_size + key_size;
++	ret = gp_tls12_cbc_decrypt(vpninfo, srv_key, key_size, in, iv_size,
++				   in, inlen, out, outlen);
++	if (!ret)
++		return 0;
++
++	/* PanGPS may pass only the ciphertext portion without explicit IV */
++	if (inlen < (int)iv_size)
++		return -EINVAL;
++	return gp_tls12_cbc_decrypt(vpninfo, srv_key, key_size,
++				    key_block + needed - iv_size, iv_size,
++				    in, inlen, out, outlen);
++}
+diff --git a/gpst.c b/gpst.c
+index 4cdbfa6..bcd417c 100644
+--- a/gpst.c
++++ b/gpst.c
+@@ -369,8 +369,22 @@ static int check_enc_algo(struct openconnect_info *v, const char *s)
+ {
+ 	if (!strcmp(s, "aes128") || !strcmp(s, "aes-128-cbc")) return ENC_AES_128_CBC;
+ 	if (!strcmp(s, "aes-256-cbc"))                         return ENC_AES_256_CBC;
+-	if (!strcmp(s, "aes-128-gcm"))                         return ENC_AES_128_GCM;
+-	if (!strcmp(s, "aes-256-gcm"))                         return ENC_AES_256_GCM;
++	if (!strcmp(s, "aes-128-gcm") || !strcmp(s, "aes128gcm16")) {
++		v->esp_gcm_icv = 16;
++		return ENC_AES_128_GCM;
++	}
++	if (!strcmp(s, "aes128gcm12")) {
++		v->esp_gcm_icv = 12;
++		return ENC_AES_128_GCM;
++	}
++	if (!strcmp(s, "aes128gcm8")) {
++		v->esp_gcm_icv = 8;
++		return ENC_AES_128_GCM;
++	}
++	if (!strcmp(s, "aes-256-gcm")) {
++		v->esp_gcm_icv = 16;
++		return ENC_AES_256_GCM;
++	}
+ 	vpn_progress(v, PRG_ERR, _("Unknown ESP encryption algorithm: %s\n"), s);
+ 	return -ENOENT;
+ }
+@@ -578,7 +592,11 @@ static int gpst_parse_config_xml(struct openconnect_info *vpninfo, xmlNode *xml_
+ 					else if (!xmlnode_get_val(member, "ipsec-mode", &s) && strcmp(s, "esp-tunnel"))
+ 						vpn_progress(vpninfo, PRG_ERR, _("GlobalProtect config sent ipsec-mode=%s (expected esp-tunnel)\n"), s);
+ 				}
+-				if (!(vpninfo->esp_enc > 0 && vpninfo->esp_hmac > 0 && vpninfo->enc_key_len > 0 && vpninfo->hmac_key_len > 0))
++				if (esp_uses_gcm(vpninfo) && !vpninfo->esp_hmac)
++					vpninfo->esp_hmac = HMAC_NONE;
++				if (!(vpninfo->esp_enc > 0 && vpninfo->enc_key_len > 0 &&
++				      (esp_uses_gcm(vpninfo) ||
++				       (vpninfo->esp_hmac > 0 && vpninfo->hmac_key_len > 0))))
+ 					vpn_progress(vpninfo, PRG_ERR, "Server's ESP configuration is incomplete or uses unknown algorithms.\n");
+ 				else
+ 					esp_keys = 1;
+diff --git a/gpst_nlb.c b/gpst_nlb.c
+index 9d88fb5..503601f 100644
+--- a/gpst_nlb.c
++++ b/gpst_nlb.c
+@@ -45,8 +45,14 @@
+  *   - getNlbRealGwIp() resolves inner gateway IP
+  *   - "NLB: add an access route for NLB private ip: %s."
+  *
+- * Crypto RE status: enc-hs-key decipherment and opaque_blob HMAC fields are not
+- * yet recovered from stripped ELF; the 16-byte envelope wrap/unwrap is implemented.
++ * NLB blob layout (PanGPS 6.3.3.1 RE, shared by enc-hs-key and tunnel-opaque):
++ *   0-15   header prefix (stored; first 16 bytes of enc-hs-key blob)
++ *  16-23   version marker (e.g. e5ac060000000000)
++ *  24-27   tunnel session id (cleartext, matches across blobs from same session)
++ *  28+     encrypted payload (enc-hs-key: 36 bytes; tunnel-opaque: 508 bytes)
++ *
++ * enc-hs-key decipherment uses TLS 1.2 key expansion from the active HTTPS
++ * session (PanGPS do_ssl_decrypt). Decrypted material keys tunnel-opaque body.
+  */
+ 
+ #include <config.h>
+@@ -70,6 +76,11 @@ static const unsigned char gp_nlb_probe_template[56] =
+ 
+ #define GP_NLB_SSL_PROTO_VERSION 110
+ #define GP_NLB_OPAQUE_REFRESH_MARGIN 60
++#define GP_NLB_BLOB_HDR_LEN		24
++#define GP_NLB_BLOB_SESSION_OFF		24
++#define GP_NLB_ENC_HS_KEY_PAYLOAD_OFF	24
++#define GP_NLB_ENC_HS_KEY_PAYLOAD_LEN	40
++#define GP_NLB_OPAQUE_PAYLOAD_OFF	28
+ 
+ static int gp_nlb_is_ipv4(const char *s)
+ {
+@@ -117,14 +128,111 @@ static int gp_nlb_split_concat_ips(const char *concat, const char *hint_vip,
+ 	return -EINVAL;
+ }
+ 
++static void gp_nlb_clear_decrypted_opaque(struct gp_nlb_config *nlb)
++{
++	if (nlb->decrypted_opaque) {
++		memset(nlb->decrypted_opaque, 0, nlb->decrypted_opaque_len);
++		free(nlb->decrypted_opaque);
++		nlb->decrypted_opaque = NULL;
++	}
++	nlb->decrypted_opaque_len = 0;
++	memset(nlb->opaque_key, 0, sizeof(nlb->opaque_key));
++	nlb->opaque_key_len = 0;
++}
++
+ static void gp_nlb_clear_opaque_blob(struct gp_nlb_config *nlb)
+ {
++	gp_nlb_clear_decrypted_opaque(nlb);
+ 	if (nlb->opaque_blob) {
+ 		memset(nlb->opaque_blob, 0, nlb->opaque_blob_len);
+ 		free(nlb->opaque_blob);
+ 		nlb->opaque_blob = NULL;
+ 	}
+ 	nlb->opaque_blob_len = 0;
++	nlb->blob_session_id = 0;
++}
++
++static int gp_nlb_parse_blob_header(struct openconnect_info *vpninfo,
++				    const unsigned char *blob, int len,
++				    struct gp_nlb_config *nlb)
++{
++	if (!blob || len < GP_NLB_BLOB_HDR_LEN)
++		return -EINVAL;
++
++	nlb->blob_session_id = load_be32(blob + GP_NLB_BLOB_SESSION_OFF);
++	vpn_progress(vpninfo, PRG_DEBUG,
++		     _("NLB blob session id 0x%08x, version marker %02x%02x%02x%02x\n"),
++		     nlb->blob_session_id,
++		     blob[16], blob[17], blob[18], blob[19]);
++	return 0;
++}
++
++static int gp_nlb_decrypt_enc_hs_key(struct openconnect_info *vpninfo,
++				     struct gp_nlb_config *nlb,
++				     const unsigned char *blob, int len)
++{
++	unsigned char plain[64];
++	int plain_len = sizeof(plain);
++	int ret;
++
++	if (!nlb->enc_hs_key)
++		return 0;
++	if (len < GP_NLB_ENC_HS_KEY_PAYLOAD_OFF + GP_NLB_ENC_HS_KEY_PAYLOAD_LEN)
++		return -EINVAL;
++
++	ret = gp_ssl_decrypt_blob(vpninfo,
++				  blob + GP_NLB_ENC_HS_KEY_PAYLOAD_OFF,
++				  GP_NLB_ENC_HS_KEY_PAYLOAD_LEN,
++				  plain, &plain_len);
++	if (ret < 0) {
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     _("enc-hs-key TLS decipherment failed; NLB opaque crypto pending\n"));
++		return 0;
++	}
++
++	if (plain_len <= 0 || plain_len > (int)sizeof(nlb->opaque_key))
++		return -EINVAL;
++
++	memcpy(nlb->opaque_key, plain, plain_len);
++	nlb->opaque_key_len = plain_len;
++	memset(plain, 0, sizeof(plain));
++	vpn_progress(vpninfo, PRG_DEBUG,
++		     _("Decrypted enc-hs-key (%d bytes)\n"), plain_len);
++	return 0;
++}
++
++static int gp_nlb_decrypt_opaque_body(struct openconnect_info *vpninfo,
++				      struct gp_nlb_config *nlb)
++{
++	const unsigned char *payload;
++	int payload_len, out_len;
++	unsigned char *out;
++
++	if (!nlb->opaque_blob || nlb->opaque_blob_len <= GP_NLB_OPAQUE_PAYLOAD_OFF)
++		return 0;
++	if (!nlb->opaque_key_len)
++		return 0;
++
++	payload = nlb->opaque_blob + GP_NLB_OPAQUE_PAYLOAD_OFF;
++	payload_len = nlb->opaque_blob_len - GP_NLB_OPAQUE_PAYLOAD_OFF;
++	out = malloc(payload_len);
++	if (!out)
++		return -ENOMEM;
++	out_len = payload_len;
++
++	if (gp_ssl_decrypt_blob(vpninfo, payload, payload_len, out, &out_len) < 0) {
++		free(out);
++		vpn_progress(vpninfo, PRG_DEBUG,
++			     _("tunnel-opaque body decipherment failed\n"));
++		return 0;
++	}
++
++	gp_nlb_clear_decrypted_opaque(nlb);
++	nlb->decrypted_opaque = out;
++	nlb->decrypted_opaque_len = out_len;
++	vpn_progress(vpninfo, PRG_DEBUG,
++		     _("Decrypted tunnel-opaque body (%d bytes)\n"), out_len);
++	return 0;
+ }
+ 
+ static void gp_nlb_write_hdr(unsigned char *hdr, uint16_t inner_len, uint8_t type)
+@@ -162,6 +270,22 @@ int gpst_nlb_prepare(struct openconnect_info *vpninfo)
+ 	}
+ 
+ 	gp_nlb_clear_opaque_blob(nlb);
++
++	if (nlb->enc_hs_key) {
++		unsigned char *enc_blob = openconnect_base64_decode(&len, nlb->enc_hs_key);
++
++		if (!enc_blob || len <= 0) {
++			vpn_progress(vpninfo, PRG_ERR,
++				     _("Failed to base64-decode enc-hs-key\n"));
++			free(enc_blob);
++			return -EINVAL;
++		}
++		gp_nlb_parse_blob_header(vpninfo, enc_blob, len, nlb);
++		gp_nlb_decrypt_enc_hs_key(vpninfo, nlb, enc_blob, len);
++		memset(enc_blob, 0, len);
++		free(enc_blob);
++	}
++
+ 	if (nlb->tunnel_opaque) {
+ 		nlb->opaque_blob = openconnect_base64_decode(&len, nlb->tunnel_opaque);
+ 		if (!nlb->opaque_blob || len <= 0) {
+@@ -173,15 +297,12 @@ int gpst_nlb_prepare(struct openconnect_info *vpninfo)
+ 		}
+ 		nlb->opaque_blob_len = len;
+ 		vpn_progress(vpninfo, PRG_DEBUG,
+-			     _("Decoded tunnel-opaque (%d bytes); enc-hs-key decipherment not yet implemented\n"),
+-			     len);
++			     _("Decoded tunnel-opaque (%d bytes)\n"), len);
++		if (!nlb->blob_session_id)
++			gp_nlb_parse_blob_header(vpninfo, nlb->opaque_blob, len, nlb);
++		gp_nlb_decrypt_opaque_body(vpninfo, nlb);
+ 	}
+ 
+-	if (nlb->enc_hs_key)
+-		vpn_progress(vpninfo, PRG_DEBUG,
+-			     _("enc-hs-key present (%zu chars); crypto RE pending\n"),
+-			     strlen(nlb->enc_hs_key));
+-
+ 	return 0;
+ }
+ 
+diff --git a/library.c b/library.c
+index 2c46031..096f4a8 100644
+--- a/library.c
++++ b/library.c
+@@ -845,6 +845,11 @@ void openconnect_vpninfo_free(struct openconnect_info *vpninfo)
+ 	free(vpninfo->gp_nlb.tunnel_vip);
+ 	free(vpninfo->gp_nlb.connected_gw_ip);
+ 	free(vpninfo->gp_nlb.in_tunnel_gw_cert_chksum);
++	if (vpninfo->gp_nlb.decrypted_opaque) {
++		memset(vpninfo->gp_nlb.decrypted_opaque, 0, vpninfo->gp_nlb.decrypted_opaque_len);
++		free(vpninfo->gp_nlb.decrypted_opaque);
++	}
++	memset(vpninfo->gp_nlb.opaque_key, 0, sizeof(vpninfo->gp_nlb.opaque_key));
+ 	if (vpninfo->gp_nlb.opaque_blob) {
+ 		memset(vpninfo->gp_nlb.opaque_blob, 0, vpninfo->gp_nlb.opaque_blob_len);
+ 		free(vpninfo->gp_nlb.opaque_blob);
+diff --git a/openconnect-internal.h b/openconnect-internal.h
+index 6148d26..533afe0 100644
+--- a/openconnect-internal.h
++++ b/openconnect-internal.h
+@@ -405,6 +405,11 @@ struct gp_nlb_config {
+ 	char *in_tunnel_gw_cert_chksum;
+ 	unsigned char *opaque_blob;
+ 	int opaque_blob_len;
++	unsigned char *decrypted_opaque;
++	int decrypted_opaque_len;
++	uint32_t blob_session_id;
++	unsigned char opaque_key[48];
++	int opaque_key_len;
+ 	int keepalive_sent;
+ };
+ 
+@@ -455,6 +460,7 @@ struct openconnect_info {
+ 	int enc_key_len;
+ 	int hmac_key_len;
+ 	int hmac_out_len;
++	int esp_gcm_icv;
+ 
+ 	int esp_magic_af;
+ 	unsigned char esp_magic[16]; /* GlobalProtect magic ping address (network-endian) */
+@@ -1106,10 +1112,14 @@ static inline void __monitor_fd_new(struct openconnect_info *vpninfo,
+ #define ENC_AES_128_GCM		20
+ #define ENC_AES_256_GCM		22
+ 
++#define HMAC_NONE		0
+ #define HMAC_MD5		1
+ #define HMAC_SHA1		2
+ #define HMAC_SHA256		3
+ 
++#define ESP_GCM_IV_LEN		8
++#define ESP_GCM_ICV_DEFAULT	16
++
+ #define MAX_HMAC_SIZE		32	/* SHA256 */
+ #define MAX_IV_SIZE		16
+ #define MAX_ESP_PAD		17	/* Including the next-header field */
+@@ -1511,6 +1521,16 @@ int init_esp_ciphers(struct openconnect_info *vpninfo, struct esp *out, struct e
+ int decrypt_esp_packet(struct openconnect_info *vpninfo, struct esp *esp, struct pkt *pkt);
+ int encrypt_esp_packet(struct openconnect_info *vpninfo, struct pkt *pkt, int crypt_len);
+ 
++static inline int esp_uses_gcm(const struct openconnect_info *vpninfo)
++{
++	return vpninfo->esp_enc == ENC_AES_128_GCM ||
++	       vpninfo->esp_enc == ENC_AES_256_GCM;
++}
++
++int gp_ssl_decrypt_blob(struct openconnect_info *vpninfo,
++			const unsigned char *in, int inlen,
++			unsigned char *out, int *outlen);
++
+ /* {gnutls,openssl}.c */
+ const char *openconnect_get_tls_library_version(void);
+ int can_enable_insecure_crypto(void);
+diff --git a/openssl-esp.c b/openssl-esp.c
+index feb3468..0fa19f5 100644
+--- a/openssl-esp.c
++++ b/openssl-esp.c
+@@ -57,13 +57,59 @@ void destroy_esp_ciphers(struct esp *esp)
+ 	}
+ }
+ 
++static const EVP_CIPHER *esp_gcm_cipher(const struct openconnect_info *vpninfo)
++{
++	return vpninfo->esp_enc == ENC_AES_256_GCM ?
++		EVP_aes_256_gcm() : EVP_aes_128_gcm();
++}
++
++static void esp_gcm_nonce(unsigned char *nonce, const unsigned char *iv, uint32_t seq)
++{
++	memcpy(nonce, iv, ESP_GCM_IV_LEN);
++	memcpy(nonce + ESP_GCM_IV_LEN, &seq, 4);
++}
++
++static int esp_gcm_init(struct openconnect_info *vpninfo, EVP_CIPHER_CTX *ctx,
++			const unsigned char *key, const unsigned char *iv, uint32_t seq,
++			int enc)
++{
++	unsigned char nonce[12];
++
++	esp_gcm_nonce(nonce, iv, seq);
++	if (!EVP_CipherInit_ex(ctx, esp_gcm_cipher(vpninfo), NULL, key, nonce, enc))
++		return -EIO;
++	if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, sizeof(nonce), NULL))
++		return -EIO;
++	return 0;
++}
++
++static int esp_gcm_aad(struct openconnect_info *vpninfo, EVP_CIPHER_CTX *ctx,
++		       const struct pkt *pkt)
++{
++	unsigned char aad[8];
++	int aadlen = 0;
++
++	memcpy(aad, &pkt->esp.spi, 8);
++	if (!EVP_CipherUpdate(ctx, NULL, &aadlen, aad, sizeof(aad))) {
++		vpn_progress(vpninfo, PRG_ERR,
++			     _("Failed to set ESP GCM AAD\n"));
++		openconnect_report_ssl_errors(vpninfo);
++		return -EIO;
++	}
++	return 0;
++}
++
+ static int init_esp_cipher(struct openconnect_info *vpninfo, struct esp *esp,
+-			    const EVP_MD *macalg, const EVP_CIPHER *encalg, int decrypt)
++			    const EVP_MD *macalg, const EVP_CIPHER *encalg, int decrypt,
++			    int gcm)
+ {
+ 	int ret;
+ 
+ 	destroy_esp_ciphers(esp);
+ 
++	if (gcm)
++		return 0;
++
+ #if OPENSSL_VERSION_NUMBER < 0x10100000L
+ 	esp->cipher = malloc(sizeof(*esp->cipher));
+ 	if (!esp->cipher)
+@@ -109,7 +155,8 @@ static int init_esp_cipher(struct openconnect_info *vpninfo, struct esp *esp,
+ int init_esp_ciphers(struct openconnect_info *vpninfo, struct esp *esp_out, struct esp *esp_in)
+ {
+ 	const EVP_CIPHER *encalg;
+-	const EVP_MD *macalg;
++	const EVP_MD *macalg = NULL;
++	int gcm = esp_uses_gcm(vpninfo);
+ 	int ret;
+ 
+ 	switch (vpninfo->esp_enc) {
+@@ -119,29 +166,35 @@ int init_esp_ciphers(struct openconnect_info *vpninfo, struct esp *esp_out, stru
+ 	case ENC_AES_256_CBC:
+ 		encalg = EVP_aes_256_cbc();
+ 		break;
++	case ENC_AES_128_GCM:
++	case ENC_AES_256_GCM:
++		encalg = esp_gcm_cipher(vpninfo);
++		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+ 
+-	switch (vpninfo->esp_hmac) {
+-	case HMAC_MD5:
+-		macalg = EVP_md5();
+-		break;
+-	case HMAC_SHA1:
+-		macalg = EVP_sha1();
+-		break;
+-	case HMAC_SHA256:
+-		macalg = EVP_sha256();
+-		break;
+-	default:
+-		return -EINVAL;
++	if (!gcm) {
++		switch (vpninfo->esp_hmac) {
++		case HMAC_MD5:
++			macalg = EVP_md5();
++			break;
++		case HMAC_SHA1:
++			macalg = EVP_sha1();
++			break;
++		case HMAC_SHA256:
++			macalg = EVP_sha256();
++			break;
++		default:
++			return -EINVAL;
++		}
+ 	}
+ 
+-	ret = init_esp_cipher(vpninfo, &vpninfo->esp_out, macalg, encalg, 0);
++	ret = init_esp_cipher(vpninfo, &vpninfo->esp_out, macalg, encalg, 0, gcm);
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = init_esp_cipher(vpninfo, esp_in, macalg, encalg, 1);
++	ret = init_esp_cipher(vpninfo, esp_in, macalg, encalg, 1, gcm);
+ 	if (ret) {
+ 		destroy_esp_ciphers(&vpninfo->esp_out);
+ 		return ret;
+@@ -150,12 +203,48 @@ int init_esp_ciphers(struct openconnect_info *vpninfo, struct esp *esp_out, stru
+ 	return 0;
+ }
+ 
+-/* pkt->len shall be the *payload* length. Omitting the header and the 12-byte HMAC */
++/* pkt->len shall be the *payload* length. Omitting the header and the ICV/HMAC */
+ int decrypt_esp_packet(struct openconnect_info *vpninfo, struct esp *esp, struct pkt *pkt)
+ {
+ 	unsigned char hmac_buf[MAX_HMAC_SIZE];
+ 	unsigned int hmac_len = sizeof(hmac_buf);
+ 	int crypt_len = pkt->len;
++	EVP_CIPHER_CTX *ctx;
++
++	if (verify_packet_seqno(vpninfo, esp, ntohl(pkt->esp.seq)))
++		return -EINVAL;
++
++	if (esp_uses_gcm(vpninfo)) {
++		int outlen = 0;
++
++		if (pkt->len < vpninfo->hmac_out_len)
++			return -EINVAL;
++
++		ctx = EVP_CIPHER_CTX_new();
++		if (!ctx)
++			return -ENOMEM;
++
++		if (esp_gcm_init(vpninfo, ctx, esp->enc_key, pkt->esp.iv, pkt->esp.seq, 0) < 0 ||
++		    esp_gcm_aad(vpninfo, ctx, pkt) < 0) {
++			EVP_CIPHER_CTX_free(ctx);
++			return -EINVAL;
++		}
++
++		pkt->len -= vpninfo->hmac_out_len;
++		memcpy(hmac_buf, pkt->data + pkt->len, vpninfo->hmac_out_len);
++		if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, vpninfo->hmac_out_len,
++					 hmac_buf) ||
++		    !EVP_DecryptUpdate(ctx, pkt->data, &outlen, pkt->data, pkt->len) ||
++		    !EVP_DecryptFinal_ex(ctx, pkt->data + outlen, &outlen)) {
++			vpn_progress(vpninfo, PRG_DEBUG,
++				     _("Received ESP GCM packet with invalid ICV\n"));
++			EVP_CIPHER_CTX_free(ctx);
++			return -EINVAL;
++		}
++
++		EVP_CIPHER_CTX_free(ctx);
++		return 0;
++	}
+ 
+ 	HMAC_Init_ex(esp->hmac, NULL, 0, NULL, NULL);
+ 	HMAC_Update(esp->hmac, (void *)&pkt->esp, sizeof(pkt->esp) + pkt->len);
+@@ -167,9 +256,6 @@ int decrypt_esp_packet(struct openconnect_info *vpninfo, struct esp *esp, struct
+ 		return -EINVAL;
+ 	}
+ 
+-	if (verify_packet_seqno(vpninfo, esp, ntohl(pkt->esp.seq)))
+-		return -EINVAL;
+-
+ 	if (!EVP_DecryptInit_ex(esp->cipher, NULL, NULL, NULL,
+ 				pkt->esp.iv)) {
+ 		vpn_progress(vpninfo, PRG_ERR,
+@@ -193,6 +279,31 @@ int encrypt_esp_packet(struct openconnect_info *vpninfo, struct pkt *pkt, int cr
+ {
+ 	int blksize = 16;
+ 	unsigned int hmac_len = vpninfo->hmac_out_len;
++	EVP_CIPHER_CTX *ctx;
++	int outlen = 0;
++
++	if (esp_uses_gcm(vpninfo)) {
++		ctx = EVP_CIPHER_CTX_new();
++		if (!ctx)
++			return -ENOMEM;
++
++		if (esp_gcm_init(vpninfo, ctx, vpninfo->esp_out.enc_key,
++				 pkt->esp.iv, pkt->esp.seq, 1) < 0 ||
++		    esp_gcm_aad(vpninfo, ctx, pkt) < 0 ||
++		    !EVP_EncryptUpdate(ctx, pkt->data, &outlen, pkt->data, crypt_len) ||
++		    !EVP_EncryptFinal_ex(ctx, pkt->data + outlen, &outlen) ||
++		    !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, vpninfo->hmac_out_len,
++					 pkt->data + crypt_len)) {
++			vpn_progress(vpninfo, PRG_ERR,
++				     _("Failed to encrypt ESP GCM packet:\n"));
++			openconnect_report_ssl_errors(vpninfo);
++			EVP_CIPHER_CTX_free(ctx);
++			return -EINVAL;
++		}
++
++		EVP_CIPHER_CTX_free(ctx);
++		return 0;
++	}
+ 
+ 	if (!EVP_EncryptUpdate(vpninfo->esp_out.cipher, pkt->data, &crypt_len,
+ 			       pkt->data, crypt_len)) {
+@@ -209,4 +320,4 @@ int encrypt_esp_packet(struct openconnect_info *vpninfo, struct pkt *pkt, int cr
+ 	EVP_EncryptUpdate(vpninfo->esp_out.cipher, vpninfo->esp_out.iv, &blksize,
+ 			  pkt->data + crypt_len + hmac_len - blksize, blksize);
+ 	return 0;
+-}
++}
+\ No newline at end of file
+diff --git a/openssl.c b/openssl.c
+index 761cb03..d860d06 100644
+--- a/openssl.c
++++ b/openssl.c
+@@ -2773,3 +2773,118 @@ out_of_memory:
+ 	return ret;
+ }
+ 
++static int gp_tls12_prf(const EVP_MD *md, const unsigned char *secret, size_t secret_len,
++			const char *label, const unsigned char *seed, size_t seed_len,
++			unsigned char *out, size_t out_len)
++{
++	EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_TLS1_PRF, NULL);
++	size_t len = out_len;
++	int ret = -1;
++
++	if (!pctx ||
++	    EVP_PKEY_derive_init(pctx) <= 0 ||
++	    EVP_PKEY_CTX_set_tls1_prf_md(pctx, md) <= 0 ||
++	    EVP_PKEY_CTX_set1_tls1_prf_secret(pctx, secret, secret_len) <= 0 ||
++	    EVP_PKEY_CTX_set1_tls1_prf_seed(pctx, (const unsigned char *)label,
++					    strlen(label)) <= 0 ||
++	    EVP_PKEY_CTX_add1_tls1_prf_seed(pctx, seed, seed_len) <= 0 ||
++	    EVP_PKEY_derive(pctx, out, &len) <= 0)
++		goto out;
++	ret = 0;
++out:
++	EVP_PKEY_CTX_free(pctx);
++	return ret;
++}
++
++static int gp_tls12_cbc_decrypt(struct openconnect_info *vpninfo,
++				const EVP_CIPHER *cipher,
++				const unsigned char *key,
++				const unsigned char *iv, size_t iv_size,
++				const unsigned char *in, int inlen,
++				unsigned char *out, int *outlen)
++{
++	EVP_CIPHER_CTX *ctx;
++	int outl = 0, tmplen = 0;
++
++	if (inlen <= (int)iv_size || inlen % (int)iv_size)
++		return -EINVAL;
++
++	ctx = EVP_CIPHER_CTX_new();
++	if (!ctx)
++		return -ENOMEM;
++
++	inlen -= iv_size;
++	memcpy(out, in + iv_size, inlen);
++	*outlen = inlen;
++	if (!EVP_DecryptInit_ex(ctx, cipher, NULL, key, iv) ||
++	    !EVP_CIPHER_CTX_set_padding(ctx, 1) ||
++	    !EVP_DecryptUpdate(ctx, out, &outl, out, inlen) ||
++	    !EVP_DecryptFinal_ex(ctx, out + outl, &tmplen)) {
++		EVP_CIPHER_CTX_free(ctx);
++		return -EINVAL;
++	}
++	*outlen = outl + tmplen;
++	EVP_CIPHER_CTX_free(ctx);
++	return 0;
++}
++
++int gp_ssl_decrypt_blob(struct openconnect_info *vpninfo,
++			const unsigned char *in, int inlen,
++			unsigned char *out, int *outlen)
++{
++	SSL *ssl = vpninfo->https_ssl;
++	SSL_SESSION *sess;
++	const SSL_CIPHER *cipher;
++	const EVP_CIPHER *evp_cipher;
++	const EVP_MD *md;
++	size_t mac_len, key_len, iv_len, needed;
++	unsigned char ms[48], crandom[32], srandom[32], seed[64], key_block[128];
++	unsigned char *srv_key, *srv_iv;
++	size_t ms_len;
++	int ret;
++
++	if (!ssl || !in || inlen <= 0 || !out || !outlen)
++		return -EINVAL;
++
++	sess = SSL_get_session(ssl);
++	cipher = SSL_SESSION_get_cipher(sess);
++	if (!sess || !cipher)
++		return -EINVAL;
++
++	ms_len = SSL_SESSION_get_master_key(sess, ms, sizeof(ms));
++	if (!ms_len)
++		return -EINVAL;
++
++	if (!SSL_get_client_random(ssl, crandom, sizeof(crandom)) ||
++	    !SSL_get_server_random(ssl, srandom, sizeof(srandom)))
++		return -EINVAL;
++
++	md = EVP_get_digestbynid(SSL_CIPHER_get_digest_nid(cipher));
++	evp_cipher = EVP_get_cipherbynid(SSL_CIPHER_get_cipher_nid(cipher));
++	if (!md || !evp_cipher)
++		return -EINVAL;
++
++	mac_len = EVP_MD_size(md);
++	key_len = EVP_CIPHER_key_length(evp_cipher);
++	iv_len = EVP_CIPHER_iv_length(evp_cipher);
++	needed = 2 * mac_len + 2 * key_len + 2 * iv_len;
++	if (needed > sizeof(key_block))
++		return -EINVAL;
++
++	memcpy(seed, srandom, 32);
++	memcpy(seed + 32, crandom, 32);
++	if (gp_tls12_prf(md, ms, ms_len, "key expansion", seed, sizeof(seed),
++			 key_block, needed))
++		return -EINVAL;
++
++	srv_key = key_block + 2 * mac_len + key_len;
++	srv_iv = key_block + 2 * mac_len + 2 * key_len + iv_len;
++	ret = gp_tls12_cbc_decrypt(vpninfo, evp_cipher, srv_key, in, iv_len,
++				   in, inlen, out, outlen);
++	if (!ret)
++		return 0;
++
++	return gp_tls12_cbc_decrypt(vpninfo, evp_cipher, srv_key, srv_iv, iv_len,
++				  in, inlen, out, outlen);
++}
++
+diff --git a/tests/Makefile.am b/tests/Makefile.am
+index 8b3cbee..ec25319 100644
+--- a/tests/Makefile.am
++++ b/tests/Makefile.am
+@@ -88,9 +88,10 @@ dist_check_SCRIPTS += auth-username-pass auth-certificate auth-nonascii cert-fin
+ 	id-test obsolete-server-crypto pfs auth-swtpm auth-hwtpm fortinet-auth-and-config \
+ 	f5-auth-and-config juniper-auth juniper-sso-auth gp-auth-and-config auth-pkcs11 \
+ 	auth-multicert gp-nlb-ssl-parse gp-nlb-esp-envelope gp-nlb-ssl-connect \
+-	gp-nlb-opaque-due gp-nlb-auth-and-config
++	gp-nlb-opaque-due gp-nlb-auth-and-config gp-esp-gcm-roundtrip gp-nlb-blob-parse
+ 
+-TESTS += gp-nlb-ssl-parse gp-nlb-esp-envelope gp-nlb-ssl-connect gp-nlb-opaque-due
++TESTS += gp-nlb-ssl-parse gp-nlb-esp-envelope gp-nlb-ssl-connect gp-nlb-opaque-due \
++	gp-esp-gcm-roundtrip gp-nlb-blob-parse
+ 
+ if HAVE_CWRAP
+ TESTS += auth-username-pass auth-certificate auth-nonascii cert-fingerprint id-test \
+diff --git a/tests/gp-esp-gcm-roundtrip b/tests/gp-esp-gcm-roundtrip
+new file mode 100755
+index 0000000..f81d6e9
+--- /dev/null
++++ b/tests/gp-esp-gcm-roundtrip
+@@ -0,0 +1,63 @@
++#!/bin/sh
++# Validate RFC4106 ESP-GCM packet layout helpers (nonce + AAD)
++set -eu
++cd "$(dirname "$0")/.."
++CC="${CC:-cc}"
++TMP=$(mktemp -d)
++trap 'rm -rf "$TMP"' EXIT
++
++cat > "$TMP/test.c" <<'EOF'
++#include <stdio.h>
++#include <stdint.h>
++#include <string.h>
++#include <arpa/inet.h>
++
++#define ESP_GCM_IV_LEN 8
++
++static inline uint32_t load_be32(const void *p)
++{
++	uint32_t n;
++	memcpy(&n, p, 4);
++	return ntohl(n);
++}
++
++static void esp_gcm_nonce(unsigned char *nonce, const unsigned char *iv, uint32_t seq)
++{
++	memcpy(nonce, iv, ESP_GCM_IV_LEN);
++	memcpy(nonce + ESP_GCM_IV_LEN, &seq, 4);
++}
++
++static void esp_gcm_aad(unsigned char *aad, uint32_t spi, uint32_t seq)
++{
++	uint32_t be[2];
++
++	be[0] = spi;
++	be[1] = seq;
++	memcpy(aad, be, 8);
++}
++
++int main(void)
++{
++	unsigned char iv[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
++	unsigned char nonce[12], aad[8];
++	uint32_t seq = htonl(42);
++	uint32_t spi = htonl(0x12345678);
++
++	esp_gcm_nonce(nonce, iv, seq);
++	if (memcmp(nonce, iv, 8) || memcmp(nonce + 8, &seq, 4)) {
++		fprintf(stderr, "nonce construction failed\n");
++		return 1;
++	}
++
++	esp_gcm_aad(aad, spi, seq);
++	if (load_be32(aad) != ntohl(spi) || load_be32(aad + 4) != ntohl(seq)) {
++		fprintf(stderr, "aad construction failed\n");
++		return 1;
++	}
++
++	printf("gp-esp-gcm-roundtrip: OK\n");
++	return 0;
++}
++EOF
++$CC -o "$TMP/test" "$TMP/test.c"
++"$TMP/test"
+\ No newline at end of file
+diff --git a/tests/gp-nlb-blob-parse b/tests/gp-nlb-blob-parse
+new file mode 100755
+index 0000000..f803b1b
+--- /dev/null
++++ b/tests/gp-nlb-blob-parse
+@@ -0,0 +1,51 @@
++#!/bin/sh
++# Validate NLB enc-hs-key / tunnel-opaque blob header parsing
++set -eu
++cd "$(dirname "$0")/.."
++CC="${CC:-cc}"
++TMP=$(mktemp -d)
++trap 'rm -rf "$TMP"' EXIT
++
++cat > "$TMP/test.c" <<'EOF'
++#include <stdio.h>
++#include <stdint.h>
++#include <string.h>
++#include <arpa/inet.h>
++
++#define GP_NLB_BLOB_HDR_LEN 24
++#define GP_NLB_BLOB_SESSION_OFF 24
++
++static inline uint32_t load_be32(const void *p)
++{
++	uint32_t n;
++	memcpy(&n, p, 4);
++	return ntohl(n);
++}
++
++int main(void)
++{
++	/* enc-hs-key sample from issue #526 (Australia NLB gateway) */
++	const unsigned char enc_blob[64] = {
++		0x58,0x8b,0xe1,0xc1,0x73,0xf0,0x7d,0x4b,0x87,0x7c,0x47,0x80,0xe3,0x61,0x37,0xe2,
++		0xe5,0xac,0x06,0x00,0x00,0x00,0x00,0x00,0x10,0xa7,0x3b,0x6a,0x70,0x3e,0xbd,0x34,
++		0x9a,0x8f,0x3b,0x81,0x8e,0x8b,0x5b,0x35,0x81,0xd2,0xa0,0xdf,0x14,0xa7,0x17,0x47,
++		0x2c,0x52,0x3b,0x8e,0x99,0x4d,0x39,0x30,0x56,0x5b,0xbe,0xff,0x06,0x1b,0x86,0xf4
++	};
++	uint32_t sid;
++
++	if (sizeof(enc_blob) != 64)
++		return 1;
++	if (enc_blob[16] != 0xe5 || enc_blob[17] != 0xac)
++		return 1;
++	sid = load_be32(enc_blob + GP_NLB_BLOB_SESSION_OFF);
++	if (sid != 0x10a73b6a) {
++		fprintf(stderr, "session id mismatch: 0x%08x\n", sid);
++		return 1;
++	}
++
++	printf("gp-nlb-blob-parse: OK\n");
++	return 0;
++}
++EOF
++$CC -o "$TMP/test" "$TMP/test.c"
++"$TMP/test"
+\ No newline at end of file
