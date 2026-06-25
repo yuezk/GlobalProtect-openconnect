@@ -1,34 +1,4 @@
-use std::{env, path::PathBuf, process::Command};
-
-fn apply_patches(patches_dir: &PathBuf, build_src: &PathBuf) {
-  let patches = std::fs::read_dir(patches_dir)
-    .expect("Failed to read patches directory")
-    .filter_map(|entry| entry.ok())
-    .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("patch"))
-    .map(|entry| entry.path())
-    .collect::<Vec<_>>();
-
-  // Sort patches to ensure they are applied in order
-  let mut patches = patches;
-  patches.sort();
-
-  for patch in patches {
-    println!("cargo:rerun-if-changed={}", patch.display());
-    println!("Applying patch: {}", patch.display());
-
-    let status = Command::new("patch")
-      .arg("-p1") // Strip one level of path (standard for git diffs)
-      .arg("-i") // Input file
-      .arg(&patch)
-      .current_dir(build_src) // Run INSIDE the copied dir
-      .status()
-      .expect("Failed to execute patch command");
-
-    if !status.success() {
-      panic!("Failed to apply patch file: {}", patch.display());
-    }
-  }
-}
+use std::{env, path::PathBuf};
 
 fn build_libxml2(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
   let libxml2_dir = deps_dir.join("libxml2");
@@ -91,12 +61,11 @@ fn build_libxml2(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
 
 fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
   let openconnect_dir = deps_dir.join("openconnect");
-  let patches_dir = deps_dir.join("patches");
 
   // The temporary location where we will build
   let build_src = out_dir.join("openconnect_build");
 
-  // Track changes so cargo rebuilds if patch or submodule changes
+  // Track changes so cargo rebuilds if submodule changes
   println!("cargo:rerun-if-changed={}", openconnect_dir.display());
 
   // Prepare the build directory
@@ -113,9 +82,6 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
   options.content_only = true; // Copy content of src into dest, not src folder itself
 
   fs_extra::dir::copy(&openconnect_dir, &build_src, &options).expect("Failed to copy C source code to OUT_DIR");
-
-  // Apply all patches from the patches directory
-  apply_patches(&patches_dir, &build_src);
 
   // Build the OpenConnect library using autotools
   // We explicitly enable static and disable shared to ensure we get a .a file.
