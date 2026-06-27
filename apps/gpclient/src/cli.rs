@@ -1,4 +1,9 @@
-use std::{env::temp_dir, fs::File, str::FromStr};
+use std::{
+  env::temp_dir,
+  fs::File,
+  path::{Path, PathBuf},
+  str::FromStr,
+};
 
 use anyhow::bail;
 use clap::{Parser, Subcommand};
@@ -31,6 +36,7 @@ const VERSION: &str = concat!(
 pub(crate) struct SharedArgs<'a> {
   pub(crate) fix_openssl: bool,
   pub(crate) ignore_tls_errors: bool,
+  pub(crate) lock_file: &'a Path,
   pub(crate) verbose: &'a InfoLevelVerbosity,
 }
 
@@ -75,6 +81,13 @@ struct Cli {
   fix_openssl: bool,
   #[arg(long, help = "Ignore the TLS errors")]
   ignore_tls_errors: bool,
+  #[arg(
+    long,
+    global = true,
+    default_value = GP_CLIENT_LOCK_FILE,
+    help = "Path to the gpclient PID lock file"
+  )]
+  lock_file: PathBuf,
 
   #[command(flatten)]
   verbose: InfoLevelVerbosity,
@@ -92,7 +105,7 @@ impl Args for Cli {
 
 impl Cli {
   async fn is_running(&self) -> bool {
-    let Ok(c) = fs::read_to_string(GP_CLIENT_LOCK_FILE).await else {
+    let Ok(c) = fs::read_to_string(&self.lock_file).await else {
       return false;
     };
 
@@ -131,6 +144,7 @@ impl Cli {
     let shared_args = SharedArgs {
       fix_openssl: self.fix_openssl,
       ignore_tls_errors: self.ignore_tls_errors,
+      lock_file: &self.lock_file,
       verbose: &self.verbose,
     };
 
@@ -140,7 +154,7 @@ impl Cli {
 
     match &self.command {
       CliCommand::Connect(args) => ConnectHandler::new(args, &shared_args).handle().await,
-      CliCommand::Disconnect(args) => DisconnectHandler::new(args).handle().await,
+      CliCommand::Disconnect(args) => DisconnectHandler::new(args, shared_args.lock_file).handle().await,
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
       CliCommand::Hip(args) => HipHandler::new(args).handle().await,
     }
@@ -175,5 +189,31 @@ pub(crate) async fn run() {
   if let Err(err) = cli.run().await {
     handle_error(err, &cli);
     std::process::exit(1);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn lock_file_defaults_to_standard_path() {
+    let cli = Cli::try_parse_from(["gpclient", "connect", "portal.example.com"]).expect("cli should parse");
+
+    assert_eq!(cli.lock_file, PathBuf::from(GP_CLIENT_LOCK_FILE));
+  }
+
+  #[test]
+  fn lock_file_can_be_overridden_after_subcommand() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "connect",
+      "portal.example.com",
+      "--lock-file",
+      "/tmp/gpclient-portal.lock",
+    ])
+    .expect("global lock file option should parse after subcommand");
+
+    assert_eq!(cli.lock_file, PathBuf::from("/tmp/gpclient-portal.lock"));
   }
 }

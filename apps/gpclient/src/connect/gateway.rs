@@ -1,5 +1,6 @@
 use std::{
   fs,
+  path::Path,
   sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -21,9 +22,8 @@ use log::{info, warn};
 use openconnect::{Vpn, VpnBuilder};
 use tokio::{runtime::Handle, task::JoinHandle};
 
-use crate::{
-  GP_CLIENT_LOCK_FILE,
-  session::{SessionContextInput, build_session_context, session_info_from_vpn, spawn_session_runtime_with_info},
+use crate::session::{
+  SessionContextInput, build_session_context, session_info_from_vpn, spawn_session_runtime_with_info,
 };
 
 use super::{ConnectHandler, args::cookie_cache_path};
@@ -384,9 +384,12 @@ impl ConnectHandler<'_> {
       vpn_clone.disconnect();
     });
 
+    let lock_file = self.shared_args.lock_file.to_path_buf();
+    let lock_file_on_connect = lock_file.clone();
+
     let connect_result = vpn.connect(move |vpn_session_info| {
       tunnel_established_on_connect.store(true, Ordering::SeqCst);
-      write_pid_file();
+      write_pid_file(&lock_file_on_connect);
 
       let Some(session_ctx) = session_ctx_on_connect.lock().unwrap().take() else {
         return;
@@ -403,9 +406,9 @@ impl ConnectHandler<'_> {
       task.abort();
     }
 
-    if fs::metadata(GP_CLIENT_LOCK_FILE).is_ok() {
+    if fs::metadata(&lock_file).is_ok() {
       info!("Removing PID file");
-      fs::remove_file(GP_CLIENT_LOCK_FILE).map_err(|err| GatewayConnectError::after_tunnel(err.into()))?;
+      fs::remove_file(&lock_file).map_err(|err| GatewayConnectError::after_tunnel(err.into()))?;
     }
 
     let disconnect_requested = disconnect_requested.load(Ordering::SeqCst);
@@ -458,13 +461,13 @@ fn direct_gateway_command(gateway: &str) -> String {
   format!("gpauth --gateway {gateway} | sudo gpclient connect {gateway} --as-gateway --cookie-on-stdin")
 }
 
-fn write_pid_file() {
+fn write_pid_file(lock_file: &Path) {
   let pid = std::process::id();
 
-  if let Err(err) = fs::write(GP_CLIENT_LOCK_FILE, pid.to_string()) {
+  if let Err(err) = fs::write(lock_file, pid.to_string()) {
     warn!("Failed to write PID file: {}", err);
   } else {
-    info!("Wrote PID {} to {}", pid, GP_CLIENT_LOCK_FILE);
+    info!("Wrote PID {} to {}", pid, lock_file.display());
   }
 }
 
