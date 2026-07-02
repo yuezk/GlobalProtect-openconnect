@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, Cow};
+use std::{
+  borrow::{Borrow, Cow},
+  fmt,
+};
 
 use anyhow::bail;
 use log::{info, warn};
@@ -25,13 +28,26 @@ pub struct SamlAuthData {
 #[serde(rename_all = "camelCase")]
 pub enum SamlAuthResult {
   Success(SamlAuthData),
+  Cancelled,
   Failure(String),
 }
+
+#[derive(Debug)]
+pub struct AuthenticationCancelled;
+
+impl fmt::Display for AuthenticationCancelled {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str("Authentication cancelled")
+  }
+}
+
+impl std::error::Error for AuthenticationCancelled {}
 
 impl SamlAuthResult {
   pub fn is_success(&self) -> bool {
     match self {
       SamlAuthResult::Success(_) => true,
+      SamlAuthResult::Cancelled => false,
       SamlAuthResult::Failure(_) => false,
     }
   }
@@ -39,6 +55,7 @@ impl SamlAuthResult {
   pub fn host_id(&self) -> Option<&str> {
     match self {
       SamlAuthResult::Success(auth_data) => auth_data.host_id(),
+      SamlAuthResult::Cancelled => None,
       SamlAuthResult::Failure(_) => None,
     }
   }
@@ -245,5 +262,16 @@ mod tests {
 
     let value = serde_json::to_value(result).unwrap();
     assert!(value["success"].get("hostId").is_none());
+  }
+
+  #[test]
+  fn auth_result_cancelled_is_structured() {
+    let value = serde_json::to_value(SamlAuthResult::Cancelled).unwrap();
+
+    assert_eq!(value, "cancelled");
+
+    let result: SamlAuthResult = serde_json::from_value(value).unwrap();
+    assert!(!result.is_success());
+    assert_eq!(result.host_id(), None);
   }
 }
