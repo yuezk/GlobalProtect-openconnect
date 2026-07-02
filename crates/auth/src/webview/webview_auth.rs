@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::bail;
 use gpapi::{
-  auth::SamlAuthData,
+  auth::{AuthenticationCancelled, SamlAuthData},
   gp_params::GpParams,
   os_profile::{WebviewUserAgent, WebviewUserAgentTransform},
   utils::redact::redact_uri,
@@ -130,7 +130,7 @@ impl<'a> WebviewAuthenticator<'a> {
 
     loop {
       match auth_messenger.subscribe().await? {
-        AuthEvent::Close => bail!("Authentication cancelled"),
+        AuthEvent::Close => bail!(AuthenticationCancelled),
         AuthEvent::RaiseWindow => self.raise_window(&auth_window),
         #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
         AuthEvent::Error(AuthError::TlsError) => bail!(gpapi::error::PortalError::TlsError),

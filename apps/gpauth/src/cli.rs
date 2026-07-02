@@ -1,7 +1,7 @@
 use auth::{BrowserAuthenticator, auth_prelogin};
 use clap::Parser;
 use gpapi::{
-  auth::{SamlAuthData, SamlAuthResult},
+  auth::{AuthenticationCancelled, SamlAuthData, SamlAuthResult},
   clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
   gp_params::GpParams,
   os_profile::{ClientOs, OsProfile},
@@ -232,6 +232,7 @@ pub fn print_auth_result(auth_result: anyhow::Result<SamlAuthData>, host_id: Opt
       };
       SamlAuthResult::Success(auth_data)
     }
+    Err(err) if err.downcast_ref::<AuthenticationCancelled>().is_some() => SamlAuthResult::Cancelled,
     Err(err) => SamlAuthResult::Failure(format!("{}", err)),
   };
 
