@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+  Arc,
+  atomic::{AtomicBool, Ordering},
+};
 use std::{collections::HashMap, io::Write};
 
 use anyhow::bail;
@@ -58,9 +61,17 @@ impl Cli {
     let (ws_req_tx, ws_req_rx) = mpsc::channel::<WsRequest>(32);
     // Channel for receiving the VPN state from the VPN task
     let (vpn_state_tx, vpn_state_rx) = watch::channel(VpnState::Disconnected);
+    let gui_restart_requested = Arc::new(AtomicBool::new(false));
 
     let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx);
-    let ws_server = WsServer::new(api_key.clone(), ws_req_tx, vpn_state_rx, lock_file.clone(), redaction);
+    let ws_server = WsServer::new(
+      api_key.clone(),
+      ws_req_tx,
+      Arc::clone(&gui_restart_requested),
+      vpn_state_rx,
+      lock_file.clone(),
+      redaction,
+    );
 
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(4);
     let shutdown_tx_clone = shutdown_tx.clone();
@@ -92,7 +103,7 @@ impl Cli {
       let minimized = self.minimized;
 
       tokio::spawn(async move {
-        launch_gui(envs, api_key, minimized).await;
+        launch_gui(envs, api_key, minimized, gui_restart_requested).await;
         let _ = shutdown_tx.send(()).await;
       });
     }
@@ -201,7 +212,12 @@ mod signals {
   }
 }
 
-async fn launch_gui(envs: Option<HashMap<String, String>>, api_key: Vec<u8>, mut minimized: bool) {
+async fn launch_gui(
+  envs: Option<HashMap<String, String>>,
+  api_key: Vec<u8>,
+  mut minimized: bool,
+  restart_requested: Arc<AtomicBool>,
+) {
   loop {
     let gui_launcher = GuiLauncher::new(env!("CARGO_PKG_VERSION"), &api_key)
       .envs(envs.clone())
@@ -209,13 +225,13 @@ async fn launch_gui(envs: Option<HashMap<String, String>>, api_key: Vec<u8>, mut
 
     match gui_launcher.launch().await {
       Ok(exit_status) => {
-        // Exit code 99 means that the GUI needs to be restarted
-        if exit_status.code() != Some(99) {
+        let should_restart = restart_requested.swap(false, Ordering::SeqCst);
+        if !should_restart {
           info!("GUI exited with code {:?}", exit_status.code());
           break;
         }
 
-        info!("GUI exited with code 99, restarting");
+        info!("GUI restart requested, restarting");
         minimized = false;
       }
       Err(err) => {

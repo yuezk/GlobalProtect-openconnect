@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+  Arc,
+  atomic::{AtomicBool, Ordering},
+};
 
 use axum::extract::ws::Message;
 use common::binary_paths;
@@ -26,6 +29,7 @@ use crate::{routes, ws_connection::WsConnection};
 pub(crate) struct WsServerContext {
   crypto: Arc<Crypto>,
   ws_req_tx: mpsc::Sender<WsRequest>,
+  gui_restart_requested: Arc<AtomicBool>,
   vpn_state_rx: watch::Receiver<VpnState>,
   redaction: Arc<Redaction>,
   connections: RwLock<Vec<Arc<WsConnection>>>,
@@ -35,12 +39,14 @@ impl WsServerContext {
   pub fn new(
     api_key: Vec<u8>,
     ws_req_tx: mpsc::Sender<WsRequest>,
+    gui_restart_requested: Arc<AtomicBool>,
     vpn_state_rx: watch::Receiver<VpnState>,
     redaction: Arc<Redaction>,
   ) -> Self {
     Self {
       crypto: Arc::new(Crypto::new(api_key)),
       ws_req_tx,
+      gui_restart_requested,
       vpn_state_rx,
       redaction,
       connections: Default::default(),
@@ -106,6 +112,11 @@ impl WsServerContext {
 
     Ok(())
   }
+
+  pub fn request_gui_restart(&self) {
+    info!("GUI restart requested");
+    self.gui_restart_requested.store(true, Ordering::SeqCst);
+  }
 }
 
 pub(crate) struct WsServer {
@@ -118,11 +129,18 @@ impl WsServer {
   pub fn new(
     api_key: Vec<u8>,
     ws_req_tx: mpsc::Sender<WsRequest>,
+    gui_restart_requested: Arc<AtomicBool>,
     vpn_state_rx: watch::Receiver<VpnState>,
     lock_file: Arc<LockFile>,
     redaction: Arc<Redaction>,
   ) -> Self {
-    let ctx = Arc::new(WsServerContext::new(api_key, ws_req_tx, vpn_state_rx, redaction));
+    let ctx = Arc::new(WsServerContext::new(
+      api_key,
+      ws_req_tx,
+      gui_restart_requested,
+      vpn_state_rx,
+      redaction,
+    ));
     let cancel_token = CancellationToken::new();
 
     Self {

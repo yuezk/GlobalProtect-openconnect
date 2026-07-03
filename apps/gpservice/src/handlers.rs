@@ -19,7 +19,10 @@ use axum::{
 use common::binary_paths;
 use futures::{SinkExt, StreamExt};
 use gpapi::{
-  service::{event::WsEvent, request::UpdateGuiRequest},
+  service::{
+    event::WsEvent,
+    request::{RestartGuiRequest, UpdateGuiRequest},
+  },
   utils::checksum::verify_checksum,
 };
 use log::{info, warn};
@@ -35,6 +38,17 @@ pub(crate) async fn health() -> impl IntoResponse {
 
 pub(crate) async fn active_gui(State(ctx): State<Arc<WsServerContext>>) -> impl IntoResponse {
   ctx.send_event(WsEvent::ActiveGui).await;
+}
+
+pub(crate) async fn restart_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) -> Result<(), StatusCode> {
+  if let Err(err) = ctx.decrypt::<RestartGuiRequest>(body.to_vec()) {
+    warn!("Failed to decrypt restart GUI payload: {}", err);
+    return Err(StatusCode::BAD_REQUEST);
+  }
+
+  ctx.request_gui_restart();
+
+  Ok(())
 }
 
 pub async fn update_gui(State(ctx): State<Arc<WsServerContext>>, body: Bytes) -> Result<(), StatusCode> {

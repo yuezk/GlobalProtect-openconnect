@@ -307,6 +307,9 @@ pub struct UpdateGuiRequest {
   pub checksum: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct RestartGuiRequest;
+
 #[cfg(test)]
 mod tests {
   use serde_json::json;
