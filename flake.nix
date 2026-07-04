@@ -192,8 +192,6 @@
 
           postInstall = ''
             cp -r packaging/files/usr/libexec $out/libexec
-
-            ${rewriteSourceInstallPaths}
           ''
           + lib.optionalString pkgs.stdenv.isLinux ''
             # Copy the prebuilt gpgui binary to the output bin directory
@@ -204,6 +202,9 @@
             cp -r packaging/files/usr/lib $out/lib
 
             ${installNixosPolkitRule}
+          ''
+          + ''
+            ${rewriteSourceInstallPaths}
           '';
         };
 
