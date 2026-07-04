@@ -90,11 +90,12 @@
           ];
 
         rewriteSourceInstallPaths = ''
-          substituteInPlace $out/share/applications/gpgui.desktop \
-            --replace-fail /usr/bin/gpclient /run/current-system/sw/bin/gpclient
-
           substituteInPlace $out/libexec/gpclient/hipreport.sh \
             --replace-fail /usr/bin/gpclient $out/bin/gpclient
+        ''
+        + lib.optionalString pkgs.stdenv.isLinux ''
+          substituteInPlace $out/share/applications/gpgui.desktop \
+            --replace-fail /usr/bin/gpclient /run/current-system/sw/bin/gpclient
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice
@@ -136,9 +137,20 @@
 
         fromSource = naersk'.buildPackage {
           inherit pname version src;
+          name = "globalprotect-openconnect";
 
           # Must be set to true to avoid issues with the Tauri build process
           singleStep = true;
+
+          cargoBuildOptions =
+            old:
+            old
+            ++ lib.optionals pkgs.stdenv.isDarwin [
+              "-p"
+              "gpclient"
+              "-p"
+              "gpauth"
+            ];
 
           buildInputs = linuxBuildInputs;
 
@@ -167,25 +179,32 @@
 
                 substituteInPlace crates/common/src/constants.rs \
                   --replace-fail /usr/bin/gpclient $out/bin/gpclient \
-                  --replace-fail /usr/bin/gpservice $out/bin/gpservice \
-                  --replace-fail /usr/bin/gpgui-helper $out/bin/gpgui-helper \
-                  --replace-fail /usr/bin/gpgui $out/bin/gpgui \
                   --replace-fail /usr/bin/gpauth $out/bin/gpauth \
                   --replace-fail /opt/homebrew/ $out/
+              ''
+              + lib.optionalString pkgs.stdenv.isLinux ''
+                substituteInPlace crates/common/src/constants.rs \
+                  --replace-fail /usr/bin/gpservice $out/bin/gpservice \
+                  --replace-fail /usr/bin/gpgui-helper $out/bin/gpgui-helper \
+                  --replace-fail /usr/bin/gpgui $out/bin/gpgui
               '';
             };
 
           postInstall = ''
+            cp -r packaging/files/usr/libexec $out/libexec
+          ''
+          + lib.optionalString pkgs.stdenv.isLinux ''
             # Copy the prebuilt gpgui binary to the output bin directory
             cp ${gpgui}/gpgui $out/bin/gpgui
             chmod +x $out/bin/gpgui
 
             cp -r packaging/files/usr/share $out/share
             cp -r packaging/files/usr/lib $out/lib
-            cp -r packaging/files/usr/libexec $out/libexec
 
-            ${rewriteSourceInstallPaths}
             ${installNixosPolkitRule}
+          ''
+          + ''
+            ${rewriteSourceInstallPaths}
           '';
         };
 
@@ -225,11 +244,7 @@
           binaryName:
           pkgs.buildFHSEnv {
             name = binaryName;
-            targetPkgs =
-              pkgs:
-              [ prebuiltFiles ]
-              ++ linuxBuildInputs
-              ++ linuxRuntimeDependencies;
+            targetPkgs = pkgs: [ prebuiltFiles ] ++ linuxBuildInputs ++ linuxRuntimeDependencies;
             runScript = "/usr/bin/${binaryName}";
             profile = ''
               export PATH=/run/wrappers/bin:$PATH
@@ -358,17 +373,16 @@
       in
       {
         # For `nix build`
-        packages =
-          {
-            fromSource = fromSource;
-          }
-          // lib.optionalAttrs pkgs.stdenv.isLinux {
-            default = prebuilt;
-            prebuilt = prebuilt;
-          }
-          // lib.optionalAttrs (!pkgs.stdenv.isLinux) {
-            default = fromSource;
-          };
+        packages = {
+          fromSource = fromSource;
+        }
+        // lib.optionalAttrs pkgs.stdenv.isLinux {
+          default = prebuilt;
+          prebuilt = prebuilt;
+        }
+        // lib.optionalAttrs (!pkgs.stdenv.isLinux) {
+          default = fromSource;
+        };
 
         apps.default = {
           type = "app";
