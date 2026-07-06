@@ -1,0 +1,19 @@
+[package]
+name = "browser-launcher"
+rust-version.workspace = true
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+log.workspace = true
+open = { version = "5", optional = true }
+webbrowser = { version = "1", optional = true }
+which = { workspace = true, optional = true }
+
+[features]
+default = []
+launcher = ["dep:open", "dep:webbrowser", "dep:which"]

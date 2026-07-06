@@ -218,6 +218,7 @@ version = "2.6.4"
 dependencies = [
  "anyhow",
  "block2",
+ "browser-launcher",
  "common",
  "gpapi",
  "html-escape",
@@ -225,16 +226,13 @@ dependencies = [
  "objc2",
  "objc2-foundation",
  "objc2-web-kit",
- "open",
  "regex",
  "tauri",
  "tiny_http",
  "tokio",
  "tokio-util",
  "uuid",
- "webbrowser",
  "webkit2gtk",
- "which",
 ]
 
 [[package]]
@@ -417,6 +415,17 @@ checksum = "3a32acac15fe1967bc3986b2a6347dffc965602354ea6f450ad07e8bfd253583"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
+]
+
+[[package]]
+name = "browser-launcher"
+version = "2.6.4"
+dependencies = [
+ "anyhow",
+ "log",
+ "open",
+ "webbrowser",
+ "which",
 ]
 
 [[package]]

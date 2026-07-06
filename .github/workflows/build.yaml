@@ -39,6 +39,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test-gp:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout GlobalProtect-openconnect
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        submodules: recursive
+    - name: Run Rust tests in Docker
+      run: |
+        docker run --rm \
+          --user root \
+          -e COREPACK_INTEGRITY_KEYS=0 \
+          -e LIBXML2_STATIC=1 \
+          -v "$(pwd):/workspace" \
+          -w /workspace \
+          yuezk/gpdev:binary-builder-tauri2 \
+          cargo test --workspace
+
   tarball:
     runs-on: ubuntu-latest
     steps:
