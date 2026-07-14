@@ -27,6 +27,7 @@ A modern GlobalProtect VPN client for Linux, built on OpenConnect with full supp
   - [Other Distributions](#other-distributions)
 - [Building from Source](#building-from-source)
 - [Frequently Asked Questions](#frequently-asked-questions)
+- [NetworkManager Integration](#networkmanager-integration)
 - [License](#license)
 
 ## Features
@@ -284,7 +285,7 @@ gnome-extensions enable appindicatorsupport@rgcjonas.gmail.com
 
 ### Official Docker Image
 
-The official Docker image provides the CLI tools on Alpine Linux:
+The [official Docker image](https://hub.docker.com/r/yuezk/globalprotect-openconnect) provides the CLI tools on Alpine Linux:
 
 ```bash
 docker pull yuezk/globalprotect-openconnect:<version>
@@ -467,6 +468,11 @@ sudo -E gpclient connect <portal>
 ```
 
 See related issue: [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)
+
+## NetworkManager Integration
+
+- [WMP/GlobalProtect-SAML-NetworkManager](https://github.com/WMP/GlobalProtect-SAML-NetworkManager) – NetworkManager VPN plugin with SAML/SSO support for GNOME and KDE Plasma
+- [jdpipe/networkmanager-gpclient](https://github.com/jdpipe/networkmanager-gpclient) – NetworkManager VPN plugin that uses `gpclient`
 
 ## Licensing
 

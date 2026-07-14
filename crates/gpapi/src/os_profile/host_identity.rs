@@ -362,6 +362,7 @@ mod platform {
 mod platform {
   use super::{
     ClientOs, NativeHostIdentitySnapshot, derive_uuid_from_seed, fallback_hostname, primary_mac_colon, resolve_host_id,
+    serial_number,
   };
   use log::debug;
 
@@ -429,9 +430,17 @@ mod platform {
   }
 
   fn collect_linux_serial_number() -> Option<String> {
-    ["/sys/class/dmi/id/product_serial", "/sys/class/dmi/id/product_uuid"]
-      .iter()
-      .find_map(|path| read_linux_identity_file(path))
+    resolve_linux_serial_number(
+      read_linux_identity_file("/sys/class/dmi/id/product_serial"),
+      collect_linux_product_uuid,
+    )
+  }
+
+  fn resolve_linux_serial_number(
+    product_serial: Option<String>,
+    product_uuid: impl FnOnce() -> Option<String>,
+  ) -> Option<String> {
+    product_serial.or_else(|| product_uuid().and_then(|uuid| serial_number::vmware_from_uuid(&uuid)))
   }
 
   #[cfg(test)]
@@ -445,6 +454,20 @@ mod platform {
         Some("5a784d56-6461-19ac-9ea9-d36a3b9c6cef".to_string())
       );
       assert_eq!(normalize_uuid("not-a-uuid"), None);
+    }
+
+    #[test]
+    fn linux_serial_number_preserves_product_serial_and_formats_uuid_fallback() {
+      let uuid = Some("5a784d56-6461-19ac-9ea9-d36a3b9c6cef".to_string());
+
+      assert_eq!(
+        resolve_linux_serial_number(Some("product-serial".to_string()), || uuid.clone()),
+        Some("product-serial".to_string())
+      );
+      assert_eq!(
+        resolve_linux_serial_number(None, || uuid),
+        Some("VMware-56 4d 78 5a 61 64 ac 19-9e a9 d3 6a 3b 9c 6c ef".to_string())
+      );
     }
   }
 }
