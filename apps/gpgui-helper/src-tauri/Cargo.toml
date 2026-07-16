@@ -20,6 +20,9 @@ clap.workspace = true
 compile-time.workspace = true
 env_logger.workspace = true
 futures-util.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+tokio-tungstenite = "0.30"
 tempfile.workspace = true
 reqwest = { workspace = true, features = ["stream"] }
 

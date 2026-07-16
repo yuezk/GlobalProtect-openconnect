@@ -5,21 +5,21 @@ use common::binary_paths;
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::{process::command_traits::CommandExt, utils};
+use crate::{process::command_traits::CommandExt, service::transport::SessionCredential};
 
 pub struct GuiHelperLauncher<'a> {
   program: PathBuf,
   envs: Option<&'a HashMap<String, String>>,
-  api_key: &'a [u8],
+  credential: &'a SessionCredential,
   gui_version: Option<&'a str>,
 }
 
 impl<'a> GuiHelperLauncher<'a> {
-  pub fn new(api_key: &'a [u8]) -> Self {
+  pub fn new(credential: &'a SessionCredential) -> Self {
     Self {
       program: binary_paths::gpgui_helper(),
       envs: None,
-      api_key,
+      credential,
       gui_version: None,
     }
   }
@@ -42,7 +42,7 @@ impl<'a> GuiHelperLauncher<'a> {
       cmd.envs(envs);
     }
 
-    cmd.arg("--api-key-on-stdin");
+    cmd.arg("--service-credential-on-stdin");
 
     if let Some(gui_version) = self.gui_version {
       cmd.arg("--gui-version").arg(gui_version);
@@ -60,13 +60,11 @@ impl<'a> GuiHelperLauncher<'a> {
       bail!("Failed to open stdin");
     };
 
-    let api_key = utils::base64::encode(self.api_key);
-    tokio::spawn(async move {
-      stdin.write_all(api_key.as_bytes()).await.unwrap();
-      drop(stdin);
-    });
+    let frame = self.credential.encode_frame()?;
+    stdin.write_all(&frame).await?;
 
     let exit_status = child.wait().await?;
+    drop(stdin);
     info!("gpgui-helper exited with: {}", exit_status);
 
     Ok(())

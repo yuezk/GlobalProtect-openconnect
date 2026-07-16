@@ -169,7 +169,7 @@ impl VpnTask {
   }
 
   pub fn context(&self) -> Arc<VpnTaskContext> {
-    return Arc::clone(&self.ctx);
+    Arc::clone(&self.ctx)
   }
 
   async fn recv(&mut self) {
@@ -188,11 +188,14 @@ async fn process_ws_req(req: WsRequest, ctx: Arc<VpnTaskContext>) {
       ctx.disconnect().await;
     }
     WsRequest::UpdateLogLevel(UpdateLogLevelRequest(level)) => {
-      let level = level.parse().unwrap_or_else(|_| log::Level::Info);
+      let level = level.parse().unwrap_or(log::Level::Info);
       info!("Updating log level to: {}", level);
       if let Err(err) = logger::set_max_level(level) {
         warn!("Failed to update log level: {}", err);
       }
+    }
+    WsRequest::RestartGui | WsRequest::UpdateGui(_) => {
+      warn!("Non-VPN request reached the VPN task");
     }
   }
 }

@@ -21,3 +21,13 @@ log.workspace = true
 compile-time.workspace = true
 xz2 = "0.1"
 tar = "0.4"
+thiserror.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+zeroize.workspace = true
+tempfile.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["fs", "socket", "user"] }
+
+[dev-dependencies]
+tokio-tungstenite = "0.29"

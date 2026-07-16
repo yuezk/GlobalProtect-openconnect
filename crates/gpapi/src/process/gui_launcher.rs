@@ -2,6 +2,7 @@ use std::{
   collections::HashMap,
   path::PathBuf,
   process::{ExitStatus, Stdio},
+  sync::Arc,
 };
 
 use anyhow::bail;
@@ -9,24 +10,24 @@ use common::binary_paths;
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::{process::gui_helper_launcher::GuiHelperLauncher, utils::base64};
+use crate::{process::gui_helper_launcher::GuiHelperLauncher, service::transport::SessionCredential};
 
 use super::command_traits::CommandExt;
 
 pub struct GuiLauncher<'a> {
   version: &'a str,
   program: PathBuf,
-  api_key: &'a [u8],
+  credential: Arc<SessionCredential>,
   minimized: bool,
   envs: Option<HashMap<String, String>>,
 }
 
 impl<'a> GuiLauncher<'a> {
-  pub fn new(version: &'a str, api_key: &'a [u8]) -> Self {
+  pub fn new(version: &'a str, credential: Arc<SessionCredential>) -> Self {
     Self {
       version,
       program: binary_paths::gpgui(),
-      api_key,
+      credential,
       minimized: false,
       envs: None,
     }
@@ -61,7 +62,7 @@ impl<'a> GuiLauncher<'a> {
       cmd.envs(envs);
     }
 
-    cmd.arg("--api-key-on-stdin");
+    cmd.arg("--service-credential-on-stdin");
 
     if self.minimized {
       cmd.arg("--minimized");
@@ -79,13 +80,11 @@ impl<'a> GuiLauncher<'a> {
       bail!("Failed to open stdin");
     };
 
-    let api_key = base64::encode(self.api_key);
-    tokio::spawn(async move {
-      stdin.write_all(api_key.as_bytes()).await.unwrap();
-      drop(stdin);
-    });
+    let frame = self.credential.encode_frame()?;
+    stdin.write_all(&frame).await?;
 
     let exit_status = child.wait().await?;
+    drop(stdin);
 
     Ok(exit_status)
   }
@@ -109,7 +108,7 @@ impl<'a> GuiLauncher<'a> {
   }
 
   async fn download_program(&self) -> anyhow::Result<()> {
-    let gui_helper = GuiHelperLauncher::new(self.api_key);
+    let gui_helper = GuiHelperLauncher::new(&self.credential);
 
     gui_helper
       .envs(self.envs.as_ref())

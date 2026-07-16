@@ -1,9 +1,15 @@
 use clap::Parser;
+use std::{io::Read, sync::Arc};
+
+use anyhow::{Context, bail};
 use gpapi::{
   clap::InfoLevelVerbosity,
-  utils::{base64, env_utils},
+  service::transport::{MAX_CREDENTIAL_FRAME, SessionCredential},
+  utils::env_utils,
 };
 use log::info;
+use tokio::sync::watch;
+use zeroize::Zeroizing;
 
 use crate::app::App;
 
@@ -15,13 +21,11 @@ const VERSION: &str = concat!(
   compile_time::date_str!(),
   ")"
 );
-const GP_API_KEY: &[u8; 32] = &[0; 32];
-
 #[derive(Parser)]
 #[command(version = VERSION)]
 struct Cli {
-  #[arg(long, help = "Read the API key from stdin")]
-  api_key_on_stdin: bool,
+  #[arg(long, help = "Read the service credential from stdin")]
+  service_credential_on_stdin: bool,
 
   #[arg(long, default_value = env!("CARGO_PKG_VERSION"), help = "The version of the GUI")]
   gui_version: String,
@@ -32,26 +36,54 @@ struct Cli {
 
 impl Cli {
   fn run(&self) -> anyhow::Result<()> {
-    let api_key = self.read_api_key()?;
-    let app = App::new(api_key, &self.gui_version);
+    let credential = self.read_credential()?;
+    let credential_lease = monitor_credential_lease().context("Failed to monitor service credential lifetime")?;
+    let app = App::new(Arc::new(credential), credential_lease, &self.gui_version);
 
     env_utils::patch_gui_runtime_env(false);
 
     app.run()
   }
 
-  fn read_api_key(&self) -> anyhow::Result<Vec<u8>> {
-    if self.api_key_on_stdin {
-      let mut api_key = String::new();
-      std::io::stdin().read_line(&mut api_key)?;
-
-      let api_key = base64::decode_to_vec(api_key.trim())?;
-
-      Ok(api_key)
-    } else {
-      Ok(GP_API_KEY.to_vec())
+  fn read_credential(&self) -> anyhow::Result<SessionCredential> {
+    if !self.service_credential_on_stdin {
+      bail!("Service credential must be provided via --service-credential-on-stdin");
     }
+    let stdin = std::io::stdin();
+    let mut input = stdin.lock();
+    let mut header = [0_u8; 2];
+    input
+      .read_exact(&mut header)
+      .context("Failed to read service credential header")?;
+    let payload_len = u16::from_be_bytes(header) as usize;
+    if payload_len == 0 || payload_len + header.len() > MAX_CREDENTIAL_FRAME {
+      bail!("Invalid service credential length");
+    }
+    let mut frame = Zeroizing::new(Vec::with_capacity(payload_len + header.len()));
+    frame.extend_from_slice(&header);
+    frame.resize(payload_len + header.len(), 0);
+    input
+      .read_exact(&mut frame[header.len()..])
+      .context("Failed to read service credential")?;
+    SessionCredential::decode_frame(&frame).context("Invalid service credential")
   }
+}
+
+fn monitor_credential_lease() -> std::io::Result<watch::Receiver<bool>> {
+  let (lease_tx, lease_rx) = watch::channel(true);
+  std::thread::Builder::new()
+    .name("credential-lease".to_owned())
+    .spawn(move || {
+      let stdin = std::io::stdin();
+      close_credential_lease_at_eof(stdin.lock(), lease_tx);
+    })?;
+  Ok(lease_rx)
+}
+
+fn close_credential_lease_at_eof(mut input: impl Read, lease_tx: watch::Sender<bool>) {
+  let mut buffer = [0_u8; 256];
+  while matches!(input.read(&mut buffer), Ok(len) if len > 0) {}
+  let _ = lease_tx.send(false);
 }
 
 fn init_logger(cli: &Cli) {
@@ -69,5 +101,19 @@ pub fn run() {
   if let Err(e) = cli.run() {
     eprintln!("{}", e);
     std::process::exit(1);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::io::Cursor;
+
+  use super::*;
+
+  #[test]
+  fn credential_lease_closes_at_eof() {
+    let (lease_tx, lease_rx) = watch::channel(true);
+    close_credential_lease_at_eof(Cursor::new(b"ignored lease bytes"), lease_tx);
+    assert!(!*lease_rx.borrow());
   }
 }

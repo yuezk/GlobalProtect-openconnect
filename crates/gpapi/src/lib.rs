@@ -17,6 +17,3 @@ pub mod logger;
 
 #[cfg(feature = "clap")]
 pub mod clap;
-
-#[cfg(debug_assertions)]
-pub const GP_API_KEY: &[u8; 32] = &[0; 32];

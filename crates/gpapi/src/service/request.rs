@@ -299,16 +299,15 @@ pub enum WsRequest {
   Connect(Box<ConnectRequest>),
   Disconnect(DisconnectRequest),
   UpdateLogLevel(UpdateLogLevelRequest),
+  RestartGui,
+  UpdateGui(UpdateGuiRequest),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UpdateGuiRequest {
   pub path: String,
   pub checksum: String,
 }
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RestartGuiRequest;
 
 #[cfg(test)]
 mod tests {

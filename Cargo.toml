@@ -59,6 +59,8 @@ which = "8"
 uuid = "1"
 netdev = "0.40"
 humantime = "2"
+snow = { version = "0.10", default-features = false, features = ["std", "use-getrandom", "use-curve25519", "use-chacha20poly1305", "use-sha2"] }
+zeroize = "1"
 
 # Tauri dependencies
 tauri = { version = "2" }

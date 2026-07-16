@@ -64,6 +64,9 @@ endif
 
 default: build
 
+dev-service:
+	./scripts/dev-service.sh
+
 version:
 	@echo $(VERSION)
 

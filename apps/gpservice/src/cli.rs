@@ -1,10 +1,12 @@
+#[cfg(debug_assertions)]
+use std::path::PathBuf;
 use std::sync::{
   Arc,
   atomic::{AtomicBool, Ordering},
 };
 use std::{collections::HashMap, io::Write};
 
-use anyhow::bail;
+use anyhow::{Context, bail};
 use clap::Parser;
 use common::constants::GP_SERVICE_LOCK_FILE;
 use gpapi::clap::InfoLevelVerbosity;
@@ -12,12 +14,15 @@ use gpapi::logger;
 use gpapi::{
   process::gui_launcher::GuiLauncher,
   service::{request::WsRequest, vpn_state::VpnState},
-  utils::{crypto::generate_key, env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
+  utils::{env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
 };
 use log::{info, warn};
 use tokio::sync::{mpsc, watch};
+use uuid::Uuid;
 
-use crate::{vpn_task::VpnTask, ws_server::WsServer};
+use crate::{
+  request_dispatcher::RequestDispatcher, session_registry::SessionRegistry, vpn_task::VpnTask, ws_server::WsServer,
+};
 
 const VERSION: &str = concat!(
   env!("CARGO_PKG_VERSION"),
@@ -36,9 +41,14 @@ struct Cli {
   #[clap(long)]
   env_file: Option<String>,
   #[cfg(debug_assertions)]
-  #[clap(long)]
-  no_gui: bool,
-
+  #[clap(long, requires_all = ["dev_uid", "dev_bootstrap_socket"])]
+  dev_standalone: bool,
+  #[cfg(debug_assertions)]
+  #[clap(long, requires = "dev_standalone")]
+  dev_uid: Option<u32>,
+  #[cfg(debug_assertions)]
+  #[clap(long, requires = "dev_standalone")]
+  dev_bootstrap_socket: Option<PathBuf>,
   #[command(flatten)]
   verbose: InfoLevelVerbosity,
 }
@@ -55,28 +65,50 @@ impl Cli {
       bail!("Another instance of the service is already running");
     }
 
-    let api_key = self.prepare_api_key();
-
     // Channel for sending requests to the VPN task
     let (ws_req_tx, ws_req_rx) = mpsc::channel::<WsRequest>(32);
     // Channel for receiving the VPN state from the VPN task
     let (vpn_state_tx, vpn_state_rx) = watch::channel(VpnState::Disconnected);
     let gui_restart_requested = Arc::new(AtomicBool::new(false));
+    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let dispatcher = Arc::new(RequestDispatcher::new(
+      ws_req_tx.clone(),
+      Arc::clone(&gui_restart_requested),
+      Arc::clone(&redaction),
+    ));
 
     let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx);
     let ws_server = WsServer::new(
-      api_key.clone(),
-      ws_req_tx,
-      Arc::clone(&gui_restart_requested),
+      env!("CARGO_PKG_VERSION"),
+      Arc::clone(&registry),
+      dispatcher,
       vpn_state_rx,
       lock_file.clone(),
-      redaction,
     );
 
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(4);
     let shutdown_tx_clone = shutdown_tx.clone();
     let vpn_task_cancel_token = vpn_task.cancel_token();
     let server_token = ws_server.cancel_token();
+
+    #[cfg(debug_assertions)]
+    if self.dev_standalone {
+      let Some(dev_bootstrap_socket) = self.dev_bootstrap_socket.clone() else {
+        bail!("--dev-bootstrap-socket is required with --dev-standalone");
+      };
+      let Some(dev_uid) = self.dev_uid else {
+        bail!("--dev-uid is required with --dev-standalone");
+      };
+      let bootstrap = crate::dev_bootstrap::DevBootstrap::new(dev_bootstrap_socket, dev_uid, Arc::clone(&registry));
+      let bootstrap_token = server_token.clone();
+      let bootstrap_shutdown = shutdown_tx.clone();
+      tokio::spawn(async move {
+        if let Err(err) = bootstrap.start(bootstrap_token).await {
+          warn!("Debug bootstrap stopped: {err}");
+          let _ = bootstrap_shutdown.send(()).await;
+        }
+      });
+    }
 
     #[cfg(unix)]
     {
@@ -87,25 +119,24 @@ impl Cli {
     }
 
     let vpn_task_handle = tokio::spawn(async move { vpn_task.start(server_token).await });
-    let ws_server_handle = tokio::spawn(async move { ws_server.start(shutdown_tx_clone).await });
+    let (ws_ready_tx, ws_ready_rx) = tokio::sync::oneshot::channel();
+    let ws_server_handle = tokio::spawn(async move { ws_server.start(shutdown_tx_clone, ws_ready_tx).await });
 
     #[cfg(debug_assertions)]
-    let no_gui = self.no_gui;
-
+    let launch_managed_gui = !self.dev_standalone;
     #[cfg(not(debug_assertions))]
-    let no_gui = false;
+    let launch_managed_gui = true;
 
-    if no_gui {
-      info!("GUI is disabled");
-    } else {
+    if launch_managed_gui {
+      ws_ready_rx.await.context("WebSocket server failed to start")?;
       let envs = self.env_file.as_ref().map(env_utils::load_env_vars).transpose()?;
-
       let minimized = self.minimized;
-
       tokio::spawn(async move {
-        launch_gui(envs, api_key, minimized, gui_restart_requested).await;
+        launch_gui(envs, registry, minimized, gui_restart_requested).await;
         let _ = shutdown_tx.send(()).await;
       });
+    } else {
+      info!("Running with a separately started debug GUI");
     }
 
     tokio::select! {
@@ -152,15 +183,6 @@ impl Cli {
     logger::init_with_logger(level, inner_logger);
 
     redaction
-  }
-
-  fn prepare_api_key(&self) -> Vec<u8> {
-    #[cfg(debug_assertions)]
-    if self.no_gui {
-      return gpapi::GP_API_KEY.to_vec();
-    }
-
-    generate_key().to_vec()
   }
 }
 
@@ -214,17 +236,26 @@ mod signals {
 
 async fn launch_gui(
   envs: Option<HashMap<String, String>>,
-  api_key: Vec<u8>,
+  registry: Arc<SessionRegistry>,
   mut minimized: bool,
   restart_requested: Arc<AtomicBool>,
 ) {
   loop {
-    let gui_launcher = GuiLauncher::new(env!("CARGO_PKG_VERSION"), &api_key)
+    let credential = match registry.issue(env!("CARGO_PKG_VERSION")) {
+      Ok(credential) => credential,
+      Err(err) => {
+        warn!("Failed to issue GUI credential: {err}");
+        break;
+      }
+    };
+    let session_id = credential.session_id();
+    let gui_launcher = GuiLauncher::new(env!("CARGO_PKG_VERSION"), credential)
       .envs(envs.clone())
       .minimized(minimized);
 
     match gui_launcher.launch().await {
       Ok(exit_status) => {
+        registry.revoke(session_id);
         let should_restart = restart_requested.swap(false, Ordering::SeqCst);
         if !should_restart {
           info!("GUI exited with code {:?}", exit_status.code());
@@ -235,6 +266,7 @@ async fn launch_gui(
         minimized = false;
       }
       Err(err) => {
+        registry.revoke(session_id);
         warn!("Failed to launch GUI: {}", err);
         break;
       }
