@@ -115,6 +115,14 @@ pub(crate) fn decode<T: for<'de> Deserialize<'de>>(encoded: &[u8]) -> Result<T, 
 
 #[cfg(test)]
 mod tests {
+  use crate::{
+    gateway::Gateway,
+    service::{
+      request::{ConnectRequest, MAX_CLIENT_IDENTITY_DATA, WsRequest},
+      vpn_state::ConnectInfo,
+    },
+  };
+
   use super::*;
 
   #[test]
@@ -136,5 +144,22 @@ mod tests {
       "x".repeat(MAX_SERVICE_MESSAGE + 1)
     );
     assert!(serde_json::from_str::<ServiceResult>(&oversized).is_err());
+  }
+
+  #[test]
+  fn maximum_client_identity_fits_one_transport_message() {
+    let gateway = Gateway::new("Gateway".to_string(), "vpn.example.com".to_string());
+    let info = ConnectInfo::new("portal.example.com".to_string(), gateway.clone(), vec![gateway]);
+    let certificate_size = MAX_CLIENT_IDENTITY_DATA / 2;
+    let request = ConnectRequest::new(info, "cookie".to_string())
+      .with_certificate_data(Some(vec![b'c'; certificate_size]))
+      .with_sslkey_data(Some(vec![b'k'; MAX_CLIENT_IDENTITY_DATA - certificate_size]));
+    let message = ClientMessage::Request {
+      id: Uuid::new_v4(),
+      request: WsRequest::Connect(Box::new(request)),
+    };
+
+    let encoded = encode(&message).unwrap();
+    assert!(encoded.len() <= MAX_PLAINTEXT);
   }
 }

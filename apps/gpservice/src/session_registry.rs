@@ -107,6 +107,22 @@ impl SessionRegistry {
     Ok(credential)
   }
 
+  pub fn is_empty(&self) -> bool {
+    let Ok(mut sessions) = self.sessions.lock() else {
+      return false;
+    };
+    let now = Instant::now();
+    sessions.retain(|_, record| {
+      !matches!(
+        record.status,
+        SessionStatus::Pending {
+          activation_deadline, ..
+        } if now > activation_deadline
+      )
+    });
+    sessions.is_empty()
+  }
+
   pub fn begin_handshake(
     self: &Arc<Self>,
     service_instance_id: Uuid,

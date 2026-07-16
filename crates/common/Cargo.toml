@@ -5,4 +5,4 @@ version.workspace = true
 authors.workspace = true
 homepage.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "MIT"

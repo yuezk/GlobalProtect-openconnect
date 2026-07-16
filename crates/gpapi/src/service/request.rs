@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use zeroize::Zeroize;
 
 use crate::{
   gateway::Gateway,
@@ -9,6 +10,8 @@ use crate::{
 };
 
 use super::vpn_state::ConnectInfo;
+
+pub const MAX_CLIENT_IDENTITY_DATA: usize = 32 * 1024;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct LaunchGuiRequest {
@@ -30,7 +33,7 @@ impl LaunchGuiRequest {
   }
 }
 
-#[derive(Debug, Deserialize, Serialize, Type, Clone)]
+#[derive(Deserialize, Serialize, Type, Clone)]
 pub struct ConnectArgs {
   cookie: String,
   vpnc_script: Option<String>,
@@ -43,6 +46,8 @@ pub struct ConnectArgs {
 
   certificate: Option<String>,
   sslkey: Option<String>,
+  certificate_data: Option<String>,
+  sslkey_data: Option<String>,
   key_password: Option<String>,
 
   hip: bool,
@@ -72,6 +77,8 @@ impl ConnectArgs {
       host_id: None,
       certificate: None,
       sslkey: None,
+      certificate_data: None,
+      sslkey_data: None,
       key_password: None,
       hip: false,
       csd_uid: 0,
@@ -127,6 +134,22 @@ impl ConnectArgs {
     self.sslkey.clone()
   }
 
+  pub fn certificate_data(&self) -> anyhow::Result<Option<Vec<u8>>> {
+    self
+      .certificate_data
+      .as_deref()
+      .map(crate::utils::base64::decode_to_vec)
+      .transpose()
+  }
+
+  pub fn sslkey_data(&self) -> anyhow::Result<Option<Vec<u8>>> {
+    self
+      .sslkey_data
+      .as_deref()
+      .map(crate::utils::base64::decode_to_vec)
+      .transpose()
+  }
+
   pub fn key_password(&self) -> Option<String> {
     self.key_password.clone()
   }
@@ -173,6 +196,40 @@ impl ConnectArgs {
 
   pub fn allow_extend_session(&self) -> bool {
     self.allow_extend_session
+  }
+}
+
+impl fmt::Debug for ConnectArgs {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("ConnectArgs")
+      .field("cookie", &"<redacted>")
+      .field("vpnc_script", &self.vpnc_script)
+      .field(
+        "client_auth_path",
+        &(self.certificate.is_some() || self.sslkey.is_some()),
+      )
+      .field(
+        "client_auth_data",
+        &(self.certificate_data.is_some() || self.sslkey_data.is_some()),
+      )
+      .field("hip", &self.hip)
+      .field("csd_uid", &self.csd_uid)
+      .field("csd_wrapper", &self.csd_wrapper)
+      .field("reconnect_timeout", &self.reconnect_timeout)
+      .field("mtu", &self.mtu)
+      .field("disable_ipv6", &self.disable_ipv6)
+      .field("no_dtls", &self.no_dtls)
+      .field("allow_extend_session", &self.allow_extend_session)
+      .finish_non_exhaustive()
+  }
+}
+
+impl Drop for ConnectArgs {
+  fn drop(&mut self) {
+    self.cookie.zeroize();
+    self.key_password.zeroize();
+    self.certificate_data.zeroize();
+    self.sslkey_data.zeroize();
   }
 }
 
@@ -226,6 +283,16 @@ impl ConnectRequest {
 
   pub fn with_sslkey<T: Into<Option<String>>>(mut self, sslkey: T) -> Self {
     self.args.sslkey = sslkey.into();
+    self
+  }
+
+  pub fn with_certificate_data(mut self, certificate: Option<Vec<u8>>) -> Self {
+    self.args.certificate_data = certificate.map(encode_secret);
+    self
+  }
+
+  pub fn with_sslkey_data(mut self, sslkey: Option<Vec<u8>>) -> Self {
+    self.args.sslkey_data = sslkey.map(encode_secret);
     self
   }
 
@@ -285,6 +352,12 @@ impl ConnectRequest {
   pub fn args(&self) -> &ConnectArgs {
     &self.args
   }
+}
+
+fn encode_secret(mut data: Vec<u8>) -> String {
+  let encoded = crate::utils::base64::encode(&data);
+  data.zeroize();
+  encoded
 }
 
 #[derive(Debug, Deserialize, Serialize, Type)]
@@ -350,5 +423,20 @@ mod tests {
       req.args().host_id(),
       Some(profile.host_identity().host_id().to_string())
     );
+  }
+
+  #[test]
+  fn client_identity_data_round_trips_without_debug_disclosure() {
+    let req = ConnectRequest::new(test_connect_info(), "secret-cookie".to_string())
+      .with_certificate_data(Some(b"certificate".to_vec()))
+      .with_sslkey_data(Some(b"private-key".to_vec()));
+    let encoded = serde_json::to_vec(&req).unwrap();
+    let decoded: ConnectRequest = serde_json::from_slice(&encoded).unwrap();
+
+    assert_eq!(decoded.args().certificate_data().unwrap().unwrap(), b"certificate");
+    assert_eq!(decoded.args().sslkey_data().unwrap().unwrap(), b"private-key");
+    let debug = format!("{decoded:?}");
+    assert!(!debug.contains("secret-cookie"));
+    assert!(!debug.contains("private-key"));
   }
 }

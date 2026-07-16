@@ -29,6 +29,8 @@ pub struct RequestDispatcher {
   gui_restart_requested: Arc<AtomicBool>,
   redaction: Arc<Redaction>,
   install_lock: Mutex<()>,
+  gui_management_enabled: bool,
+  brokered_helpers_dir: Option<std::path::PathBuf>,
 }
 
 impl RequestDispatcher {
@@ -36,33 +38,49 @@ impl RequestDispatcher {
     ws_req_tx: mpsc::Sender<WsRequest>,
     gui_restart_requested: Arc<AtomicBool>,
     redaction: Arc<Redaction>,
+    gui_management_enabled: bool,
+    brokered_helpers_dir: Option<std::path::PathBuf>,
   ) -> Self {
     Self {
       ws_req_tx,
       gui_restart_requested,
       redaction,
       install_lock: Mutex::new(()),
+      gui_management_enabled,
+      brokered_helpers_dir,
     }
   }
 
   pub async fn dispatch(&self, request: WsRequest) -> ServiceResult {
     match request {
       WsRequest::RestartGui => {
+        if !self.gui_management_enabled {
+          return ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "GUI restart is unavailable on macOS");
+        }
         info!("GUI restart requested");
         self
           .gui_restart_requested
           .store(true, std::sync::atomic::Ordering::SeqCst);
         ServiceResult::Accepted
       }
-      WsRequest::UpdateGui(request) => self.update_gui(request).await,
+      WsRequest::UpdateGui(request) => {
+        if !self.gui_management_enabled {
+          return ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "GUI update is unavailable on macOS");
+        }
+        self.update_gui(request).await
+      }
       request => {
-        if let WsRequest::Connect(ref connect) = request
-          && let Err(err) = self
+        if let WsRequest::Connect(ref connect) = request {
+          if let Err(message) = self.validate_connect_paths(connect) {
+            return ServiceResult::rejected(ServiceErrorCode::InvalidRequest, message);
+          }
+          if let Err(err) = self
             .redaction
             .add_values(&[connect.gateway().server(), connect.args().cookie()])
-        {
-          warn!("Failed to update log redaction: {err}");
-          return ServiceResult::rejected(ServiceErrorCode::Internal, "Request could not be accepted");
+          {
+            warn!("Failed to update log redaction: {err}");
+            return ServiceResult::rejected(ServiceErrorCode::Internal, "Request could not be accepted");
+          }
         }
 
         match self.ws_req_tx.try_send(request) {
@@ -76,6 +94,24 @@ impl RequestDispatcher {
         }
       }
     }
+  }
+
+  fn validate_connect_paths(&self, request: &gpapi::service::request::ConnectRequest) -> Result<(), &'static str> {
+    let Some(helpers) = &self.brokered_helpers_dir else {
+      return Ok(());
+    };
+    let expected_script = helpers.join("vpnc-script").to_string_lossy().into_owned();
+    let expected_wrapper = helpers.join("hipreport.sh").to_string_lossy().into_owned();
+    if request.args().vpnc_script().as_deref() != Some(expected_script.as_str()) {
+      return Err("macOS VPN script must be the bundled script");
+    }
+    if request.args().csd_wrapper().as_deref() != Some(expected_wrapper.as_str()) {
+      return Err("macOS HIP wrapper must be the bundled wrapper");
+    }
+    if request.args().certificate().is_some() || request.args().sslkey().is_some() {
+      return Err("macOS client identity must be provided as protected data, not root-readable paths");
+    }
+    Ok(())
   }
 
   async fn update_gui(&self, request: UpdateGuiRequest) -> ServiceResult {
@@ -210,6 +246,13 @@ fn extract_gui_binary<R: Read>(archive: &mut Archive<R>, dir: &Path) -> Result<N
 mod tests {
   use std::io::Cursor;
 
+  use gpapi::{
+    gateway::Gateway,
+    service::{
+      request::ConnectRequest,
+      transport::{ServiceErrorCode, ServiceResult},
+    },
+  };
   use tar::{Builder, EntryType, Header};
 
   use super::*;
@@ -276,5 +319,32 @@ mod tests {
 
     let mut archive = Archive::new(Cursor::new(data));
     assert!(extract_gui_binary(&mut archive, output.path()).is_err());
+  }
+
+  #[tokio::test]
+  async fn brokered_mode_rejects_gui_management_and_root_readable_identity_paths() {
+    let (request_tx, _request_rx) = mpsc::channel(1);
+    let dispatcher = RequestDispatcher::new(
+      request_tx,
+      Arc::new(AtomicBool::new(false)),
+      Arc::new(Redaction::new()),
+      false,
+      Some(std::path::PathBuf::from("/app/Contents/Helpers")),
+    );
+    let ServiceResult::Rejected(rejection) = dispatcher.dispatch(WsRequest::RestartGui).await else {
+      panic!("brokered mode accepted GUI restart");
+    };
+    assert_eq!(rejection.code(), ServiceErrorCode::InvalidRequest);
+
+    let gateway = Gateway::new("Gateway".into(), "vpn.example.com".into());
+    let info = gpapi::service::vpn_state::ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway]);
+    let request = ConnectRequest::new(info, "cookie".into())
+      .with_vpnc_script(Some("/app/Contents/Helpers/vpnc-script".to_string()))
+      .with_csd_wrapper(Some("/app/Contents/Helpers/hipreport.sh".to_string()))
+      .with_certificate(Some("/Users/example/client.pem".to_string()));
+    let ServiceResult::Rejected(rejection) = dispatcher.dispatch(WsRequest::Connect(Box::new(request))).await else {
+      panic!("brokered mode accepted a root-readable identity path");
+    };
+    assert_eq!(rejection.code(), ServiceErrorCode::InvalidRequest);
   }
 }

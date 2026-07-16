@@ -1,9 +1,9 @@
-use std::{sync::Arc, thread};
+use std::{io::Write, os::unix::fs::PermissionsExt, sync::Arc, thread};
 
 use gpapi::{
   logger,
   service::{
-    request::{ConnectRequest, UpdateLogLevelRequest, WsRequest},
+    request::{ConnectRequest, MAX_CLIENT_IDENTITY_DATA, UpdateLogLevelRequest, WsRequest},
     vpn_state::{ConnectedInfo, VpnState},
   },
   session::{SessionInfo, SessionWarning},
@@ -12,19 +12,24 @@ use log::{info, warn};
 use openconnect::Vpn;
 use tokio::sync::{RwLock, mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroizing;
 
 pub(crate) struct VpnTaskContext {
   vpn_handle: Arc<RwLock<Option<Vpn>>>,
   vpn_state_tx: Arc<watch::Sender<VpnState>>,
   disconnect_rx: RwLock<Option<oneshot::Receiver<()>>>,
+  brokered_macos: bool,
+  identity_files: Arc<RwLock<Vec<tempfile::NamedTempFile>>>,
 }
 
 impl VpnTaskContext {
-  pub fn new(vpn_state_tx: watch::Sender<VpnState>) -> Self {
+  pub fn new(vpn_state_tx: watch::Sender<VpnState>, brokered_macos: bool) -> Self {
     Self {
       vpn_handle: Default::default(),
       vpn_state_tx: Arc::new(vpn_state_tx),
       disconnect_rx: Default::default(),
+      brokered_macos,
+      identity_files: Default::default(),
     }
   }
 
@@ -39,6 +44,14 @@ impl VpnTaskContext {
     let info = req.info().clone();
     let vpn_handle = Arc::clone(&self.vpn_handle);
     let args = req.args();
+    let identity = match prepare_identity(args, self.brokered_macos) {
+      Ok(identity) => identity,
+      Err(err) => {
+        warn!("Failed to prepare client identity: {err}");
+        vpn_state_tx.send(VpnState::Disconnected).ok();
+        return;
+      }
+    };
     let allow_extend_session = args.allow_extend_session();
     let vpn = match Vpn::builder(req.gateway().server(), args.cookie())
       .script(args.vpnc_script())
@@ -47,8 +60,8 @@ impl VpnTaskContext {
       .os_version(args.os_version())
       .client_version(args.client_version())
       .host_id(args.host_id())
-      .certificate(args.certificate())
-      .sslkey(args.sslkey())
+      .certificate(identity.certificate.clone())
+      .sslkey(identity.sslkey.clone())
       .key_password(args.key_password())
       .hip(args.hip())
       .csd_uid(args.csd_uid())
@@ -72,11 +85,13 @@ impl VpnTaskContext {
 
     // Save the VPN handle
     vpn_handle.write().await.replace(vpn);
+    *self.identity_files.write().await = identity.files;
     let connect_info = Box::new(info.clone());
     vpn_state_tx.send(VpnState::Connecting(connect_info)).ok();
 
     let (disconnect_tx, disconnect_rx) = oneshot::channel::<()>();
     self.disconnect_rx.write().await.replace(disconnect_rx);
+    let identity_files = Arc::clone(&self.identity_files);
 
     // Spawn a new thread to process the VPN connection, cannot use tokio::spawn here.
     // Otherwise, it will block the tokio runtime and cannot send the VPN state to the channel
@@ -104,6 +119,7 @@ impl VpnTaskContext {
       vpn_state_tx_clone.send(VpnState::Disconnected).ok();
       // Remove the VPN handle
       vpn_handle.blocking_write().take();
+      identity_files.blocking_write().clear();
 
       disconnect_tx.send(()).ok();
     });
@@ -137,8 +153,12 @@ pub(crate) struct VpnTask {
 }
 
 impl VpnTask {
-  pub fn new(ws_req_rx: mpsc::Receiver<WsRequest>, vpn_state_tx: watch::Sender<VpnState>) -> Self {
-    let ctx = Arc::new(VpnTaskContext::new(vpn_state_tx));
+  pub fn new(
+    ws_req_rx: mpsc::Receiver<WsRequest>,
+    vpn_state_tx: watch::Sender<VpnState>,
+    brokered_macos: bool,
+  ) -> Self {
+    let ctx = Arc::new(VpnTaskContext::new(vpn_state_tx, brokered_macos));
     let cancel_token = CancellationToken::new();
 
     Self {
@@ -177,6 +197,55 @@ impl VpnTask {
       tokio::spawn(process_ws_req(req, self.ctx.clone()));
     }
   }
+}
+
+struct PreparedIdentity {
+  certificate: Option<String>,
+  sslkey: Option<String>,
+  files: Vec<tempfile::NamedTempFile>,
+}
+
+fn prepare_identity(
+  args: &gpapi::service::request::ConnectArgs,
+  brokered_macos: bool,
+) -> anyhow::Result<PreparedIdentity> {
+  if !brokered_macos {
+    return Ok(PreparedIdentity {
+      certificate: args.certificate(),
+      sslkey: args.sslkey(),
+      files: vec![],
+    });
+  }
+
+  let certificate = args.certificate_data()?.map(Zeroizing::new);
+  let sslkey = args.sslkey_data()?.map(Zeroizing::new);
+  let total_size = certificate.as_ref().map_or(0, |data| data.len()) + sslkey.as_ref().map_or(0, |data| data.len());
+  if total_size > MAX_CLIENT_IDENTITY_DATA {
+    anyhow::bail!("Client certificate and key exceed the macOS size limit");
+  }
+
+  let mut files = Vec::new();
+  let certificate = write_identity_file(certificate, &mut files)?;
+  let sslkey = write_identity_file(sslkey, &mut files)?;
+  Ok(PreparedIdentity {
+    certificate,
+    sslkey,
+    files,
+  })
+}
+
+fn write_identity_file(
+  data: Option<Zeroizing<Vec<u8>>>,
+  files: &mut Vec<tempfile::NamedTempFile>,
+) -> anyhow::Result<Option<String>> {
+  let Some(data) = data else { return Ok(None) };
+  let mut file = tempfile::NamedTempFile::new_in("/var/run/com.yuezk.gpgui")?;
+  file.as_file().set_permissions(std::fs::Permissions::from_mode(0o600))?;
+  file.write_all(&data)?;
+  file.flush()?;
+  let path = file.path().to_string_lossy().into_owned();
+  files.push(file);
+  Ok(Some(path))
 }
 
 async fn process_ws_req(req: WsRequest, ctx: Arc<VpnTaskContext>) {

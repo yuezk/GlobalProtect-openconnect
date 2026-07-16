@@ -2,7 +2,7 @@
 name = "openconnect"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "MIT"
 links = "openconnect"
 
 [dependencies]

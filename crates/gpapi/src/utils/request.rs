@@ -88,6 +88,7 @@ mod tests {
   }
 
   #[test]
+  #[cfg(not(target_os = "macos"))]
   fn create_identity_from_pem_with_passphrase() {
     let cert = "tests/files/badssl.com-client.pem";
     let passphrase = "badssl.com";
@@ -98,6 +99,7 @@ mod tests {
   }
 
   #[test]
+  #[cfg(not(target_os = "macos"))]
   fn create_identity_from_pem_unencrypted_key() {
     let cert = "tests/files/badssl.com-client-unencrypted.pem";
     let identity = create_identity_from_pem(cert, None, None);
@@ -107,6 +109,7 @@ mod tests {
   }
 
   #[test]
+  #[cfg(not(target_os = "macos"))]
   fn create_identity_from_pem_cert_and_encrypted_key() {
     let cert = "tests/files/badssl.com-client.pem";
     let key = "tests/files/badssl.com-client.pem";
@@ -129,6 +132,7 @@ mod tests {
   }
 
   #[test]
+  #[cfg(not(target_os = "macos"))]
   fn create_identity_from_pem_cert_and_unencrypted_key() {
     let cert = "tests/files/badssl.com-client.pem";
     let key = "tests/files/badssl.com-client-unencrypted.pem";

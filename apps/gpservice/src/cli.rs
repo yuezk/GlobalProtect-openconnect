@@ -4,6 +4,8 @@ use std::sync::{
   Arc,
   atomic::{AtomicBool, Ordering},
 };
+#[cfg(target_os = "macos")]
+use std::time::Duration;
 use std::{collections::HashMap, io::Write};
 
 use anyhow::{Context, bail};
@@ -49,6 +51,9 @@ struct Cli {
   #[cfg(debug_assertions)]
   #[clap(long, requires = "dev_standalone")]
   dev_bootstrap_socket: Option<PathBuf>,
+  #[cfg(target_os = "macos")]
+  #[clap(long, conflicts_with = "dev_standalone")]
+  macos_brokered: bool,
   #[command(flatten)]
   verbose: InfoLevelVerbosity,
 }
@@ -71,13 +76,20 @@ impl Cli {
     let (vpn_state_tx, vpn_state_rx) = watch::channel(VpnState::Disconnected);
     let gui_restart_requested = Arc::new(AtomicBool::new(false));
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let externally_brokered = self.externally_brokered();
+    let brokered_helpers_dir = externally_brokered
+      .then(|| std::env::current_exe().ok()?.parent().map(ToOwned::to_owned))
+      .flatten();
     let dispatcher = Arc::new(RequestDispatcher::new(
       ws_req_tx.clone(),
       Arc::clone(&gui_restart_requested),
       Arc::clone(&redaction),
+      !externally_brokered,
+      brokered_helpers_dir,
     ));
 
-    let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx);
+    let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx, externally_brokered);
+    let idle_vpn_state_rx = vpn_state_rx.clone();
     let ws_server = WsServer::new(
       env!("CARGO_PKG_VERSION"),
       Arc::clone(&registry),
@@ -90,6 +102,27 @@ impl Cli {
     let shutdown_tx_clone = shutdown_tx.clone();
     let vpn_task_cancel_token = vpn_task.cancel_token();
     let server_token = ws_server.cancel_token();
+
+    #[cfg(target_os = "macos")]
+    if externally_brokered {
+      let credential_server = crate::macos_broker::CredentialServer::new(Arc::clone(&registry));
+      let credential_token = server_token.clone();
+      let credential_shutdown = shutdown_tx.clone();
+      tokio::spawn(async move {
+        if let Err(err) = credential_server.start(credential_token).await {
+          warn!("Broker credential server stopped: {err}");
+          let _ = credential_shutdown.send(()).await;
+        }
+      });
+
+      let idle_registry = Arc::clone(&registry);
+      let idle_shutdown = shutdown_tx.clone();
+      let idle_token = server_token.clone();
+      tokio::spawn(async move {
+        wait_for_brokered_idle(idle_vpn_state_rx, idle_registry, idle_token).await;
+        let _ = idle_shutdown.send(()).await;
+      });
+    }
 
     #[cfg(debug_assertions)]
     if self.dev_standalone {
@@ -123,9 +156,9 @@ impl Cli {
     let ws_server_handle = tokio::spawn(async move { ws_server.start(shutdown_tx_clone, ws_ready_tx).await });
 
     #[cfg(debug_assertions)]
-    let launch_managed_gui = !self.dev_standalone;
+    let launch_managed_gui = !self.dev_standalone && !externally_brokered;
     #[cfg(not(debug_assertions))]
-    let launch_managed_gui = true;
+    let launch_managed_gui = !externally_brokered;
 
     if launch_managed_gui {
       ws_ready_rx.await.context("WebSocket server failed to start")?;
@@ -158,6 +191,14 @@ impl Cli {
     Ok(())
   }
 
+  fn externally_brokered(&self) -> bool {
+    #[cfg(target_os = "macos")]
+    return self.macos_brokered;
+
+    #[cfg(not(target_os = "macos"))]
+    false
+  }
+
   fn init_logger(&self) -> Arc<Redaction> {
     let redaction = Arc::new(Redaction::new());
     let redaction_clone = Arc::clone(&redaction);
@@ -183,6 +224,38 @@ impl Cli {
     logger::init_with_logger(level, inner_logger);
 
     redaction
+  }
+}
+
+#[cfg(target_os = "macos")]
+async fn wait_for_brokered_idle(
+  mut vpn_state_rx: watch::Receiver<VpnState>,
+  registry: Arc<SessionRegistry>,
+  cancel: tokio_util::sync::CancellationToken,
+) {
+  const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+  const CHECK_INTERVAL: Duration = Duration::from_secs(1);
+
+  let mut idle_since = None;
+  let mut interval = tokio::time::interval(CHECK_INTERVAL);
+  loop {
+    tokio::select! {
+      _ = cancel.cancelled() => return,
+      _ = vpn_state_rx.changed() => {},
+      _ = interval.tick() => {},
+    }
+
+    let idle = matches!(*vpn_state_rx.borrow(), VpnState::Disconnected) && registry.is_empty();
+    if !idle {
+      idle_since = None;
+      continue;
+    }
+
+    let started = idle_since.get_or_insert_with(tokio::time::Instant::now);
+    if started.elapsed() >= IDLE_TIMEOUT {
+      info!("Brokered service idle timeout reached");
+      return;
+    }
   }
 }
 

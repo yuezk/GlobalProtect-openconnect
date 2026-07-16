@@ -7,13 +7,10 @@ use std::{
 use anyhow::{Context, bail};
 use log::{info, warn};
 use nix::unistd::{Uid, chown};
-use tokio::{
-  io::{AsyncReadExt, AsyncWriteExt},
-  net::{UnixListener, UnixStream},
-};
+use tokio::net::{UnixListener, UnixStream};
 use tokio_util::sync::CancellationToken;
 
-use crate::session_registry::SessionRegistry;
+use crate::{credential_lease, session_registry::SessionRegistry};
 
 pub struct DevBootstrap {
   path: PathBuf,
@@ -57,7 +54,7 @@ impl DevBootstrap {
           }
           let registry = Arc::clone(&self.registry);
           tokio::spawn(async move {
-            if let Err(err) = authorize_gui(stream, registry).await {
+            if let Err(err) = credential_lease::serve(stream, registry).await {
               warn!("Debug credential client ended: {err}");
             }
           });
@@ -121,28 +118,6 @@ fn prepare_socket_path(path: &Path, allowed_uid: u32) -> anyhow::Result<PathBuf>
     Err(err) => return Err(err.into()),
   }
   Ok(path)
-}
-
-async fn authorize_gui(mut stream: UnixStream, registry: Arc<SessionRegistry>) -> anyhow::Result<()> {
-  let credential = registry.issue(env!("CARGO_PKG_VERSION"))?;
-  let session_id = credential.session_id();
-  let result = async {
-    let frame = credential.encode_frame()?;
-    stream.write_all(&frame).await?;
-
-    let mut buffer = [0_u8; 1];
-    loop {
-      match stream.read(&mut buffer).await {
-        Ok(0) => break,
-        Ok(_) => continue,
-        Err(err) => return Err(err.into()),
-      }
-    }
-    Ok(())
-  }
-  .await;
-  registry.revoke(session_id);
-  result
 }
 
 #[cfg(target_os = "linux")]
@@ -213,7 +188,7 @@ mod tests {
   async fn anchor_eof_revokes_issued_credential() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
     let (service, mut client) = UnixStream::pair().unwrap();
-    let task = tokio::spawn(authorize_gui(service, Arc::clone(&registry)));
+    let task = tokio::spawn(credential_lease::serve(service, Arc::clone(&registry)));
 
     let mut header = [0_u8; 2];
     client.read_exact(&mut header).await.unwrap();

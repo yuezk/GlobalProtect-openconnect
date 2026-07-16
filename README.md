@@ -488,8 +488,10 @@ This project consists of multiple components, each with its own license:
 | Component | Type | License |
 |-----------|------|---------|
 | [gpapi](./crates/gpapi) | Crate | [MIT](./crates/gpapi/LICENSE) |
-| [openconnect](./crates/openconnect) | Crate | [GPL-3.0](./crates/openconnect/LICENSE) |
-| [common](./crates/common) | Crate | [GPL-3.0](./crates/common/LICENSE) |
+| [openconnect](./crates/openconnect) | Rust wrapper crate | [MIT](./crates/openconnect/LICENSE) |
+| [upstream OpenConnect](./crates/openconnect/deps/openconnect) | C library | [LGPL-2.1](./crates/openconnect/deps/openconnect/COPYING.LGPL) |
+| [common](./crates/common) | Crate | [MIT](./crates/common/LICENSE) |
+| [browser-launcher](./crates/browser-launcher) | Crate | [MIT](./crates/browser-launcher/LICENSE) |
 | [auth](./crates/auth) | Crate | [GPL-3.0](./crates/auth/LICENSE) |
 | [gpservice](./apps/gpservice) | Application | [GPL-3.0](./apps/gpservice/LICENSE) |
 | [gpclient](./apps/gpclient) | Application | [GPL-3.0](./apps/gpclient/LICENSE) |
