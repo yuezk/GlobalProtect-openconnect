@@ -53,8 +53,13 @@ impl VpnTaskContext {
       }
     };
     let allow_extend_session = args.allow_extend_session();
-    let vpn = match Vpn::builder(req.gateway().server(), args.cookie())
-      .script(args.vpnc_script())
+    let mut vpn_builder = Vpn::builder(req.gateway().server(), args.cookie());
+    vpn_builder = if self.brokered_macos {
+      vpn_builder.script_path(args.vpnc_script())
+    } else {
+      vpn_builder.script(args.vpnc_script())
+    };
+    let vpn = match vpn_builder
       .user_agent(args.user_agent())
       .os(args.openconnect_os())
       .os_version(args.os_version())

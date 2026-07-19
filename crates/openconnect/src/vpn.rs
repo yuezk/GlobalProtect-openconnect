@@ -184,6 +184,7 @@ pub struct VpnBuilder {
   server: String,
   cookie: String,
   script: Option<String>,
+  script_is_path: bool,
   interface: Option<String>,
   script_tun: bool,
 
@@ -217,6 +218,7 @@ impl VpnBuilder {
       server: server.to_string(),
       cookie: cookie.to_string(),
       script: None,
+      script_is_path: false,
       interface: None,
       script_tun: false,
 
@@ -246,6 +248,13 @@ impl VpnBuilder {
 
   pub fn script<T: Into<Option<String>>>(mut self, script: T) -> Self {
     self.script = script.into();
+    self.script_is_path = false;
+    self
+  }
+
+  pub fn script_path<T: Into<Option<String>>>(mut self, script: T) -> Self {
+    self.script = script.into();
+    self.script_is_path = true;
     self
   }
 
@@ -352,6 +361,9 @@ impl VpnBuilder {
   fn determine_script(&self) -> Result<&str, VpnError> {
     match &self.script {
       Some(script) => {
+        if self.script_is_path && !std::path::Path::new(script).exists() {
+          return Err(VpnError::new(format!("VPN script does not exist: {script}")));
+        }
         check_executable(script).map_err(|e| VpnError::new(e.to_string()))?;
         Ok(script)
       }
@@ -378,6 +390,11 @@ impl VpnBuilder {
 
   pub fn build(self) -> Result<Vpn, VpnError> {
     let script = self.determine_script()?.to_owned();
+    let script = if self.script_is_path {
+      shell_quote_path(&script)
+    } else {
+      script
+    };
     let csd_wrapper = self.determine_csd_wrapper()?.map(|s| s.to_owned());
 
     let user_agent = self.user_agent.unwrap_or_default();
@@ -422,10 +439,44 @@ impl VpnBuilder {
   }
 }
 
+fn shell_quote_path(path: &str) -> String {
+  format!("'{}'", path.replace('\'', "'\\''"))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
   use std::ffi::CString;
+
+  #[test]
+  fn quotes_vpnc_script_path_for_the_shell() {
+    assert_eq!(
+      shell_quote_path("/Applications/GP Connect.app/Contents/Helpers/vpnc-script"),
+      "'/Applications/GP Connect.app/Contents/Helpers/vpnc-script'"
+    );
+    assert_eq!(shell_quote_path("/tmp/user's script"), "'/tmp/user'\\''s script'");
+  }
+
+  #[test]
+  fn preserves_vpnc_script_commands() {
+    let command = "\"/tmp/script with spaces\" --option";
+    let vpn = Vpn::builder("vpn.example.com", "cookie")
+      .script(command.to_string())
+      .build()
+      .unwrap();
+
+    assert_eq!(vpn.script.to_str().unwrap(), command);
+  }
+
+  #[test]
+  fn quotes_explicit_vpnc_script_paths() {
+    let vpn = Vpn::builder("vpn.example.com", "cookie")
+      .script_path("/bin/sh".to_string())
+      .build()
+      .unwrap();
+
+    assert_eq!(vpn.script.to_str().unwrap(), "'/bin/sh'");
+  }
 
   #[test]
   fn maps_session_info_from_callback_payload() {
