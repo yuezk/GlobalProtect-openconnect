@@ -206,9 +206,11 @@ impl Cli {
 }
 
 fn init_logger(cli: &Cli) {
-  env_logger::builder()
-    .filter_level(cli.verbose.log_level_filter())
-    .init();
+  if let Some(level) = cli.verbose.log_level_filter().to_level() {
+    gpapi::logger::init(level, "com.yuezk.gpgui", "gpauth");
+  } else {
+    log::set_max_level(log::LevelFilter::Off);
+  }
 }
 
 pub async fn run() {

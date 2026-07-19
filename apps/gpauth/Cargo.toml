@@ -11,14 +11,13 @@ tauri-build = { version = "2", features = [], optional = true }
 
 [dependencies]
 common = { path = "../../crates/common" }
-gpapi = { path = "../../crates/gpapi", features = ["clap"] }
+gpapi = { path = "../../crates/gpapi", features = ["clap", "logger"] }
 
 auth = { path = "../../crates/auth", features = ["browser-auth"] }
 
 # Shared dependencies
 anyhow.workspace = true
 clap.workspace = true
-env_logger.workspace = true
 log.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }

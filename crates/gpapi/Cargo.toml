@@ -49,6 +49,9 @@ clap-verbosity-flag = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 log-reload = { version = "0.1", optional = true }
 
+[target.'cfg(target_os="macos")'.dependencies]
+oslog = { version = "0.2", default-features = false, optional = true }
+
 # Dependencies for Linux and other OSes only
 [target.'cfg(not(any(target_os="macos", target_os="windows")))'.dependencies]
 gtk = { version = "0.18", optional = true }
@@ -60,4 +63,4 @@ proptest.workspace = true
 tauri = ["dep:tauri", "dep:gtk"]
 clap = ["dep:clap", "dep:clap-verbosity-flag"]
 webview-auth = []
-logger = ["dep:env_logger", "dep:log-reload"]
+logger = ["dep:env_logger", "dep:log-reload", "dep:oslog"]

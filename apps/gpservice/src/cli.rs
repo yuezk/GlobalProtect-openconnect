@@ -18,6 +18,8 @@ use gpapi::{
   service::{request::WsRequest, vpn_state::VpnState},
   utils::{env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
 };
+#[cfg(target_os = "macos")]
+use log::{Log, Metadata, Record};
 use log::{info, warn};
 use tokio::sync::{mpsc, watch};
 use uuid::Uuid;
@@ -34,6 +36,28 @@ const VERSION: &str = concat!(
   compile_time::date_str!(),
   ")"
 );
+
+#[cfg(target_os = "macos")]
+struct RedactingMacosLogger {
+  logger: logger::MacosLogger,
+  redaction: Arc<Redaction>,
+}
+
+#[cfg(target_os = "macos")]
+impl Log for RedactingMacosLogger {
+  fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+    self.logger.enabled(metadata)
+  }
+
+  fn log(&self, record: &Record<'_>) {
+    if self.enabled(record.metadata()) {
+      let message = self.redaction.redact_str(&record.args().to_string());
+      self.logger.write(record.level(), record.target(), &message);
+    }
+  }
+
+  fn flush(&self) {}
+}
 
 #[derive(Parser)]
 #[command(version = VERSION)]
@@ -77,15 +101,22 @@ impl Cli {
     let gui_restart_requested = Arc::new(AtomicBool::new(false));
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
     let externally_brokered = self.externally_brokered();
-    let brokered_helpers_dir = externally_brokered
-      .then(|| std::env::current_exe().ok()?.parent().map(ToOwned::to_owned))
-      .flatten();
+    let brokered_scripts_dir = if externally_brokered {
+      let executable = std::env::current_exe().context("Failed to locate the gpservice executable")?;
+      let contents_dir = executable
+        .parent()
+        .and_then(std::path::Path::parent)
+        .context("gpservice is not inside a macOS application bundle")?;
+      Some(contents_dir.join("Resources/Scripts"))
+    } else {
+      None
+    };
     let dispatcher = Arc::new(RequestDispatcher::new(
       ws_req_tx.clone(),
       Arc::clone(&gui_restart_requested),
       Arc::clone(&redaction),
       !externally_brokered,
-      brokered_helpers_dir,
+      brokered_scripts_dir,
     ));
 
     let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx, externally_brokered);
@@ -201,6 +232,20 @@ impl Cli {
 
   fn init_logger(&self) -> Arc<Redaction> {
     let redaction = Arc::new(Redaction::new());
+    let level = self.verbose.log_level_filter().to_level().unwrap_or(log::Level::Info);
+
+    #[cfg(target_os = "macos")]
+    if logger::macos_unified_log_enabled() {
+      logger::init_with_logger(
+        level,
+        RedactingMacosLogger {
+          logger: logger::MacosLogger::new("com.yuezk.gpgui", "gpservice"),
+          redaction: Arc::clone(&redaction),
+        },
+      );
+      return redaction;
+    }
+
     let redaction_clone = Arc::clone(&redaction);
 
     let inner_logger = env_logger::builder()
@@ -218,8 +263,6 @@ impl Cli {
         )
       })
       .build();
-
-    let level = self.verbose.log_level_filter().to_level().unwrap_or(log::Level::Info);
 
     logger::init_with_logger(level, inner_logger);
 

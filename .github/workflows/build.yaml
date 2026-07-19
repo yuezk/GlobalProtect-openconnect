@@ -415,6 +415,7 @@ jobs:
         brew install \
           autoconf \
           automake \
+          create-dmg \
           dylibbundler \
           gettext \
           gmp \

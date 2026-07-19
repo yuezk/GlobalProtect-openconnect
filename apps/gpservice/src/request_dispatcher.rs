@@ -30,7 +30,7 @@ pub struct RequestDispatcher {
   redaction: Arc<Redaction>,
   install_lock: Mutex<()>,
   gui_management_enabled: bool,
-  brokered_helpers_dir: Option<std::path::PathBuf>,
+  brokered_scripts_dir: Option<std::path::PathBuf>,
 }
 
 impl RequestDispatcher {
@@ -39,7 +39,7 @@ impl RequestDispatcher {
     gui_restart_requested: Arc<AtomicBool>,
     redaction: Arc<Redaction>,
     gui_management_enabled: bool,
-    brokered_helpers_dir: Option<std::path::PathBuf>,
+    brokered_scripts_dir: Option<std::path::PathBuf>,
   ) -> Self {
     Self {
       ws_req_tx,
@@ -47,7 +47,7 @@ impl RequestDispatcher {
       redaction,
       install_lock: Mutex::new(()),
       gui_management_enabled,
-      brokered_helpers_dir,
+      brokered_scripts_dir,
     }
   }
 
@@ -97,11 +97,11 @@ impl RequestDispatcher {
   }
 
   fn validate_connect_paths(&self, request: &gpapi::service::request::ConnectRequest) -> Result<(), &'static str> {
-    let Some(helpers) = &self.brokered_helpers_dir else {
+    let Some(scripts) = &self.brokered_scripts_dir else {
       return Ok(());
     };
-    let expected_script = helpers.join("vpnc-script").to_string_lossy().into_owned();
-    let expected_wrapper = helpers.join("hipreport.sh").to_string_lossy().into_owned();
+    let expected_script = scripts.join("vpnc-script").to_string_lossy().into_owned();
+    let expected_wrapper = scripts.join("hipreport.sh").to_string_lossy().into_owned();
     if request.args().vpnc_script().as_deref() != Some(expected_script.as_str()) {
       return Err("macOS VPN script must be the bundled script");
     }
@@ -329,7 +329,7 @@ mod tests {
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       false,
-      Some(std::path::PathBuf::from("/app/Contents/Helpers")),
+      Some(std::path::PathBuf::from("/app/Contents/Resources/Scripts")),
     );
     let ServiceResult::Rejected(rejection) = dispatcher.dispatch(WsRequest::RestartGui).await else {
       panic!("brokered mode accepted GUI restart");
@@ -339,12 +339,38 @@ mod tests {
     let gateway = Gateway::new("Gateway".into(), "vpn.example.com".into());
     let info = gpapi::service::vpn_state::ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway]);
     let request = ConnectRequest::new(info, "cookie".into())
-      .with_vpnc_script(Some("/app/Contents/Helpers/vpnc-script".to_string()))
-      .with_csd_wrapper(Some("/app/Contents/Helpers/hipreport.sh".to_string()))
+      .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
+      .with_csd_wrapper(Some("/app/Contents/Resources/Scripts/hipreport.sh".to_string()))
       .with_certificate(Some("/Users/example/client.pem".to_string()));
     let ServiceResult::Rejected(rejection) = dispatcher.dispatch(WsRequest::Connect(Box::new(request))).await else {
       panic!("brokered mode accepted a root-readable identity path");
     };
     assert_eq!(rejection.code(), ServiceErrorCode::InvalidRequest);
+  }
+
+  #[test]
+  fn brokered_mode_accepts_only_resource_script_paths() {
+    let (request_tx, _request_rx) = mpsc::channel(1);
+    let dispatcher = RequestDispatcher::new(
+      request_tx,
+      Arc::new(AtomicBool::new(false)),
+      Arc::new(Redaction::new()),
+      false,
+      Some(std::path::PathBuf::from("/app/Contents/Resources/Scripts")),
+    );
+    let gateway = Gateway::new("Gateway".into(), "vpn.example.com".into());
+    let info = gpapi::service::vpn_state::ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway]);
+    let bundled = ConnectRequest::new(info.clone(), "cookie".into())
+      .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
+      .with_csd_wrapper(Some("/app/Contents/Resources/Scripts/hipreport.sh".to_string()));
+    assert_eq!(dispatcher.validate_connect_paths(&bundled), Ok(()));
+
+    let old_layout = ConnectRequest::new(info, "cookie".into())
+      .with_vpnc_script(Some("/app/Contents/Helpers/vpnc-script".to_string()))
+      .with_csd_wrapper(Some("/app/Contents/Helpers/hipreport.sh".to_string()));
+    assert_eq!(
+      dispatcher.validate_connect_paths(&old_layout),
+      Err("macOS VPN script must be the bundled script")
+    );
   }
 }
