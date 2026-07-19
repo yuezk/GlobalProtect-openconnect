@@ -1,0 +1,240 @@
+name: Publish macOS appcast
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+      archive_name:
+        required: false
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Update channel
+        required: true
+        type: choice
+        options:
+          - stable
+          - snapshot
+      release_tag:
+        description: Release containing the macOS update archive
+        required: true
+        type: string
+      archive_name:
+        description: Exact ZIP asset name; leave empty when the release has one macOS update archive
+        required: false
+        type: string
+
+concurrency:
+  group: macos-appcast-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: macos-15
+    environment: macos-release
+    permissions:
+      contents: write
+    env:
+      REPOSITORY: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      CHANNEL: ${{ inputs.channel }}
+      REQUESTED_ARCHIVE: ${{ inputs.archive_name }}
+      SPARKLE_VERSION: 2.9.2
+      SPARKLE_ARCHIVE_SHA256: b83e37436774556ed055e0244b297ef2c790e0737393bf65bf495fcbba6eed65
+    steps:
+      - name: Validate inputs
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$CHANNEL" != "stable" && "$CHANNEL" != "snapshot" ]]; then
+            echo "channel must be stable or snapshot" >&2
+            exit 1
+          fi
+          if [[ "$CHANNEL" == "snapshot" && "$RELEASE_TAG" != "snapshot" ]]; then
+            echo "The snapshot channel must publish to the snapshot release" >&2
+            exit 1
+          fi
+          if [[ "$CHANNEL" == "stable" && "$RELEASE_TAG" == "snapshot" ]]; then
+            echo "The stable channel cannot publish to the snapshot release" >&2
+            exit 1
+          fi
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "SPARKLE_PRIVATE_KEY is not configured" >&2
+            exit 1
+          fi
+
+      - name: Prepare Sparkle tools
+        run: |
+          set -euo pipefail
+
+          archive="$RUNNER_TEMP/Sparkle.zip"
+          curl --fail --location --silent --show-error \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-for-Swift-Package-Manager.zip" \
+            --output "$archive"
+          echo "$SPARKLE_ARCHIVE_SHA256  $archive" | shasum -a 256 --check
+          ditto -x -k "$archive" "$RUNNER_TEMP/sparkle"
+          test -x "$RUNNER_TEMP/sparkle/Sparkle/bin/generate_appcast"
+
+      - name: Download update archive
+        id: archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$RUNNER_TEMP/updates"
+          archive_name="$REQUESTED_ARCHIVE"
+          if [[ -z "$archive_name" ]]; then
+            archives="$(gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json assets \
+              --jq '.assets[].name | select(test("^GP-Connect-.*-arm64\\.zip$"))')"
+            archive_count="$(printf '%s\n' "$archives" | sed '/^$/d' | wc -l | tr -d ' ')"
+            if [[ "$archive_count" != "1" ]]; then
+              echo "Expected one macOS update archive on $RELEASE_TAG, found $archive_count" >&2
+              printf '%s\n' "$archives" >&2
+              exit 1
+            fi
+            archive_name="$archives"
+          fi
+
+          if [[ ! "$archive_name" =~ ^GP-Connect-[0-9A-Za-z._-]+-arm64\.zip$ ]]; then
+            echo "Invalid macOS update archive name: $archive_name" >&2
+            exit 1
+          fi
+
+          gh release download "$RELEASE_TAG" --repo "$REPOSITORY" \
+            --pattern "$archive_name" --dir "$RUNNER_TEMP/updates"
+          echo "name=$archive_name" >> "$GITHUB_OUTPUT"
+          echo "path=$RUNNER_TEMP/updates/$archive_name" >> "$GITHUB_OUTPUT"
+
+      - name: Verify update archive
+        id: bundle
+        env:
+          ARCHIVE_PATH: ${{ steps.archive.outputs.path }}
+        run: |
+          set -euo pipefail
+
+          extract_dir="$RUNNER_TEMP/extracted"
+          ditto -x -k "$ARCHIVE_PATH" "$extract_dir"
+          app="$extract_dir/GP Connect.app"
+          test -d "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          xcrun stapler validate "$app"
+
+          signing_info="$(codesign -d --verbose=4 "$app" 2>&1)"
+          grep -q '^Authority=Developer ID Application:' <<<"$signing_info"
+          grep -q '^CodeDirectory .*flags=.*runtime' <<<"$signing_info"
+
+          identifier="$(sed -n 's/^Identifier=//p' <<<"$signing_info")"
+          if [[ "$identifier" != "com.yuezk.gpgui" ]]; then
+            echo "Unexpected bundle identifier: $identifier" >&2
+            exit 1
+          fi
+          file "$app/Contents/MacOS/gpgui" | grep -q 'arm64'
+
+          feed_url="$(plutil -extract SUFeedURL raw "$app/Contents/Info.plist")"
+          expected_feed="https://github.com/$REPOSITORY/releases/latest/download/appcast.xml"
+          if [[ "$CHANNEL" == "snapshot" ]]; then
+            expected_feed="https://github.com/$REPOSITORY/releases/download/snapshot/appcast.xml"
+          fi
+          if [[ "$feed_url" != "$expected_feed" ]]; then
+            echo "Unexpected Sparkle feed URL: $feed_url" >&2
+            exit 1
+          fi
+
+          bundle_version="$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")"
+          short_version="$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")"
+          if [[ ! "$bundle_version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "Invalid bundle version: $bundle_version" >&2
+            exit 1
+          fi
+          echo "version=$bundle_version" >> "$GITHUB_OUTPUT"
+          echo "short_version=$short_version" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        env:
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          notes="$RUNNER_TEMP/updates/${ARCHIVE_NAME%.zip}.md"
+          gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json body --jq '.body // ""' > "$notes"
+          if [[ ! -s "$notes" ]]; then
+            printf 'GP Connect %s\n' '${{ steps.bundle.outputs.short_version }}' > "$notes"
+          fi
+
+      - name: Generate appcast
+        env:
+          ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          embedded_public_key="$(plutil -extract SUPublicEDKey raw \
+            "$RUNNER_TEMP/extracted/GP Connect.app/Contents/Info.plist")"
+          derived_public_key="$(swift -e '
+            import Foundation
+            import CryptoKit
+            let encoded = ProcessInfo.processInfo.environment["SPARKLE_PRIVATE_KEY"]!
+              .trimmingCharacters(in: .whitespacesAndNewlines)
+            let privateKey = try Curve25519.Signing.PrivateKey(
+              rawRepresentation: Data(base64Encoded: encoded)!)
+            print(privateKey.publicKey.rawRepresentation.base64EncodedString())
+          ')"
+          if [[ "$derived_public_key" != "$embedded_public_key" ]]; then
+            echo "Sparkle private key does not match the public key embedded in the application" >&2
+            exit 1
+          fi
+
+          download_prefix="https://github.com/$REPOSITORY/releases/download/$RELEASE_TAG/"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | \
+            "$RUNNER_TEMP/sparkle/Sparkle/bin/generate_appcast" \
+              --download-url-prefix "$download_prefix" \
+              --maximum-deltas 0 \
+              --embed-release-notes \
+              --ed-key-file - \
+              "$RUNNER_TEMP/updates"
+
+          appcast="$RUNNER_TEMP/updates/appcast.xml"
+          test -s "$appcast"
+          grep -Fq "sparkle:version>${{ steps.bundle.outputs.version }}<" "$appcast"
+          grep -Fq "sparkle:shortVersionString>${{ steps.bundle.outputs.short_version }}<" "$appcast"
+          grep -Fq "url=\"$download_prefix$ARCHIVE_NAME\"" "$appcast"
+          grep -q 'sparkle:edSignature=' "$appcast"
+
+      - name: Publish appcast
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/updates/appcast.xml" \
+            --repo "$REPOSITORY" --clobber
+
+      - name: Verify published appcast
+        run: |
+          set -euo pipefail
+
+          if [[ "$CHANNEL" == "stable" ]]; then
+            feed_url="https://github.com/$REPOSITORY/releases/latest/download/appcast.xml"
+          else
+            feed_url="https://github.com/$REPOSITORY/releases/download/$RELEASE_TAG/appcast.xml"
+          fi
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            published_appcast="$(curl --fail --location --silent --show-error "$feed_url" || true)"
+            if grep -Fq "sparkle:version>${{ steps.bundle.outputs.version }}<" <<<"$published_appcast"; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Published appcast did not become available at $feed_url" >&2
+          exit 1

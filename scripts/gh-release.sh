@@ -30,18 +30,32 @@ release_assets() {
   "$SCRIPT_DIR/release-assets.sh" "$TAG"
 }
 
-# For snapshot release, we don't create a release, just clear the existing assets and upload new ones.
-# This is to avoid notification spam.
+# Update the existing snapshot release in place to avoid notification spam.
+# Preserve its macOS update assets when the current run does not replace them.
 release_snapshot() {
-  while IFS= read -r asset; do
-    if [ -n "$asset" ]; then
-      gh -R "$REPO" release delete-asset "$TAG" "$asset" --yes
+  mapfile -t files < <(release_assets)
+  local includes_macos=false
+  local file
+  for file in "${files[@]}"; do
+    if [[ "$(basename "$file")" == GP-Connect-*-arm64.* ]]; then
+      includes_macos=true
+      break
     fi
+  done
+
+  while IFS= read -r asset; do
+    if [[ -z "$asset" ]]; then
+      continue
+    fi
+    if [[ "$includes_macos" == "false" && \
+          ( "$asset" == "appcast.xml" || "$asset" == GP-Connect-*-arm64.* ) ]]; then
+      continue
+    fi
+    gh -R "$REPO" release delete-asset "$TAG" "$asset" --yes
   done < <(gh -R "$REPO" release view "$TAG" --json assets --jq '.assets[].name')
 
   echo "Uploading new assets..."
   # Upload all artifacts for snapshot release because we don't need to guarantee stability.
-  mapfile -t files < <(release_assets)
   upload_files "${files[@]}"
 }
 
