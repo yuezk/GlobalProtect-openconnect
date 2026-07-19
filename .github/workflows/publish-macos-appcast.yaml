@@ -82,7 +82,7 @@ jobs:
             --output "$archive"
           echo "$SPARKLE_ARCHIVE_SHA256  $archive" | shasum -a 256 --check
           ditto -x -k "$archive" "$RUNNER_TEMP/sparkle"
-          test -x "$RUNNER_TEMP/sparkle/Sparkle/bin/generate_appcast"
+          test -x "$RUNNER_TEMP/sparkle/bin/generate_appcast"
 
       - name: Download update archive
         id: archive
@@ -197,7 +197,7 @@ jobs:
 
           download_prefix="https://github.com/$REPOSITORY/releases/download/$RELEASE_TAG/"
           printf '%s' "$SPARKLE_PRIVATE_KEY" | \
-            "$RUNNER_TEMP/sparkle/Sparkle/bin/generate_appcast" \
+            "$RUNNER_TEMP/sparkle/bin/generate_appcast" \
               --download-url-prefix "$download_prefix" \
               --maximum-deltas 0 \
               --embed-release-notes \
