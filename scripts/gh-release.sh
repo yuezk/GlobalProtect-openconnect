@@ -9,11 +9,28 @@ REPO="yuezk/GlobalProtect-openconnect"
 TAG=${1:-}
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+GH_MAX_ATTEMPTS=5
 
 if [ -z "$TAG" ]; then
   echo "Usage: ./scripts/gh-release.sh <tag>"
   exit 1
 fi
+
+retry_gh() {
+  local attempt=1
+  local delay
+
+  until "$@"; do
+    if (( attempt >= GH_MAX_ATTEMPTS )); then
+      echo "GitHub operation failed after $attempt attempts" >&2
+      return 1
+    fi
+    delay=$((attempt * 3))
+    echo "GitHub operation failed; retrying in ${delay}s" >&2
+    sleep "$delay"
+    ((attempt += 1))
+  done
+}
 
 upload_files() {
   local files=("$@")
@@ -23,17 +40,46 @@ upload_files() {
     exit 1
   fi
 
-  gh -R "$REPO" release upload "$TAG" "${files[@]}"
+  retry_gh gh -R "$REPO" release upload "$TAG" --clobber "${files[@]}"
 }
 
 release_assets() {
   "$SCRIPT_DIR/release-assets.sh" "$TAG"
 }
 
+snapshot_asset_names() {
+  retry_gh gh -R "$REPO" release view "$TAG" --json assets --jq '.assets[].name'
+}
+
+delete_snapshot_asset() {
+  local asset=$1
+  local assets
+  local attempt=1
+  local delay
+
+  while (( attempt <= GH_MAX_ATTEMPTS )); do
+    if gh -R "$REPO" release delete-asset "$TAG" "$asset" --yes; then
+      return 0
+    fi
+    if assets="$(snapshot_asset_names)" && ! grep -Fqx -- "$asset" <<<"$assets"; then
+      return 0
+    fi
+    if (( attempt >= GH_MAX_ATTEMPTS )); then
+      echo "Failed to delete release asset after $attempt attempts: $asset" >&2
+      return 1
+    fi
+    delay=$((attempt * 3))
+    echo "Failed to delete $asset; retrying in ${delay}s" >&2
+    sleep "$delay"
+    ((attempt += 1))
+  done
+}
+
 # Update the existing snapshot release in place to avoid notification spam.
 # Preserve its macOS update assets when the current run does not replace them.
 release_snapshot() {
   mapfile -t files < <(release_assets)
+  local existing_assets
   local includes_macos=false
   local file
   for file in "${files[@]}"; do
@@ -43,6 +89,7 @@ release_snapshot() {
     fi
   done
 
+  existing_assets="$(snapshot_asset_names)"
   while IFS= read -r asset; do
     if [[ -z "$asset" ]]; then
       continue
@@ -51,8 +98,8 @@ release_snapshot() {
           ( "$asset" == "appcast.xml" || "$asset" == GP-Connect-*-arm64.* ) ]]; then
       continue
     fi
-    gh -R "$REPO" release delete-asset "$TAG" "$asset" --yes
-  done < <(gh -R "$REPO" release view "$TAG" --json assets --jq '.assets[].name')
+    delete_snapshot_asset "$asset"
+  done <<<"$existing_assets"
 
   echo "Uploading new assets..."
   # Upload all artifacts for snapshot release because we don't need to guarantee stability.
