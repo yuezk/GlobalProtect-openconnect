@@ -9,7 +9,8 @@ REPO="yuezk/GlobalProtect-openconnect"
 TAG=${1:-}
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-GH_MAX_ATTEMPTS=5
+GH_MAX_ATTEMPTS=8
+GH_DELETE_MAX_ATTEMPTS=3
 
 if [ -z "$TAG" ]; then
   echo "Usage: ./scripts/gh-release.sh <tag>"
@@ -57,14 +58,14 @@ delete_snapshot_asset() {
   local attempt=1
   local delay
 
-  while (( attempt <= GH_MAX_ATTEMPTS )); do
+  while (( attempt <= GH_DELETE_MAX_ATTEMPTS )); do
     if gh -R "$REPO" release delete-asset "$TAG" "$asset" --yes; then
       return 0
     fi
     if assets="$(snapshot_asset_names)" && ! grep -Fqx -- "$asset" <<<"$assets"; then
       return 0
     fi
-    if (( attempt >= GH_MAX_ATTEMPTS )); then
+    if (( attempt >= GH_DELETE_MAX_ATTEMPTS )); then
       echo "Failed to delete release asset after $attempt attempts: $asset" >&2
       return 1
     fi
@@ -81,6 +82,8 @@ release_snapshot() {
   mapfile -t files < <(release_assets)
   local existing_assets
   local includes_macos=false
+  local is_current
+  local asset
   local file
   for file in "${files[@]}"; do
     if [[ "$(basename "$file")" == GP-Connect-*-arm64.* ]]; then
@@ -89,21 +92,39 @@ release_snapshot() {
     fi
   done
 
-  existing_assets="$(snapshot_asset_names)"
-  while IFS= read -r asset; do
-    if [[ -z "$asset" ]]; then
-      continue
-    fi
-    if [[ "$includes_macos" == "false" && \
-          ( "$asset" == "appcast.xml" || "$asset" == GP-Connect-*-arm64.* ) ]]; then
-      continue
-    fi
-    delete_snapshot_asset "$asset"
-  done <<<"$existing_assets"
-
   echo "Uploading new assets..."
-  # Upload all artifacts for snapshot release because we don't need to guarantee stability.
+  # Upload first so a transient cleanup failure cannot leave the snapshot
+  # release without the current artifacts.
   upload_files "${files[@]}"
+
+  if ! existing_assets="$(snapshot_asset_names)"; then
+    echo "::warning::Could not list stale snapshot assets for cleanup" >&2
+    return 0
+  fi
+  while IFS= read -r asset; do
+    if [[ -z "$asset" || "$asset" == "appcast.xml" ]]; then
+      continue
+    fi
+
+    is_current=false
+    for file in "${files[@]}"; do
+      if [[ "$(basename "$file")" == "$asset" ]]; then
+        is_current=true
+        break
+      fi
+    done
+    if [[ "$is_current" == "true" ]]; then
+      continue
+    fi
+
+    if [[ "$includes_macos" == "false" && \
+          "$asset" == GP-Connect-*-arm64.* ]]; then
+      continue
+    fi
+    if ! delete_snapshot_asset "$asset"; then
+      echo "::warning::Could not remove stale snapshot asset: $asset" >&2
+    fi
+  done <<<"$existing_assets"
 }
 
 release_tag() {
