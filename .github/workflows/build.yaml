@@ -11,7 +11,7 @@ on:
         required: true
         default: dev
       build_macos:
-        description: 'Build signed and notarized Apple Silicon artifacts for the snapshot release'
+        description: 'Build Apple Silicon artifacts for the snapshot release'
         required: true
         default: false
         type: boolean
@@ -442,25 +442,30 @@ jobs:
 
         for variable in \
           MACOS_CERTIFICATE_P12 \
-          MACOS_CERTIFICATE_PASSWORD \
-          APPLE_NOTARY_KEY_P8 \
-          APPLE_NOTARY_KEY_ID \
-          APPLE_NOTARY_ISSUER_ID; do
+          MACOS_CERTIFICATE_PASSWORD; do
           if [[ -z "${!variable:-}" ]]; then
             echo "$variable is not configured" >&2
             exit 1
           fi
         done
+        if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
+          for variable in \
+            APPLE_NOTARY_KEY_P8 \
+            APPLE_NOTARY_KEY_ID \
+            APPLE_NOTARY_ISSUER_ID; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "$variable is not configured" >&2
+              exit 1
+            fi
+          done
+        fi
 
         keychain="$RUNNER_TEMP/gp-connect.keychain-db"
         keychain_password="$(openssl rand -hex 24)"
-        certificate="$RUNNER_TEMP/developer-id.p12"
-        notary_key="$RUNNER_TEMP/AuthKey.p8"
-        notary_profile="gp-connect-ci"
+        certificate="$RUNNER_TEMP/signing-identity.p12"
 
         printf '%s' "$MACOS_CERTIFICATE_P12" | base64 -D > "$certificate"
-        printf '%s' "$APPLE_NOTARY_KEY_P8" > "$notary_key"
-        chmod 600 "$certificate" "$notary_key"
+        chmod 600 "$certificate"
 
         security create-keychain -p "$keychain_password" "$keychain"
         security set-keychain-settings -lut 21600 "$keychain"
@@ -471,33 +476,55 @@ jobs:
           -s -k "$keychain_password" "$keychain"
         security list-keychains -d user -s "$keychain" login.keychain-db
 
-        identity="$(security find-identity -v -p codesigning "$keychain" \
-          | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"
+        if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"
+        else
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n \
+                -e 's/.*"\(Developer ID Application:.*\)"/\1/p' \
+                -e 's/.*"\(Apple Development:.*\)"/\1/p' \
+            | head -1)"
+        fi
         if [[ -z "$identity" ]]; then
-          echo "Developer ID Application identity was not found" >&2
+          echo "A compatible Apple code-signing identity was not found" >&2
           exit 1
         fi
-
-        xcrun notarytool store-credentials "$notary_profile" \
-          --key "$notary_key" \
-          --key-id "$APPLE_NOTARY_KEY_ID" \
-          --issuer "$APPLE_NOTARY_ISSUER_ID" \
-          --keychain "$keychain"
 
         {
           echo "CI_KEYCHAIN=$keychain"
           echo "MACOS_SIGN_IDENTITY=$identity"
-          echo "APPLE_NOTARY_PROFILE=$notary_profile"
-          echo "APPLE_NOTARY_KEYCHAIN=$keychain"
         } >> "$GITHUB_ENV"
 
-    - name: Build signed and notarized application
+        if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
+          notary_key="$RUNNER_TEMP/AuthKey.p8"
+          notary_profile="gp-connect-ci"
+          printf '%s' "$APPLE_NOTARY_KEY_P8" > "$notary_key"
+          chmod 600 "$notary_key"
+          xcrun notarytool store-credentials "$notary_profile" \
+            --key "$notary_key" \
+            --key-id "$APPLE_NOTARY_KEY_ID" \
+            --issuer "$APPLE_NOTARY_ISSUER_ID" \
+            --keychain "$keychain"
+          {
+            echo "APPLE_NOTARY_PROFILE=$notary_profile"
+            echo "APPLE_NOTARY_KEYCHAIN=$keychain"
+          } >> "$GITHUB_ENV"
+        fi
+
+    - name: Build macOS release artifacts
       env:
         SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
       run: |
         set -euo pipefail
         cd gpgui-source/gpgui
-        ./scripts/build-macos.sh dmg release
+        if [[ "$UPDATE_CHANNEL" == "stable" ]]; then
+          build_mode="release"
+        else
+          build_mode="development"
+          export SPARKLE_CREATE_UPDATE_ARCHIVE=1
+        fi
+        ./scripts/build-macos.sh dmg "$build_mode"
 
     - name: Prepare release assets
       run: |

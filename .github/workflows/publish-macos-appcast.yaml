@@ -127,11 +127,21 @@ jobs:
           app="$extract_dir/GP Connect.app"
           test -d "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
-          xcrun stapler validate "$app"
 
           signing_info="$(codesign -d --verbose=4 "$app" 2>&1)"
-          grep -q '^Authority=Developer ID Application:' <<<"$signing_info"
-          grep -q '^CodeDirectory .*flags=.*runtime' <<<"$signing_info"
+          if [[ "$CHANNEL" == "stable" ]]; then
+            xcrun stapler validate "$app"
+            grep -q '^Authority=Developer ID Application:' <<<"$signing_info"
+            grep -q '^CodeDirectory .*flags=.*runtime' <<<"$signing_info"
+          else
+            grep -E -q '^Authority=(Apple Development|Developer ID Application):' \
+              <<<"$signing_info"
+          fi
+          team_identifier="$(sed -n 's/^TeamIdentifier=//p' <<<"$signing_info")"
+          if [[ -z "$team_identifier" || "$team_identifier" == "not set" ]]; then
+            echo "Signed application has no Team Identifier" >&2
+            exit 1
+          fi
 
           identifier="$(sed -n 's/^Identifier=//p' <<<"$signing_info")"
           if [[ "$identifier" != "com.yuezk.gpgui" ]]; then
