@@ -891,7 +891,7 @@ jobs:
         cd gh-release/gp/scripts && ./gh-release.sh "$RELEASE_TAG"
 
   publish-macos-appcast:
-    if: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.build_macos) }}
+    if: ${{ always() && needs.gh-release.result == 'success' && needs.build-gpgui-macos.result == 'success' }}
     permissions:
       contents: write
     needs:
