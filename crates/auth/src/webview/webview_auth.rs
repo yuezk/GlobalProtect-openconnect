@@ -2,10 +2,10 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::bail;
 use gpapi::{
-  auth::{AuthenticationCancelled, SamlAuthData},
+  auth::{AuthWindowTheme, AuthenticationCancelled, SamlAuthData},
   gp_params::GpParams,
   os_profile::{WebviewUserAgent, WebviewUserAgentTransform},
-  utils::redact::redact_uri,
+  utils::{redact::redact_uri, window::get_title_bar_height},
 };
 use log::{info, warn};
 use tauri::{
@@ -53,8 +53,26 @@ pub struct WebviewAuthenticator<'a> {
   auth_request: Option<&'a str>,
   webview_user_agent: Option<WebviewUserAgent>,
   clean: bool,
+  window_title: &'a str,
+  window_theme: AuthWindowTheme,
 
   is_retrying: tokio::sync::RwLock<bool>,
+}
+
+fn native_theme(theme: AuthWindowTheme) -> Option<tauri::Theme> {
+  match theme {
+    AuthWindowTheme::System => None,
+    AuthWindowTheme::Light => Some(tauri::Theme::Light),
+    AuthWindowTheme::Dark => Some(tauri::Theme::Dark),
+  }
+}
+
+pub fn apply_auth_theme(app_handle: &AppHandle, theme: AuthWindowTheme) {
+  app_handle.set_theme(native_theme(theme));
+}
+
+fn present_after_setup(clean: bool) -> bool {
+  clean
 }
 
 impl<'a> WebviewAuthenticator<'a> {
@@ -65,6 +83,8 @@ impl<'a> WebviewAuthenticator<'a> {
       auth_request: None,
       webview_user_agent: None,
       clean: false,
+      window_title: "GlobalProtect Login",
+      window_theme: AuthWindowTheme::System,
       is_retrying: Default::default(),
     }
   }
@@ -81,6 +101,16 @@ impl<'a> WebviewAuthenticator<'a> {
 
   pub fn with_clean(mut self, clean: bool) -> Self {
     self.clean = clean;
+    self
+  }
+
+  pub fn with_window_title(mut self, window_title: &'a str) -> Self {
+    self.window_title = window_title;
+    self
+  }
+
+  pub fn with_window_theme(mut self, window_theme: AuthWindowTheme) -> Self {
+    self.window_theme = window_theme;
     self
   }
 
@@ -112,21 +142,25 @@ impl<'a> WebviewAuthenticator<'a> {
       });
     };
 
-    let title_bar_height = if cfg!(target_os = "macos") { 28.0 } else { 0.0 };
-
-    let auth_window = WebviewWindow::builder(app_handle, "auth_window", WebviewUrl::default())
+    let auth_window_builder = WebviewWindow::builder(app_handle, "auth_window", WebviewUrl::default())
       .on_page_load(on_page_load)
-      .title("GlobalProtect Login")
-      .inner_size(900.0, 650.0 + title_bar_height)
+      .title(self.window_title)
+      .theme(native_theme(self.window_theme))
+      .devtools(true);
+    let auth_window = auth_window_builder
+      .inner_size(900.0, 650.0 + get_title_bar_height())
       .focused(true)
-      // when clean is true, the window is expected to be shown because the cookies are cleared
-      .visible(self.clean)
+      .visible(false)
       .center()
       .build()?;
 
     self
       .setup_auth_window(&auth_window, Arc::clone(&auth_messenger))
       .await?;
+
+    if present_after_setup(self.clean) {
+      self.raise_window(&auth_window);
+    }
 
     loop {
       match auth_messenger.subscribe().await? {
@@ -284,14 +318,8 @@ impl<'a> WebviewAuthenticator<'a> {
 
     info!("Raising auth window...");
 
-    #[cfg(target_os = "macos")]
-    let result = auth_window.show();
-
-    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-    let result = {
-      use gpapi::utils::window::WindowExt;
-      auth_window.raise()
-    };
+    use gpapi::utils::window::WindowExt;
+    let result = auth_window.raise();
 
     if let Err(err) = result {
       warn!("Failed to raise window: {}", err);
@@ -376,6 +404,19 @@ fn prepend_webview_user_agent_prefix(prefix: &str, default_user_agent: &str) -> 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn maps_auth_window_theme_to_native_theme() {
+    assert_eq!(native_theme(AuthWindowTheme::System), None);
+    assert_eq!(native_theme(AuthWindowTheme::Light), Some(tauri::Theme::Light));
+    assert_eq!(native_theme(AuthWindowTheme::Dark), Some(tauri::Theme::Dark));
+  }
+
+  #[test]
+  fn presents_clean_auth_after_setup() {
+    assert!(present_after_setup(true));
+    assert!(!present_after_setup(false));
+  }
 
   #[test]
   fn prepends_prefix_to_default_user_agent() {

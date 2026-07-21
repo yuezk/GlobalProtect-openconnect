@@ -1,11 +1,40 @@
 use tauri::WebviewWindow;
 
+/// Returns the frame-to-content height difference for a standard titled macOS window.
+/// This is nonzero only on macOS.
+pub fn get_title_bar_height() -> f64 {
+  #[cfg(target_os = "macos")]
+  {
+    macos_title_bar_height(os_info::get().version())
+  }
+  #[cfg(not(target_os = "macos"))]
+  {
+    0.0
+  }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_title_bar_height(version: &os_info::Version) -> f64 {
+  if version.ge(&os_info::Version::from_string("26.0.0")) {
+    32.0
+  } else {
+    28.0
+  }
+}
+
 pub trait WindowExt {
   fn raise(&self) -> anyhow::Result<()>;
 }
 
 impl WindowExt for WebviewWindow {
-  #[cfg(any(target_os = "macos", target_os = "windows"))]
+  #[cfg(target_os = "macos")]
+  fn raise(&self) -> anyhow::Result<()> {
+    self.show()?;
+    self.set_focus()?;
+    Ok(())
+  }
+
+  #[cfg(target_os = "windows")]
   fn raise(&self) -> anyhow::Result<()> {
     self.show()?;
     Ok(())
@@ -14,6 +43,24 @@ impl WindowExt for WebviewWindow {
   #[cfg(not(any(target_os = "macos", target_os = "windows")))]
   fn raise(&self) -> anyhow::Result<()> {
     unix::raise_window(self)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[cfg(target_os = "macos")]
+  #[test]
+  fn uses_the_current_macos_title_bar_height() {
+    assert_eq!(macos_title_bar_height(&os_info::Version::from_string("25.9.0")), 28.0);
+    assert_eq!(macos_title_bar_height(&os_info::Version::from_string("26.0.0")), 32.0);
+  }
+
+  #[cfg(not(target_os = "macos"))]
+  #[test]
+  fn native_title_bar_height_is_zero_without_a_native_macos_title_bar() {
+    assert_eq!(get_title_bar_height(), 0.0);
   }
 }
 

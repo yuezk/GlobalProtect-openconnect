@@ -1,4 +1,3 @@
-#[cfg(debug_assertions)]
 use std::path::PathBuf;
 use std::sync::{
   Arc,
@@ -13,6 +12,8 @@ use clap::Parser;
 use common::constants::GP_SERVICE_LOCK_FILE;
 use gpapi::clap::InfoLevelVerbosity;
 use gpapi::logger;
+#[cfg(debug_assertions)]
+use gpapi::utils::lock_file::dev_service_lock_file_path;
 use gpapi::{
   process::gui_launcher::GuiLauncher,
   service::{request::WsRequest, vpn_state::VpnState},
@@ -88,7 +89,7 @@ impl Cli {
     info!("gpservice started: {}", VERSION);
 
     let pid = std::process::id();
-    let lock_file = Arc::new(LockFile::new(GP_SERVICE_LOCK_FILE, pid));
+    let lock_file = Arc::new(LockFile::new(self.service_lock_file_path()?, pid));
 
     if lock_file.check_health().await {
       bail!("Another instance of the service is already running");
@@ -228,6 +229,19 @@ impl Cli {
 
     #[cfg(not(target_os = "macos"))]
     false
+  }
+
+  fn service_lock_file_path(&self) -> anyhow::Result<PathBuf> {
+    #[cfg(debug_assertions)]
+    if self.dev_standalone {
+      let socket = self
+        .dev_bootstrap_socket
+        .as_ref()
+        .context("--dev-bootstrap-socket is required with --dev-standalone")?;
+      return Ok(dev_service_lock_file_path(socket));
+    }
+
+    Ok(PathBuf::from(GP_SERVICE_LOCK_FILE))
   }
 
   fn init_logger(&self) -> Arc<Redaction> {

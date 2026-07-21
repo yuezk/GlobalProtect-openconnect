@@ -1,5 +1,5 @@
-use auth::WebviewAuthenticator;
-use gpapi::gp_params::GpParams;
+use auth::{WebviewAuthenticator, apply_auth_theme};
+use gpapi::{auth::AuthWindowTheme, gp_params::GpParams};
 use log::info;
 use tauri::RunEvent;
 use tempfile::NamedTempFile;
@@ -11,19 +11,24 @@ pub async fn authenticate(
   gp_params: GpParams,
   auth_request: String,
   clean: bool,
+  window_title: Option<String>,
+  window_theme: AuthWindowTheme,
   mut openssl_conf: Option<NamedTempFile>,
 ) -> anyhow::Result<()> {
   let auth_host_id = gp_params.os_profile().host_identity().host_id().to_string();
 
   tauri::Builder::default()
     .setup(move |app| {
+      apply_auth_theme(app.handle(), window_theme);
       let app_handle = app.handle().clone();
 
       tauri::async_runtime::spawn(async move {
         let authenticator = WebviewAuthenticator::new(&server, &gp_params)
           .with_auth_request(&auth_request)
           .with_webview_user_agent(gp_params.os_profile().webview_user_agent())
-          .with_clean(clean);
+          .with_clean(clean)
+          .with_window_title(window_title.as_deref().unwrap_or("GlobalProtect Login"))
+          .with_window_theme(window_theme);
 
         let auth_result = authenticator.authenticate(&app_handle).await;
         print_auth_result(auth_result, Some(&auth_host_id));

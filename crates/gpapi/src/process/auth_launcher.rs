@@ -4,6 +4,8 @@ use anyhow::bail;
 use common::binary_paths;
 use tokio::process::Command;
 
+#[cfg(feature = "webview-auth")]
+use crate::auth::AuthWindowTheme;
 use crate::{auth::SamlAuthResult, credential::Credential, os_profile::OsProfile};
 
 use super::command_traits::CommandExt;
@@ -27,6 +29,10 @@ pub struct SamlAuthLauncher<'a> {
   clean: bool,
   #[cfg(feature = "webview-auth")]
   default_browser: bool,
+  #[cfg(feature = "webview-auth")]
+  window_title: Option<&'a str>,
+  #[cfg(feature = "webview-auth")]
+  window_theme: Option<AuthWindowTheme>,
   browser: Option<&'a str>,
   verbose: Option<&'a str>,
 }
@@ -52,6 +58,10 @@ impl<'a> SamlAuthLauncher<'a> {
       clean: false,
       #[cfg(feature = "webview-auth")]
       default_browser: false,
+      #[cfg(feature = "webview-auth")]
+      window_title: None,
+      #[cfg(feature = "webview-auth")]
+      window_theme: None,
       browser: None,
       verbose: None,
     }
@@ -119,6 +129,18 @@ impl<'a> SamlAuthLauncher<'a> {
   #[cfg(feature = "webview-auth")]
   pub fn default_browser(mut self, default_browser: bool) -> Self {
     self.default_browser = default_browser;
+    self
+  }
+
+  #[cfg(feature = "webview-auth")]
+  pub fn window_title(mut self, window_title: &'a str) -> Self {
+    self.window_title = Some(window_title);
+    self
+  }
+
+  #[cfg(feature = "webview-auth")]
+  pub fn window_theme(mut self, window_theme: AuthWindowTheme) -> Self {
+    self.window_theme = Some(window_theme);
     self
   }
 
@@ -193,6 +215,14 @@ impl<'a> SamlAuthLauncher<'a> {
 
       if self.default_browser {
         auth_cmd.arg("--default-browser");
+      }
+
+      if let Some(window_title) = self.window_title {
+        auth_cmd.arg("--window-title").arg(window_title);
+      }
+
+      if let Some(window_theme) = self.window_theme {
+        auth_cmd.arg("--window-theme").arg(window_theme.as_str());
       }
     }
 

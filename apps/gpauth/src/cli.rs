@@ -1,5 +1,7 @@
 use auth::{BrowserAuthenticator, auth_prelogin};
 use clap::Parser;
+#[cfg(feature = "webview-auth")]
+use gpapi::auth::AuthWindowTheme;
 use gpapi::{
   auth::{AuthenticationCancelled, SamlAuthData, SamlAuthResult},
   clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
@@ -96,6 +98,14 @@ struct Cli {
   #[arg(long, help = "Clean the cache of the embedded browser")]
   pub clean: bool,
 
+  #[cfg(feature = "webview-auth")]
+  #[arg(long, help = "Set the embedded authentication window title")]
+  window_title: Option<String>,
+
+  #[cfg(feature = "webview-auth")]
+  #[arg(long, value_enum, default_value_t = AuthWindowTheme::default(), help = "Set the embedded authentication window appearance")]
+  window_theme: AuthWindowTheme,
+
   #[command(flatten)]
   verbose: InfoLevelVerbosity,
 }
@@ -166,7 +176,16 @@ impl Cli {
     }
 
     #[cfg(feature = "webview-auth")]
-    crate::webview_auth::authenticate(server, gp_params, auth_request, self.clean, openssl_conf).await?;
+    crate::webview_auth::authenticate(
+      server,
+      gp_params,
+      auth_request,
+      self.clean,
+      self.window_title.clone(),
+      self.window_theme,
+      openssl_conf,
+    )
+    .await?;
 
     Ok(())
   }
@@ -313,5 +332,22 @@ mod tests {
     assert_eq!(cli.certificate.as_deref(), Some("/tmp/client.pem"));
     assert_eq!(cli.sslkey.as_deref(), Some("/tmp/client.key"));
     assert_eq!(cli.key_password.as_deref(), Some("secret"));
+  }
+
+  #[cfg(feature = "webview-auth")]
+  #[test]
+  fn auth_window_options_parse() {
+    let cli = Cli::try_parse_from([
+      "gpauth",
+      "portal.example.com",
+      "--window-title",
+      "GP Connect Login",
+      "--window-theme",
+      "dark",
+    ])
+    .expect("gpauth window options should parse");
+
+    assert_eq!(cli.window_title.as_deref(), Some("GP Connect Login"));
+    assert_eq!(cli.window_theme, AuthWindowTheme::Dark);
   }
 }

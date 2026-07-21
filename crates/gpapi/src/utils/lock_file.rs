@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use common::constants::GP_SERVICE_LOCK_FILE;
 use thiserror::Error;
@@ -7,6 +7,10 @@ use tokio::fs;
 pub struct LockFile {
   path: PathBuf,
   pid: u32,
+}
+
+pub fn dev_service_lock_file_path(bootstrap_socket: impl AsRef<Path>) -> PathBuf {
+  bootstrap_socket.as_ref().with_file_name("gpservice.lock")
 }
 
 impl LockFile {
@@ -95,7 +99,11 @@ impl LockInfo {
 }
 
 pub async fn gpservice_lock_info() -> Result<LockInfo, LockFileError> {
-  LockInfo::from_file(GP_SERVICE_LOCK_FILE).await
+  gpservice_lock_info_at(GP_SERVICE_LOCK_FILE).await
+}
+
+pub async fn gpservice_lock_info_at(path: impl AsRef<Path>) -> Result<LockInfo, LockFileError> {
+  LockInfo::from_file(path).await
 }
 
 #[cfg(test)]
@@ -125,5 +133,13 @@ mod tests {
       LockInfo::parse("1234:abc"),
       Err(LockFileError::InvalidPort(_))
     ));
+  }
+
+  #[test]
+  fn dev_service_lock_file_is_next_to_the_bootstrap_socket() {
+    assert_eq!(
+      dev_service_lock_file_path("/var/run/gpservice-dev-123/dev-bootstrap.sock"),
+      PathBuf::from("/var/run/gpservice-dev-123/gpservice.lock")
+    );
   }
 }

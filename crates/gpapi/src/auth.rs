@@ -12,6 +12,25 @@ use crate::{error::AuthDataParseError, utils::base64::decode_to_string};
 
 pub type AuthDataParseResult = anyhow::Result<SamlAuthData, AuthDataParseError>;
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum AuthWindowTheme {
+  #[default]
+  System,
+  Light,
+  Dark,
+}
+
+impl AuthWindowTheme {
+  pub fn as_str(self) -> &'static str {
+    match self {
+      Self::System => "system",
+      Self::Light => "light",
+      Self::Dark => "dark",
+    }
+  }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SamlAuthData {
