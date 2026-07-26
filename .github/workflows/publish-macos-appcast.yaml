@@ -95,7 +95,7 @@ jobs:
           archive_name="$REQUESTED_ARCHIVE"
           if [[ -z "$archive_name" ]]; then
             archives="$(gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json assets \
-              --jq '.assets[].name | select(test("^GP-Connect-.*-arm64\\.zip$"))')"
+              --jq '.assets[].name | select(test("^GPConnect_[0-9A-Za-z._-]+_arm64\\.zip$"))')"
             archive_count="$(printf '%s\n' "$archives" | sed '/^$/d' | wc -l | tr -d ' ')"
             if [[ "$archive_count" != "1" ]]; then
               echo "Expected one macOS update archive on $RELEASE_TAG, found $archive_count" >&2
@@ -105,7 +105,7 @@ jobs:
             archive_name="$archives"
           fi
 
-          if [[ ! "$archive_name" =~ ^GP-Connect-[0-9A-Za-z._-]+-arm64\.zip$ ]]; then
+          if [[ ! "$archive_name" =~ ^GPConnect_[0-9A-Za-z._-]+_arm64\.zip$ ]]; then
             echo "Invalid macOS update archive name: $archive_name" >&2
             exit 1
           fi

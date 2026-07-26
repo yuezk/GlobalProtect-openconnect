@@ -15,3 +15,5 @@ gen
 
 # Nix files
 result
+
+.DS_Store

@@ -140,7 +140,7 @@ release_snapshot() {
   local asset
   local file
   for file in "${files[@]}"; do
-    if [[ "$(basename "$file")" == GP-Connect-*-arm64.* ]]; then
+    if [[ "$(basename "$file")" == GPConnect_*_arm64.* ]]; then
       includes_macos=true
       break
     fi
@@ -172,7 +172,7 @@ release_snapshot() {
     fi
 
     if [[ "$includes_macos" == "false" && \
-          "$asset" == GP-Connect-*-arm64.* ]]; then
+          "$asset" == GPConnect_*_arm64.* ]]; then
       continue
     fi
     if ! delete_release_asset "$asset"; then

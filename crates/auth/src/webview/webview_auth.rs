@@ -146,7 +146,7 @@ impl<'a> WebviewAuthenticator<'a> {
       .on_page_load(on_page_load)
       .title(self.window_title)
       .theme(native_theme(self.window_theme))
-      .devtools(true);
+      .devtools(cfg!(any(debug_assertions, feature = "release-devtools")));
     let auth_window = auth_window_builder
       .inner_size(900.0, 650.0 + get_title_bar_height())
       .focused(true)

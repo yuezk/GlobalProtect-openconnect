@@ -54,3 +54,4 @@ webview-auth = [
   "dep:objc2-foundation",
   "dep:objc2-web-kit",
 ]
+release-devtools = ["webview-auth", "tauri/devtools"]

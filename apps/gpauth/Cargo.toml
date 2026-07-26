@@ -28,8 +28,9 @@ compile-time.workspace = true
 home = "=0.5.11"
 
 # webview auth dependencies
-tauri = { workspace = true, optional = true, features = ["devtools"] }
+tauri = { workspace = true, optional = true }
 
 [features]
 default = ["webview-auth"]
 webview-auth = ["auth/webview-auth", "dep:tauri", "dep:tauri-build"]
+release-devtools = ["auth/release-devtools"]

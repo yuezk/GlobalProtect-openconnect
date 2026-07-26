@@ -400,7 +400,7 @@ jobs:
           fi
         fi
 
-        archive_name="GP-Connect-$artifact_version-arm64.zip"
+        archive_name="GPConnect_${artifact_version}_arm64.zip"
         {
           echo "MACOS_BUILD_NUMBER=$build_number"
           echo "MACOS_ARTIFACT_VERSION=$artifact_version"
@@ -532,8 +532,8 @@ jobs:
 
         artifact_dir="gpgui-source/artifacts"
         mkdir -p "$artifact_dir"
-        dmg_name="GP-Connect-$MACOS_ARTIFACT_VERSION-arm64.dmg"
-        archive_name="GP-Connect-$MACOS_ARTIFACT_VERSION-arm64.zip"
+        dmg_name="GPConnect_${MACOS_ARTIFACT_VERSION}_arm64.dmg"
+        archive_name="GPConnect_${MACOS_ARTIFACT_VERSION}_arm64.zip"
         mv "gpgui-source/gpgui/target/release/bundle/dmg/GP Connect.dmg" \
           "$artifact_dir/$dmg_name"
         mv "gpgui-source/gpgui/target/release/bundle/sparkle/$archive_name" \
