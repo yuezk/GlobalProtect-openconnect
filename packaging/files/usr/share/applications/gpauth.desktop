@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=GP Connect Login
+Comment=Authenticate GP Connect VPN connections
+NoDisplay=true
+Terminal=false
+TryExec=/usr/bin/gpauth
+Exec=/usr/bin/gpauth
+Icon=gpgui
+Categories=Network;

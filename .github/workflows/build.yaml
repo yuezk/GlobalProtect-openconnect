@@ -304,6 +304,9 @@ jobs:
         repository: yuezk/gpgui
         ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
         path: gpgui-source/gpgui
+    - name: Verify Linux desktop assets
+      if: matrix.os.arch == 'amd64' && matrix.libc.name == 'glibc'
+      run: gpgui-source/gp/scripts/verify-linux-desktop-assets.sh gpgui-source/gpgui
     - name: Tarball
       run: |
         cd gpgui-source

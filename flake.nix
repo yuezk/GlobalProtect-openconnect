@@ -97,6 +97,9 @@
           substituteInPlace $out/share/applications/gpgui.desktop \
             --replace-fail /usr/bin/gpclient /run/current-system/sw/bin/gpclient
 
+          substituteInPlace $out/share/applications/gpauth.desktop \
+            --replace-fail /usr/bin/gpauth /run/current-system/sw/bin/gpauth
+
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice
 
@@ -109,6 +112,9 @@
         rewriteHostInstallPaths = ''
           substituteInPlace $out/share/applications/gpgui.desktop \
             --replace-fail /usr/bin/gpclient /run/current-system/sw/bin/gpclient
+
+          substituteInPlace $out/share/applications/gpauth.desktop \
+            --replace-fail /usr/bin/gpauth /run/current-system/sw/bin/gpauth
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice

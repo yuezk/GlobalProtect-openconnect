@@ -6,11 +6,14 @@
     "beforeBuildCommand": ""
   },
   "identifier": "com.yuezk.gpauth",
-  "productName": "gpauth",
+  "productName": "GP Connect Login",
   "app": {
     "withGlobalTauri": false,
     "security": {
       "csp": null
     }
+  },
+  "bundle": {
+    "icon": ["icons/icon.png"]
   }
 }
