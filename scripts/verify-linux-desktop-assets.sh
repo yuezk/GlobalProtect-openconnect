@@ -30,6 +30,9 @@ verify_same_file \
   "$GP_DIR/packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png"
 verify_same_file \
   "$GPGUI_DIR/app/src-tauri/icons/128x128@2x.png" \
+  "$GP_DIR/packaging/files/usr/share/icons/hicolor/256x256/apps/gpgui.png"
+verify_same_file \
+  "$GPGUI_DIR/app/src-tauri/icons/icon.png" \
   "$GP_DIR/packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png"
 verify_same_file \
   "$GPGUI_DIR/app/src-tauri/icons/icon.svg" \
@@ -46,6 +49,30 @@ verify_same_file \
 verify_same_file \
   "$GPGUI_DIR/app/src-tauri/icons/icon.png" \
   "$GP_DIR/apps/gpauth/icons/icon.png"
+verify_same_file \
+  "$GPGUI_DIR/app/src-tauri/icons/32x32.png" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/32x32.png"
+verify_same_file \
+  "$GPGUI_DIR/app/src-tauri/icons/128x128.png" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/128x128.png"
+verify_same_file \
+  "$GPGUI_DIR/app/src-tauri/icons/128x128@2x.png" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/128x128@2x.png"
+verify_same_file \
+  "$GPGUI_DIR/app/src-tauri/icons/icon.png" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.png"
+verify_same_file \
+  "$GPGUI_DIR/app/src-tauri/icons/icon.svg" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.svg"
+verify_same_file \
+  "$GPGUI_DIR/app/src-tauri/icons/icon.icns" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.icns"
+verify_same_file \
+  "$GPGUI_DIR/app/src-tauri/icons/icon.ico" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.ico"
+verify_same_file \
+  "$GPGUI_DIR/app/src-tauri/icons/icon.svg" \
+  "$GP_DIR/apps/gpgui-helper/src/assets/icon.svg"
 verify_same_file \
   "$GPGUI_DIR/app/gpauth.desktop" \
   "$GP_DIR/packaging/files/usr/share/applications/gpauth.desktop"

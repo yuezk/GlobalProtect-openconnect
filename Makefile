@@ -167,6 +167,7 @@ install:
 	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
 	install -Dm644 packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
 	install -Dm644 packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
+	install -Dm644 packaging/files/usr/share/icons/hicolor/256x256/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	install -Dm644 packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
 	install -Dm644 packaging/files/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
@@ -195,10 +196,12 @@ install-bsd:
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/32x32/apps
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps
+	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256/apps
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256@2/apps
 	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/gpgui.svg
 	install -m 644 packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/32x32/apps/gpgui.png
 	install -m 644 packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps/gpgui.png
+	install -m 644 packaging/files/usr/share/icons/hicolor/256x256/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256/apps/gpgui.png
 	install -m 644 packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256@2/apps/gpgui.png
 	install -d $(DESTDIR)$(PREFIX)/share/polkit-1/actions
 	install -m 644 packaging/bsd/com.yuezk.gpgui.policy $(DESTDIR)$(PREFIX)/share/polkit-1/actions/com.yuezk.gpgui.policy
@@ -282,6 +285,7 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
