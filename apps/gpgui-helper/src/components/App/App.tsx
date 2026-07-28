@@ -1,6 +1,6 @@
 import { Box, Button, CssBaseline, LinearProgress, Typography } from "@mui/material";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import logo from "../../assets/icon.svg";
+import logo from "../../assets/icon-small.svg";
 import { useEffect, useState } from "react";
 
 import "./styles.css";

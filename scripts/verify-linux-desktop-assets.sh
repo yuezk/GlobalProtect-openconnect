@@ -71,8 +71,8 @@ verify_same_file \
   "$GPGUI_DIR/app/src-tauri/icons/icon.ico" \
   "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.ico"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/icon.svg" \
-  "$GP_DIR/apps/gpgui-helper/src/assets/icon.svg"
+  "$GPGUI_DIR/app/src-tauri/icons/icon-small.svg" \
+  "$GP_DIR/apps/gpgui-helper/src/assets/icon-small.svg"
 verify_same_file \
   "$GPGUI_DIR/app/gpauth.desktop" \
   "$GP_DIR/packaging/files/usr/share/applications/gpauth.desktop"
