@@ -248,8 +248,48 @@
           '';
         };
 
+        hostGuiLauncher = pkgs.writeShellScript "gpgui-host-launcher" ''
+          set -eu
+
+          if [ "''${1:-}" = "--version" ]; then
+            exec ${prebuiltFiles}/bin/gpgui "$@"
+          fi
+
+          systemd_run_args=(
+            --user
+            --pipe
+            --wait
+            --quiet
+            --collect
+            --service-type=exec
+          )
+
+          while IFS= read -r env_name; do
+            case "$env_name" in
+              *[!A-Za-z0-9_]* | [0-9]* | PATH | GP_VPNC_SCRIPT_INSTALLER_BINARY | INVOCATION_ID | JOURNAL_STREAM | LISTEN_* | NOTIFY_SOCKET | SYSTEMD_EXEC_PID)
+                continue
+                ;;
+            esac
+            systemd_run_args+=("--setenv=$env_name")
+          done < <(compgen -e)
+
+          gui_path="/run/wrappers/bin:''${PATH:-}"
+          systemd_run_args+=(
+            "--setenv=PATH=$gui_path"
+            "--setenv=GP_VPNC_SCRIPT_INSTALLER_BINARY=${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer"
+          )
+
+          exec ${pkgs.systemd}/bin/systemd-run \
+            "''${systemd_run_args[@]}" \
+            ${prebuiltFiles}/bin/gpgui \
+            "$@"
+        '';
+
         prebuiltCommand =
-          binaryName:
+          {
+            binaryName,
+            extraProfile ? "",
+          }:
           pkgs.buildFHSEnv {
             name = binaryName;
             targetPkgs = pkgs: [ prebuiltFiles ] ++ linuxBuildInputs ++ linuxRuntimeDependencies;
@@ -257,6 +297,7 @@
             profile = ''
               export PATH=/run/wrappers/bin:$PATH
               export GP_VPNC_SCRIPT_INSTALLER_BINARY='${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer'
+              ${extraProfile}
             '';
             extraBwrapArgs = [
               "--bind-try"
@@ -269,11 +310,16 @@
           };
 
         prebuiltCommands = {
-          gpclient = prebuiltCommand "gpclient";
-          gpservice = prebuiltCommand "gpservice";
-          gpauth = prebuiltCommand "gpauth";
-          gpgui = prebuiltCommand "gpgui";
-          gpgui-helper = prebuiltCommand "gpgui-helper";
+          gpclient = prebuiltCommand { binaryName = "gpclient"; };
+          gpservice = prebuiltCommand {
+            binaryName = "gpservice";
+            extraProfile = ''
+              export GP_GUI_BINARY='${hostGuiLauncher}'
+            '';
+          };
+          gpauth = prebuiltCommand { binaryName = "gpauth"; };
+          gpgui = prebuiltCommand { binaryName = "gpgui"; };
+          gpgui-helper = prebuiltCommand { binaryName = "gpgui-helper"; };
         };
 
         prebuilt = pkgs.stdenv.mkDerivation {
