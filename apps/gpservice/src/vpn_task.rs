@@ -19,16 +19,18 @@ pub(crate) struct VpnTaskContext {
   vpn_state_tx: Arc<watch::Sender<VpnState>>,
   disconnect_rx: RwLock<Option<oneshot::Receiver<()>>>,
   brokered_macos: bool,
+  trusted_csd_uid: Option<u32>,
   identity_files: Arc<RwLock<Vec<tempfile::NamedTempFile>>>,
 }
 
 impl VpnTaskContext {
-  pub fn new(vpn_state_tx: watch::Sender<VpnState>, brokered_macos: bool) -> Self {
+  pub fn new(vpn_state_tx: watch::Sender<VpnState>, brokered_macos: bool, trusted_csd_uid: Option<u32>) -> Self {
     Self {
       vpn_handle: Default::default(),
       vpn_state_tx: Arc::new(vpn_state_tx),
       disconnect_rx: Default::default(),
       brokered_macos,
+      trusted_csd_uid,
       identity_files: Default::default(),
     }
   }
@@ -53,11 +55,21 @@ impl VpnTaskContext {
       }
     };
     let allow_extend_session = args.allow_extend_session();
-    let mut vpn_builder = Vpn::builder(req.gateway().server(), args.cookie());
-    vpn_builder = if self.brokered_macos {
-      vpn_builder.script_path(args.vpnc_script())
-    } else {
-      vpn_builder.script(args.vpnc_script())
+    let vpn_builder = match crate::vpn_script::builder(req.gateway().server(), args.cookie(), args) {
+      Ok(builder) => builder,
+      Err(err) => {
+        warn!("Failed to select the VPNC script: {err}");
+        vpn_state_tx.send(VpnState::Disconnected).ok();
+        return;
+      }
+    };
+    let csd_uid = match resolve_csd_uid(self.trusted_csd_uid, args.csd_uid(), args.hip()) {
+      Ok(uid) => uid,
+      Err(err) => {
+        warn!("Failed to select the HIP script user: {err}");
+        vpn_state_tx.send(VpnState::Disconnected).ok();
+        return;
+      }
     };
     let vpn = match vpn_builder
       .user_agent(args.user_agent())
@@ -69,7 +81,7 @@ impl VpnTaskContext {
       .sslkey(identity.sslkey.clone())
       .key_password(args.key_password())
       .hip(args.hip())
-      .csd_uid(args.csd_uid())
+      .csd_uid(csd_uid)
       .csd_wrapper(args.csd_wrapper())
       .reconnect_timeout(args.reconnect_timeout())
       .mtu(args.mtu())
@@ -162,8 +174,9 @@ impl VpnTask {
     ws_req_rx: mpsc::Receiver<WsRequest>,
     vpn_state_tx: watch::Sender<VpnState>,
     brokered_macos: bool,
+    trusted_csd_uid: Option<u32>,
   ) -> Self {
-    let ctx = Arc::new(VpnTaskContext::new(vpn_state_tx, brokered_macos));
+    let ctx = Arc::new(VpnTaskContext::new(vpn_state_tx, brokered_macos, trusted_csd_uid));
     let cancel_token = CancellationToken::new();
 
     Self {
@@ -202,6 +215,14 @@ impl VpnTask {
       tokio::spawn(process_ws_req(req, self.ctx.clone()));
     }
   }
+}
+
+fn resolve_csd_uid(trusted_uid: Option<u32>, requested_uid: u32, hip_enabled: bool) -> anyhow::Result<u32> {
+  let uid = trusted_uid.unwrap_or(requested_uid);
+  if hip_enabled && uid == 0 {
+    anyhow::bail!("HIP scripts must not run as root");
+  }
+  Ok(uid)
 }
 
 struct PreparedIdentity {
@@ -277,6 +298,17 @@ async fn process_ws_req(req: WsRequest, ctx: Arc<VpnTaskContext>) {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn trusted_csd_uid_overrides_request_uid() {
+    assert_eq!(resolve_csd_uid(Some(1000), 0, true).unwrap(), 1000);
+  }
+
+  #[test]
+  fn root_csd_uid_is_rejected_when_hip_is_enabled() {
+    assert!(resolve_csd_uid(None, 0, true).is_err());
+    assert_eq!(resolve_csd_uid(None, 0, false).unwrap(), 0);
+  }
 
   #[test]
   fn maps_openconnect_session_metadata_to_service_session_info() {

@@ -3,6 +3,15 @@ pub const GP_CLIENT_VERSION_LINUX: &str = "6.3.3-619";
 pub const GP_CLIENT_VERSION_WINDOWS: &str = "6.3.3-650";
 pub const GP_CLIENT_VERSION_MACOS: &str = "6.3.3-915";
 pub const GP_SERVICE_LOCK_FILE: &str = "/var/run/gpservice.lock";
+#[cfg(target_os = "linux")]
+pub const GP_VPNC_SCRIPT_INSTALLER_BINARY: &str = "/usr/libexec/gpclient/gp-vpnc-script-installer";
+#[cfg(target_os = "linux")]
+pub const INSTALLED_VPNC_SCRIPT: &str = "/var/lib/gpclient/scripts/vpnc-script";
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+pub const GP_VPNC_SCRIPT_INSTALLER_BINARY: &str = "/usr/local/libexec/gpclient/gp-vpnc-script-installer";
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+pub const INSTALLED_VPNC_SCRIPT: &str = "/var/db/gpclient/scripts/vpnc-script";
+pub const MAX_VPNC_SCRIPT_SIZE: usize = 1024 * 1024;
 pub const GP_CALLBACK_PORT_FILENAME: &str = "gpcallback.port";
 
 // Release binaries - macOS (Apple Silicon Homebrew)

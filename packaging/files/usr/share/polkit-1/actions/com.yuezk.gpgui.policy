@@ -15,4 +15,15 @@
     <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/gpservice</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
   </action>
+  <action id="com.yuezk.gpgui.manage-vpnc-script">
+    <description>Manage the system-wide GP Connect VPN script</description>
+    <message>Administrator authentication is required to manage the system-wide VPN script</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/gpclient/gp-vpnc-script-installer</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
 </policyconfig>

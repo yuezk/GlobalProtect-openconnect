@@ -102,6 +102,7 @@ impl Cli {
     let gui_restart_requested = Arc::new(AtomicBool::new(false));
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
     let externally_brokered = self.externally_brokered();
+    let trusted_csd_uid = crate::runtime_user::trusted_csd_uid()?;
     let brokered_scripts_dir = if externally_brokered {
       let executable = std::env::current_exe().context("Failed to locate the gpservice executable")?;
       let contents_dir = executable
@@ -120,7 +121,7 @@ impl Cli {
       brokered_scripts_dir,
     ));
 
-    let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx, externally_brokered);
+    let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx, externally_brokered, trusted_csd_uid);
     let idle_vpn_state_rx = vpn_state_rx.clone();
     let ws_server = WsServer::new(
       env!("CARGO_PKG_VERSION"),

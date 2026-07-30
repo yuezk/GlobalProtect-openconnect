@@ -101,7 +101,8 @@
             --replace-fail /usr/bin/gpauth /run/current-system/sw/bin/gpauth
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
-            --replace-fail /usr/bin/gpservice $out/bin/gpservice
+            --replace-fail /usr/bin/gpservice $out/bin/gpservice \
+            --replace-fail /usr/libexec/gpclient/gp-vpnc-script-installer $out/bin/gp-vpnc-script-installer
 
           if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
             substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
@@ -117,7 +118,8 @@
             --replace-fail /usr/bin/gpauth /run/current-system/sw/bin/gpauth
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
-            --replace-fail /usr/bin/gpservice $out/bin/gpservice
+            --replace-fail /usr/bin/gpservice $out/bin/gpservice \
+            --replace-fail /usr/libexec/gpclient/gp-vpnc-script-installer ${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer
 
           if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
             substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
@@ -254,6 +256,7 @@
             runScript = "/usr/bin/${binaryName}";
             profile = ''
               export PATH=/run/wrappers/bin:$PATH
+              export GP_VPNC_SCRIPT_INSTALLER_BINARY='${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer'
             '';
             extraBwrapArgs = [
               "--bind-try"

@@ -3,6 +3,8 @@ use std::{
   path::{Path, PathBuf},
 };
 
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use crate::constants::GP_VPNC_SCRIPT_INSTALLER_BINARY;
 use crate::constants::{GP_AUTH_BINARY, GP_CLIENT_BINARY, GP_GUI_BINARY, GP_GUI_HELPER_BINARY, GP_SERVICE_BINARY};
 
 pub fn gpclient() -> PathBuf {
@@ -11,6 +13,15 @@ pub fn gpclient() -> PathBuf {
 
 pub fn gpservice() -> PathBuf {
   resolve("GP_SERVICE_BINARY", "gpservice", GP_SERVICE_BINARY)
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+pub fn gp_vpnc_script_installer() -> PathBuf {
+  resolve(
+    "GP_VPNC_SCRIPT_INSTALLER_BINARY",
+    "gp-vpnc-script-installer",
+    GP_VPNC_SCRIPT_INSTALLER_BINARY,
+  )
 }
 
 pub fn gpauth() -> PathBuf {

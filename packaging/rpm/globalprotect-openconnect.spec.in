@@ -64,6 +64,7 @@ make build
 %{_bindir}/*
 %{_libexecdir}/gpclient/vpnc-script
 %{_libexecdir}/gpclient/hipreport.sh
+%{_libexecdir}/gpclient/gp-vpnc-script-installer
 %{_datadir}/applications/gpgui.desktop
 %{_datadir}/applications/gpauth.desktop
 %{_datadir}/icons/hicolor/32x32/apps/gpgui.png

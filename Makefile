@@ -145,6 +145,7 @@ install:
 	install -Dm755 target/release/gpclient $(DESTDIR)/usr/bin/gpclient
 	install -Dm755 target/release/gpauth $(DESTDIR)/usr/bin/gpauth
 	install -Dm755 target/release/gpservice $(DESTDIR)/usr/bin/gpservice
+	install -Dm755 target/release/gp-vpnc-script-installer $(DESTDIR)/usr/libexec/gpclient/gp-vpnc-script-installer
 
 	# Install the GUI components if BUILD_GUI_HELPER is set to 1
 	if [ $(BUILD_GUI_HELPER) -eq 1 ]; then \
@@ -188,6 +189,7 @@ install-bsd:
 	fi
 
 	install -d $(DESTDIR)$(PREFIX)/libexec/gpclient
+	install -m 755 target/release/gp-vpnc-script-installer $(DESTDIR)$(PREFIX)/libexec/gpclient/gp-vpnc-script-installer
 	install -m 755 packaging/files/usr/libexec/gpclient/vpnc-script $(DESTDIR)$(PREFIX)/libexec/gpclient/vpnc-script
 	install -m 755 packaging/files/usr/libexec/gpclient/hipreport.sh $(DESTDIR)$(PREFIX)/libexec/gpclient/hipreport.sh
 
@@ -276,6 +278,7 @@ uninstall:
 
 	rm -f $(DESTDIR)/usr/libexec/gpclient/vpnc-script
 	rm -f $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
+	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-vpnc-script-installer
 
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
