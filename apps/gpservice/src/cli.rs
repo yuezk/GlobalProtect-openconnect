@@ -122,6 +122,7 @@ impl Cli {
     ));
 
     let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx, externally_brokered, trusted_csd_uid);
+    #[cfg(target_os = "macos")]
     let idle_vpn_state_rx = vpn_state_rx.clone();
     let ws_server = WsServer::new(
       env!("CARGO_PKG_VERSION"),

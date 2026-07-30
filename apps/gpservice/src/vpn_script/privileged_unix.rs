@@ -5,7 +5,8 @@ use super::selection::{ScriptSource, select};
 
 pub(crate) fn builder(server: &str, cookie: &str, args: &ConnectArgs) -> anyhow::Result<VpnBuilder> {
   let installed = gpservice::vpnc_script::installed_script()?;
-  match select(installed.as_deref(), args.vpnc_script()) {
+  let legacy = args.vpnc_script();
+  match select(installed.as_deref(), legacy.as_deref()) {
     ScriptSource::Installed(path) => {
       Ok(Vpn::builder(server, cookie).script_path(Some(path.to_string_lossy().into_owned())))
     }

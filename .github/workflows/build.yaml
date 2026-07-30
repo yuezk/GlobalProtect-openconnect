@@ -685,6 +685,7 @@ jobs:
             git \
             rust \
             libiconv \
+            bzip2 \
             gettext-tools \
             autoconf \
             automake \
