@@ -107,6 +107,7 @@ impl SessionRegistry {
     Ok(credential)
   }
 
+  #[cfg(target_os = "macos")]
   pub fn is_empty(&self) -> bool {
     let Ok(mut sessions) = self.sessions.lock() else {
       return false;

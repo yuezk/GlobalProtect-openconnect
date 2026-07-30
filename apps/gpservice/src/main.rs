@@ -1,5 +1,5 @@
 mod cli;
-#[cfg(unix)]
+#[cfg(all(unix, any(target_os = "macos", debug_assertions)))]
 mod credential_lease;
 #[cfg(debug_assertions)]
 mod dev_bootstrap;
