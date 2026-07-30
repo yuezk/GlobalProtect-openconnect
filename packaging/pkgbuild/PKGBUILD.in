@@ -14,6 +14,7 @@ depends=('webkit2gtk-4.1' 'libappindicator-gtk3' 'librsvg' 'libsecret' 'openssl'
 optdepends=('wmctrl: for window management')
 
 provides=('globalprotect-openconnect' 'gpclient' 'gpservice' 'gpauth' 'gpgui')
+install=gp.install
 
 source=("${_pkgname}-${pkgver}.tar.gz")
 sha256sums=('SKIP')

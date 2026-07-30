@@ -225,7 +225,7 @@ bsd-gpgui-tarball:
 package-freebsd: BSD_FLAVOR=freebsd
 package-freebsd: clean-bsd-package
 	test -x "$(GPGUI_BINARY)"
-	mkdir -p .build/freebsd/pkgroot .build/freebsd/artifacts
+	mkdir -p .build/freebsd/pkgroot .build/freebsd/artifacts .build/freebsd/metadata
 	$(MAKE) install-bsd DESTDIR=$(CURDIR)/.build/freebsd/pkgroot PREFIX=$(PREFIX) GPGUI_BINARY="$(GPGUI_BINARY)"
 	find .build/freebsd/pkgroot$(PREFIX) -type f -print | sed 's|^.build/freebsd/pkgroot$(PREFIX)/||' | sort > .build/freebsd/PLIST
 	freebsd_major=$$(freebsd-version -u | sed 's/\..*//'); \
@@ -236,8 +236,9 @@ package-freebsd: clean-bsd-package
 		-e "s/@ABI@/FreeBSD:$$freebsd_major:$$freebsd_arch/g" \
 		-e "s/@ARCH@/freebsd:$$freebsd_major:$$freebsd_arch/g" \
 		-e 's|@PREFIX@|$(PREFIX)|g' \
-		packaging/bsd/freebsd/MANIFEST.in > .build/freebsd/+MANIFEST
-	pkg create -r .build/freebsd/pkgroot -M .build/freebsd/+MANIFEST -p .build/freebsd/PLIST -o .build/freebsd/artifacts
+		packaging/bsd/freebsd/MANIFEST.in > .build/freebsd/metadata/+MANIFEST
+	cp packaging/bsd/freebsd/POST_DEINSTALL .build/freebsd/metadata/+POST_DEINSTALL
+	pkg create -r .build/freebsd/pkgroot -M .build/freebsd/metadata -p .build/freebsd/PLIST -o .build/freebsd/artifacts
 	freebsd_arch=$$(uname -m | sed -e 's/x86_64/amd64/' -e 's/arm64/aarch64/'); \
 		mv .build/freebsd/artifacts/$(PKG_NAME)-$(VERSION).pkg .build/freebsd/artifacts/$(PKG_NAME)-$(VERSION)-freebsd-$$freebsd_arch.pkg
 	$(MAKE) bsd-gpgui-tarball BSD_FLAVOR=freebsd GPGUI_BINARY="$(GPGUI_BINARY)"
@@ -249,7 +250,11 @@ package-openbsd: clean-bsd-package
 	$(MAKE) install-bsd DESTDIR=$(CURDIR)/.build/openbsd/pkgroot PREFIX=$(PREFIX) GPGUI_BINARY="$(GPGUI_BINARY)"
 	cp packaging/bsd/openbsd/COMMENT .build/openbsd/+COMMENT
 	cp packaging/bsd/openbsd/DESC .build/openbsd/+DESC
-	find .build/openbsd/pkgroot$(PREFIX) -type f -print | sed 's|^.build/openbsd/pkgroot$(PREFIX)/||' | sort > .build/openbsd/PLIST
+	{ \
+		echo '@unexec-delete /bin/rm -f /var/db/gpclient/scripts/vpnc-script /var/db/gpclient/scripts/vpnc-script.metadata || echo "Warning: failed to remove the installed VPN script" >&2'; \
+		echo '@unexec-delete /bin/rmdir /var/db/gpclient/scripts 2>/dev/null || true'; \
+		find .build/openbsd/pkgroot$(PREFIX) -type f -print | sed 's|^.build/openbsd/pkgroot$(PREFIX)/||' | sort; \
+	} > .build/openbsd/PLIST
 	comment=$$(cat .build/openbsd/+COMMENT); \
 		openbsd_arch=$$(uname -m | sed 's/x86_64/amd64/'); \
 		gnome_keyring_pkg=$$(pkg_info -e 'gnome-keyring-*' | sed 's/^inst://' | head -n 1); \
@@ -291,6 +296,11 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
+
+	rm -f $(DESTDIR)/var/lib/gpclient/scripts/vpnc-script \
+		$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata || \
+		echo "Warning: failed to remove the installed VPN script" >&2
+	rmdir $(DESTDIR)/var/lib/gpclient/scripts 2>/dev/null || true
 
 clean-debian:
 	rm -rf .build/deb
@@ -398,6 +408,7 @@ init-pkgbuild: clean-pkgbuild tarball
 
 	cp .build/tarball/${PKG}.tar.gz .build/pkgbuild
 	cp packaging/pkgbuild/PKGBUILD.in .build/pkgbuild/PKGBUILD
+	cp packaging/pkgbuild/gp.install .build/pkgbuild/gp.install
 
 	sed -i "s/@PKG_NAME@/$(PKG_NAME)/g" .build/pkgbuild/PKGBUILD
 	sed -i "s/@VERSION@/$(VERSION)/g" .build/pkgbuild/PKGBUILD
@@ -414,6 +425,7 @@ init-apk: clean-apk tarball
 
 	cp .build/tarball/${PKG}.tar.gz .build/apk
 	cp packaging/apk/APKBUILD.in .build/apk/APKBUILD
+	cp packaging/apk/post-deinstall .build/apk/$(PKG_NAME).post-deinstall
 
 	sed -i "s/@PKG_NAME@/$(PKG_NAME)/g" .build/apk/APKBUILD
 	sed -i "s/@VERSION@/$(VERSION)/g" .build/apk/APKBUILD

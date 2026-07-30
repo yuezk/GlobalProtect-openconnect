@@ -1,0 +1,9 @@
+#!/bin/sh
+
+root=${PKG_ROOTDIR:-}
+
+rm -f \
+	"$root/var/db/gpclient/scripts/vpnc-script" \
+	"$root/var/db/gpclient/scripts/vpnc-script.metadata" ||
+	echo "Warning: failed to remove the installed VPN script" >&2
+rmdir "$root/var/db/gpclient/scripts" 2>/dev/null || true

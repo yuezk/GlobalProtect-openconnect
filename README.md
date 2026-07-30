@@ -283,6 +283,10 @@ After logging back in to GNOME, enable AppIndicator support if needed:
 gnome-extensions enable appindicatorsupport@rgcjonas.gmail.com
 ```
 
+NixOS does not run an imperative package-uninstall hook when a package is
+removed from the system configuration. Remove an installed replacement VPN
+script from the app settings before removing the package.
+
 ### Official Docker Image
 
 The [official Docker image](https://hub.docker.com/r/yuezk/globalprotect-openconnect) provides the CLI tools on Alpine Linux:

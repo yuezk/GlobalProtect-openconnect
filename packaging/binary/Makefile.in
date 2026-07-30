@@ -51,3 +51,8 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
+
+	rm -f $(DESTDIR)/var/lib/gpclient/scripts/vpnc-script \
+		$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata || \
+		echo "Warning: failed to remove the installed VPN script" >&2
+	rmdir $(DESTDIR)/var/lib/gpclient/scripts 2>/dev/null || true

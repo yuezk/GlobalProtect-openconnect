@@ -50,6 +50,13 @@ A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authenticati
 
 %postun
 rm -f %{_bindir}/gpgui
+if [ "$1" -eq 0 ]; then
+    rm -f \
+        /var/lib/gpclient/scripts/vpnc-script \
+        /var/lib/gpclient/scripts/vpnc-script.metadata ||
+        echo "Warning: failed to remove the installed VPN script" >&2
+    rmdir /var/lib/gpclient/scripts 2>/dev/null || :
+fi
 
 %build
 # The injected RUSTFLAGS could fail the build
