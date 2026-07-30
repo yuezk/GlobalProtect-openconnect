@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::service::{event::WsEvent, request::WsRequest, vpn_env::VpnEnv};
+use crate::service::{event::WsEvent, request::WsRequest, vpn_env::VpnEnv, vpnc_script::VpncScriptMetadata};
 
 use super::{MAX_PLAINTEXT, MAX_SERVICE_MESSAGE, ServiceErrorCode, TransportError};
 
@@ -39,6 +39,7 @@ pub enum ServerMessage {
 #[serde(tag = "type", content = "data", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ServiceResult {
   Accepted,
+  VpncScriptMetadata(Option<VpncScriptMetadata>),
   Rejected(ServiceRejection),
 }
 

@@ -69,6 +69,22 @@ impl RequestDispatcher {
         }
         self.update_gui(request).await
       }
+      WsRequest::GetVpncScriptMetadata => {
+        #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+        {
+          match gpservice::vpnc_script::metadata() {
+            Ok(metadata) => ServiceResult::VpncScriptMetadata(metadata),
+            Err(err) => {
+              warn!("Failed to read VPNC script metadata: {err}");
+              ServiceResult::rejected(ServiceErrorCode::Internal, "Failed to read VPNC script metadata")
+            }
+          }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))]
+        {
+          ServiceResult::VpncScriptMetadata(None)
+        }
+      }
       request => {
         if let WsRequest::Connect(ref connect) = request {
           if let Err(message) = self.validate_connect_paths(connect) {

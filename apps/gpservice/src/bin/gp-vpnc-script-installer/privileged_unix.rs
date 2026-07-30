@@ -1,8 +1,11 @@
-use std::io;
+use std::io::Read;
 
 use anyhow::bail;
 use clap::{Parser, Subcommand};
+use gpapi::service::vpnc_script::InstallVpncScriptRequest;
 use nix::unistd::Uid;
+
+const MAX_INSTALL_REQUEST_SIZE: u64 = 2 * 1024 * 1024;
 
 #[derive(Parser)]
 struct Cli {
@@ -22,7 +25,11 @@ fn try_run() -> anyhow::Result<()> {
   }
 
   match Cli::parse().command {
-    Command::Install => gpservice::vpnc_script::install(io::stdin().lock()),
+    Command::Install => {
+      let input = std::io::stdin().lock().take(MAX_INSTALL_REQUEST_SIZE);
+      let request = serde_json::from_reader::<_, InstallVpncScriptRequest>(input)?;
+      gpservice::vpnc_script::install(request)
+    }
     Command::Remove => gpservice::vpnc_script::remove(),
   }
 }

@@ -230,6 +230,9 @@ async fn run_installer_connection(
                   rejection.code(),
                   rejection.message()
                 )),
+                ServiceResult::VpncScriptMetadata(_) => {
+                  Err(anyhow::anyhow!("Service sent an unexpected VPNC script metadata reply"))
+                }
               };
               let _ = command.reply.send(result);
             }

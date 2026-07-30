@@ -289,7 +289,7 @@ async fn process_ws_req(req: WsRequest, ctx: Arc<VpnTaskContext>) {
         warn!("Failed to update log level: {}", err);
       }
     }
-    WsRequest::RestartGui | WsRequest::UpdateGui(_) => {
+    WsRequest::RestartGui | WsRequest::UpdateGui(_) | WsRequest::GetVpncScriptMetadata => {
       warn!("Non-VPN request reached the VPN task");
     }
   }

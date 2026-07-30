@@ -374,6 +374,7 @@ pub enum WsRequest {
   UpdateLogLevel(UpdateLogLevelRequest),
   RestartGui,
   UpdateGui(UpdateGuiRequest),
+  GetVpncScriptMetadata,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
