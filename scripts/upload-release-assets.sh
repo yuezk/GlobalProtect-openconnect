@@ -19,7 +19,19 @@ if [[ -z "$TAG" || "$#" -lt 2 ]]; then
   exit 2
 fi
 shift
-RELEASE_ID="$(gh api "repos/$REPOSITORY/releases/tags/$TAG" --jq .id)"
+
+if [[ -z "${GH_TOKEN:-}" ]]; then
+  echo "GH_TOKEN is not configured" >&2
+  exit 1
+fi
+API_HEADERS=(
+  -H "Authorization: Bearer $GH_TOKEN"
+  -H 'Accept: application/vnd.github+json'
+  -H 'X-GitHub-Api-Version: 2022-11-28'
+)
+RELEASE_ID="$(curl --fail --silent --show-error \
+  "${API_HEADERS[@]}" \
+  "https://api.github.com/repos/$REPOSITORY/releases/tags/$TAG" | jq -r .id)"
 
 file_digest() {
   if command -v sha256sum >/dev/null; then
@@ -49,7 +61,9 @@ upload_asset() {
   local_digest="sha256:$(file_digest "$file")"
 
   while (( attempt <= MAX_ATTEMPTS )); do
-    assets_json="$(gh api "repos/$REPOSITORY/releases/$RELEASE_ID/assets?per_page=100")"
+    assets_json="$(curl --fail --silent --show-error \
+      "${API_HEADERS[@]}" \
+      "https://api.github.com/repos/$REPOSITORY/releases/$RELEASE_ID/assets?per_page=100")"
     asset_id="$(jq -r --arg name "$asset" \
       '[.[] | select(.name == $name)] | first | .id // empty' <<<"$assets_json")"
     if [[ -n "$asset_id" ]]; then
@@ -63,12 +77,17 @@ upload_asset() {
         echo "Refusing to replace immutable release asset: $asset" >&2
         return 1
       fi
-      gh api --method DELETE "repos/$REPOSITORY/releases/assets/$asset_id"
+      curl --fail --silent --show-error \
+        "${API_HEADERS[@]}" \
+        --request DELETE \
+        "https://api.github.com/repos/$REPOSITORY/releases/assets/$asset_id"
     fi
 
-    if gh api --method POST \
+    if curl --fail --silent --show-error \
+      "${API_HEADERS[@]}" \
+      --request POST \
       -H 'Content-Type: application/octet-stream' \
-      --input "$file" \
+      --data-binary "@$file" \
       "https://uploads.github.com/repos/$REPOSITORY/releases/$RELEASE_ID/assets?name=$encoded_asset" \
       >/dev/null; then
       return 0
