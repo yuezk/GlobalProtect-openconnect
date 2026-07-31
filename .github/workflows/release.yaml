@@ -272,13 +272,6 @@ jobs:
       uses: actions/download-artifact@v8
       with:
         path: gh-release
-    - name: Generate release notes
-      id: release-notes
-      run: |
-        cd gh-release/gp
-        mkdir -p .build
-        scripts/release-notes.sh "${{ inputs.tag }}" > .build/release-notes.md
-        echo "path=$GITHUB_WORKSPACE/gh-release/gp/.build/release-notes.md" >> "$GITHUB_OUTPUT"
     - name: Rename APK artifacts
       run: |
         shopt -s nullglob
@@ -290,7 +283,6 @@ jobs:
           mv "$file" "${file%.apk}-aarch64.apk"
         done
     - name: Generate release asset checksums
-      id: release-assets
       run: |
         cd gh-release/gp
         mkdir -p .build
@@ -303,21 +295,20 @@ jobs:
           digest=$(sha256sum "$file" | cut -d ' ' -f 1)
           printf '%s  %s\n' "$digest" "$(basename "$file")"
         done < .build/release-assets.txt > .build/release-assets.sha256
-        {
-          echo 'files<<EOF'
-          cat .build/release-assets.txt
-          echo EOF
-        } >> "$GITHUB_OUTPUT"
     - name: Attest release assets
       uses: actions/attest-build-provenance@v4
       with:
         subject-checksums: gh-release/gp/.build/release-assets.sha256
-    - name: Update release
-      uses: softprops/action-gh-release@v1
-      with:
-        token: ${{ secrets.GH_PAT }}
-        prerelease: ${{ contains(github.ref, 'snapshot') }}
-        fail_on_unmatched_files: true
-        tag_name: ${{ inputs.tag }}
-        body_path: ${{ steps.release-notes.outputs.path }}
-        files: ${{ steps.release-assets.outputs.files }}
+    - name: Upload release assets
+      env:
+        GH_TOKEN: ${{ secrets.GH_PAT }}
+      run: |
+        mapfile -t files < gh-release/gp/.build/release-assets.txt
+        if [[ "${{ inputs.tag }}" == "snapshot" ]]; then
+          for file in "${files[@]}"; do
+            gh release upload snapshot "$file" --clobber \
+              --repo yuezk/GlobalProtect-openconnect
+          done
+        else
+          gh-release/gp/scripts/upload-release-assets.sh "${{ inputs.tag }}" "${files[@]}"
+        fi

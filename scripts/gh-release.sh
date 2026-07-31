@@ -135,16 +135,19 @@ upload_file() {
 release_snapshot() {
   mapfile -t files < <(release_assets)
   local existing_assets
-  local includes_macos=false
   local is_current
   local asset
   local file
-  for file in "${files[@]}"; do
-    if [[ "$(basename "$file")" == GPConnect_*_arm64.* ]]; then
-      includes_macos=true
-      break
-    fi
-  done
+  local snapshot_commit
+
+  snapshot_commit="$(git -C "$SCRIPT_DIR/.." rev-parse HEAD)"
+  if ! gh -R "$REPO" release view "$TAG" >/dev/null 2>&1; then
+    gh -R "$REPO" release create "$TAG" \
+      --prerelease \
+      --target "$snapshot_commit" \
+      --title "Snapshot" \
+      --notes "Rolling snapshot release from trusted CI builds."
+  fi
 
   echo "Uploading new assets..."
   # Upload first so a transient cleanup failure cannot leave the snapshot
@@ -153,7 +156,7 @@ release_snapshot() {
 
   if ! existing_assets="$(release_asset_names)"; then
     echo "::warning::Could not list stale snapshot assets for cleanup" >&2
-    return 0
+    existing_assets=""
   fi
   while IFS= read -r asset; do
     if [[ -z "$asset" || "$asset" == "appcast.xml" ]]; then
@@ -171,33 +174,37 @@ release_snapshot() {
       continue
     fi
 
-    if [[ "$includes_macos" == "false" && \
-          "$asset" == GPConnect_*_arm64.* ]]; then
+    # The appcast publisher removes expired macOS snapshots after the new feed
+    # is live. Removing them here would temporarily break the current feed.
+    if [[ "$asset" == GPConnect_*_arm64.* ]]; then
       continue
     fi
     if ! delete_release_asset "$asset"; then
       echo "::warning::Could not remove stale snapshot asset: $asset" >&2
     fi
   done <<<"$existing_assets"
+
+  gh api --method PATCH "repos/$REPO/git/refs/tags/$TAG" \
+    -f sha="$snapshot_commit" -F force=true >/dev/null
+  gh -R "$REPO" release edit "$TAG" --prerelease --title "Snapshot"
 }
 
 release_tag() {
-  echo "Removing existing release..."
-  gh -R "$REPO" release delete "$TAG" --yes --cleanup-tag || true
-
-  echo "Creating release..."
   local release_notes_file
-  release_notes_file="$(mktemp)"
-  "$SCRIPT_DIR/release-notes.sh" "$TAG" > "$release_notes_file"
+  if ! gh -R "$REPO" release view "$TAG" >/dev/null 2>&1; then
+    echo "Creating release..."
+    release_notes_file="$(mktemp)"
+    "$SCRIPT_DIR/release-notes.sh" "$TAG" > "$release_notes_file"
 
-  # Upload source tarballs, GUI components, and BSD packages. Other Linux
-  # packages are built in `release.yml` from the standalone source tarball.
-  gh -R "$REPO" release create "$TAG" \
-    --title "$TAG" \
-    --notes-file "$release_notes_file"
+    # Upload source tarballs, GUI components, and BSD packages. Other Linux
+    # packages are built in `release.yml` from the standalone source tarball.
+    gh -R "$REPO" release create "$TAG" \
+      --title "$TAG" \
+      --notes-file "$release_notes_file"
+  fi
 
   mapfile -t files < <(release_assets)
-  upload_files "${files[@]}"
+  GITHUB_REPOSITORY="$REPO" "$SCRIPT_DIR/upload-release-assets.sh" "$TAG" "${files[@]}"
 }
 
 if [[ $TAG == *"snapshot" ]]; then
