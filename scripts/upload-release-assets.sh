@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-REPOSITORY="${GITHUB_REPOSITORY:-yuezk/GlobalProtect-openconnect}"
+REPOSITORY="${RELEASE_REPOSITORY:-${GITHUB_REPOSITORY:-yuezk/GlobalProtect-openconnect}}"
 MAX_ATTEMPTS=8
 CLOBBER=false
 
