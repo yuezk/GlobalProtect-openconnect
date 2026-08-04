@@ -142,17 +142,58 @@ fn find_browser_path(browser: &Browser) -> String {
 }
 
 fn find_auto_browser_path() -> Option<String> {
-  find_chrome_path().or_else(|| find_program_path("firefox"))
+  find_chrome_path().or_else(find_firefox_path)
 }
 
+#[cfg(not(target_os = "macos"))]
 fn find_chrome_path() -> Option<String> {
   ["google-chrome-stable", "google-chrome", "chromium"]
     .iter()
     .find_map(|browser_name| find_program_path(browser_name))
 }
 
+#[cfg(not(target_os = "macos"))]
+fn find_firefox_path() -> Option<String> {
+  find_program_path("firefox")
+}
+
+#[cfg(not(target_os = "macos"))]
 fn find_program_path(name: &str) -> Option<String> {
   which::which(name).ok().map(|path| path.to_string_lossy().to_string())
+}
+
+/// On macOS browsers ship as app bundles rather than executables on PATH, so
+/// probing for Linux binary names such as `google-chrome` never matches and
+/// `--browser chrome` falls through to the literal string "chrome", which
+/// `/usr/bin/open -a chrome` cannot resolve. `open::with_detached` runs
+/// `/usr/bin/open <url> -a <app>`, which accepts a bundle path.
+#[cfg(target_os = "macos")]
+fn find_chrome_path() -> Option<String> {
+  find_macos_app(&["Google Chrome", "Chromium"])
+}
+
+#[cfg(target_os = "macos")]
+fn find_firefox_path() -> Option<String> {
+  find_macos_app(&["Firefox"])
+}
+
+#[cfg(target_os = "macos")]
+fn find_macos_app(names: &[&str]) -> Option<String> {
+  use std::path::PathBuf;
+
+  let mut dirs = vec![PathBuf::from("/Applications")];
+  if let Some(home) = std::env::var_os("HOME") {
+    dirs.push(PathBuf::from(home).join("Applications"));
+  }
+
+  names.iter().find_map(|name| {
+    let bundle = format!("{}.app", name);
+    dirs
+      .iter()
+      .map(|dir| dir.join(&bundle))
+      .find(|path| path.exists())
+      .map(|path| path.to_string_lossy().to_string())
+  })
 }
 
 async fn wait_auth_data() -> anyhow::Result<SamlAuthData> {
@@ -203,5 +244,11 @@ mod tests {
   fn browser_auto_is_distinct_from_system_default() {
     assert!(matches!(Browser::from_str("auto"), Browser::Auto));
     assert!(matches!(Browser::from_str("default"), Browser::Default));
+  }
+
+  #[cfg(target_os = "macos")]
+  #[test]
+  fn find_macos_app_returns_none_when_bundle_is_absent() {
+    assert!(find_macos_app(&["Definitely Not An Installed Browser"]).is_none());
   }
 }
