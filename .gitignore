@@ -7,6 +7,9 @@
 
 .cargo
 .build
+
+# macOS callback handler build output
+/packaging/macos/build
 SNAPSHOT
 SOURCE_COMMIT
 
