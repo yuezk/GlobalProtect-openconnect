@@ -1,5 +1,9 @@
-use auth::{BrowserAuthenticator, auth_prelogin, forward_auth_callback};
-use clap::{Parser, Subcommand};
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use auth::forward_auth_callback;
+use auth::{BrowserAuthenticator, auth_prelogin};
+use clap::Parser;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use clap::Subcommand;
 #[cfg(feature = "webview-auth")]
 use gpapi::auth::AuthWindowTheme;
 use gpapi::{
@@ -43,6 +47,7 @@ See 'gpauth -h' for more information.
 "
 )]
 struct Cli {
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   #[command(subcommand)]
   command: Option<CliCommand>,
 
@@ -115,6 +120,7 @@ struct Cli {
   verbose: InfoLevelVerbosity,
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 #[derive(Subcommand)]
 enum CliCommand {
   #[command(hide = true)]
@@ -249,6 +255,7 @@ fn init_logger(cli: &Cli) {
 pub async fn run() {
   let cli = Cli::parse();
 
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   if let Some(CliCommand::AuthCallback { callback }) = &cli.command {
     if let Err(err) = forward_auth_callback(callback).await {
       eprintln!("Failed to forward authentication callback: {err}");
@@ -294,6 +301,7 @@ mod tests {
   }
 
   #[test]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   fn callback_arguments_parse_separately() {
     let cli = Cli::try_parse_from([
       "gpauth",

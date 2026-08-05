@@ -39,7 +39,7 @@ pub async fn authenticate(
 
       Ok(())
     })
-    .build(tauri::generate_context!())?
+    .build(crate::tauri_context::get())?
     .run(move |_app_handle, event| {
       if let RunEvent::Exit = event {
         if let Some(file) = openssl_conf.take() {

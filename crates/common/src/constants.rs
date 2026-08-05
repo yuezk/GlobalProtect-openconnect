@@ -16,7 +16,6 @@ pub const INSTALLED_VPNC_SCRIPT: &str = "/var/db/gpclient/scripts/vpnc-script";
 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
 pub const INSTALLED_VPNC_SCRIPT_METADATA: &str = "/var/db/gpclient/scripts/vpnc-script.metadata";
 pub const MAX_VPNC_SCRIPT_SIZE: usize = 1024 * 1024;
-pub const GP_CALLBACK_PORT_FILENAME: &str = "gpcallback.port";
 
 // Release binaries - macOS (Apple Silicon Homebrew)
 #[cfg(all(not(debug_assertions), target_os = "macos", target_arch = "aarch64"))]

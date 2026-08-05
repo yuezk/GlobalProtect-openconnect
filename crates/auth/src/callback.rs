@@ -24,6 +24,9 @@ const STATUS_ACCEPTED: u8 = 0;
 const STATUS_INVALID_CALLBACK: u8 = 1;
 const STATUS_UNSUPPORTED_VERSION: u8 = 2;
 
+#[cfg(target_os = "macos")]
+mod macos;
+
 pub struct AuthCallbackReceiver {
   listener: UnixListener,
   socket_path: PathBuf,
@@ -127,7 +130,17 @@ fn query_callback_handler(mime_type: &str) -> anyhow::Result<String> {
   Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))]
+#[cfg(target_os = "macos")]
+pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
+  macos::ensure_auth_callback_handler()
+}
+
+#[cfg(not(any(
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd",
+  target_os = "macos"
+)))]
 pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
   Ok(())
 }
