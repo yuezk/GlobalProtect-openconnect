@@ -35,7 +35,7 @@ static void print_progress(__attribute__((unused)) void *_vpninfo, int level,
 	if (message == NULL) {
 		ERROR("Failed to format log message");
 	} else {
-		LOG(level, message);
+		vpn_log(level, message);
 		free(message);
 	}
 }
