@@ -320,18 +320,19 @@ init-debian: clean-debian tarball
 
 	sed -i "s/@RUST_VERSION@/$(RUST_VERSION)/g" .build/deb/$(PKG)/debian/control
 
-	# Remove the GUI dependencies if BUILD_GUI_HELPER is set to 0
-	if [ $(BUILD_GUI_HELPER) -eq 0 ]; then \
+	# Remove the GUI dependencies if neither GUI component is included
+	if [ $(INCLUDE_GUI) -eq 0 ] && [ $(BUILD_GUI_HELPER) -eq 0 ]; then \
 		sed -i "/libsecret-1-0/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/libayatana-appindicator3-1/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/gnome-keyring/d" .build/deb/$(PKG)/debian/control; \
 	fi
 
-	# Remove the WebKitGTK build dependency only if neither gpauth webview auth nor gpgui-helper needs it
-	if [ $(BUILD_GUI_HELPER) -eq 0 ] && [ $(BUILD_WEBVIEW_AUTH) -eq 0 ]; then \
+	# Remove WebKitGTK only if no included component needs it
+	if [ $(INCLUDE_GUI) -eq 0 ] && [ $(BUILD_GUI_HELPER) -eq 0 ] && [ $(BUILD_WEBVIEW_AUTH) -eq 0 ]; then \
 		sed -i "/libwebkit2gtk-4.1-dev/d" .build/deb/$(PKG)/debian/control; \
 	fi
 
+	sed -i "s/@INCLUDE_GUI@/$(INCLUDE_GUI)/g" .build/deb/$(PKG)/debian/rules
 	sed -i "s/@BUILD_GUI_HELPER@/$(BUILD_GUI_HELPER)/g" .build/deb/$(PKG)/debian/rules
 	sed -i "s/@BUILD_WEBVIEW_AUTH@/$(BUILD_WEBVIEW_AUTH)/g" .build/deb/$(PKG)/debian/rules
 	sed -i "s/@RUST_VERSION@/$(RUST_VERSION)/g" .build/deb/$(PKG)/debian/rules
@@ -433,14 +434,14 @@ init-apk: clean-apk tarball
 	checksum=$$(sha512sum .build/apk/${PKG}.tar.gz | cut -d' ' -f1); \
 		sed -i "s/@SHA512@/$$checksum/g" .build/apk/APKBUILD
 
-	# Remove the GUI dependencies if BUILD_GUI_HELPER is set to 0
-	if [ $(BUILD_GUI_HELPER) -eq 0 ]; then \
+	# Remove the GUI dependencies if neither GUI component is included
+	if [ $(INCLUDE_GUI) -eq 0 ] && [ $(BUILD_GUI_HELPER) -eq 0 ]; then \
 		sed -i "/^\tlibayatana-appindicator$$/d" .build/apk/APKBUILD; \
 		sed -i "/^\tlibsecret$$/d" .build/apk/APKBUILD; \
 	fi
 
-	# Remove the WebKitGTK dependency only if neither gpauth webview auth nor gpgui-helper needs it
-	if [ $(BUILD_GUI_HELPER) -eq 0 ] && [ $(BUILD_WEBVIEW_AUTH) -eq 0 ]; then \
+	# Remove WebKitGTK only if no included component needs it
+	if [ $(INCLUDE_GUI) -eq 0 ] && [ $(BUILD_GUI_HELPER) -eq 0 ] && [ $(BUILD_WEBVIEW_AUTH) -eq 0 ]; then \
 		sed -i "/^\twebkit2gtk-4.1$$/d" .build/apk/APKBUILD; \
 	fi
 
