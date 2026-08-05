@@ -415,7 +415,7 @@ dependencies = [
 
 [[package]]
 name = "browser-launcher"
-version = "2.6.4"
+version = "2.6.5"
 dependencies = [
  "anyhow",
  "log",
