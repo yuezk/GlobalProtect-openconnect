@@ -433,6 +433,17 @@ init-apk: clean-apk tarball
 	checksum=$$(sha512sum .build/apk/${PKG}.tar.gz | cut -d' ' -f1); \
 		sed -i "s/@SHA512@/$$checksum/g" .build/apk/APKBUILD
 
+	# Remove the GUI dependencies if BUILD_GUI_HELPER is set to 0
+	if [ $(BUILD_GUI_HELPER) -eq 0 ]; then \
+		sed -i "/^\tlibayatana-appindicator$$/d" .build/apk/APKBUILD; \
+		sed -i "/^\tlibsecret$$/d" .build/apk/APKBUILD; \
+	fi
+
+	# Remove the WebKitGTK dependency only if neither gpauth webview auth nor gpgui-helper needs it
+	if [ $(BUILD_GUI_HELPER) -eq 0 ] && [ $(BUILD_WEBVIEW_AUTH) -eq 0 ]; then \
+		sed -i "/^\twebkit2gtk-4.1$$/d" .build/apk/APKBUILD; \
+	fi
+
 apk: init-apk
 	cd .build/apk && abuild -r -P "$(CURDIR)/.build/apk/packages"
 
