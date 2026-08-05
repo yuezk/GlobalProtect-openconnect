@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.6.5
+
+### Fixed
+
+- Fixed duplicate tray icons caused by both Tauri configuration and application code creating a tray icon (fix [#464](https://github.com/yuezk/GlobalProtect-openconnect/issues/464)).
+- Fixed a potential crash when VPN progress messages contain printf-style format specifiers.
+
 ## 2.6.4
 
 ### Fixed
