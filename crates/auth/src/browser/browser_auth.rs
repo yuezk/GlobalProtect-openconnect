@@ -1,15 +1,9 @@
-use std::{env::temp_dir, fs, os::unix::fs::PermissionsExt};
-
 use browser_launcher::Browser as LaunchBrowser;
-use common::constants::GP_CALLBACK_PORT_FILENAME;
 use gpapi::auth::SamlAuthData;
 use log::info;
-use tokio::{
-  io::AsyncReadExt,
-  net::{TcpListener, UdpSocket},
-};
+use tokio::net::UdpSocket;
 
-use crate::browser::auth_server::AuthServer;
+use crate::{AuthCallbackReceiver, browser::auth_server::AuthServer, ensure_auth_callback_handler};
 
 pub struct BrowserAuthenticator<'a> {
   auth_request: &'a str,
@@ -22,6 +16,12 @@ impl<'a> BrowserAuthenticator<'a> {
   }
 
   pub async fn authenticate(&self) -> anyhow::Result<SamlAuthData> {
+    let callback_receiver = if is_remote_browser(self.browser) {
+      None
+    } else {
+      ensure_auth_callback_handler()?;
+      Some(AuthCallbackReceiver::bind()?)
+    };
     let addr = self.determine_addr().await?;
     let auth_server = AuthServer::new(&addr)?;
     let auth_url = auth_server.auth_url();
@@ -54,7 +54,7 @@ Note that the URL is only valid for a single use.
     browser_launcher::open_url(&auth_url, LaunchBrowser::from_name(self.browser))?;
 
     info!("Please continue the authentication process in the default browser");
-    wait_auth_data().await
+    callback_receiver.unwrap().receive().await
   }
 
   async fn determine_addr(&self) -> anyhow::Result<String> {
@@ -82,38 +82,6 @@ async fn detect_local_ip() -> anyhow::Result<String> {
   info!("Determined local IP address: {}", ip);
 
   Ok(ip.to_string())
-}
-
-async fn wait_auth_data() -> anyhow::Result<SamlAuthData> {
-  // Start a local server to receive the browser authentication data
-  let listener = TcpListener::bind("127.0.0.1:0").await?;
-  let port = listener.local_addr()?.port();
-  let port_file = temp_dir().join(GP_CALLBACK_PORT_FILENAME);
-
-  // Write the port to a file
-  fs::write(&port_file, port.to_string())?;
-  fs::set_permissions(&port_file, fs::Permissions::from_mode(0o600))?;
-
-  // Remove the previous log file
-  let callback_log = temp_dir().join("gpcallback.log");
-  let _ = fs::remove_file(&callback_log);
-
-  info!("Listening authentication data on port {}", port);
-  info!(
-    "If it hangs, please check the logs at `{}` for more information",
-    callback_log.display()
-  );
-  let (mut socket, _) = listener.accept().await?;
-
-  info!("Received the browser authentication data from the socket");
-  let mut data = String::new();
-  socket.read_to_string(&mut data).await?;
-
-  // Remove the port file
-  fs::remove_file(&port_file)?;
-
-  let auth_data = SamlAuthData::from_gpcallback(&data)?;
-  Ok(auth_data)
 }
 
 fn read_auth_data_from_stdin() -> anyhow::Result<SamlAuthData> {

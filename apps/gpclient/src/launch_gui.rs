@@ -1,22 +1,15 @@
-use std::{collections::HashMap, env::temp_dir, fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use clap::Args;
-use common::constants::GP_CALLBACK_PORT_FILENAME;
 use directories::ProjectDirs;
 use gpapi::{
   process::service_launcher::ServiceLauncher,
   utils::{endpoint::http_endpoint, env_utils, shutdown_signal},
 };
 use log::info;
-use tokio::io::AsyncWriteExt;
 
 #[derive(Args)]
 pub(crate) struct LaunchGuiArgs {
-  #[arg(
-    required = false,
-    help = "The authentication data, used for the default browser authentication"
-  )]
-  pub auth_data: Option<String>,
   #[arg(long, help = "Launch the GUI minimized")]
   minimized: bool,
 }
@@ -35,13 +28,6 @@ impl<'a> LaunchGuiHandler<'a> {
     let user = whoami::username().map_err(|err| anyhow::anyhow!("Failed to resolve current user: {err}"))?;
     if user == "root" {
       anyhow::bail!("`launch-gui` cannot be run as root");
-    }
-
-    let auth_data = self.args.auth_data.as_deref().unwrap_or_default();
-    if !auth_data.is_empty() {
-      info!("Received auth callback data");
-      // Process the authentication data, its format is `globalprotectcallback:<data>`
-      return feed_auth_data(auth_data).await;
     }
 
     if try_active_gui().await.is_ok() {
@@ -78,26 +64,6 @@ impl<'a> LaunchGuiHandler<'a> {
 
     Ok(())
   }
-}
-
-async fn feed_auth_data(auth_data: &str) -> anyhow::Result<()> {
-  if let Err(err) = feed_auth_data_cli(auth_data).await {
-    info!("Failed to feed auth data to the CLI: {}", err);
-  }
-
-  Ok(())
-}
-
-async fn feed_auth_data_cli(auth_data: &str) -> anyhow::Result<()> {
-  info!("Feeding auth data to the CLI");
-
-  let port_file = temp_dir().join(GP_CALLBACK_PORT_FILENAME);
-  let port = tokio::fs::read_to_string(port_file).await?;
-  let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port.trim())).await?;
-
-  stream.write_all(auth_data.as_bytes()).await?;
-
-  Ok(())
 }
 
 async fn try_active_gui() -> anyhow::Result<()> {

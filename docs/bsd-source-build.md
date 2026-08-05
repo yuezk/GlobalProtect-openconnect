@@ -19,7 +19,7 @@ Install build and runtime dependencies:
 ```sh
 sudo pkg install git rust libiconv gettext-tools autoconf automake libtool patch \
   gmake pkgconf libxml2 gnutls p11-kit nettle gmp gnome-keyring \
-  libayatana-appindicator polkit webkit2-gtk_41
+  libayatana-appindicator polkit webkit2-gtk_41 xdg-utils
 ```
 
 Build and install:
@@ -45,7 +45,7 @@ Install build and runtime dependencies:
 ```sh
 doas pkg_add git rust libiconv gettext-tools autoconf-2.72 automake-1.17 \
   libtool patch gmake pkgconf libxml gnutls p11-kit nettle gmp \
-  gnome-keyring polkit webkitgtk41
+  gnome-keyring polkit webkitgtk41 xdg-utils
 ```
 
 Use the installed Autoconf and Automake versions:

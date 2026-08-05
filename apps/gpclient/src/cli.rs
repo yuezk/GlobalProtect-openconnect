@@ -1,6 +1,4 @@
 use std::{
-  env::temp_dir,
-  fs::File,
   path::{Path, PathBuf},
   str::FromStr,
 };
@@ -164,17 +162,6 @@ impl Cli {
 fn init_logger(cli: &Cli) {
   let mut builder = env_logger::builder();
   builder.filter_level(cli.verbose.log_level_filter());
-
-  // Output the log messages to a file if the command is the auth callback
-  if let CliCommand::LaunchGui(args) = &cli.command {
-    let auth_data = args.auth_data.as_deref().unwrap_or_default();
-    if !auth_data.is_empty()
-      && let Ok(log_file) = File::create(temp_dir().join("gpcallback.log"))
-    {
-      let target = Box::new(log_file);
-      builder.target(env_logger::Target::Pipe(target));
-    }
-  }
 
   builder.init();
 }

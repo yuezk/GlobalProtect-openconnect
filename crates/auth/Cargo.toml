@@ -8,18 +8,18 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-common = { path = "../common" }
 gpapi = { path = "../gpapi" }
 
 # Shared dependencies
 anyhow.workspace = true
 log.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["io-util", "net", "time"] }
 
 # Browser auth dependencies
 browser-launcher = { path = "../browser-launcher", default-features = false, features = ["launcher"], optional = true }
 tiny_http = { version = "0.12", optional = true }
 uuid = { version = "1", optional = true, features = ["v4"] }
+uzers = { workspace = true, optional = true }
 
 # Webview auth dependencies
 tauri = { workspace = true, optional = true }
@@ -41,6 +41,7 @@ browser-auth = [
   "dep:browser-launcher",
   "dep:tiny_http",
   "dep:uuid",
+  "dep:uzers",
 ]
 webview-auth = [
   "gpapi/tauri",
@@ -55,3 +56,6 @@ webview-auth = [
   "dep:objc2-web-kit",
 ]
 release-devtools = ["webview-auth", "tauri/devtools"]
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -65,6 +65,7 @@
         linuxRuntimeDependencies = with pkgs; [
           glib-networking
           libayatana-appindicator
+          xdg-utils
         ];
 
         linuxBuildInputs =
@@ -95,10 +96,10 @@
         ''
         + lib.optionalString pkgs.stdenv.isLinux ''
           substituteInPlace $out/share/applications/gpgui.desktop \
-            --replace-fail /usr/bin/gpclient /run/current-system/sw/bin/gpclient
+            --replace-fail /usr/bin/gpclient $out/bin/gpclient
 
           substituteInPlace $out/share/applications/gpauth.desktop \
-            --replace-fail /usr/bin/gpauth /run/current-system/sw/bin/gpauth
+            --replace-fail /usr/bin/gpauth $out/bin/gpauth
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice \
@@ -112,10 +113,10 @@
 
         rewriteHostInstallPaths = ''
           substituteInPlace $out/share/applications/gpgui.desktop \
-            --replace-fail /usr/bin/gpclient /run/current-system/sw/bin/gpclient
+            --replace-fail /usr/bin/gpclient $out/bin/gpclient
 
           substituteInPlace $out/share/applications/gpauth.desktop \
-            --replace-fail /usr/bin/gpauth /run/current-system/sw/bin/gpauth
+            --replace-fail /usr/bin/gpauth $out/bin/gpauth
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice \
@@ -176,6 +177,10 @@
             ];
 
           runtimeDependencies = lib.optionals pkgs.stdenv.isLinux linuxRuntimeDependencies;
+
+          preFixup = lib.optionalString pkgs.stdenv.isLinux ''
+            gappsWrapperArgs+=(--prefix PATH : ${lib.makeBinPath [ pkgs.xdg-utils ]})
+          '';
 
           overrideMain =
             { ... }:
@@ -341,56 +346,50 @@
             if [ "''${1:-}" = "launch-gui" ]; then
               shift
 
-              auth_data=
               minimized=
               for arg in "$@"; do
                 case "$arg" in
                   --minimized)
                     minimized=--minimized
                     ;;
-                  --*)
-                    ;;
                   *)
-                    auth_data=$arg
+                    echo "Unsupported launch-gui argument: $arg" >&2
+                    exit 2
                     ;;
                 esac
               done
 
-              if [ -z "$auth_data" ]; then
-                if [ -n "''${XDG_DATA_HOME:-}" ]; then
-                  data_home=$XDG_DATA_HOME
-                elif [ -n "''${HOME:-}" ]; then
-                  data_home=$HOME/.local/share
-                else
-                  data_home=/tmp
-                fi
-
-                log_dir="$data_home/gpclient"
-                mkdir -p "$log_dir"
-                log_file="$log_dir/gpclient.log"
-                env_file=$(mktemp)
-
-                env > "$env_file"
-                printf 'GP_LOG_FILE=%s\n' "$log_file" >> "$env_file"
-
-                pkexec_bin=/run/wrappers/bin/pkexec
-                if [ ! -x "$pkexec_bin" ]; then
-                  pkexec_bin=pkexec
-                fi
-
-                set +e
-                if [ -n "$minimized" ]; then
-                  "$pkexec_bin" --user root "$gpservice_public" --minimized --env-file "$env_file" 2>"$log_file"
-                else
-                  "$pkexec_bin" --user root "$gpservice_public" --env-file "$env_file" 2>"$log_file"
-                fi
-                status=$?
-                set -e
-                rm -f "$env_file"
-                exit "$status"
+              if [ -n "''${XDG_DATA_HOME:-}" ]; then
+                data_home=$XDG_DATA_HOME
+              elif [ -n "''${HOME:-}" ]; then
+                data_home=$HOME/.local/share
+              else
+                data_home=/tmp
               fi
 
-              set -- launch-gui "$@"
+              log_dir="$data_home/gpclient"
+              mkdir -p "$log_dir"
+              log_file="$log_dir/gpclient.log"
+              env_file=$(mktemp)
+
+              env > "$env_file"
+              printf 'GP_LOG_FILE=%s\n' "$log_file" >> "$env_file"
+
+              pkexec_bin=/run/wrappers/bin/pkexec
+              if [ ! -x "$pkexec_bin" ]; then
+                pkexec_bin=pkexec
+              fi
+
+              set +e
+              if [ -n "$minimized" ]; then
+                "$pkexec_bin" --user root "$gpservice_public" --minimized --env-file "$env_file" 2>"$log_file"
+              else
+                "$pkexec_bin" --user root "$gpservice_public" --env-file "$env_file" 2>"$log_file"
+              fi
+              status=$?
+              set -e
+              rm -f "$env_file"
+              exit "$status"
             fi
 
             exec "$gpclient_fhs" "$@"

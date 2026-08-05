@@ -195,6 +195,7 @@ install-bsd:
 
 	install -d $(DESTDIR)$(PREFIX)/share/applications
 	install -m 644 packaging/bsd/gpgui.desktop $(DESTDIR)$(PREFIX)/share/applications/gpgui.desktop
+	install -m 644 packaging/bsd/gpauth.desktop $(DESTDIR)$(PREFIX)/share/applications/gpauth.desktop
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/32x32/apps
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps
@@ -260,6 +261,7 @@ package-openbsd: clean-bsd-package
 		gnome_keyring_pkg=$$(pkg_info -e 'gnome-keyring-*' | sed 's/^inst://' | head -n 1); \
 		polkit_pkg=$$(pkg_info -e 'polkit-*' | sed 's/^inst://' | head -n 1); \
 		webkitgtk_pkg=$$(pkg_info -e 'webkitgtk41-*' | sed 's/^inst://' | head -n 1); \
+		xdg_utils_pkg=$$(pkg_info -e 'xdg-utils-*' | sed 's/^inst://' | head -n 1); \
 		pkg_create \
 			-B .build/openbsd/pkgroot \
 			-D COMMENT="$$comment" \
@@ -269,6 +271,7 @@ package-openbsd: clean-bsd-package
 			-P x11/gnome/keyring:gnome-keyring-*:$$gnome_keyring_pkg \
 			-P sysutils/polkit:polkit-*:$$polkit_pkg \
 			-P www/webkitgtk4,webkitgtk41:webkitgtk41-*:$$webkitgtk_pkg \
+			-P devel/xdg-utils:xdg-utils-*:$$xdg_utils_pkg \
 			.build/openbsd/artifacts/$(PKG_NAME)-$(VERSION)-openbsd-$$openbsd_arch.tgz
 	$(MAKE) bsd-gpgui-tarball BSD_FLAVOR=openbsd GPGUI_BINARY="$(GPGUI_BINARY)"
 

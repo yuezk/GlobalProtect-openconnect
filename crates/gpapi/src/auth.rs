@@ -154,7 +154,6 @@ impl SamlAuthData {
 
       let auth_data: SamlAuthData = serde_urlencoded::from_str(auth_data.borrow()).map_err(|e| {
         warn!("Failed to parse token auth data: {}", e);
-        warn!("Auth data: {}", auth_data);
         AuthDataParseError::Invalid(anyhow::anyhow!(e))
       })?;
 
@@ -163,7 +162,7 @@ impl SamlAuthData {
     }
 
     let auth_data = decode_to_string(auth_data).map_err(|e| {
-      warn!("Failed to decode SAML auth data: {}, data: {}", e, data);
+      warn!("Failed to decode SAML auth data: {}", e);
       AuthDataParseError::Invalid(anyhow::anyhow!(e))
     })?;
     let auth_data = Self::from_html(&auth_data)?;

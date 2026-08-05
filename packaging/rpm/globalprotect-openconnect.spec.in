@@ -38,6 +38,7 @@ Requires:       (libappindicator3-1 or libayatana-appindicator3-1)
 %else
 Requires:       (libappindicator-gtk3 or libayatana-appindicator-gtk3)
 %endif
+Requires:       xdg-utils
 Conflicts:      globalprotect-openconnect-snapshot
 
 %global debug_package %{nil}

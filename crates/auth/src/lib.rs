@@ -8,7 +8,13 @@ use gpapi::{
 mod browser;
 
 #[cfg(feature = "browser-auth")]
+mod callback;
+
+#[cfg(feature = "browser-auth")]
 pub use browser::*;
+
+#[cfg(feature = "browser-auth")]
+pub use callback::*;
 
 #[cfg(feature = "webview-auth")]
 mod webview;

@@ -1,5 +1,5 @@
-use auth::{BrowserAuthenticator, auth_prelogin};
-use clap::Parser;
+use auth::{BrowserAuthenticator, auth_prelogin, forward_auth_callback};
+use clap::{Parser, Subcommand};
 #[cfg(feature = "webview-auth")]
 use gpapi::auth::AuthWindowTheme;
 use gpapi::{
@@ -27,6 +27,8 @@ const VERSION: &str = concat!(
   version = VERSION,
   author,
   about = "The authentication component for the GlobalProtect VPN client, supports the SSO authentication method.",
+  args_conflicts_with_subcommands = true,
+  subcommand_negates_reqs = true,
   help_template = "\
 {before-help}{name} {version}
 {author}
@@ -41,8 +43,11 @@ See 'gpauth -h' for more information.
 "
 )]
 struct Cli {
-  #[arg(help = "The portal server to authenticate")]
-  server: String,
+  #[command(subcommand)]
+  command: Option<CliCommand>,
+
+  #[arg(required = true, help = "The portal server to authenticate")]
+  server: Option<String>,
 
   #[arg(long, help = "Treating the server as a gateway")]
   gateway: bool,
@@ -110,6 +115,15 @@ struct Cli {
   verbose: InfoLevelVerbosity,
 }
 
+#[derive(Subcommand)]
+enum CliCommand {
+  #[command(hide = true)]
+  AuthCallback {
+    #[arg(help = "The globalprotectcallback URL to forward")]
+    callback: String,
+  },
+}
+
 impl Args for Cli {
   fn fix_openssl(&self) -> bool {
     self.fix_openssl
@@ -142,7 +156,7 @@ impl Cli {
 
     let openssl_conf = self.prepare_env()?;
 
-    let server = normalize_server(&self.server)?;
+    let server = normalize_server(self.server.as_deref().expect("server is required for authentication"))?;
     let gp_params = self.build_gp_params();
     info!(
       "gpauth auth host-id: {}",
@@ -235,6 +249,14 @@ fn init_logger(cli: &Cli) {
 pub async fn run() {
   let cli = Cli::parse();
 
+  if let Some(CliCommand::AuthCallback { callback }) = &cli.command {
+    if let Err(err) = forward_auth_callback(callback).await {
+      eprintln!("Failed to forward authentication callback: {err}");
+      std::process::exit(1);
+    }
+    return;
+  }
+
   init_logger(&cli);
   info!("gpauth started: {}", VERSION);
 
@@ -269,6 +291,22 @@ mod tests {
     let cli = Cli::try_parse_from(["gpauth", "portal.example.com"]).expect("gpauth args should parse");
 
     assert_eq!(cli.os, Os::default());
+  }
+
+  #[test]
+  fn callback_arguments_parse_separately() {
+    let cli = Cli::try_parse_from([
+      "gpauth",
+      "auth-callback",
+      "globalprotectcallback:cas-as=1&un=alice@example.com&token=token",
+    ])
+    .unwrap();
+
+    assert!(matches!(
+      cli.command,
+      Some(CliCommand::AuthCallback { callback }) if callback.starts_with("globalprotectcallback:")
+    ));
+    assert!(cli.server.is_none());
   }
 
   #[test]

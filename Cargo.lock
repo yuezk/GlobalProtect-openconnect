@@ -219,7 +219,6 @@ dependencies = [
  "anyhow",
  "block2",
  "browser-launcher",
- "common",
  "gpapi",
  "html-escape",
  "log",
@@ -228,10 +227,12 @@ dependencies = [
  "objc2-web-kit",
  "regex",
  "tauri",
+ "tempfile",
  "tiny_http",
  "tokio",
  "tokio-util",
  "uuid",
+ "uzers",
  "webkit2gtk",
 ]
 
