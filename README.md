@@ -313,6 +313,12 @@ docker run --rm -it --cap-add=NET_ADMIN --device=/dev/net/tun \
   connect <portal> --browser remote
 ```
 
+On a host with multiple network interfaces, use `--browser-listen` to select the IP address reachable from the browser machine:
+
+```bash
+gpclient connect <portal> --browser remote --browser-listen 192.168.107.15
+```
+
 On a Linux host, add host networking if the VPN routes should affect the host network namespace:
 
 ```bash

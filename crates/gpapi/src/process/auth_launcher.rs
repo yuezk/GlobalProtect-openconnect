@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::Stdio};
+use std::{net::IpAddr, path::PathBuf, process::Stdio};
 
 use anyhow::bail;
 use common::binary_paths;
@@ -34,6 +34,7 @@ pub struct SamlAuthLauncher<'a> {
   #[cfg(feature = "webview-auth")]
   window_theme: Option<AuthWindowTheme>,
   browser: Option<&'a str>,
+  browser_listen: Option<IpAddr>,
   verbose: Option<&'a str>,
 }
 
@@ -63,6 +64,7 @@ impl<'a> SamlAuthLauncher<'a> {
       #[cfg(feature = "webview-auth")]
       window_theme: None,
       browser: None,
+      browser_listen: None,
       verbose: None,
     }
   }
@@ -149,6 +151,11 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  pub fn browser_listen(mut self, browser_listen: Option<IpAddr>) -> Self {
+    self.browser_listen = browser_listen;
+    self
+  }
+
   pub fn verbose(mut self, verbose: Option<&'a str>) -> Self {
     self.verbose = verbose;
     self
@@ -230,6 +237,10 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--browser").arg(browser);
     }
 
+    if let Some(browser_listen) = self.browser_listen {
+      auth_cmd.arg("--browser-listen").arg(browser_listen.to_string());
+    }
+
     if let Some(verbose) = self.verbose {
       auth_cmd.arg(verbose);
     }
@@ -296,5 +307,13 @@ mod tests {
     assert_eq!(launcher.certificate, Some("/tmp/client.pem"));
     assert_eq!(launcher.sslkey, Some("/tmp/client.key"));
     assert_eq!(launcher.key_password, Some("secret"));
+  }
+
+  #[test]
+  fn browser_listen_address_is_stored() {
+    let listen_ip = "192.168.107.15".parse().unwrap();
+    let launcher = SamlAuthLauncher::new("portal.example.com").browser_listen(Some(listen_ip));
+
+    assert_eq!(launcher.browser_listen, Some(listen_ip));
   }
 }

@@ -85,6 +85,7 @@ impl ConnectHandler<'_> {
           .sslkey(self.args.sslkey.as_deref())
           .key_password(key_password.as_deref())
           .browser(browser)
+          .browser_listen(self.args.browser_listen)
           .verbose(verbose);
 
         #[cfg(feature = "webview-auth")]

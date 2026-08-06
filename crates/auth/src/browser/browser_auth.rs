@@ -1,3 +1,5 @@
+use std::net::{IpAddr, SocketAddr};
+
 use browser_launcher::Browser as LaunchBrowser;
 use gpapi::auth::SamlAuthData;
 use log::info;
@@ -8,11 +10,16 @@ use crate::{AuthCallbackReceiver, browser::auth_server::AuthServer, ensure_auth_
 pub struct BrowserAuthenticator<'a> {
   auth_request: &'a str,
   browser: &'a str,
+  browser_listen: Option<IpAddr>,
 }
 
 impl<'a> BrowserAuthenticator<'a> {
-  pub fn new(auth_request: &'a str, browser: &'a str) -> Self {
-    Self { auth_request, browser }
+  pub fn new(auth_request: &'a str, browser: &'a str, browser_listen: Option<IpAddr>) -> Self {
+    Self {
+      auth_request,
+      browser,
+      browser_listen,
+    }
   }
 
   pub async fn authenticate(&self) -> anyhow::Result<SamlAuthData> {
@@ -23,7 +30,7 @@ impl<'a> BrowserAuthenticator<'a> {
       Some(AuthCallbackReceiver::bind()?)
     };
     let addr = self.determine_addr().await?;
-    let auth_server = AuthServer::new(&addr)?;
+    let auth_server = AuthServer::new(addr)?;
     let auth_url = auth_server.auth_url();
 
     let auth_request = self.auth_request.to_string();
@@ -57,12 +64,15 @@ Note that the URL is only valid for a single use.
     callback_receiver.unwrap().receive().await
   }
 
-  async fn determine_addr(&self) -> anyhow::Result<String> {
+  async fn determine_addr(&self) -> anyhow::Result<SocketAddr> {
     if is_remote_browser(self.browser) {
-      let local_ip = detect_local_ip().await?;
-      Ok(format!("{}:0", local_ip))
+      let local_ip = match self.browser_listen {
+        Some(ip) => ip,
+        None => detect_local_ip().await?,
+      };
+      Ok(SocketAddr::new(local_ip, 0))
     } else {
-      Ok("127.0.0.1:0".to_string())
+      Ok(SocketAddr::from(([127, 0, 0, 1], 0)))
     }
   }
 }
@@ -72,16 +82,16 @@ fn is_remote_browser(browser: &str) -> bool {
 }
 
 /// Detect the local IP address by creating a UDP socket and connecting to an external address
-async fn detect_local_ip() -> anyhow::Result<String> {
+async fn detect_local_ip() -> anyhow::Result<IpAddr> {
   let socket = UdpSocket::bind("0.0.0.0:0").await?;
   if let Err(err) = socket.connect("1.1.1.1:80").await {
     anyhow::bail!("Failed to connect to external address to determine local IP: {}", err);
   }
   let local_addr = socket.local_addr()?;
-  let ip = local_addr.ip().to_string();
+  let ip = local_addr.ip();
   info!("Determined local IP address: {}", ip);
 
-  Ok(ip.to_string())
+  Ok(ip)
 }
 
 fn read_auth_data_from_stdin() -> anyhow::Result<SamlAuthData> {
@@ -107,5 +117,16 @@ mod tests {
     assert!(is_remote_browser("remote"));
     assert!(is_remote_browser("REMOTE"));
     assert_ne!(LaunchBrowser::from_name("remote"), LaunchBrowser::Default);
+  }
+
+  #[tokio::test]
+  async fn remote_browser_uses_explicit_listen_address() {
+    let listen_ip = "192.168.107.15".parse().unwrap();
+    let authenticator = BrowserAuthenticator::new("request", "remote", Some(listen_ip));
+
+    assert_eq!(
+      authenticator.determine_addr().await.unwrap(),
+      SocketAddr::new(listen_ip, 0)
+    );
   }
 }

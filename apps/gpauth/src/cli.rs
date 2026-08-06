@@ -15,6 +15,7 @@ use gpapi::{
 };
 use log::info;
 use serde_json::json;
+use std::net::IpAddr;
 use tempfile::NamedTempFile;
 
 const VERSION: &str = concat!(
@@ -94,11 +95,14 @@ struct Cli {
 
   #[arg(
     long,
-    help = "Use external browser authentication. With no value, auto-select Chrome, Firefox, then system default. Use `default` for the system default browser.",
+    help = "Use external browser authentication. With no value, auto-select Chrome, Firefox, then system default. Use `default` for the system default browser or `remote` for headless servers.",
     default_missing_value = "auto",
     num_args=0..=1
   )]
   browser: Option<String>,
+
+  #[arg(long, help = "Listen on this IP address when using '--browser remote'")]
+  browser_listen: Option<IpAddr>,
 
   #[cfg(feature = "webview-auth")]
   #[arg(long, help = "The HiDPI mode, useful for high-resolution screens")]
@@ -156,6 +160,12 @@ impl Cli {
   }
 
   async fn run(&self) -> anyhow::Result<()> {
+    if self.browser_listen.is_some()
+      && !matches!(self.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("remote"))
+    {
+      anyhow::bail!("The '--browser-listen' option requires '--browser remote'");
+    }
+
     if self.ignore_tls_errors {
       info!("TLS errors will be ignored");
     }
@@ -185,7 +195,7 @@ impl Cli {
 
     if let Some(browser) = browser {
       let auth_host_id = gp_params.os_profile().host_identity().host_id().to_string();
-      let authenticator = BrowserAuthenticator::new(&auth_request, browser);
+      let authenticator = BrowserAuthenticator::new(&auth_request, browser, self.browser_listen);
       let auth_result = authenticator.authenticate().await;
 
       print_auth_result(auth_result, Some(&auth_host_id));
@@ -349,6 +359,21 @@ mod tests {
 
     assert_eq!(cli.browser.as_deref(), Some("default"));
     assert!(cli.external_browser_requested());
+  }
+
+  #[test]
+  fn browser_listen_accepts_ip_address() {
+    let cli = Cli::try_parse_from([
+      "gpauth",
+      "portal.example.com",
+      "--browser",
+      "remote",
+      "--browser-listen",
+      "192.168.107.15",
+    ])
+    .expect("gpauth args should parse");
+
+    assert_eq!(cli.browser_listen, Some("192.168.107.15".parse().unwrap()));
   }
 
   #[test]

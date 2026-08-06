@@ -6,7 +6,7 @@ use gpapi::{
   os_profile::{ClientOs, OsProfile},
 };
 use log::warn;
-use std::path::PathBuf;
+use std::{net::IpAddr, path::PathBuf};
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -146,6 +146,9 @@ pub(crate) struct ConnectArgs {
     num_args=0..=1
   )]
   pub(super) browser: Option<String>,
+
+  #[arg(long, help = "Listen on this IP address when using '--browser remote'")]
+  pub(super) browser_listen: Option<IpAddr>,
 }
 
 pub(super) fn build_os_profile(args: &ConnectArgs) -> OsProfile {
@@ -261,6 +264,23 @@ mod tests {
       .expect("--browser default should parse");
 
     assert_eq!(cli.args.browser.as_deref(), Some("default"));
+  }
+
+  #[test]
+  fn browser_listen_accepts_ip_address() {
+    use clap::Parser;
+
+    let cli = ConnectArgsTestCli::try_parse_from([
+      "test",
+      "portal.example.com",
+      "--browser",
+      "remote",
+      "--browser-listen",
+      "192.168.107.15",
+    ])
+    .expect("connect args should parse");
+
+    assert_eq!(cli.args.browser_listen, Some("192.168.107.15".parse().unwrap()));
   }
 
   #[test]

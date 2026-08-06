@@ -92,6 +92,12 @@ impl<'a> ConnectHandler<'a> {
   }
 
   pub(crate) async fn handle(&self) -> anyhow::Result<()> {
+    if self.args.browser_listen.is_some()
+      && !matches!(self.args.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("remote"))
+    {
+      bail!("The '--browser-listen' option requires '--browser remote'");
+    }
+
     #[cfg(feature = "webview-auth")]
     if self.args.default_browser && self.args.browser.is_some() {
       bail!("Cannot use `--default-browser` and `--browser` options at the same time");
