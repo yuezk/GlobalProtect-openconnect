@@ -600,7 +600,8 @@ jobs:
             gmp \
             gnome-keyring \
             polkit \
-            webkitgtk41
+            webkitgtk41 \
+            xdg-utils
           ln -sf /usr/local/bin/autoreconf-2.72 /usr/local/bin/autoreconf
           ln -sf /usr/local/bin/autoconf-2.72 /usr/local/bin/autoconf
           ln -sf /usr/local/bin/autoheader-2.72 /usr/local/bin/autoheader
