@@ -100,7 +100,7 @@ pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
   const HANDLER: &str = "gpauth.desktop";
 
   let current_handler = query_callback_handler(MIME_TYPE)?;
-  if !should_register_handler(&current_handler)? {
+  if !should_register_handler(&current_handler) {
     return Ok(());
   }
 
@@ -146,12 +146,8 @@ pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
-fn should_register_handler(current_handler: &str) -> anyhow::Result<bool> {
-  match current_handler {
-    "gpauth.desktop" => Ok(false),
-    "" | "gpgui.desktop" => Ok(true),
-    handler => bail!("The globalprotectcallback URL scheme is owned by {handler}"),
-  }
+fn should_register_handler(current_handler: &str) -> bool {
+  current_handler != "gpauth.desktop"
 }
 
 async fn forward_auth_callback_to(callback: &str, socket_path: &Path) -> anyhow::Result<()> {
@@ -337,11 +333,11 @@ mod tests {
   }
 
   #[test]
-  fn preserves_unrelated_callback_handler() {
-    assert!(!should_register_handler("gpauth.desktop").unwrap());
-    assert!(should_register_handler("").unwrap());
-    assert!(should_register_handler("gpgui.desktop").unwrap());
-    assert!(should_register_handler("other-vpn.desktop").is_err());
+  fn replaces_any_other_callback_handler() {
+    assert!(!should_register_handler("gpauth.desktop"));
+    assert!(should_register_handler(""));
+    assert!(should_register_handler("gpgui.desktop"));
+    assert!(should_register_handler("other-vpn.desktop"));
   }
 
   #[tokio::test]
