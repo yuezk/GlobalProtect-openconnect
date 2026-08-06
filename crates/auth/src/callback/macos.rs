@@ -1,4 +1,4 @@
-use std::{ffi::OsStr, path::PathBuf, thread, time::Duration};
+use std::{ffi::OsStr, os::raw::c_void, path::PathBuf, thread, time::Duration};
 
 use anyhow::{Context, bail};
 use objc2_app_kit::NSWorkspace;
@@ -8,6 +8,11 @@ const CALLBACK_SCHEME: &str = "globalprotectcallback";
 const CALLBACK_URL: &str = "globalprotectcallback:";
 const HANDLER_BUNDLE_ID: &str = "com.yuezk.gpauth";
 const LOGIN_APP_NAME: &str = "GP Connect Login.app";
+
+#[link(name = "CoreServices", kind = "framework")]
+unsafe extern "C" {
+  fn LSRegisterURL(url: *const c_void, update: u8) -> i32;
+}
 
 pub(super) fn ensure_auth_callback_handler() -> anyhow::Result<()> {
   let workspace = NSWorkspace::sharedWorkspace();
@@ -28,6 +33,7 @@ pub(super) fn ensure_auth_callback_handler() -> anyhow::Result<()> {
     .first()
     .context("GP Connect Login.app is required for external-browser authentication; install GP Connect")?;
   let app_url = file_url(app_path);
+  register_app(&app_url)?;
   workspace.setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(
     &app_url,
     &NSString::from_str(CALLBACK_SCHEME),
@@ -44,6 +50,16 @@ pub(super) fn ensure_auth_callback_handler() -> anyhow::Result<()> {
   }
 
   bail!("The globalprotectcallback URL handler registration did not take effect")
+}
+
+fn register_app(app_url: &NSURL) -> anyhow::Result<()> {
+  // A nested application is not necessarily known to LaunchServices until it
+  // has been launched. Register it explicitly before assigning its URL scheme.
+  let status = unsafe { LSRegisterURL(app_url as *const NSURL as *const c_void, 1) };
+  if status != 0 {
+    bail!("Failed to register GP Connect Login.app with LaunchServices (OSStatus {status})");
+  }
+  Ok(())
 }
 
 fn current_handler(workspace: &NSWorkspace) -> Option<(String, PathBuf)> {
@@ -70,18 +86,14 @@ fn callback_app_paths() -> Vec<PathBuf> {
 
   if let Some(user_dir) = std::env::var_os("HOME").filter(|path| !path.is_empty()) {
     let applications = PathBuf::from(user_dir).join("Applications");
-    candidates.extend([
+    candidates.push(
       applications
         .join("GP Connect.app/Contents/Helpers")
         .join(LOGIN_APP_NAME),
-      applications.join(LOGIN_APP_NAME),
-    ]);
+    );
   }
 
-  candidates.extend([
-    PathBuf::from("/Applications/GP Connect.app/Contents/Helpers").join(LOGIN_APP_NAME),
-    PathBuf::from("/Applications").join(LOGIN_APP_NAME),
-  ]);
+  candidates.push(PathBuf::from("/Applications/GP Connect.app/Contents/Helpers").join(LOGIN_APP_NAME));
 
   candidates
     .into_iter()

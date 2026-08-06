@@ -13,6 +13,9 @@ pub fn run() -> anyhow::Result<()> {
   let timeout_handled = Arc::clone(&handled);
   let app = tauri::Builder::default()
     .setup(move |app| {
+      #[cfg(target_os = "macos")]
+      app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
       let app_handle = app.handle().clone();
       tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(10)).await;

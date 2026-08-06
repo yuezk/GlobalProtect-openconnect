@@ -8,6 +8,8 @@ use gpapi::{
   utils::{redact::redact_uri, window::get_title_bar_height},
 };
 use log::{info, warn};
+#[cfg(target_os = "macos")]
+use tauri::Manager;
 use tauri::{
   AppHandle, WebviewUrl, WebviewWindow, WindowEvent,
   webview::{PageLoadEvent, PageLoadPayload},
@@ -317,6 +319,14 @@ impl<'a> WebviewAuthenticator<'a> {
     }
 
     info!("Raising auth window...");
+
+    #[cfg(target_os = "macos")]
+    if let Err(err) = auth_window
+      .app_handle()
+      .set_activation_policy(tauri::ActivationPolicy::Regular)
+    {
+      warn!("Failed to show the application in the Dock: {}", err);
+    }
 
     use gpapi::utils::window::WindowExt;
     let result = auth_window.raise();

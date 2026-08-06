@@ -19,6 +19,9 @@ pub async fn authenticate(
 
   tauri::Builder::default()
     .setup(move |app| {
+      #[cfg(target_os = "macos")]
+      app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
       apply_auth_theme(app.handle(), window_theme);
       let app_handle = app.handle().clone();
 
