@@ -117,7 +117,10 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
 
   #[cfg(target_os = "macos")]
   {
-    config.disable_static().enable_shared();
+    config
+      .disable_static()
+      .enable_shared()
+      .without("gnutls", None);
     config.ldflag("-liconv");
     config.env("LIBS", "-liconv");
   }
@@ -168,14 +171,20 @@ fn main() {
 
   // Using pkg-config to find system deps
   pkg_config::probe_library("zlib").unwrap();
-  pkg_config::probe_library("liblz4").unwrap();
-  pkg_config::probe_library("gnutls").unwrap();
+  #[cfg(target_os = "macos")]
+  pkg_config::probe_library("openssl").unwrap();
 
-  // Below are required by gnutls
-  pkg_config::probe_library("p11-kit-1").unwrap();
-  pkg_config::probe_library("hogweed").unwrap();
-  pkg_config::probe_library("nettle").unwrap();
-  pkg_config::probe_library("gmp").unwrap();
+  #[cfg(not(target_os = "macos"))]
+  {
+    pkg_config::probe_library("liblz4").unwrap();
+    pkg_config::probe_library("gnutls").unwrap();
+
+    // Below are required by gnutls
+    pkg_config::probe_library("p11-kit-1").unwrap();
+    pkg_config::probe_library("hogweed").unwrap();
+    pkg_config::probe_library("nettle").unwrap();
+    pkg_config::probe_library("gmp").unwrap();
+  }
 
   // Compile the vpn.c file
   println!("cargo:rerun-if-changed=src/ffi/vpn.c");
