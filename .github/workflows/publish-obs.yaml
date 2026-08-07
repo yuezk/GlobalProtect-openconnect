@@ -1,0 +1,72 @@
+name: Publish OBS
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish'
+        required: true
+      revision:
+        description: 'Package revision'
+        type: string
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  publish-obs:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check inputs
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ inputs.tag }}
+        REVISION: ${{ inputs.revision }}
+      run: |
+        if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
+          echo "Revision must be a positive integer" >&2
+          exit 1
+        fi
+
+        gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" >/dev/null
+
+    - name: Prepare OBS package
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ inputs.tag }}
+        REVISION: ${{ inputs.revision }}
+      run: |
+        version="${TAG#v}"
+        archive="globalprotect-openconnect-${version}.offline.tar.gz"
+        source_dir="publish-obs/source/globalprotect-openconnect-${version}"
+
+        mkdir -p publish-obs/files publish-obs/source
+
+        gh release download "$TAG" \
+          --repo "${{ github.repository }}" \
+          --pattern "$archive" \
+          --dir publish-obs
+
+        tar -xzf "publish-obs/$archive" -C publish-obs/source
+
+        make -C "$source_dir" init-rpm \
+          REVISION="$REVISION" \
+          RPM_SOURCE='%{name}.tar.gz'
+
+        mv "publish-obs/$archive" \
+          publish-obs/files/globalprotect-openconnect.tar.gz
+        cp "$source_dir/.build/rpm/globalprotect-openconnect.spec" \
+          "$source_dir/.build/rpm/globalprotect-openconnect.changes" \
+          publish-obs/files/
+
+    - name: Publish OBS package
+      uses: yuezk/publish-obs-package@main
+      with:
+        project: home:yuezk
+        package: globalprotect-openconnect
+        username: yuezk
+        password: ${{ secrets.OBS_PASSWORD }}
+        files: ./publish-obs/files/*
+        commit_message: 'Release ${{ inputs.tag }}-${{ inputs.revision }}'
