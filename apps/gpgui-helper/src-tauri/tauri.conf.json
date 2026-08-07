@@ -15,15 +15,11 @@
     },
     "windows": [
       {
-        "title": "GP Connect Helper",
+        "title": "GPGUI Downloader",
         "center": true,
-        "resizable": true,
-        "width": 500,
-        "height": 100,
-        "minWidth": 500,
-        "minHeight": 100,
-        "maxWidth": 500,
-        "maxHeight": 100,
+        "resizable": false,
+        "width": 460,
+        "height": 104,
         "label": "main",
         "decorations": false
       }

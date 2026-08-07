@@ -7,104 +7,99 @@ import "./styles.css";
 
 const appWindow = getCurrentWindow();
 
-function useUpdateProgress() {
+export default function App() {
+  const [error, setError] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
 
   useEffect(() => {
-    const unlisten = appWindow.listen("app://update-progress", (event) => {
-      setProgress(event.payload as number);
-    });
+    const unlisteners: Array<() => void> = [];
+    let disposed = false;
 
-    return () => {
-      unlisten.then((unlisten) => unlisten());
+    const startUpdate = async () => {
+      const progressUnlisten = await appWindow.listen("app://update-progress", (event) => {
+        setProgress(event.payload as number);
+      });
+      const errorUnlisten = await appWindow.listen("app://update-error", () => {
+        setError(true);
+      });
+
+      if (disposed) {
+        progressUnlisten();
+        errorUnlisten();
+        return;
+      }
+
+      unlisteners.push(progressUnlisten, errorUnlisten);
+      await appWindow.emit("app://update");
     };
-  }, []);
 
-  return progress;
-}
-
-export default function App() {
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    appWindow.emit("app://update");
-
-    const unlisten = appWindow.listen("app://update-error", () => {
-      setError(true);
-    });
+    void startUpdate();
 
     return () => {
-      unlisten.then((unlisten) => unlisten());
+      disposed = true;
+      unlisteners.forEach((unlisten) => unlisten());
     };
   }, []);
 
   const handleRetry = () => {
     setError(false);
+    setProgress(null);
     appWindow.emit("app://update");
   };
 
   return (
     <>
       <CssBaseline />
-      <Box
-        sx={{ position: "absolute", inset: 0 }}
-        display="flex"
-        alignItems="center"
-        px={2}
-        data-tauri-drag-region
-      >
-        <Box display="flex" alignItems="center" flex="1" data-tauri-drag-region>
-          <Box
-            component="img"
-            src={logo}
-            alt="logo"
-            sx={{ width: "4rem", height: "4rem" }}
-            data-tauri-drag-region
-          />
-          <Box flex={1} ml={2}>
-            {error ? <DownloadFailed onRetry={handleRetry} /> : <DownloadIndicator />}
-          </Box>
+      <Box className="update-window" data-tauri-drag-region>
+        <Box
+          component="img"
+          src={logo}
+          alt="GPGUI"
+          className="update-logo"
+          data-tauri-drag-region
+        />
+        <Box className="update-content" data-tauri-drag-region>
+          {error ? <DownloadFailed onRetry={handleRetry} /> : <DownloadIndicator progress={progress} />}
         </Box>
       </Box>
     </>
   );
 }
 
-function DownloadIndicator() {
-  const progress = useUpdateProgress();
-
+function DownloadIndicator({ progress }: { progress: number | null }) {
   return (
-    <>
-      <Typography variant="h1" fontSize="1rem" data-tauri-drag-region>
-        Updating the GUI components...
+    <Box className="update-status" data-tauri-drag-region>
+      <Typography component="h1" className="update-title" data-tauri-drag-region>
+        Downloading GPGUI
       </Typography>
-      <Box mt={1}>
-        <LinearProgressWithLabel value={progress} />
-      </Box>
-    </>
+      <Typography className="update-description" data-tauri-drag-region>
+        This may take a moment.
+      </Typography>
+      <LinearProgressWithLabel value={progress} />
+    </Box>
   );
 }
 
 function DownloadFailed({ onRetry }: { onRetry: () => void }) {
   return (
-    <>
-      <Typography variant="h1" fontSize="1rem" data-tauri-drag-region>
-        Failed to update the GUI components.
+    <Box className="update-status error-status" data-tauri-drag-region>
+      <Typography component="h1" className="update-title" data-tauri-drag-region>
+        GPGUI couldn’t be downloaded
       </Typography>
-      <Box mt={1} data-tauri-drag-region>
+      <Box className="error-actions" data-tauri-drag-region>
+        <Typography className="update-description" data-tauri-drag-region>
+          Check your connection and try again.
+        </Typography>
         <Button
           variant="contained"
-          color="primary"
           size="small"
           onClick={onRetry}
-          sx={{
-            textTransform: "none",
-          }}
+          className="retry-button"
         >
           Retry
         </Button>
       </Box>
-    </>
+    </Box>
   );
 }
 
@@ -112,24 +107,21 @@ function LinearProgressWithLabel(props: { value: number | null }) {
   const { value } = props;
 
   return (
-    <Box sx={{ display: "flex", alignItems: "center" }}>
-      <Box flex="1">
+    <Box className="progress-row">
+      <Box className="progress-track">
         <LinearProgress
           variant={value === null ? "indeterminate" : "determinate"}
           value={value ?? 0}
-          sx={{
-            py: 1.2,
-            ".MuiLinearProgress-bar": {
-              transition: "none",
-            },
-          }}
+          className="progress-bar"
+          aria-label="Update progress"
         />
       </Box>
-      {value !== null && (
-        <Box sx={{ minWidth: 35, textAlign: "right", ml: 1 }}>
-          <Typography variant="body2" color="text.secondary">{`${Math.round(value)}%`}</Typography>
-        </Box>
-      )}
+      <Typography
+        className={`progress-label${value === null ? " progress-label-hidden" : ""}`}
+        aria-hidden={value === null}
+      >
+        {value === null ? "100%" : `${Math.round(value)}%`}
+      </Typography>
     </Box>
   );
 }
