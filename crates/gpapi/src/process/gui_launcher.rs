@@ -162,6 +162,7 @@ mod tests {
   const VERSION: &str = "test-version";
 
   fn executable(dir: &TempDir, name: &str, output: &str, exit_code: i32) -> PathBuf {
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o755)).unwrap();
     let path = dir.path().join(name);
     fs::write(
       &path,
