@@ -97,7 +97,7 @@ pub async fn forward_auth_callback(callback: &str) -> anyhow::Result<()> {
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
   const MIME_TYPE: &str = "x-scheme-handler/globalprotectcallback";
-  const HANDLER: &str = "gpauth.desktop";
+  const HANDLER: &str = "gpgui.desktop";
 
   let current_handler = query_callback_handler(MIME_TYPE)?;
   if !should_register_handler(&current_handler) {
@@ -147,7 +147,7 @@ pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
 fn should_register_handler(current_handler: &str) -> bool {
-  current_handler != "gpauth.desktop"
+  current_handler != "gpgui.desktop"
 }
 
 async fn forward_auth_callback_to(callback: &str, socket_path: &Path) -> anyhow::Result<()> {
@@ -334,9 +334,9 @@ mod tests {
 
   #[test]
   fn replaces_any_other_callback_handler() {
-    assert!(!should_register_handler("gpauth.desktop"));
+    assert!(!should_register_handler("gpgui.desktop"));
     assert!(should_register_handler(""));
-    assert!(should_register_handler("gpgui.desktop"));
+    assert!(should_register_handler("gpauth.desktop"));
     assert!(should_register_handler("other-vpn.desktop"));
   }
 

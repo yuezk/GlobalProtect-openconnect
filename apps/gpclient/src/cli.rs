@@ -102,6 +102,14 @@ impl Args for Cli {
 }
 
 impl Cli {
+  fn can_run_alongside_client(&self) -> bool {
+    match &self.command {
+      CliCommand::Disconnect(_) => true,
+      CliCommand::LaunchGui(args) => args.is_auth_callback(),
+      _ => false,
+    }
+  }
+
   async fn is_running(&self) -> bool {
     let Ok(c) = fs::read_to_string(&self.lock_file).await else {
       return false;
@@ -132,7 +140,7 @@ impl Cli {
 
   async fn run(&self) -> anyhow::Result<()> {
     // check if an instance is running
-    if !matches!(self.command, CliCommand::Disconnect(_)) && self.is_running().await {
+    if !self.can_run_alongside_client() && self.is_running().await {
       bail!("Another instance of the client is already running");
     }
 
@@ -202,5 +210,34 @@ mod tests {
     .expect("global lock file option should parse after subcommand");
 
     assert_eq!(cli.lock_file, PathBuf::from("/tmp/gpclient-portal.lock"));
+  }
+
+  #[test]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  fn launch_gui_accepts_auth_callback() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "launch-gui",
+      "globalprotectcallback:cas-as=1&un=alice@example.com&token=token",
+    ])
+    .expect("authentication callback should parse");
+
+    assert!(matches!(
+      &cli.command,
+      CliCommand::LaunchGui(args) if args.is_auth_callback()
+    ));
+    assert!(cli.can_run_alongside_client());
+  }
+
+  #[test]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  fn launch_gui_rejects_callback_with_minimized() {
+    assert!(Cli::try_parse_from(["gpclient", "launch-gui", "globalprotectcallback:token", "--minimized",]).is_err());
+  }
+
+  #[test]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  fn launch_gui_rejects_non_callback_positional() {
+    assert!(Cli::try_parse_from(["gpclient", "launch-gui", "https://example.com/callback"]).is_err());
   }
 }

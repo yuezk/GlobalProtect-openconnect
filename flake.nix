@@ -98,9 +98,6 @@
           substituteInPlace $out/share/applications/gpgui.desktop \
             --replace-fail /usr/bin/gpclient $out/bin/gpclient
 
-          substituteInPlace $out/share/applications/gpauth.desktop \
-            --replace-fail /usr/bin/gpauth $out/bin/gpauth
-
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice \
             --replace-fail /usr/libexec/gpclient/gp-vpnc-script-installer $out/bin/gp-vpnc-script-installer
@@ -114,9 +111,6 @@
         rewriteHostInstallPaths = ''
           substituteInPlace $out/share/applications/gpgui.desktop \
             --replace-fail /usr/bin/gpclient $out/bin/gpclient
-
-          substituteInPlace $out/share/applications/gpauth.desktop \
-            --replace-fail /usr/bin/gpauth $out/bin/gpauth
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice \
@@ -342,15 +336,24 @@
 
             gpclient_fhs='${prebuiltCommands.gpclient}/bin/gpclient'
             gpservice_public='@gpservice_public@'
+            gpauth_public='@gpauth_public@'
 
             if [ "''${1:-}" = "launch-gui" ]; then
               shift
 
               minimized=
+              callback=
               for arg in "$@"; do
                 case "$arg" in
                   --minimized)
                     minimized=--minimized
+                    ;;
+                  globalprotectcallback:*)
+                    if [ -n "$callback" ]; then
+                      echo "Multiple authentication callback URLs were provided" >&2
+                      exit 2
+                    fi
+                    callback=$arg
                     ;;
                   *)
                     echo "Unsupported launch-gui argument: $arg" >&2
@@ -358,6 +361,14 @@
                     ;;
                 esac
               done
+
+              if [ -n "$callback" ]; then
+                if [ -n "$minimized" ]; then
+                  echo "An authentication callback cannot be combined with --minimized" >&2
+                  exit 2
+                fi
+                exec "$gpauth_public" auth-callback "$callback"
+              fi
 
               if [ -n "''${XDG_DATA_HOME:-}" ]; then
                 data_home=$XDG_DATA_HOME
@@ -395,7 +406,8 @@
             exec "$gpclient_fhs" "$@"
             EOF
             substituteInPlace $out/bin/gpclient \
-              --replace-fail '@gpservice_public@' "$out/bin/gpservice"
+              --replace-fail '@gpservice_public@' "$out/bin/gpservice" \
+              --replace-fail '@gpauth_public@' "$out/bin/gpauth"
             chmod +x $out/bin/gpclient
 
             cat > $out/bin/gpservice <<'EOF'
