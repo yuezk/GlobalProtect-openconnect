@@ -20,6 +20,10 @@
         "resizable": false,
         "width": 460,
         "height": 104,
+        "minWidth": 460,
+        "minHeight": 104,
+        "maxWidth": 460,
+        "maxHeight": 104,
         "label": "main",
         "decorations": false
       }
