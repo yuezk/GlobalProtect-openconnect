@@ -160,7 +160,10 @@ enum GuiInstallError {
 }
 
 fn install_gui(src: &str, checksum: &str) -> Result<(), GuiInstallError> {
-  let target = binary_paths::gpgui();
+  install_gui_at(Path::new(src), checksum, &binary_paths::gpgui_update_target())
+}
+
+fn install_gui_at(src: &Path, checksum: &str, target: &Path) -> Result<(), GuiInstallError> {
   let Some(dir) = target.parent() else {
     return Err(GuiInstallError::Install(anyhow::anyhow!(
       "Failed to get parent directory of GUI binary"
@@ -168,7 +171,7 @@ fn install_gui(src: &str, checksum: &str) -> Result<(), GuiInstallError> {
   };
   fs::create_dir_all(dir).map_err(|err| GuiInstallError::Install(err.into()))?;
 
-  let staged_archive = stage_gui_archive(Path::new(src), dir)?;
+  let staged_archive = stage_gui_archive(src, dir)?;
   let archive_path = staged_archive.path().to_string_lossy();
   verify_checksum(&archive_path, checksum).map_err(GuiInstallError::Checksum)?;
 
@@ -260,7 +263,7 @@ fn extract_gui_binary<R: Read>(archive: &mut Archive<R>, dir: &Path) -> Result<N
 
 #[cfg(test)]
 mod tests {
-  use std::io::Cursor;
+  use std::{io::Cursor, os::unix::fs::PermissionsExt};
 
   use gpapi::{
     gateway::Gateway,
@@ -270,6 +273,7 @@ mod tests {
     },
   };
   use tar::{Builder, EntryType, Header};
+  use xz2::write::XzEncoder;
 
   use super::*;
 
@@ -286,6 +290,17 @@ mod tests {
       builder.finish().unwrap();
     }
     data
+  }
+
+  fn compressed_gui_archive(contents: &[u8]) -> NamedTempFile {
+    let tar = archive_with_entry(EntryType::Regular, contents);
+    let mut encoder = XzEncoder::new(Vec::new(), 6);
+    encoder.write_all(&tar).unwrap();
+    let compressed = encoder.finish().unwrap();
+    let mut archive = NamedTempFile::new().unwrap();
+    archive.write_all(&compressed).unwrap();
+    archive.flush().unwrap();
+    archive
   }
 
   #[test]
@@ -335,6 +350,31 @@ mod tests {
 
     let mut archive = Archive::new(Cursor::new(data));
     assert!(extract_gui_binary(&mut archive, output.path()).is_err());
+  }
+
+  #[test]
+  fn installs_gui_at_the_supplied_target() {
+    let archive = compressed_gui_archive(b"gui binary");
+    let checksum = sha256::try_digest(archive.path()).unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let target = output.path().join("gpclient/gpgui");
+
+    install_gui_at(archive.path(), &checksum, &target).unwrap();
+
+    assert_eq!(std::fs::read(&target).unwrap(), b"gui binary");
+    assert_eq!(std::fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o755);
+  }
+
+  #[test]
+  fn checksum_failure_preserves_the_existing_gui() {
+    let archive = compressed_gui_archive(b"replacement");
+    let output = tempfile::tempdir().unwrap();
+    let target = output.path().join("gpclient/gpgui");
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::write(&target, b"existing").unwrap();
+
+    assert!(install_gui_at(archive.path(), "invalid", &target).is_err());
+    assert_eq!(std::fs::read(target).unwrap(), b"existing");
   }
 
   #[tokio::test]

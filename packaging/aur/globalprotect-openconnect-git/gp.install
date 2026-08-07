@@ -3,22 +3,19 @@ post_install() {
     update-desktop-database -q
 }
 
-pre_upgrade() {
-    rm -f /usr/bin/gpgui
-}
-
 post_upgrade() {
     update-mime-database /usr/share/mime
     update-desktop-database -q
 }
 
 post_remove() {
-    rm -f /usr/bin/gpgui
     rm -f \
+        /var/lib/gpclient/gpgui \
         /var/lib/gpclient/scripts/vpnc-script \
         /var/lib/gpclient/scripts/vpnc-script.metadata ||
-        echo "Warning: failed to remove the installed VPN script" >&2
+        echo "Warning: failed to remove gpclient runtime files" >&2
     rmdir /var/lib/gpclient/scripts 2>/dev/null || true
+    rmdir /var/lib/gpclient 2>/dev/null || true
     update-mime-database /usr/share/mime
     update-desktop-database -q
 }

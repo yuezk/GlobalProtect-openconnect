@@ -48,6 +48,8 @@ pub const GP_CLIENT_BINARY: &str = "/usr/local/bin/gpclient";
 pub const GP_SERVICE_BINARY: &str = "/usr/local/bin/gpservice";
 #[cfg(all(not(debug_assertions), any(target_os = "freebsd", target_os = "openbsd")))]
 pub const GP_GUI_BINARY: &str = "/usr/local/bin/gpgui";
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+pub const GP_DOWNLOADED_GUI_BINARY: &str = "/usr/local/libexec/gpclient/gpgui";
 #[cfg(all(not(debug_assertions), any(target_os = "freebsd", target_os = "openbsd")))]
 pub const GP_GUI_HELPER_BINARY: &str = "/usr/local/bin/gpgui-helper";
 #[cfg(all(not(debug_assertions), any(target_os = "freebsd", target_os = "openbsd")))]
@@ -69,6 +71,8 @@ pub const GP_SERVICE_BINARY: &str = "/usr/bin/gpservice";
   not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))
 ))]
 pub const GP_GUI_BINARY: &str = "/usr/bin/gpgui";
+#[cfg(target_os = "linux")]
+pub const GP_DOWNLOADED_GUI_BINARY: &str = "/var/lib/gpclient/gpgui";
 #[cfg(all(
   not(debug_assertions),
   not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))

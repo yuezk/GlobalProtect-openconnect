@@ -1966,6 +1966,7 @@ dependencies = [
  "openconnect",
  "serde",
  "serde_json",
+ "sha256",
  "tar",
  "tempfile",
  "thiserror 2.0.18",

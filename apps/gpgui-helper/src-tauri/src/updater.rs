@@ -41,6 +41,22 @@ const GUI_LIBC_SUFFIX: &str = "-musl";
 #[cfg(not(target_env = "musl"))]
 const GUI_LIBC_SUFFIX: &str = "";
 
+fn gui_asset_name() -> Option<String> {
+  gui_asset_name_for(std::env::consts::OS, std::env::consts::ARCH, GUI_LIBC_SUFFIX)
+}
+
+fn gui_asset_name_for(os: &str, arch: &str, libc_suffix: &str) -> Option<String> {
+  let name = match (os, arch) {
+    ("linux", "x86_64" | "aarch64") => format!("gpgui_{arch}{libc_suffix}.bin.tar.xz"),
+    ("freebsd", "x86_64") => "gpgui_freebsd_amd64.bin.tar.xz".to_owned(),
+    ("freebsd", "aarch64") => "gpgui_freebsd_arm64.bin.tar.xz".to_owned(),
+    ("openbsd", "x86_64") => "gpgui_openbsd_amd64.bin.tar.xz".to_owned(),
+    ("openbsd", "aarch64") => "gpgui_openbsd_arm64.bin.tar.xz".to_owned(),
+    _ => return None,
+  };
+  Some(name)
+}
+
 pub struct ProgressNotifier {
   win: WebviewWindow,
 }
@@ -366,10 +382,10 @@ impl GuiUpdater {
   }
 
   pub async fn update(&self) {
-    if !cfg!(any(target_arch = "x86_64", target_arch = "aarch64")) {
-      info!("GUI version is not supported on this architecture.");
+    let Some(asset_name) = gui_asset_name() else {
+      info!("GUI updates are not supported on this platform.");
       return;
-    }
+    };
     info!("Update GUI, version: {}", self.version);
 
     #[cfg(debug_assertions)]
@@ -381,16 +397,8 @@ impl GuiUpdater {
       format!("v{}", self.version)
     };
 
-    let arch = if cfg!(target_arch = "x86_64") {
-      "x86_64"
-    } else {
-      "aarch64"
-    };
-
-    let file_url = format!(
-      "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{}/gpgui_{}{}.bin.tar.xz",
-      release_tag, arch, GUI_LIBC_SUFFIX
-    );
+    let file_url =
+      format!("https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{release_tag}/{asset_name}");
     let checksum_url = format!("{}.sha256", file_url);
 
     info!("Downloading file: {}", file_url);
@@ -493,6 +501,27 @@ mod tests {
   use tokio_tungstenite::accept_async;
 
   use super::*;
+
+  #[test]
+  fn selects_platform_specific_gui_assets() {
+    assert_eq!(
+      gui_asset_name_for("linux", "x86_64", ""),
+      Some("gpgui_x86_64.bin.tar.xz".to_owned())
+    );
+    assert_eq!(
+      gui_asset_name_for("linux", "aarch64", "-musl"),
+      Some("gpgui_aarch64-musl.bin.tar.xz".to_owned())
+    );
+    assert_eq!(
+      gui_asset_name_for("freebsd", "x86_64", ""),
+      Some("gpgui_freebsd_amd64.bin.tar.xz".to_owned())
+    );
+    assert_eq!(
+      gui_asset_name_for("openbsd", "aarch64", ""),
+      Some("gpgui_openbsd_arm64.bin.tar.xz".to_owned())
+    );
+    assert_eq!(gui_asset_name_for("macos", "aarch64", ""), None);
+  }
 
   #[tokio::test]
   async fn pending_install_reconnects_with_a_fresh_handshake() {

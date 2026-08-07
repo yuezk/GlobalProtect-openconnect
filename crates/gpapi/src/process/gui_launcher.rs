@@ -1,6 +1,6 @@
 use std::{
   collections::HashMap,
-  path::PathBuf,
+  path::{Path, PathBuf},
   process::{ExitStatus, Stdio},
   sync::Arc,
 };
@@ -16,7 +16,7 @@ use super::command_traits::CommandExt;
 
 pub struct GuiLauncher<'a> {
   version: &'a str,
-  program: PathBuf,
+  programs: Vec<PathBuf>,
   credential: Arc<SessionCredential>,
   minimized: bool,
   envs: Option<HashMap<String, String>>,
@@ -24,9 +24,17 @@ pub struct GuiLauncher<'a> {
 
 impl<'a> GuiLauncher<'a> {
   pub fn new(version: &'a str, credential: Arc<SessionCredential>) -> Self {
+    let primary = binary_paths::gpgui();
+    let update_target = binary_paths::gpgui_update_target();
+    let programs = if primary == update_target {
+      vec![primary]
+    } else {
+      vec![primary, update_target]
+    };
+
     Self {
       version,
-      program: binary_paths::gpgui(),
+      programs,
       credential,
       minimized: false,
       envs: None,
@@ -44,18 +52,33 @@ impl<'a> GuiLauncher<'a> {
   }
 
   pub async fn launch(&self) -> anyhow::Result<ExitStatus> {
-    // Check if the program's version
-    if let Err(err) = self.check_version().await {
-      info!("Check version failed: {}", err);
-      // Download the program and replace the current one
-      self.download_program().await?;
+    if let Some(program) = self.find_compatible_program().await {
+      return self.launch_program(&program).await;
     }
 
-    self.launch_program().await
+    self.download_program().await?;
+
+    let program = binary_paths::gpgui_update_target();
+    self.check_version(&program).await?;
+    self.launch_program(&program).await
   }
 
-  async fn launch_program(&self) -> anyhow::Result<ExitStatus> {
-    let mut cmd = Command::new(&self.program);
+  async fn find_compatible_program(&self) -> Option<PathBuf> {
+    for program in &self.programs {
+      match self.check_version(program).await {
+        Ok(()) => return Some(program.clone()),
+        Err(err) => info!(
+          "GUI candidate {} is unavailable or incompatible: {err}",
+          program.display()
+        ),
+      }
+    }
+
+    None
+  }
+
+  async fn launch_program(&self, program: &Path) -> anyhow::Result<ExitStatus> {
+    let mut cmd = Command::new(program);
 
     if let Some(envs) = &self.envs {
       cmd.env_clear();
@@ -73,7 +96,7 @@ impl<'a> GuiLauncher<'a> {
     let child = non_root_cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn();
     let mut child = match child {
       Ok(child) => child,
-      Err(err) => bail!("Failed to spawn {}: {}", self.program.display(), err),
+      Err(err) => bail!("Failed to spawn {}: {}", program.display(), err),
     };
 
     let Some(mut stdin) = child.stdin.take() else {
@@ -89,9 +112,18 @@ impl<'a> GuiLauncher<'a> {
     Ok(exit_status)
   }
 
-  async fn check_version(&self) -> anyhow::Result<()> {
-    let cmd = Command::new(&self.program).arg("--version").output().await?;
-    let output = String::from_utf8_lossy(&cmd.stdout);
+  async fn check_version(&self, program: &Path) -> anyhow::Result<()> {
+    let mut cmd = Command::new(program);
+    if let Some(envs) = &self.envs {
+      cmd.env_clear();
+      cmd.envs(envs);
+    }
+    cmd.arg("--version");
+    let output = cmd.into_non_root()?.output().await?;
+    if !output.status.success() {
+      bail!("Version command exited with {}", output.status);
+    }
+    let output = String::from_utf8_lossy(&output.stdout);
 
     // Version string: "gpgui 2.0.0 (2024-02-05)"
     let Some(version) = output.split_whitespace().nth(1) else {
@@ -114,11 +146,68 @@ impl<'a> GuiLauncher<'a> {
       .envs(self.envs.as_ref())
       .gui_version(Some(self.version))
       .launch()
-      .await?;
+      .await
+  }
+}
 
-    // Check the version again
-    self.check_version().await?;
+#[cfg(test)]
+mod tests {
+  use std::{fs, os::unix::fs::PermissionsExt};
 
-    Ok(())
+  use tempfile::TempDir;
+  use uuid::Uuid;
+
+  use super::*;
+
+  const VERSION: &str = "test-version";
+
+  fn executable(dir: &TempDir, name: &str, output: &str, exit_code: i32) -> PathBuf {
+    let path = dir.path().join(name);
+    fs::write(
+      &path,
+      format!("#!/bin/sh\nprintf '%s\\n' '{output}'\nexit {exit_code}\n"),
+    )
+    .unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    path
+  }
+
+  fn launcher(version: &'static str, programs: Vec<PathBuf>) -> GuiLauncher<'static> {
+    GuiLauncher {
+      version,
+      programs,
+      credential: Arc::new(SessionCredential::generate(Uuid::new_v4(), version).unwrap()),
+      minimized: false,
+      envs: None,
+    }
+  }
+
+  #[tokio::test]
+  async fn prefers_the_first_compatible_program() {
+    let dir = TempDir::new().unwrap();
+    let packaged = executable(&dir, "packaged", "gpgui test-version", 0);
+    let downloaded = executable(&dir, "downloaded", "gpgui test-version", 0);
+    let launcher = launcher(VERSION, vec![packaged.clone(), downloaded]);
+
+    assert_eq!(launcher.find_compatible_program().await, Some(packaged));
+  }
+
+  #[tokio::test]
+  async fn falls_back_when_the_first_program_is_incompatible() {
+    let dir = TempDir::new().unwrap();
+    let packaged = executable(&dir, "packaged", "gpgui other-version", 0);
+    let downloaded = executable(&dir, "downloaded", "gpgui test-version", 0);
+    let launcher = launcher(VERSION, vec![packaged, downloaded.clone()]);
+
+    assert_eq!(launcher.find_compatible_program().await, Some(downloaded));
+  }
+
+  #[tokio::test]
+  async fn rejects_an_unsuccessful_version_command() {
+    let dir = TempDir::new().unwrap();
+    let program = executable(&dir, "broken", "gpgui test-version", 1);
+    let launcher = launcher(VERSION, vec![program]);
+
+    assert_eq!(launcher.find_compatible_program().await, None);
   }
 }

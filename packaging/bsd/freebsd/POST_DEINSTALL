@@ -3,7 +3,10 @@
 root=${PKG_ROOTDIR:-}
 
 rm -f \
+	"$root/usr/local/libexec/gpclient/gpgui" \
 	"$root/var/db/gpclient/scripts/vpnc-script" \
 	"$root/var/db/gpclient/scripts/vpnc-script.metadata" ||
-	echo "Warning: failed to remove the installed VPN script" >&2
+	echo "Warning: failed to remove gpclient runtime files" >&2
+rmdir "$root/usr/local/libexec/gpclient" 2>/dev/null || true
 rmdir "$root/var/db/gpclient/scripts" 2>/dev/null || true
+rmdir "$root/var/db/gpclient" 2>/dev/null || true

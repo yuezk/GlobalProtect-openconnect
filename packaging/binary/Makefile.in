@@ -53,6 +53,8 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
 	rm -f $(DESTDIR)/var/lib/gpclient/scripts/vpnc-script \
+		$(DESTDIR)/var/lib/gpclient/gpgui \
 		$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata || \
-		echo "Warning: failed to remove the installed VPN script" >&2
+		echo "Warning: failed to remove gpclient runtime files" >&2
 	rmdir $(DESTDIR)/var/lib/gpclient/scripts 2>/dev/null || true
+	rmdir $(DESTDIR)/var/lib/gpclient 2>/dev/null || true

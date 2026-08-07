@@ -3,6 +3,11 @@ use std::{
   path::{Path, PathBuf},
 };
 
+#[cfg(all(
+  not(debug_assertions),
+  any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")
+))]
+use crate::constants::GP_DOWNLOADED_GUI_BINARY;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 use crate::constants::GP_VPNC_SCRIPT_INSTALLER_BINARY;
 use crate::constants::{GP_AUTH_BINARY, GP_CLIENT_BINARY, GP_GUI_BINARY, GP_GUI_HELPER_BINARY, GP_SERVICE_BINARY};
@@ -30,6 +35,24 @@ pub fn gpauth() -> PathBuf {
 
 pub fn gpgui() -> PathBuf {
   resolve("GP_GUI_BINARY", "gpgui", GP_GUI_BINARY)
+}
+
+pub fn gpgui_update_target() -> PathBuf {
+  #[cfg(all(
+    not(debug_assertions),
+    any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")
+  ))]
+  {
+    PathBuf::from(GP_DOWNLOADED_GUI_BINARY)
+  }
+
+  #[cfg(any(
+    debug_assertions,
+    not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))
+  ))]
+  {
+    gpgui()
+  }
 }
 
 pub fn gpgui_helper() -> PathBuf {

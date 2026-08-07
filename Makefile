@@ -252,8 +252,10 @@ package-openbsd: clean-bsd-package
 	cp packaging/bsd/openbsd/COMMENT .build/openbsd/+COMMENT
 	cp packaging/bsd/openbsd/DESC .build/openbsd/+DESC
 	{ \
-		echo '@unexec-delete /bin/rm -f /var/db/gpclient/scripts/vpnc-script /var/db/gpclient/scripts/vpnc-script.metadata || echo "Warning: failed to remove the installed VPN script" >&2'; \
+		echo '@unexec-delete /bin/rm -f /usr/local/libexec/gpclient/gpgui /var/db/gpclient/scripts/vpnc-script /var/db/gpclient/scripts/vpnc-script.metadata || echo "Warning: failed to remove gpclient runtime files" >&2'; \
+		echo '@unexec-delete /bin/rmdir /usr/local/libexec/gpclient 2>/dev/null || true'; \
 		echo '@unexec-delete /bin/rmdir /var/db/gpclient/scripts 2>/dev/null || true'; \
+		echo '@unexec-delete /bin/rmdir /var/db/gpclient 2>/dev/null || true'; \
 		find .build/openbsd/pkgroot$(PREFIX) -type f -print | sed 's|^.build/openbsd/pkgroot$(PREFIX)/||' | sort; \
 	} > .build/openbsd/PLIST
 	comment=$$(cat .build/openbsd/+COMMENT); \
@@ -300,10 +302,12 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
-	rm -f $(DESTDIR)/var/lib/gpclient/scripts/vpnc-script \
+	rm -f $(DESTDIR)/var/lib/gpclient/gpgui \
+		$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script \
 		$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata || \
-		echo "Warning: failed to remove the installed VPN script" >&2
+		echo "Warning: failed to remove gpclient runtime files" >&2
 	rmdir $(DESTDIR)/var/lib/gpclient/scripts 2>/dev/null || true
+	rmdir $(DESTDIR)/var/lib/gpclient 2>/dev/null || true
 
 clean-debian:
 	rm -rf .build/deb

@@ -31,3 +31,4 @@ nix = { version = "0.31", features = ["fs", "socket", "user"] }
 
 [dev-dependencies]
 tokio-tungstenite = "0.29"
+sha256.workspace = true
