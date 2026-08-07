@@ -60,7 +60,7 @@ jobs:
           --user root \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -e LIBXML2_STATIC=1 \
-          -e SUDO_UID=1000 \
+          -e PKEXEC_UID=1000 \
           -v "$(pwd):/workspace" \
           -w /workspace \
           yuezk/gpdev:binary-builder-tauri2 \
