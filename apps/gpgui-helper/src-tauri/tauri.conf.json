@@ -17,7 +17,7 @@
       {
         "title": "GPGUI Downloader",
         "center": true,
-        "resizable": false,
+        "resizable": true,
         "width": 460,
         "height": 104,
         "minWidth": 460,
