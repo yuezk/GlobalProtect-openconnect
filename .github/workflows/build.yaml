@@ -316,6 +316,8 @@ jobs:
       run: |
         docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
+          -e GPGUI_BUILD_VERSION=${{ github.run_id }}.${{ github.run_attempt }} \
+          -e GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }} \
           -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:${{ matrix.libc.builder }}
     - name: Install gpgui in Docker
       run: |
@@ -560,6 +562,8 @@ jobs:
             webkit2-gtk_41
         run: |
           set -eu
+          export GPGUI_BUILD_VERSION=${{ github.run_id }}.${{ github.run_attempt }}
+          export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }}
 
           cd "${{ matrix.workspace }}/gp"
           cargo build --release --workspace
@@ -613,6 +617,8 @@ jobs:
           set -eu
           export AUTOCONF_VERSION=2.72
           export AUTOMAKE_VERSION=1.17
+          export GPGUI_BUILD_VERSION=${{ github.run_id }}.${{ github.run_attempt }}
+          export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }}
 
           cd "${{ matrix.workspace }}/gp"
           cargo build --release --workspace
