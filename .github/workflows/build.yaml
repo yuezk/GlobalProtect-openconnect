@@ -180,6 +180,80 @@ jobs:
         path: |
           build-gp-${{ matrix.package }}/artifacts/*
 
+  # GUI-free variant, for the headless servers README.md names as the audience
+  # for `--browser remote`. Same source and same builder images as build-gp;
+  # only the three GUI flags differ, which #638 made effective for `depends=`.
+  #
+  # Scoped to apk and deb: those are the two formats whose depends= is gated on
+  # the flags today (Makefile `init-apk` / `init-debian`). An rpm built this way
+  # would still declare the GUI dependencies, so a "CLI" rpm would mislead.
+  build-gp-headless:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    needs:
+    - tarball
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: ubuntu-24.04-arm
+        package: [apk, deb]
+    runs-on: ${{ matrix.os.runner }}
+    name: build-gp-headless (${{ matrix.package }}, ${{ matrix.os.arch }})
+    steps:
+    - name: Prepare workspace
+      run: |
+        rm -rf build-gp-headless-${{ matrix.package }}
+        mkdir -p build-gp-headless-${{ matrix.package }}
+    - name: Download tarball
+      uses: actions/download-artifact@v8
+      with:
+        name: artifact-source
+        path: build-gp-headless-${{ matrix.package }}
+    - name: Build GUI-free ${{ matrix.package }} package in Docker
+      run: |
+        docker run --rm \
+          -e COREPACK_INTEGRITY_KEYS=0 \
+          -e LIBXML2_STATIC=1 \
+          -e INCLUDE_GUI=0 \
+          -e BUILD_GUI_HELPER=0 \
+          -e BUILD_WEBVIEW_AUTH=0 \
+          -v $(pwd)/build-gp-headless-${{ matrix.package }}:/workspace \
+          yuezk/gpdev:${{ matrix.package }}-builder-tauri2
+    # Not `bash install.sh`: that script checks `gpgui-helper --version`
+    # unconditionally, and BUILD_GUI_HELPER=0 means it isn't built. Its
+    # GPGUI_INSTALLED knob covers gpgui but not the helper. Rather than ask for
+    # a new knob in the builder image, this asserts the property that actually
+    # matters for the variant — the CLI binaries work and no GUI binary shipped.
+    - name: Verify GUI-free ${{ matrix.package }} package in Docker
+      run: |
+        docker run --rm \
+          -e COREPACK_INTEGRITY_KEYS=0 \
+          -v $(pwd)/build-gp-headless-${{ matrix.package }}:/workspace \
+          --entrypoint /bin/bash \
+          yuezk/gpdev:${{ matrix.package }}-builder-tauri2 -lc '
+            set -eux
+            if command -v apk >/dev/null; then
+              sudo apk add --allow-untrusted /workspace/artifacts/*.apk
+            else
+              sudo apt-get install -y /workspace/artifacts/*.deb
+            fi
+            gpclient --version
+            gpservice --version
+            gpauth --version
+            ! command -v gpgui-helper
+            ! command -v gpgui
+          '
+    - name: Upload GUI-free ${{ matrix.package }} package
+      uses: actions/upload-artifact@v7
+      with:
+        name: artifact-gp-headless-${{ matrix.package }}-${{ matrix.os.arch }}
+        if-no-files-found: error
+        path: |
+          build-gp-headless-${{ matrix.package }}/artifacts/*
+
   build-docker-image:
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     strategy:
