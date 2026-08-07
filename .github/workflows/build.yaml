@@ -376,13 +376,14 @@ jobs:
 
           expected_title="macOS $CHANNEL $RELEASE_TAG ($REQUEST_ID)"
           jq -n \
+            --arg workflow_ref "$GPGUI_REF" \
             --arg request_id "$REQUEST_ID" \
             --arg channel "$CHANNEL" \
             --arg release_tag "$RELEASE_TAG" \
             --arg gp_ref "$gp_sha" \
             --arg gpgui_ref "$gpgui_sha" \
             '{
-              ref: "main",
+              ref: $workflow_ref,
               inputs: {
                 request_id: $request_id,
                 channel: $channel,
