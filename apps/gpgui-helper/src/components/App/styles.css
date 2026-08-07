@@ -1,6 +1,7 @@
 html,
 body,
 #root {
+  box-sizing: border-box;
   height: 100%;
   margin: 0;
   padding: 0;
@@ -14,7 +15,16 @@ body {
   background: #f6f5f4;
   color: #2e3436;
   font-family:
-    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+button {
+  font: inherit;
 }
 
 .update-window {
@@ -40,7 +50,8 @@ body {
   width: 100%;
 }
 
-.update-title.MuiTypography-root {
+.update-title {
+  margin: 0;
   color: #2e3436;
   font-size: 16px;
   font-weight: 600;
@@ -48,8 +59,8 @@ body {
   letter-spacing: -0.01em;
 }
 
-.update-description.MuiTypography-root {
-  margin-top: 3px;
+.update-description {
+  margin: 3px 0 0;
   color: #5e5c64;
   font-size: 12px;
   line-height: 1.4;
@@ -62,25 +73,50 @@ body {
   margin-top: 9px;
 }
 
-.progress-track {
+.progress-bar {
+  position: relative;
   flex: 1;
   min-width: 0;
-}
-
-.progress-bar.MuiLinearProgress-root {
   height: 6px;
   overflow: hidden;
   border-radius: 3px;
   background-color: #d5d3d1;
 }
 
-.progress-bar .MuiLinearProgress-bar {
+.progress-fill {
+  height: 100%;
   border-radius: 3px;
   background: #3584e4;
-  transition: transform 180ms ease-out;
+  transition: width 180ms ease-out;
 }
 
-.progress-label.MuiTypography-root {
+.progress-bar-indeterminate .progress-fill {
+  width: 35%;
+  animation: progress-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill {
+    transition: none;
+  }
+
+  .progress-bar-indeterminate .progress-fill {
+    animation: none;
+    transform: translateX(90%);
+  }
+}
+
+.progress-label {
   min-width: 36px;
   color: #3d3846;
   font-size: 12px;
@@ -89,38 +125,47 @@ body {
   text-align: right;
 }
 
-.progress-label-hidden.MuiTypography-root {
+.progress-label-hidden {
   visibility: hidden;
 }
 
-.error-status .update-title.MuiTypography-root {
-  color: #9c2f2f;
-}
-
-.error-actions {
+.error-status {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 8px;
 }
 
-.error-actions .update-description.MuiTypography-root {
-  margin-top: 0;
+.error-status .update-title {
+  color: #9c2f2f;
 }
 
-.retry-button.MuiButton-root {
+.error-copy {
+  min-width: 0;
+}
+
+.retry-button {
   min-width: 68px;
+  padding: 4px 14px;
+  border: 0;
   border-radius: 8px;
-  background: #3584e4;
-  box-shadow: none;
+  background: #1c71d8;
+  color: #ffffff;
+  cursor: pointer;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
-  text-transform: none;
 }
 
-.retry-button.MuiButton-root:hover {
-  background: #1c71d8;
-  box-shadow: none;
+.retry-button:hover {
+  background: #1a5fb4;
+}
+
+.retry-button:active {
+  background: #174a8b;
+}
+
+.retry-button:focus-visible {
+  outline: 2px solid #1a5fb4;
+  outline-offset: 2px;
 }

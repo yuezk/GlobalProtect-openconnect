@@ -1,4 +1,3 @@
-import { Box, Button, CssBaseline, LinearProgress, Typography } from "@mui/material";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import logo from "../../assets/icon-small.svg";
 import { useEffect, useState } from "react";
@@ -48,80 +47,72 @@ export default function App() {
   };
 
   return (
-    <>
-      <CssBaseline />
-      <Box className="update-window" data-tauri-drag-region>
-        <Box
-          component="img"
-          src={logo}
-          alt="GPGUI"
-          className="update-logo"
-          data-tauri-drag-region
-        />
-        <Box className="update-content" data-tauri-drag-region>
-          {error ? <DownloadFailed onRetry={handleRetry} /> : <DownloadIndicator progress={progress} />}
-        </Box>
-      </Box>
-    </>
+    <div className="update-window" data-tauri-drag-region>
+      <img src={logo} alt="" className="update-logo" data-tauri-drag-region />
+      <div className="update-content" data-tauri-drag-region>
+        {error ? (
+          <DownloadFailed onRetry={handleRetry} />
+        ) : (
+          <DownloadIndicator progress={progress} />
+        )}
+      </div>
+    </div>
   );
 }
 
 function DownloadIndicator({ progress }: { progress: number | null }) {
   return (
-    <Box className="update-status" data-tauri-drag-region>
-      <Typography component="h1" className="update-title" data-tauri-drag-region>
+    <div className="update-status" data-tauri-drag-region>
+      <h1 className="update-title" data-tauri-drag-region>
         Downloading GPGUI
-      </Typography>
-      <Typography className="update-description" data-tauri-drag-region>
+      </h1>
+      <p className="update-description" data-tauri-drag-region>
         This may take a moment.
-      </Typography>
-      <LinearProgressWithLabel value={progress} />
-    </Box>
+      </p>
+      <ProgressWithLabel value={progress} />
+    </div>
   );
 }
 
 function DownloadFailed({ onRetry }: { onRetry: () => void }) {
   return (
-    <Box className="update-status error-status" data-tauri-drag-region>
-      <Typography component="h1" className="update-title" data-tauri-drag-region>
-        GPGUI couldn’t be downloaded
-      </Typography>
-      <Box className="error-actions" data-tauri-drag-region>
-        <Typography className="update-description" data-tauri-drag-region>
-          Check your connection and try again.
-        </Typography>
-        <Button
-          variant="contained"
-          size="small"
-          onClick={onRetry}
-          className="retry-button"
-        >
-          Retry
-        </Button>
-      </Box>
-    </Box>
+    <div className="update-status error-status" data-tauri-drag-region>
+      <div className="error-copy" role="alert" data-tauri-drag-region>
+        <h1 className="update-title" data-tauri-drag-region>
+          GPGUI update failed
+        </h1>
+        <p className="update-description" data-tauri-drag-region>
+          Please try again.
+        </p>
+      </div>
+      <button type="button" onClick={onRetry} className="retry-button">
+        Retry
+      </button>
+    </div>
   );
 }
 
-function LinearProgressWithLabel(props: { value: number | null }) {
-  const { value } = props;
+function ProgressWithLabel({ value }: { value: number | null }) {
+  const isDeterminate = value !== null;
 
   return (
-    <Box className="progress-row">
-      <Box className="progress-track">
-        <LinearProgress
-          variant={value === null ? "indeterminate" : "determinate"}
-          value={value ?? 0}
-          className="progress-bar"
-          aria-label="Update progress"
-        />
-      </Box>
-      <Typography
+    <div className="progress-row">
+      <div
+        className={`progress-bar${isDeterminate ? "" : " progress-bar-indeterminate"}`}
+        role="progressbar"
+        aria-label="Update progress"
+        aria-valuemin={isDeterminate ? 0 : undefined}
+        aria-valuemax={isDeterminate ? 100 : undefined}
+        aria-valuenow={isDeterminate ? Math.round(value) : undefined}
+      >
+        <div className="progress-fill" style={isDeterminate ? { width: `${value}%` } : undefined} />
+      </div>
+      <span
         className={`progress-label${value === null ? " progress-label-hidden" : ""}`}
         aria-hidden={value === null}
       >
         {value === null ? "100%" : `${Math.round(value)}%`}
-      </Typography>
-    </Box>
+      </span>
+    </div>
   );
 }
