@@ -64,12 +64,9 @@ function DownloadIndicator({ progress }: { progress: number | null }) {
   return (
     <div className="update-status" data-tauri-drag-region>
       <h1 className="update-title" data-tauri-drag-region>
-        Downloading GPGUI
+        Getting GP Connect ready
       </h1>
-      <p className="update-description" data-tauri-drag-region>
-        This may take a moment.
-      </p>
-      <ProgressWithLabel value={progress} />
+      <DownloadProgress value={progress} />
     </div>
   );
 }
@@ -79,7 +76,7 @@ function DownloadFailed({ onRetry }: { onRetry: () => void }) {
     <div className="update-status error-status" data-tauri-drag-region>
       <div className="error-copy" role="alert" data-tauri-drag-region>
         <h1 className="update-title" data-tauri-drag-region>
-          GPGUI update failed
+          Couldn’t get GP Connect ready
         </h1>
         <p className="update-description" data-tauri-drag-region>
           Please try again.
@@ -92,11 +89,19 @@ function DownloadFailed({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function ProgressWithLabel({ value }: { value: number | null }) {
+function DownloadProgress({ value }: { value: number | null }) {
   const isDeterminate = value !== null;
 
   return (
-    <div className="progress-row">
+    <>
+      <div className="progress-summary" data-tauri-drag-region>
+        <p className="update-description" data-tauri-drag-region>
+          This should only take a moment.
+        </p>
+        <span className="progress-label" aria-hidden="true">
+          {isDeterminate ? `${Math.round(value)}%` : "In progress"}
+        </span>
+      </div>
       <div
         className={`progress-bar${isDeterminate ? "" : " progress-bar-indeterminate"}`}
         role="progressbar"
@@ -107,12 +112,6 @@ function ProgressWithLabel({ value }: { value: number | null }) {
       >
         <div className="progress-fill" style={isDeterminate ? { width: `${value}%` } : undefined} />
       </div>
-      <span
-        className={`progress-label${value === null ? " progress-label-hidden" : ""}`}
-        aria-hidden={value === null}
-      >
-        {value === null ? "100%" : `${Math.round(value)}%`}
-      </span>
-    </div>
+    </>
   );
 }
