@@ -16,6 +16,10 @@ const FIREFOX_ESR_BROWSERS: &[&str] = &["firefox-esr"];
 enum LauncherSpec {
   Programs(&'static [&'static str]),
   Flatpak(&'static str),
+  ProgramsOrFlatpak {
+    programs: &'static [&'static str],
+    app_id: &'static str,
+  },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -146,7 +150,10 @@ fn launcher_spec_for_desktop_id(desktop_id: &str) -> Option<LauncherSpec> {
     "com.google.Chrome.desktop" => Some(LauncherSpec::Flatpak("com.google.Chrome")),
     "org.chromium.Chromium.desktop" => Some(LauncherSpec::Flatpak("org.chromium.Chromium")),
     "com.microsoft.Edge.desktop" => Some(LauncherSpec::Flatpak("com.microsoft.Edge")),
-    "org.mozilla.firefox.desktop" => Some(LauncherSpec::Flatpak("org.mozilla.firefox")),
+    "org.mozilla.firefox.desktop" => Some(LauncherSpec::ProgramsOrFlatpak {
+      programs: FIREFOX_BROWSERS,
+      app_id: "org.mozilla.firefox",
+    }),
     _ => None,
   }
 }
@@ -154,10 +161,24 @@ fn launcher_spec_for_desktop_id(desktop_id: &str) -> Option<LauncherSpec> {
 fn resolve_launcher(spec: LauncherSpec) -> Option<BrowserLauncher> {
   match spec {
     LauncherSpec::Programs(programs) => find_programs(programs).map(BrowserLauncher::Executable),
-    LauncherSpec::Flatpak(app_id) => {
-      find_program("flatpak").map(|executable| BrowserLauncher::Flatpak { executable, app_id })
-    }
+    LauncherSpec::Flatpak(app_id) => find_flatpak_browser(app_id),
+    LauncherSpec::ProgramsOrFlatpak { programs, app_id } => find_programs(programs)
+      .map(BrowserLauncher::Executable)
+      .or_else(|| find_flatpak_browser(app_id)),
   }
+}
+
+fn find_flatpak_browser(app_id: &'static str) -> Option<BrowserLauncher> {
+  let executable = find_program("flatpak")?;
+  let installed = Command::new(&executable)
+    .args(["info", app_id])
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .status()
+    .is_ok_and(|status| status.success());
+
+  installed.then_some(BrowserLauncher::Flatpak { executable, app_id })
 }
 
 fn find_auto_browser_launcher() -> Option<BrowserLauncher> {
@@ -253,7 +274,10 @@ mod tests {
       ),
       (
         "org.mozilla.firefox.desktop",
-        LauncherSpec::Flatpak("org.mozilla.firefox"),
+        LauncherSpec::ProgramsOrFlatpak {
+          programs: FIREFOX_BROWSERS,
+          app_id: "org.mozilla.firefox",
+        },
       ),
     ];
 
