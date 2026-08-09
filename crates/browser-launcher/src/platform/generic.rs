@@ -1,5 +1,6 @@
 use std::process::{Command, Stdio};
 
+use anyhow::Context;
 use log::{debug, info, warn};
 
 use crate::Browser;
@@ -11,6 +12,47 @@ const EDGE_BETA_BROWSERS: &[&str] = &["microsoft-edge-beta"];
 const EDGE_DEV_BROWSERS: &[&str] = &["microsoft-edge-dev"];
 const FIREFOX_BROWSERS: &[&str] = &["firefox"];
 const FIREFOX_ESR_BROWSERS: &[&str] = &["firefox-esr"];
+const BRAVE_BROWSERS: &[&str] = &["brave-browser-stable"];
+const VIVALDI_BROWSERS: &[&str] = &["vivaldi-stable"];
+const FALKON_BROWSERS: &[&str] = &["falkon"];
+const EPIPHANY_BROWSERS: &[&str] = &["epiphany"];
+const OPERA_BROWSERS: &[&str] = &["opera"];
+const LIBREWOLF_BROWSERS: &[&str] = &["librewolf"];
+const WATERFOX_BROWSERS: &[&str] = &["waterfox"];
+const QUTEBROWSER_BROWSERS: &[&str] = &["qutebrowser"];
+
+const AUTO_BROWSER_PROGRAMS: &[&[&str]] = &[
+  GOOGLE_CHROME_BROWSERS,
+  CHROMIUM_BROWSERS,
+  EDGE_BROWSERS,
+  EDGE_BETA_BROWSERS,
+  EDGE_DEV_BROWSERS,
+  FIREFOX_BROWSERS,
+  FIREFOX_ESR_BROWSERS,
+  BRAVE_BROWSERS,
+  VIVALDI_BROWSERS,
+  FALKON_BROWSERS,
+  EPIPHANY_BROWSERS,
+  OPERA_BROWSERS,
+  LIBREWOLF_BROWSERS,
+  WATERFOX_BROWSERS,
+  QUTEBROWSER_BROWSERS,
+];
+
+const AUTO_BROWSER_FLATPAK_IDS: &[&str] = &[
+  "com.google.Chrome",
+  "org.chromium.Chromium",
+  "com.microsoft.Edge",
+  "org.mozilla.firefox",
+  "com.brave.Browser",
+  "com.vivaldi.Vivaldi",
+  "org.kde.falkon",
+  "org.gnome.Epiphany",
+  "com.opera.Opera",
+  "io.gitlab.librewolf-community",
+  "net.waterfox.waterfox",
+  "org.qutebrowser.qutebrowser",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LauncherSpec {
@@ -32,20 +74,25 @@ pub(super) fn open_url(url: &str, browser: Browser<'_>) -> anyhow::Result<()> {
   match browser {
     Browser::Auto => open_auto_browser(url),
     Browser::Default => open_default_browser(url),
-    Browser::Chrome => {
-      let browser = find_chrome_browser().unwrap_or_else(|| browser.as_str().to_string());
-      open_with_browser(url, &browser)
-    }
-    Browser::Edge => {
-      let browser = find_edge_browser().unwrap_or_else(|| browser.as_str().to_string());
-      open_with_browser(url, &browser)
-    }
-    Browser::Firefox => {
-      let browser = find_firefox_browser().unwrap_or_else(|| browser.as_str().to_string());
-      open_with_browser(url, &browser)
-    }
-    Browser::Safari | Browser::Other(_) => open_with_browser(url, browser.as_str()),
+    Browser::Chrome => open_resolved_browser(url, find_chrome_browser(), "Chrome is not available."),
+    Browser::Edge => open_resolved_browser(url, find_edge_browser(), "Edge is not available."),
+    Browser::Firefox => open_resolved_browser(url, find_firefox_browser(), "Firefox is not available."),
+    Browser::Safari => open_resolved_browser(url, find_program(browser.as_str()), "Safari is not available."),
+    Browser::Other(browser) => open_resolved_browser(
+      url,
+      find_program(browser.trim()),
+      "Configured browser is not available.",
+    ),
   }
+}
+
+fn open_resolved_browser(
+  url: &str,
+  executable: Option<String>,
+  unavailable_message: &'static str,
+) -> anyhow::Result<()> {
+  let executable = executable.context(unavailable_message)?;
+  open_with_browser(url, &executable)
 }
 
 fn open_auto_browser(url: &str) -> anyhow::Result<()> {
@@ -154,6 +201,24 @@ fn launcher_spec_for_desktop_id(desktop_id: &str) -> Option<LauncherSpec> {
       programs: FIREFOX_BROWSERS,
       app_id: "org.mozilla.firefox",
     }),
+    "com.brave.Browser.desktop" => Some(LauncherSpec::Flatpak("com.brave.Browser")),
+    "vivaldi-stable.desktop" => Some(LauncherSpec::Programs(VIVALDI_BROWSERS)),
+    "com.vivaldi.Vivaldi.desktop" => Some(LauncherSpec::Flatpak("com.vivaldi.Vivaldi")),
+    "org.kde.falkon.desktop" => Some(LauncherSpec::ProgramsOrFlatpak {
+      programs: FALKON_BROWSERS,
+      app_id: "org.kde.falkon",
+    }),
+    "org.gnome.Epiphany.desktop" => Some(LauncherSpec::ProgramsOrFlatpak {
+      programs: EPIPHANY_BROWSERS,
+      app_id: "org.gnome.Epiphany",
+    }),
+    "com.opera.Opera.desktop" => Some(LauncherSpec::Flatpak("com.opera.Opera")),
+    "io.gitlab.librewolf-community.desktop" => Some(LauncherSpec::Flatpak("io.gitlab.librewolf-community")),
+    "net.waterfox.waterfox.desktop" => Some(LauncherSpec::Flatpak("net.waterfox.waterfox")),
+    "org.qutebrowser.qutebrowser.desktop" => Some(LauncherSpec::ProgramsOrFlatpak {
+      programs: QUTEBROWSER_BROWSERS,
+      app_id: "org.qutebrowser.qutebrowser",
+    }),
     _ => None,
   }
 }
@@ -182,13 +247,41 @@ fn find_flatpak_browser(app_id: &'static str) -> Option<BrowserLauncher> {
 }
 
 fn find_auto_browser_launcher() -> Option<BrowserLauncher> {
-  find_auto_browser().map(BrowserLauncher::Executable)
+  find_auto_browser()
+    .map(BrowserLauncher::Executable)
+    .or_else(find_auto_flatpak_browser)
 }
 
 fn find_auto_browser() -> Option<String> {
-  find_chrome_browser()
-    .or_else(find_edge_browser)
-    .or_else(find_firefox_browser)
+  AUTO_BROWSER_PROGRAMS
+    .iter()
+    .find_map(|programs| find_programs(programs))
+}
+
+fn find_auto_flatpak_browser() -> Option<BrowserLauncher> {
+  let executable = find_program("flatpak")?;
+  let output = Command::new(&executable)
+    .args(["list", "--app", "--columns=application"])
+    .stdin(Stdio::null())
+    .stderr(Stdio::null())
+    .output()
+    .ok()?;
+
+  if !output.status.success() {
+    return None;
+  }
+
+  let installed_apps = String::from_utf8_lossy(&output.stdout);
+  let app_id = find_auto_flatpak_app_id(&installed_apps)?;
+
+  Some(BrowserLauncher::Flatpak { executable, app_id })
+}
+
+fn find_auto_flatpak_app_id(installed_apps: &str) -> Option<&'static str> {
+  AUTO_BROWSER_FLATPAK_IDS
+    .iter()
+    .copied()
+    .find(|app_id| installed_apps.lines().any(|installed| installed.trim() == *app_id))
 }
 
 fn find_chrome_browser() -> Option<String> {
@@ -218,15 +311,10 @@ mod tests {
   use super::*;
 
   #[test]
-  fn auto_candidates_try_chrome_then_edge_then_firefox() {
-    let candidates = GOOGLE_CHROME_BROWSERS
+  fn auto_candidates_use_the_expected_order() {
+    let candidates = AUTO_BROWSER_PROGRAMS
       .iter()
-      .chain(CHROMIUM_BROWSERS)
-      .chain(EDGE_BROWSERS)
-      .chain(EDGE_BETA_BROWSERS)
-      .chain(EDGE_DEV_BROWSERS)
-      .chain(FIREFOX_BROWSERS)
-      .chain(FIREFOX_ESR_BROWSERS)
+      .flat_map(|programs| programs.iter())
       .copied()
       .collect::<Vec<_>>();
 
@@ -243,6 +331,32 @@ mod tests {
         "microsoft-edge-dev",
         "firefox",
         "firefox-esr",
+        "brave-browser-stable",
+        "vivaldi-stable",
+        "falkon",
+        "epiphany",
+        "opera",
+        "librewolf",
+        "waterfox",
+        "qutebrowser",
+      ]
+    );
+
+    assert_eq!(
+      AUTO_BROWSER_FLATPAK_IDS,
+      [
+        "com.google.Chrome",
+        "org.chromium.Chromium",
+        "com.microsoft.Edge",
+        "org.mozilla.firefox",
+        "com.brave.Browser",
+        "com.vivaldi.Vivaldi",
+        "org.kde.falkon",
+        "org.gnome.Epiphany",
+        "com.opera.Opera",
+        "io.gitlab.librewolf-community",
+        "net.waterfox.waterfox",
+        "org.qutebrowser.qutebrowser",
       ]
     );
   }
@@ -279,6 +393,42 @@ mod tests {
           app_id: "org.mozilla.firefox",
         },
       ),
+      ("com.brave.Browser.desktop", LauncherSpec::Flatpak("com.brave.Browser")),
+      ("vivaldi-stable.desktop", LauncherSpec::Programs(VIVALDI_BROWSERS)),
+      (
+        "com.vivaldi.Vivaldi.desktop",
+        LauncherSpec::Flatpak("com.vivaldi.Vivaldi"),
+      ),
+      (
+        "org.kde.falkon.desktop",
+        LauncherSpec::ProgramsOrFlatpak {
+          programs: FALKON_BROWSERS,
+          app_id: "org.kde.falkon",
+        },
+      ),
+      (
+        "org.gnome.Epiphany.desktop",
+        LauncherSpec::ProgramsOrFlatpak {
+          programs: EPIPHANY_BROWSERS,
+          app_id: "org.gnome.Epiphany",
+        },
+      ),
+      ("com.opera.Opera.desktop", LauncherSpec::Flatpak("com.opera.Opera")),
+      (
+        "io.gitlab.librewolf-community.desktop",
+        LauncherSpec::Flatpak("io.gitlab.librewolf-community"),
+      ),
+      (
+        "net.waterfox.waterfox.desktop",
+        LauncherSpec::Flatpak("net.waterfox.waterfox"),
+      ),
+      (
+        "org.qutebrowser.qutebrowser.desktop",
+        LauncherSpec::ProgramsOrFlatpak {
+          programs: QUTEBROWSER_BROWSERS,
+          app_id: "org.qutebrowser.qutebrowser",
+        },
+      ),
     ];
 
     for (desktop_id, expected) in cases {
@@ -289,5 +439,25 @@ mod tests {
   #[test]
   fn unknown_desktop_id_is_not_used() {
     assert_eq!(launcher_spec_for_desktop_id("code.desktop"), None);
+  }
+
+  #[test]
+  fn auto_flatpak_candidates_use_priority_and_exact_ids() {
+    assert_eq!(
+      find_auto_flatpak_app_id("org.kde.falkon\ncom.brave.Browser\n"),
+      Some("com.brave.Browser")
+    );
+    assert_eq!(find_auto_flatpak_app_id("com.brave.Browser.beta\n"), None);
+  }
+
+  #[test]
+  fn unavailable_custom_browser_returns_an_error() {
+    let err = open_url(
+      "https://example.com",
+      Browser::Other("gpgui-browser-that-does-not-exist"),
+    )
+    .unwrap_err();
+
+    assert_eq!(err.to_string(), "Configured browser is not available.");
   }
 }
