@@ -1,5 +1,25 @@
 use tauri::WebviewWindow;
 
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WindowTypeHint {
+  Dialog,
+  Utility,
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+pub fn set_window_type_hint(window: &WebviewWindow, hint: WindowTypeHint) -> anyhow::Result<()> {
+  use gtk::{gdk, traits::GtkWindowExt};
+
+  let hint = match hint {
+    WindowTypeHint::Dialog => gdk::WindowTypeHint::Dialog,
+    WindowTypeHint::Utility => gdk::WindowTypeHint::Utility,
+  };
+
+  window.gtk_window()?.set_type_hint(hint);
+  Ok(())
+}
+
 /// Returns the frame-to-content height difference for a standard titled macOS window.
 /// This is nonzero only on macOS.
 pub fn get_title_bar_height() -> f64 {

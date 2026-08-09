@@ -1,6 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::bail;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use gpapi::utils::window::{WindowTypeHint, set_window_type_hint};
 use gpapi::{
   auth::{AuthWindowTheme, AuthenticationCancelled, SamlAuthData},
   gp_params::GpParams,
@@ -155,6 +157,9 @@ impl<'a> WebviewAuthenticator<'a> {
       .visible(false)
       .center()
       .build()?;
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+    set_window_type_hint(&auth_window, WindowTypeHint::Dialog)?;
 
     self
       .setup_auth_window(&auth_window, Arc::clone(&auth_messenger))
