@@ -8,6 +8,11 @@ pub enum WindowTypeHint {
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+pub fn is_screen_composited() -> bool {
+  gtk::gdk::Screen::default().is_some_and(|screen| screen.is_composited())
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 pub fn set_window_type_hint(window: &WebviewWindow, hint: WindowTypeHint) -> anyhow::Result<()> {
   use gtk::{gdk, traits::GtkWindowExt};
 
