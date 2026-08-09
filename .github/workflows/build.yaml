@@ -316,7 +316,7 @@ jobs:
       run: |
         docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
-          -e GPGUI_BUILD_VERSION=${{ github.run_id }}.${{ github.run_attempt }} \
+          -e GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }} \
           -e GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }} \
           -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:${{ matrix.libc.builder }}
     - name: Install gpgui in Docker
@@ -355,6 +355,7 @@ jobs:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && 'snapshot' || github.ref_name }}
           GP_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref_name }}
           GPGUI_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+          BUILD_VERSION: ${{ github.run_number }}.${{ github.run_attempt }}
           REQUEST_ID: ${{ github.run_id }}.${{ github.run_attempt }}.macos
         run: |
           set -euo pipefail
@@ -378,6 +379,7 @@ jobs:
           jq -n \
             --arg workflow_ref "$GPGUI_REF" \
             --arg request_id "$REQUEST_ID" \
+            --arg build_version "$BUILD_VERSION" \
             --arg channel "$CHANNEL" \
             --arg release_tag "$RELEASE_TAG" \
             --arg gp_ref "$gp_sha" \
@@ -386,6 +388,7 @@ jobs:
               ref: $workflow_ref,
               inputs: {
                 request_id: $request_id,
+                build_version: $build_version,
                 channel: $channel,
                 release_tag: $release_tag,
                 gp_ref: $gp_ref,
@@ -563,7 +566,7 @@ jobs:
             webkit2-gtk_41
         run: |
           set -eu
-          export GPGUI_BUILD_VERSION=${{ github.run_id }}.${{ github.run_attempt }}
+          export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
           export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }}
 
           cd "${{ matrix.workspace }}/gp"
@@ -618,7 +621,7 @@ jobs:
           set -eu
           export AUTOCONF_VERSION=2.72
           export AUTOMAKE_VERSION=1.17
-          export GPGUI_BUILD_VERSION=${{ github.run_id }}.${{ github.run_attempt }}
+          export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
           export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }}
 
           cd "${{ matrix.workspace }}/gp"
