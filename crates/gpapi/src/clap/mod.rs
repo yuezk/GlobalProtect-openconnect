@@ -59,50 +59,81 @@ fn retry_hints(err: &anyhow::Error, args: &impl Args) -> Vec<String> {
   hints
 }
 
-/// Render the failure as JSON records.
+/// Write one message to `w` the way `format` asks for.
 ///
-/// Written directly rather than through the `log` macros: this is the program's
-/// final report, not a log line, and it must survive `--quiet` exactly as the
-/// text form does. Going through the logger would let `-qqq` discard the only
-/// explanation of why the run failed.
-fn write_error_records<W: Write>(w: &mut W, err: &anyhow::Error, hints: &[String]) -> io::Result<()> {
-  let mut write_one = |message: &str| {
-    write_json_record(
-      w,
-      &log::Record::builder()
-        .level(Level::Error)
-        .target(module_path!())
-        .args(format_args!("{message}"))
-        .build(),
-    )
-  };
+/// Text is emitted exactly as it always was, so existing output does not move.
+/// JSON is written directly rather than through the `log` macros, because these
+/// are reports rather than log lines: they must survive `--quiet`, which would
+/// otherwise discard the only explanation of a failed run.
+///
+/// The record is rendered into one buffer and written once. `serde_json`'s
+/// `Display` would otherwise reach the stream in dozens of fragments, and any
+/// process sharing this stderr — the spawned authenticator, a connect script —
+/// could land a line inside a half-written record.
+fn write_message<W: Write>(w: &mut W, format: LogFormat, level: Level, message: &str) -> io::Result<()> {
+  match format {
+    LogFormat::Text => writeln!(w, "{message}"),
+    LogFormat::Json => {
+      // Callers pass the exact text line, blank-line padding included, so the
+      // text form does not move. A record carries its own separation.
+      let message = message.trim_start_matches('\n');
+      let mut line = Vec::new();
 
-  write_one(&format!("{err:?}"))?;
+      write_json_record(
+        &mut line,
+        &log::Record::builder()
+          .level(level)
+          .target(module_path!())
+          .args(format_args!("{message}"))
+          .build(),
+      )?;
 
-  for hint in hints {
-    write_one(hint)?;
+      w.write_all(&line)
+    }
+  }
+}
+
+/// Report a user-facing line that is not a log record — a note, a warning, or
+/// advice about what to try next.
+///
+/// Callers used `eprintln!` directly, which in JSON mode drops prose into a
+/// stream the caller is parsing a line at a time. Routing them here keeps one
+/// answer to "how does this program emit a user-facing line", and leaves the
+/// text form byte-for-byte unchanged.
+pub fn report(format: LogFormat, level: Level, message: &str) {
+  let _ = write_message(&mut io::stderr().lock(), format, level, message);
+}
+
+fn write_failure<W: Write>(w: &mut W, format: LogFormat, err: &anyhow::Error, hints: &[String]) -> io::Result<()> {
+  match format {
+    LogFormat::Text => {
+      writeln!(w, "\nError: {err:?}")?;
+
+      for hint in hints {
+        writeln!(w, "\n{hint}\n")?;
+      }
+    }
+    LogFormat::Json => {
+      write_message(w, format, Level::Error, &format!("{err:?}"))?;
+
+      for hint in hints {
+        write_message(w, format, Level::Error, hint)?;
+      }
+    }
   }
 
   Ok(())
 }
 
-pub fn handle_error(err: anyhow::Error, args: &impl Args) {
+fn handle_error_to<W: Write>(w: &mut W, err: anyhow::Error, args: &impl Args) -> io::Result<()> {
   let hints = retry_hints(&err, args);
 
-  // In JSON mode the failure has to arrive as records too: a block of prose in
-  // the middle of the stream would break a caller parsing it a line at a time,
-  // and it would break on the record explaining the failure.
-  if args.log_format() == LogFormat::Json {
-    // Nothing useful to do if stderr itself is gone.
-    let _ = write_error_records(&mut io::stderr().lock(), &err, &hints);
-    return;
-  }
+  write_failure(w, args.log_format(), &err, &hints)
+}
 
-  eprintln!("\nError: {err:?}");
-
-  for hint in hints {
-    eprintln!("\n{hint}\n");
-  }
+pub fn handle_error(err: anyhow::Error, args: &impl Args) {
+  // Nothing useful to do if stderr itself is gone.
+  let _ = handle_error_to(&mut io::stderr().lock(), err, args);
 }
 
 #[derive(Debug)]
@@ -165,6 +196,7 @@ mod tests {
   struct TestArgs {
     fix_openssl: bool,
     ignore_tls_errors: bool,
+    log_format: LogFormat,
   }
 
   impl Args for TestArgs {
@@ -175,12 +207,48 @@ mod tests {
     fn ignore_tls_errors(&self) -> bool {
       self.ignore_tls_errors
     }
+
+    fn log_format(&self) -> LogFormat {
+      self.log_format
+    }
   }
 
   /// A binary that never learned about the flag keeps its current output.
   #[test]
   fn log_format_defaults_to_text() {
-    assert_eq!(TestArgs::default().log_format(), LogFormat::Text);
+    struct Bare;
+
+    impl Args for Bare {
+      fn fix_openssl(&self) -> bool {
+        false
+      }
+
+      fn ignore_tls_errors(&self) -> bool {
+        false
+      }
+    }
+
+    assert_eq!(Bare.log_format(), LogFormat::Text);
+  }
+
+  /// The seam that matters: `handle_error` must ask the args which format to
+  /// use. Testing the writer alone would leave a version that always reports as
+  /// prose passing every test.
+  #[test]
+  fn handle_error_honours_the_requested_format() {
+    let args = TestArgs {
+      log_format: LogFormat::Json,
+      ..Default::default()
+    };
+    let mut out = Vec::new();
+
+    handle_error_to(&mut out, anyhow!(PortalError::TlsError), &args).expect("writing to a Vec cannot fail");
+
+    let out = String::from_utf8(out).expect("output should be UTF-8");
+    for line in out.lines() {
+      serde_json::from_str::<serde_json::Value>(line).unwrap_or_else(|e| panic!("not JSON: {line:?} ({e})"));
+    }
+    assert!(!out.is_empty(), "the failure must be reported");
   }
 
   #[test]
@@ -218,18 +286,22 @@ mod tests {
     assert!(hints.is_empty(), "got {hints:?}");
   }
 
+  fn failure_output(format: LogFormat) -> String {
+    let hints = vec!["Re-run it with the `--ignore-tls-errors` option".to_string()];
+    let mut out = Vec::new();
+
+    write_failure(&mut out, format, &anyhow!(PortalError::TlsError), &hints).expect("writing to a Vec cannot fail");
+
+    String::from_utf8(out).expect("output should be UTF-8")
+  }
+
   /// The failure is the program's final report, so in JSON mode it must be one
   /// more record on the same stream — and it must not be filtered away, which
   /// is why it does not go through the log macros. A run that fails silently is
   /// worse than one that fails noisily.
   #[test]
   fn the_failure_is_reported_as_records() {
-    let hints = vec!["Re-run it with the `--ignore-tls-errors` option".to_string()];
-    let mut out = Vec::new();
-
-    write_error_records(&mut out, &anyhow!(PortalError::TlsError), &hints).expect("writing to a Vec cannot fail");
-
-    let out = String::from_utf8(out).expect("output should be UTF-8");
+    let out = failure_output(LogFormat::Json);
     let lines: Vec<_> = out.lines().collect();
     assert_eq!(lines.len(), 2, "expected the error and its hint: {out:?}");
 
@@ -237,5 +309,23 @@ mod tests {
       let v: serde_json::Value = serde_json::from_str(line).unwrap_or_else(|e| panic!("not JSON: {line:?} ({e})"));
       assert_eq!(v["level"], "ERROR");
     }
+  }
+
+  /// The format has to be honoured, not merely available: reporting the failure
+  /// as prose to a caller that asked for JSON is the defect this whole flag
+  /// exists to remove.
+  #[test]
+  fn the_format_decides_how_the_failure_is_written() {
+    assert!(
+      serde_json::from_str::<serde_json::Value>(failure_output(LogFormat::Json).lines().next().unwrap()).is_ok(),
+      "json mode must not emit prose"
+    );
+
+    let text = failure_output(LogFormat::Text);
+    assert!(text.starts_with("\nError: "), "text mode keeps its shape: {text:?}");
+    assert!(
+      serde_json::from_str::<serde_json::Value>(text.trim()).is_err(),
+      "text mode must not emit JSON: {text:?}"
+    );
   }
 }

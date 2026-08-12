@@ -1,4 +1,7 @@
-use std::{path::PathBuf, process::Stdio};
+use std::{
+  path::{Path, PathBuf},
+  process::Stdio,
+};
 
 use anyhow::bail;
 use common::binary_paths;
@@ -152,7 +155,7 @@ impl<'a> SamlAuthLauncher<'a> {
   /// Split out from `launch` so a test can observe the argv the child actually
   /// receives: asserting on the builder's own fields would not catch an
   /// argument that never gets appended.
-  fn build_command(&self, program: &PathBuf) -> Command {
+  fn build_command(&self, program: &Path) -> Command {
     let mut auth_cmd = Command::new(program);
     auth_cmd.arg(self.server);
 
@@ -288,7 +291,7 @@ mod tests {
 
   fn child_args(launcher: SamlAuthLauncher) -> Vec<String> {
     launcher
-      .build_command(&PathBuf::from("gpauth"))
+      .build_command(Path::new("gpauth"))
       .as_std()
       .get_args()
       .map(|arg| arg.to_string_lossy().into_owned())
