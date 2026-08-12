@@ -10,6 +10,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GP_DIR="$(dirname "$SCRIPT_DIR")"
 GPGUI_DIR="$1"
+GPGUI_APP_DIR="$GPGUI_DIR/apps/desktop"
 
 verify_same_file() {
   local source_file="$1"
@@ -42,61 +43,61 @@ verify_absent() {
 }
 
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/32x32.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/32x32.png" \
   "$GP_DIR/packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/128x128.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128.png" \
   "$GP_DIR/packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/128x128@2x.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128@2x.png" \
   "$GP_DIR/packaging/files/usr/share/icons/hicolor/256x256/apps/gpgui.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/icon.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.png" \
   "$GP_DIR/packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/icon.svg" \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.svg" \
   "$GP_DIR/packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/32x32.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/32x32.png" \
   "$GP_DIR/apps/gpauth/icons/32x32.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/128x128.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128.png" \
   "$GP_DIR/apps/gpauth/icons/128x128.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/128x128@2x.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128@2x.png" \
   "$GP_DIR/apps/gpauth/icons/128x128@2x.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/icon.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.png" \
   "$GP_DIR/apps/gpauth/icons/icon.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/32x32.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/32x32.png" \
   "$GP_DIR/apps/gpgui-helper/src-tauri/icons/32x32.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/128x128.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128.png" \
   "$GP_DIR/apps/gpgui-helper/src-tauri/icons/128x128.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/128x128@2x.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128@2x.png" \
   "$GP_DIR/apps/gpgui-helper/src-tauri/icons/128x128@2x.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/icon.png" \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.png" \
   "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.png"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/icon.svg" \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.svg" \
   "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.svg"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/icon.icns" \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.icns" \
   "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.icns"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/icon.ico" \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.ico" \
   "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.ico"
 verify_same_file \
-  "$GPGUI_DIR/app/src-tauri/icons/icon-small.svg" \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon-small.svg" \
   "$GP_DIR/apps/gpgui-helper/src/assets/icon-small.svg"
 verify_contains \
-  "$GPGUI_DIR/app/gpgui.desktop.in" \
+  "$GPGUI_APP_DIR/gpgui.desktop.in" \
   "Exec=/usr/bin/gpclient launch-gui %u"
 verify_contains \
-  "$GPGUI_DIR/app/gpgui.desktop.in" \
+  "$GPGUI_APP_DIR/gpgui.desktop.in" \
   "MimeType=x-scheme-handler/globalprotectcallback;"
 verify_contains \
   "$GP_DIR/packaging/files/usr/share/applications/gpgui.desktop" \
@@ -110,7 +111,7 @@ verify_contains \
 verify_contains \
   "$GP_DIR/packaging/bsd/gpgui.desktop" \
   "MimeType=x-scheme-handler/globalprotectcallback;"
-verify_absent "$GPGUI_DIR/app/gpauth.desktop"
+verify_absent "$GPGUI_APP_DIR/gpauth.desktop"
 verify_absent "$GP_DIR/packaging/files/usr/share/applications/gpauth.desktop"
 verify_absent "$GP_DIR/packaging/bsd/gpauth.desktop"
 

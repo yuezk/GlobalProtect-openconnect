@@ -493,7 +493,7 @@ jobs:
         path: gpgui-frontend/gpgui
     - name: Build gpgui frontend
       run: |
-        cd gpgui-frontend/gpgui/app
+        cd gpgui-frontend/gpgui/apps/desktop
         pnpm install --frozen-lockfile
         pnpm build
     - name: Upload gpgui frontend
@@ -501,7 +501,7 @@ jobs:
       with:
         name: bsd-gpgui-frontend
         if-no-files-found: error
-        path: gpgui-frontend/gpgui/app/dist/**
+        path: gpgui-frontend/gpgui/apps/desktop/dist/**
 
   build-bsd:
     needs:
@@ -535,7 +535,7 @@ jobs:
       uses: actions/download-artifact@v8
       with:
         name: bsd-gpgui-frontend
-        path: ${{ matrix.workspace }}/gpgui/app/dist
+        path: ${{ matrix.workspace }}/gpgui/apps/desktop/dist
     - name: Build on FreeBSD
       if: ${{ matrix.os == 'freebsd' }}
       uses: vmactions/freebsd-vm@v1
@@ -572,10 +572,10 @@ jobs:
           cd "${{ matrix.workspace }}/gp"
           cargo build --release --workspace
 
-          cd ../gpgui/app/src-tauri
+          cd ../gpgui/apps/desktop/src-tauri
           cargo build --release --workspace
 
-          cd ../../../gp
+          cd ../../../../gp
           gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
           pkg install -y ".build/${{ matrix.artifact_dir }}"/artifacts/*.pkg
           gpclient --version
@@ -627,10 +627,10 @@ jobs:
           cd "${{ matrix.workspace }}/gp"
           cargo build --release --workspace
 
-          cd ../gpgui/app/src-tauri
+          cd ../gpgui/apps/desktop/src-tauri
           cargo build --release --workspace
 
-          cd ../../../gp
+          cd ../../../../gp
           gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
           pkg_add -D unsigned ".build/${{ matrix.artifact_dir }}"/artifacts/*.tgz
           gpclient --version
