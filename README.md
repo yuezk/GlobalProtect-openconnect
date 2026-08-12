@@ -55,13 +55,17 @@ Commands:
   connect     Connect to a portal server
   disconnect  Disconnect from the server
   launch-gui  Launch the GUI
+  hip         Generate HIP report
   help        Print this message or the help of the given subcommand(s)
 
 Options:
-      --fix-openssl        Get around the OpenSSL 'unsafe legacy renegotiation' error
-      --ignore-tls-errors  Ignore TLS errors
-  -h, --help               Print help
-  -V, --version            Print version
+      --fix-openssl              Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats.
+      --ignore-tls-errors        Ignore the TLS errors
+      --log-format <LOG_FORMAT>  The log output format. Use 'json' when another program reads the logs, so it can match on fields rather than on message text. [default: text] [possible values: text, json]
+  -v, --verbose...               Enable verbose output, -v for debug, -vv for trace
+  -q, --quiet...                 Decrease logging verbosity, -q for warnings, -qq for errors
+  -h, --help                     Print help (see more with '--help')
+  -V, --version                  Print version
 ```
 
 > **Tip:** Use `gpclient help <command>` for detailed information on a specific command.
