@@ -4,6 +4,7 @@ use gpapi::{
   auth::{SamlAuthData, SamlAuthResult},
   clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
   gp_params::GpParams,
+  log_format::{LogFormat, write_json_record},
   os_profile::{ClientOs, OsProfile},
   utils::{normalize_server, openssl},
 };
@@ -76,6 +77,14 @@ struct Cli {
   #[arg(long, help = "Ignore TLS errors")]
   ignore_tls_errors: bool,
 
+  #[arg(
+    long,
+    value_enum,
+    default_value_t = LogFormat::Text,
+    help = "The log output format. Use 'json' when another program reads the logs, so it can match on fields rather than on message text."
+  )]
+  log_format: LogFormat,
+
   #[cfg(feature = "webview-auth")]
   #[arg(long, help = "Use the default browser for authentication")]
   default_browser: bool,
@@ -107,6 +116,10 @@ impl Args for Cli {
 
   fn ignore_tls_errors(&self) -> bool {
     self.ignore_tls_errors
+  }
+
+  fn log_format(&self) -> LogFormat {
+    self.log_format
   }
 }
 
@@ -205,16 +218,23 @@ impl Cli {
   }
 }
 
-fn init_logger(cli: &Cli) {
-  env_logger::builder()
-    .filter_level(cli.verbose.log_level_filter())
-    .init();
+fn build_logger(cli: &Cli) -> env_logger::Builder {
+  let mut builder = env_logger::builder();
+  builder.filter_level(cli.verbose.log_level_filter());
+
+  // Text is env_logger's own format, so leave it untouched rather than
+  // reimplementing it.
+  if cli.log_format == LogFormat::Json {
+    builder.format(write_json_record);
+  }
+
+  builder
 }
 
 pub async fn run() {
   let cli = Cli::parse();
 
-  init_logger(&cli);
+  build_logger(&cli).init();
   info!("gpauth started: {}", VERSION);
 
   if let Err(err) = cli.run().await {
@@ -240,7 +260,79 @@ pub fn print_auth_result(auth_result: anyhow::Result<SamlAuthData>, host_id: Opt
 
 #[cfg(test)]
 mod tests {
+  use std::{
+    io::Write,
+    sync::{Arc, Mutex},
+  };
+
+  use log::Log;
+
   use super::*;
+
+  /// gpauth's own result already goes to stdout as JSON; this makes its *logs*
+  /// readable the same way, so a caller driving it does not have to parse prose
+  /// on stderr to find out why an attempt failed.
+  #[test]
+  fn log_format_defaults_to_text() {
+    let cli = Cli::try_parse_from(["gpauth", "portal.example.com"]).expect("gpauth args should parse");
+
+    assert_eq!(cli.log_format, LogFormat::Text);
+  }
+
+  #[test]
+  fn log_format_accepts_json() {
+    let cli =
+      Cli::try_parse_from(["gpauth", "portal.example.com", "--log-format", "json"]).expect("gpauth args should parse");
+
+    assert_eq!(cli.log_format, LogFormat::Json);
+  }
+
+  /// A `Write` that keeps what was written, so the logger can be driven for
+  /// real instead of asserting on how it was configured.
+  #[derive(Clone, Default)]
+  struct Captured(Arc<Mutex<Vec<u8>>>);
+
+  impl Write for Captured {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+      self.0.lock().unwrap().extend_from_slice(buf);
+      Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn json_format_emits_one_json_object_per_record() {
+    let cli =
+      Cli::try_parse_from(["gpauth", "portal.example.com", "--log-format", "json"]).expect("gpauth args should parse");
+
+    let captured = Captured::default();
+    let logger = build_logger(&cli)
+      .target(env_logger::Target::Pipe(Box::new(captured.clone())))
+      .build();
+
+    // Drive the logger directly: `init()` installs a global that a second test
+    // could not replace.
+    logger.log(
+      &log::Record::builder()
+        .level(log::Level::Info)
+        .target("gpauth")
+        .args(format_args!("authenticating against {}", "portal.example.com"))
+        .build(),
+    );
+    logger.flush();
+
+    let out = String::from_utf8(captured.0.lock().unwrap().clone()).expect("log output should be UTF-8");
+    let lines: Vec<_> = out.lines().collect();
+    assert_eq!(lines.len(), 1, "expected exactly one line, got: {out:?}");
+
+    let v: serde_json::Value = serde_json::from_str(lines[0]).unwrap_or_else(|e| panic!("not JSON: {out:?} ({e})"));
+    assert_eq!(v["level"], "INFO");
+    assert_eq!(v["target"], "gpauth");
+    assert_eq!(v["message"], "authenticating against portal.example.com");
+  }
 
   #[test]
   fn os_defaults_to_runtime_os() {
