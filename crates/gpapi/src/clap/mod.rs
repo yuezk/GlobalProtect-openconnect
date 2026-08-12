@@ -1,7 +1,12 @@
-use clap_verbosity_flag::{LogLevel, Verbosity, VerbosityFilter};
-use log::{Level, error};
+use std::io::{self, Write};
 
-use crate::{error::PortalError, log_format::LogFormat};
+use clap_verbosity_flag::{LogLevel, Verbosity, VerbosityFilter};
+use log::Level;
+
+use crate::{
+  error::PortalError,
+  log_format::{LogFormat, write_json_record},
+};
 
 pub mod args;
 
@@ -54,20 +59,42 @@ fn retry_hints(err: &anyhow::Error, args: &impl Args) -> Vec<String> {
   hints
 }
 
+/// Render the failure as JSON records.
+///
+/// Written directly rather than through the `log` macros: this is the program's
+/// final report, not a log line, and it must survive `--quiet` exactly as the
+/// text form does. Going through the logger would let `-qqq` discard the only
+/// explanation of why the run failed.
+fn write_error_records<W: Write>(w: &mut W, err: &anyhow::Error, hints: &[String]) -> io::Result<()> {
+  let mut write_one = |message: &str| {
+    write_json_record(
+      w,
+      &log::Record::builder()
+        .level(Level::Error)
+        .target(module_path!())
+        .args(format_args!("{message}"))
+        .build(),
+    )
+  };
+
+  write_one(&format!("{err:?}"))?;
+
+  for hint in hints {
+    write_one(hint)?;
+  }
+
+  Ok(())
+}
+
 pub fn handle_error(err: anyhow::Error, args: &impl Args) {
   let hints = retry_hints(&err, args);
 
-  // In JSON mode this has to go through the logger like everything else:
-  // writing it straight to stderr would put a block of prose in the middle of
-  // a stream the caller is parsing a line at a time — and it would land on the
-  // record that explains the failure.
+  // In JSON mode the failure has to arrive as records too: a block of prose in
+  // the middle of the stream would break a caller parsing it a line at a time,
+  // and it would break on the record explaining the failure.
   if args.log_format() == LogFormat::Json {
-    error!("{err:?}");
-
-    for hint in hints {
-      error!("{hint}");
-    }
-
+    // Nothing useful to do if stderr itself is gone.
+    let _ = write_error_records(&mut io::stderr().lock(), &err, &hints);
     return;
   }
 
@@ -189,5 +216,26 @@ mod tests {
     let hints = retry_hints(&anyhow!("something else went wrong"), &TestArgs::default());
 
     assert!(hints.is_empty(), "got {hints:?}");
+  }
+
+  /// The failure is the program's final report, so in JSON mode it must be one
+  /// more record on the same stream — and it must not be filtered away, which
+  /// is why it does not go through the log macros. A run that fails silently is
+  /// worse than one that fails noisily.
+  #[test]
+  fn the_failure_is_reported_as_records() {
+    let hints = vec!["Re-run it with the `--ignore-tls-errors` option".to_string()];
+    let mut out = Vec::new();
+
+    write_error_records(&mut out, &anyhow!(PortalError::TlsError), &hints).expect("writing to a Vec cannot fail");
+
+    let out = String::from_utf8(out).expect("output should be UTF-8");
+    let lines: Vec<_> = out.lines().collect();
+    assert_eq!(lines.len(), 2, "expected the error and its hint: {out:?}");
+
+    for line in lines {
+      let v: serde_json::Value = serde_json::from_str(line).unwrap_or_else(|e| panic!("not JSON: {line:?} ({e})"));
+      assert_eq!(v["level"], "ERROR");
+    }
   }
 }
