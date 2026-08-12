@@ -16,10 +16,10 @@ pub trait Args {
 
   /// How this program renders its logs.
   ///
-  /// Defaults to text so that a binary without the flag is unaffected.
-  fn log_format(&self) -> LogFormat {
-    LogFormat::Text
-  }
+  /// Required rather than defaulted: a default would let an implementor drop
+  /// the override and silently report failures as prose to a caller that asked
+  /// for JSON, with nothing — not even a warning — to catch it.
+  fn log_format(&self) -> LogFormat;
 }
 
 /// Suggestions for re-running the command, for failures that have a known
@@ -211,24 +211,6 @@ mod tests {
     fn log_format(&self) -> LogFormat {
       self.log_format
     }
-  }
-
-  /// A binary that never learned about the flag keeps its current output.
-  #[test]
-  fn log_format_defaults_to_text() {
-    struct Bare;
-
-    impl Args for Bare {
-      fn fix_openssl(&self) -> bool {
-        false
-      }
-
-      fn ignore_tls_errors(&self) -> bool {
-        false
-      }
-    }
-
-    assert_eq!(Bare.log_format(), LogFormat::Text);
   }
 
   /// The seam that matters: `handle_error` must ask the args which format to
