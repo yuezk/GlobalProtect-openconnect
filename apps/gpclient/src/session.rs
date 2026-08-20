@@ -1,11 +1,13 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpapi::{
+  clap::report,
   gateway::{SessionContext, SessionExtensionAuth, extend_session},
+  log_format::LogFormat,
   os_profile::OsProfile,
   session::{SessionInfo, SessionRequestArgs, SessionWarning},
 };
-use log::{info, warn};
+use log::{Level, info, warn};
 use openconnect::VpnSessionInfo;
 use tokio::{runtime::Handle, task::JoinHandle};
 
@@ -59,11 +61,12 @@ pub(crate) fn spawn_session_runtime_with_info(
   handle: &Handle,
   session_ctx: SessionContext,
   session_info: SessionInfo,
+  log_format: LogFormat,
 ) -> JoinHandle<()> {
-  handle.spawn(run_session_runtime(session_ctx, session_info))
+  handle.spawn(run_session_runtime(session_ctx, session_info, log_format))
 }
 
-async fn run_session_runtime(session_ctx: SessionContext, mut session_info: SessionInfo) {
+async fn run_session_runtime(session_ctx: SessionContext, mut session_info: SessionInfo, log_format: LogFormat) {
   loop {
     let Some(schedule) = build_session_warning_schedule(&session_info) else {
       info!("No session warning schedule provided by the gateway");
@@ -72,7 +75,7 @@ async fn run_session_runtime(session_ctx: SessionContext, mut session_info: Sess
 
     tokio::time::sleep(schedule.delay).await;
 
-    eprintln!("\nWARNING: {}", schedule.message);
+    report(log_format, Level::Warn, &format!("\nWARNING: {}", schedule.message));
 
     if !schedule.should_auto_extend {
       info!("Session extension is not allowed by the gateway");
@@ -87,12 +90,16 @@ async fn run_session_runtime(session_ctx: SessionContext, mut session_info: Sess
           return;
         };
 
-        eprintln!("Session extended.");
+        report(log_format, Level::Info, "Session extended.");
         session_info = next_session_info;
       }
       Err(err) => {
         warn!("Failed to extend session: {}", err);
-        eprintln!("WARNING: Failed to extend session: {}", err);
+        report(
+          log_format,
+          Level::Warn,
+          &format!("WARNING: Failed to extend session: {}", err),
+        );
         return;
       }
     }

@@ -10,6 +10,7 @@ use gpapi::{
   auth::{AuthenticationCancelled, SamlAuthData, SamlAuthResult},
   clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
   gp_params::GpParams,
+  log_format::LogFormat,
   os_profile::{ClientOs, OsProfile},
   utils::{normalize_server, openssl},
 };
@@ -89,6 +90,14 @@ struct Cli {
   #[arg(long, help = "Ignore TLS errors")]
   ignore_tls_errors: bool,
 
+  #[arg(
+    long,
+    value_enum,
+    default_value_t = LogFormat::Text,
+    help = "Log output format. JSON is intended for non-interactive consumers; interactive prompts remain text."
+  )]
+  log_format: LogFormat,
+
   #[cfg(feature = "webview-auth")]
   #[arg(long, help = "Use the default browser for authentication")]
   default_browser: bool,
@@ -141,6 +150,10 @@ impl Args for Cli {
 
   fn ignore_tls_errors(&self) -> bool {
     self.ignore_tls_errors
+  }
+
+  fn log_format(&self) -> LogFormat {
+    self.log_format
   }
 }
 
@@ -255,11 +268,12 @@ impl Cli {
 }
 
 fn init_logger(cli: &Cli) {
-  if let Some(level) = cli.verbose.log_level_filter().to_level() {
-    gpapi::logger::init(level, "com.yuezk.gpgui", "gpauth");
-  } else {
+  let Some(level) = cli.verbose.log_level_filter().to_level() else {
     log::set_max_level(log::LevelFilter::Off);
-  }
+    return;
+  };
+
+  gpapi::logger::init(level, "com.yuezk.gpgui", "gpauth", cli.log_format);
 }
 
 pub async fn run() {
@@ -302,6 +316,24 @@ pub fn print_auth_result(auth_result: anyhow::Result<SamlAuthData>, host_id: Opt
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// gpauth's own result already goes to stdout as JSON; this makes its *logs*
+  /// readable the same way, so a caller driving it does not have to parse prose
+  /// on stderr to find out why an attempt failed.
+  #[test]
+  fn log_format_defaults_to_text() {
+    let cli = Cli::try_parse_from(["gpauth", "portal.example.com"]).expect("gpauth args should parse");
+
+    assert_eq!(cli.log_format, LogFormat::Text);
+  }
+
+  #[test]
+  fn log_format_accepts_json() {
+    let cli =
+      Cli::try_parse_from(["gpauth", "portal.example.com", "--log-format", "json"]).expect("gpauth args should parse");
+
+    assert_eq!(cli.log_format, LogFormat::Json);
+  }
 
   #[test]
   fn os_defaults_to_runtime_os() {

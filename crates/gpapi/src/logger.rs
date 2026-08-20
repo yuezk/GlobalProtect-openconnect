@@ -4,15 +4,17 @@ use anyhow::bail;
 use log::{Level, Log, warn};
 use log_reload::{ReloadHandle, ReloadLog};
 
+use crate::log_format::{LogFormat, write_json_record};
+
 pub const LOG_BACKEND_ENV: &str = "GP_LOG_BACKEND";
 pub const MACOS_UNIFIED_LOG_BACKEND: &str = "macos-unified";
 
 type BoxedLogger = Box<dyn Log + Send + Sync>;
 static LOG_HANDLE: OnceLock<ReloadHandle<log_reload::LevelFilter<BoxedLogger>>> = OnceLock::new();
 
-pub fn init(level: Level, subsystem: &str, category: &str) {
+pub fn init(level: Level, subsystem: &str, category: &str, log_format: LogFormat) {
   #[cfg(target_os = "macos")]
-  if macos_unified_log_enabled() {
+  if log_format == LogFormat::Text && macos_unified_log_enabled() {
     init_with_logger(level, MacosLogger::new(subsystem, category));
     return;
   }
@@ -20,10 +22,19 @@ pub fn init(level: Level, subsystem: &str, category: &str) {
   #[cfg(not(target_os = "macos"))]
   let _ = (subsystem, category);
 
-  // Initialize the env_logger and global max level to trace, the logs will be
-  // filtered by the outer logger
-  let logger = env_logger::builder().filter_level(log::LevelFilter::Trace).build();
-  init_with_logger(level, logger);
+  init_with_logger(level, build_env_logger(log_format).build());
+}
+
+fn build_env_logger(log_format: LogFormat) -> env_logger::Builder {
+  let mut builder = env_logger::builder();
+  // The outer reloadable logger owns filtering.
+  builder.filter_level(log::LevelFilter::Trace);
+
+  if log_format == LogFormat::Json {
+    builder.format(write_json_record);
+  }
+
+  builder
 }
 
 pub fn init_with_logger(level: Level, logger: impl Log + Send + Sync + 'static) {
@@ -103,11 +114,51 @@ fn macos_log_level(level: Level) -> oslog::Level {
   }
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(test)]
 mod tests {
+  use std::{
+    io::Write,
+    sync::{Arc, Mutex},
+  };
+
   use super::*;
 
+  #[derive(Clone, Default)]
+  struct Captured(Arc<Mutex<Vec<u8>>>);
+
+  impl Write for Captured {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+      self.0.lock().unwrap().extend_from_slice(buf);
+      Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+      Ok(())
+    }
+  }
+
   #[test]
+  fn json_format_configures_the_env_logger() {
+    let captured = Captured::default();
+    let logger = build_env_logger(LogFormat::Json)
+      .target(env_logger::Target::Pipe(Box::new(captured.clone())))
+      .build();
+
+    logger.log(
+      &log::Record::builder()
+        .level(Level::Info)
+        .target("gpauth")
+        .args(format_args!("authenticating"))
+        .build(),
+    );
+
+    let output = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+    let value: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(value["message"], "authenticating");
+  }
+
+  #[test]
+  #[cfg(target_os = "macos")]
   fn info_logs_use_the_persistent_macos_level() {
     assert_eq!(macos_log_level(Level::Info) as u8, oslog::Level::Default as u8);
   }
