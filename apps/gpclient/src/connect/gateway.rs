@@ -7,6 +7,7 @@ use std::{
 };
 
 use gpapi::{
+  clap::report,
   cookie_store,
   credential::{AuthCookieCredential, Credential},
   gateway::{GatewayLogin, GatewayLoginContext, SessionExtensionAuth, gateway_login, gateway_login_with_context},
@@ -17,7 +18,7 @@ use gpapi::{
   utils::shutdown_signal,
 };
 use inquire::Text;
-use log::{info, warn};
+use log::{Level, info, warn};
 use openconnect::{Vpn, VpnBuilder};
 use tokio::{runtime::Handle, task::JoinHandle};
 
@@ -281,9 +282,22 @@ impl ConnectHandler<'_> {
       return;
     }
 
-    eprintln!("\nNOTE: Gateway authentication failed after portal login.");
-    eprintln!("NOTE: If this server also accepts direct gateway login, try:");
-    eprintln!("NOTE: {}", direct_gateway_command(gateway));
+    let format = self.shared_args.log_format;
+    report(
+      format,
+      Level::Warn,
+      "\nNOTE: Gateway authentication failed after portal login.",
+    );
+    report(
+      format,
+      Level::Warn,
+      "NOTE: If this server also accepts direct gateway login, try:",
+    );
+    report(
+      format,
+      Level::Warn,
+      &format!("NOTE: {}", direct_gateway_command(gateway)),
+    );
   }
 
   async fn login_gateway(
@@ -384,6 +398,7 @@ impl ConnectHandler<'_> {
       vpn_clone.disconnect();
     });
 
+    let log_format = self.shared_args.log_format;
     let connect_result = vpn.connect(move |vpn_session_info| {
       tunnel_established_on_connect.store(true, Ordering::SeqCst);
       write_pid_file();
@@ -394,7 +409,7 @@ impl ConnectHandler<'_> {
       let session_info = session_info_from_vpn(vpn_session_info, allow_extend_session);
       info!("VPN session info: {}", session_info.log_summary());
 
-      let task = spawn_session_runtime_with_info(&runtime_handle, session_ctx, session_info);
+      let task = spawn_session_runtime_with_info(&runtime_handle, session_ctx, session_info, log_format);
       session_task_on_connect.lock().unwrap().replace(task);
     });
     let tunnel_established = tunnel_established.load(Ordering::SeqCst);

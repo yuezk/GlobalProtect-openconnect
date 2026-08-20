@@ -1,10 +1,13 @@
-use std::{path::PathBuf, process::Stdio};
+use std::{
+  path::{Path, PathBuf},
+  process::Stdio,
+};
 
 use anyhow::bail;
 use common::binary_paths;
 use tokio::process::Command;
 
-use crate::{auth::SamlAuthResult, credential::Credential, os_profile::OsProfile};
+use crate::{auth::SamlAuthResult, credential::Credential, log_format::LogFormat, os_profile::OsProfile};
 
 use super::command_traits::CommandExt;
 
@@ -29,6 +32,7 @@ pub struct SamlAuthLauncher<'a> {
   default_browser: bool,
   browser: Option<&'a str>,
   verbose: Option<&'a str>,
+  log_format: LogFormat,
 }
 
 impl<'a> SamlAuthLauncher<'a> {
@@ -54,6 +58,7 @@ impl<'a> SamlAuthLauncher<'a> {
       default_browser: false,
       browser: None,
       verbose: None,
+      log_format: LogFormat::Text,
     }
   }
 
@@ -127,18 +132,27 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  /// Render the child's logs the same way as ours.
+  ///
+  /// gpauth inherits this process's stderr, so both processes must use the same
+  /// format to keep the stream consistent.
+  pub fn log_format(mut self, log_format: LogFormat) -> Self {
+    self.log_format = log_format;
+    self
+  }
+
   pub fn verbose(mut self, verbose: Option<&'a str>) -> Self {
     self.verbose = verbose;
     self
   }
 
-  /// Launch the authenticator binary as the current user or SUDO_USER if available.
-  pub async fn launch(self) -> anyhow::Result<Credential> {
-    let program = self
-      .auth_executable
-      .map(PathBuf::from)
-      .unwrap_or_else(binary_paths::gpauth);
-    let mut auth_cmd = Command::new(&program);
+  /// The command line this launcher will run.
+  ///
+  /// Split out from `launch` so a test can observe the argv the child actually
+  /// receives: asserting on the builder's own fields would not catch an
+  /// argument that never gets appended.
+  fn build_command(&self, program: &Path) -> Command {
+    let mut auth_cmd = Command::new(program);
     auth_cmd.arg(self.server);
 
     if self.gateway {
@@ -200,9 +214,22 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--browser").arg(browser);
     }
 
+    auth_cmd.arg("--log-format").arg(self.log_format.as_str());
+
     if let Some(verbose) = self.verbose {
       auth_cmd.arg(verbose);
     }
+
+    auth_cmd
+  }
+
+  /// Launch the authenticator binary as the current user or SUDO_USER if available.
+  pub async fn launch(self) -> anyhow::Result<Credential> {
+    let program = self
+      .auth_executable
+      .map(PathBuf::from)
+      .unwrap_or_else(binary_paths::gpauth);
+    let auth_cmd = self.build_command(&program);
 
     let mut non_root_cmd = auth_cmd.into_non_root()?;
     let child = non_root_cmd.kill_on_drop(true).stdout(Stdio::piped()).spawn();
@@ -254,6 +281,45 @@ mod tests {
     let launcher = SamlAuthLauncher::new("portal.example.com").os_profile(&profile);
 
     assert_eq!(launcher.client_version, Some("6.0.0"));
+  }
+
+  fn child_args(launcher: SamlAuthLauncher) -> Vec<String> {
+    launcher
+      .build_command(Path::new("gpauth"))
+      .as_std()
+      .get_args()
+      .map(|arg| arg.to_string_lossy().into_owned())
+      .collect()
+  }
+
+  /// gpauth writes to the same stderr as its parent, so a caller reading the
+  /// parent's JSON would hit gpauth's text records mid-stream unless the format
+  /// is passed down.
+  #[test]
+  fn json_is_forwarded_to_the_child() {
+    let args = child_args(SamlAuthLauncher::new("portal.example.com").log_format(LogFormat::Json));
+
+    assert!(
+      args.windows(2).any(|pair| pair == ["--log-format", "json"]),
+      "expected --log-format json in {args:?}"
+    );
+  }
+
+  /// The launcher always passes the selected format so the parent and child
+  /// cannot silently drift onto different output formats.
+  #[test]
+  fn text_is_forwarded_to_the_child() {
+    for launcher in [
+      SamlAuthLauncher::new("portal.example.com").log_format(LogFormat::Text),
+      SamlAuthLauncher::new("portal.example.com"),
+    ] {
+      let args = child_args(launcher);
+
+      assert!(
+        args.windows(2).any(|pair| pair == ["--log-format", "text"]),
+        "expected --log-format text in {args:?}"
+      );
+    }
   }
 
   #[test]
