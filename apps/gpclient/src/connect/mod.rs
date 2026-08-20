@@ -6,6 +6,7 @@ use std::cell::RefCell;
 
 use anyhow::bail;
 use gpapi::{
+  clap::report,
   error::PortalError,
   gateway::{GatewayLoginContext, GatewaySelection},
   gp_params::GpParams,
@@ -14,7 +15,7 @@ use gpapi::{
   utils::request::RequestIdentityError,
 };
 use inquire::{Password, PasswordDisplayMode, Select};
-use log::{info, warn};
+use log::{Level, info, warn};
 
 use crate::cli::SharedArgs;
 
@@ -110,8 +111,17 @@ impl<'a> ConnectHandler<'a> {
 
       match root_cause {
         RequestIdentityError::NoKey => {
-          eprintln!("ERROR: No private key found in the certificate file");
-          eprintln!("ERROR: Please provide the private key file using the `-k` option");
+          let format = self.shared_args.log_format;
+          report(
+            format,
+            Level::Error,
+            "ERROR: No private key found in the certificate file",
+          );
+          report(
+            format,
+            Level::Error,
+            "ERROR: Please provide the private key file using the `-k` option",
+          );
           return Ok(());
         }
         RequestIdentityError::NoPassphrase(cert_type) | RequestIdentityError::DecryptError(cert_type) => {
@@ -153,8 +163,17 @@ impl<'a> ConnectHandler<'a> {
       info!("Trying the gateway authentication workflow...");
       self.connect_gateway_with_prelogin(server, server, false, None).await?;
 
-      eprintln!("\nNOTE: the server may be a gateway, not a portal.");
-      eprintln!("NOTE: try to use the `--as-gateway` option if you were authenticated twice.");
+      let format = self.shared_args.log_format;
+      report(
+        format,
+        Level::Warn,
+        "\nNOTE: the server may be a gateway, not a portal.",
+      );
+      report(
+        format,
+        Level::Warn,
+        "NOTE: try to use the `--as-gateway` option if you were authenticated twice.",
+      );
 
       Ok(())
     } else {
