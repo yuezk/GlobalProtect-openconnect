@@ -81,7 +81,7 @@ struct Cli {
     long,
     value_enum,
     default_value_t = LogFormat::Text,
-    help = "The log output format. Use 'json' when another program reads the logs, so it can match on fields rather than on message text. Interactive prompts are not JSON, so json suits non-interactive runs."
+    help = "Log output format. JSON is intended for non-interactive consumers; interactive prompts remain text."
   )]
   log_format: LogFormat,
 

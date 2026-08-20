@@ -32,7 +32,7 @@ pub struct SamlAuthLauncher<'a> {
   default_browser: bool,
   browser: Option<&'a str>,
   verbose: Option<&'a str>,
-  log_format: Option<LogFormat>,
+  log_format: LogFormat,
 }
 
 impl<'a> SamlAuthLauncher<'a> {
@@ -58,7 +58,7 @@ impl<'a> SamlAuthLauncher<'a> {
       default_browser: false,
       browser: None,
       verbose: None,
-      log_format: None,
+      log_format: LogFormat::Text,
     }
   }
 
@@ -134,14 +134,10 @@ impl<'a> SamlAuthLauncher<'a> {
 
   /// Render the child's logs the same way as ours.
   ///
-  /// gpauth inherits this process's stderr, so leaving it on the default would
-  /// interleave text records into an otherwise machine-readable stream.
-  ///
-  /// The default format is deliberately *not* forwarded: a gpauth predating the
-  /// flag rejects it as an unknown argument, and someone who never asked for
-  /// JSON should not need matching binaries.
+  /// gpauth inherits this process's stderr, so both processes must use the same
+  /// format to keep the stream consistent.
   pub fn log_format(mut self, log_format: LogFormat) -> Self {
-    self.log_format = (log_format != LogFormat::Text).then_some(log_format);
+    self.log_format = log_format;
     self
   }
 
@@ -218,9 +214,7 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--browser").arg(browser);
     }
 
-    if let Some(log_format) = self.log_format {
-      auth_cmd.arg("--log-format").arg(log_format.as_str());
-    }
+    auth_cmd.arg("--log-format").arg(self.log_format.as_str());
 
     if let Some(verbose) = self.verbose {
       auth_cmd.arg(verbose);
@@ -311,12 +305,10 @@ mod tests {
     );
   }
 
-  /// A gpauth predating the flag rejects it outright — clap treats an unknown
-  /// argument as an error — so a caller who never asked for JSON must produce
-  /// exactly the argv it produced before, or mismatched binaries stop working
-  /// for people not using this feature at all.
+  /// The launcher always passes the selected format so the parent and child
+  /// cannot silently drift onto different output formats.
   #[test]
-  fn the_default_format_never_reaches_the_child() {
+  fn text_is_forwarded_to_the_child() {
     for launcher in [
       SamlAuthLauncher::new("portal.example.com").log_format(LogFormat::Text),
       SamlAuthLauncher::new("portal.example.com"),
@@ -324,8 +316,8 @@ mod tests {
       let args = child_args(launcher);
 
       assert!(
-        !args.iter().any(|arg| arg == "--log-format"),
-        "unexpected flag in {args:?}"
+        args.windows(2).any(|pair| pair == ["--log-format", "text"]),
+        "expected --log-format text in {args:?}"
       );
     }
   }

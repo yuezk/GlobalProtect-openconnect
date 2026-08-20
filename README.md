@@ -61,7 +61,7 @@ Commands:
 Options:
       --fix-openssl              Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats.
       --ignore-tls-errors        Ignore the TLS errors
-      --log-format <LOG_FORMAT>  The log output format. Use 'json' when another program reads the logs, so it can match on fields rather than on message text. [default: text] [possible values: text, json]
+      --log-format <LOG_FORMAT>  Log output format. JSON is intended for non-interactive consumers; interactive prompts remain text. [default: text] [possible values: text, json]
   -v, --verbose...               Enable verbose output, -v for debug, -vv for trace
   -q, --quiet...                 Decrease logging verbosity, -q for warnings, -qq for errors
   -h, --help                     Print help (see more with '--help')
