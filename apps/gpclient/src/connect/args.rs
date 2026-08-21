@@ -146,6 +146,14 @@ pub(crate) struct ConnectArgs {
     num_args=0..=1
   )]
   pub(super) browser: Option<String>,
+
+  #[arg(
+    long,
+    help = "Authenticate and print the gateway cookie to stdout, then exit without starting the \
+            VPN tunnel. Outputs two lines: COOKIE='<value>' and HOST='<gateway>'. Combine with \
+            --cookie-cache to avoid re-authenticating when the portal session is still valid."
+  )]
+  pub(super) cookie_only: bool,
 }
 
 pub(super) fn build_os_profile(args: &ConnectArgs) -> OsProfile {
@@ -397,5 +405,25 @@ mod tests {
       Err(err) => err,
     };
     assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+  }
+
+  #[test]
+  fn cookie_only_flag_parses() {
+    use clap::Parser;
+
+    let cli = ConnectArgsTestCli::try_parse_from(["test", "portal.example.com", "--cookie-only"])
+      .expect("--cookie-only should parse");
+
+    assert!(cli.args.cookie_only);
+  }
+
+  #[test]
+  fn cookie_only_is_disabled_by_default() {
+    use clap::Parser;
+
+    let cli = ConnectArgsTestCli::try_parse_from(["test", "portal.example.com"])
+      .expect("connect args should parse");
+
+    assert!(!cli.args.cookie_only);
   }
 }
