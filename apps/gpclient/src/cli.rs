@@ -1,7 +1,8 @@
-use std::{env::temp_dir, fs::File, str::FromStr};
+use std::{fs::File, str::FromStr};
 
 use anyhow::bail;
 use clap::{Parser, Subcommand};
+use common::constants::gp_callback_log_file;
 use gpapi::{
   clap::{Args, InfoLevelVerbosity, handle_error},
   log_format::{LogFormat, write_json_record},
@@ -176,7 +177,7 @@ fn build_logger(cli: &Cli) -> env_logger::Builder {
   if let CliCommand::LaunchGui(args) = &cli.command {
     let auth_data = args.auth_data.as_deref().unwrap_or_default();
     if !auth_data.is_empty()
-      && let Ok(log_file) = File::create(temp_dir().join("gpcallback.log"))
+      && let Ok(log_file) = File::create(gp_callback_log_file())
     {
       let target = Box::new(log_file);
       builder.target(env_logger::Target::Pipe(target));

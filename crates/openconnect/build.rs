@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf, process::Command};
+use std::{collections::BTreeSet, env, path::PathBuf, process::Command};
 
 fn apply_patches(patches_dir: &PathBuf, build_src: &PathBuf) {
   let patches = std::fs::read_dir(patches_dir)
@@ -167,31 +167,49 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
   dst
 }
 
+fn openconnect_private_deps(oc_dst: &PathBuf) -> Vec<String> {
+  let pc_file = oc_dst.join("lib/pkgconfig/openconnect.pc");
+  let pc = std::fs::read_to_string(&pc_file).expect("Failed to read generated openconnect.pc");
+  let mut deps = BTreeSet::new();
+
+  for line in pc.lines() {
+    let Some(requires) = line.strip_prefix("Requires.private:") else {
+      continue;
+    };
+
+    for token in requires.split(|ch: char| ch.is_ascii_whitespace() || ch == ',') {
+      if token.is_empty()
+        || matches!(token, "=" | "<" | "<=" | ">" | ">=")
+        || token.chars().next().is_some_and(|ch| ch.is_ascii_digit())
+      {
+        continue;
+      }
+      deps.insert(token.to_string());
+    }
+  }
+
+  deps.into_iter().collect()
+}
+
 fn main() {
   let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
   let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
   let deps_dir = PathBuf::from(manifest_dir).join("deps");
 
   let oc_dst = build_openconnect(&deps_dir, &out_dir);
+  let libxml2_static = env::var("LIBXML2_STATIC").is_ok();
 
   // Only statically link libxml2 if `LIBXML2_STATIC` is set
-  if env::var("LIBXML2_STATIC").is_ok() {
+  if libxml2_static {
     let _libxml2_dst = build_libxml2(&deps_dir, &out_dir);
-  } else {
-    // Using pkg-config to find system libxml2
-    pkg_config::probe_library("libxml-2.0").unwrap();
   }
 
-  // Using pkg-config to find system deps
-  pkg_config::probe_library("zlib").unwrap();
-  pkg_config::probe_library("liblz4").unwrap();
-  pkg_config::probe_library("gnutls").unwrap();
-
-  // Below are required by gnutls
-  pkg_config::probe_library("p11-kit-1").unwrap();
-  pkg_config::probe_library("hogweed").unwrap();
-  pkg_config::probe_library("nettle").unwrap();
-  pkg_config::probe_library("gmp").unwrap();
+  for dep in openconnect_private_deps(&oc_dst) {
+    if libxml2_static && dep == "libxml-2.0" {
+      continue;
+    }
+    pkg_config::probe_library(&dep).unwrap();
+  }
 
   // Compile the vpn.c file
   println!("cargo:rerun-if-changed=src/ffi/vpn.c");
