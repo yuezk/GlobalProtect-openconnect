@@ -24,6 +24,11 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
 
+      - name: Update Nixpkgs lock
+        run: |
+          nix flake update nixpkgs \
+            --extra-experimental-features "nix-command flakes"
+
       - name: Update flake hashes
         env:
           RELEASE_VERSION: ${{ inputs.version }}
@@ -39,7 +44,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: updated-flake
-          path: flake.nix
+          path: |
+            flake.nix
+            flake.lock
           if-no-files-found: error
 
   validate-nix-prebuilt:
@@ -50,20 +57,24 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-latest
+            nixpkgs: locked
+          - runner: ubuntu-latest
             nixpkgs: nixos-25.11
           - runner: ubuntu-latest
             nixpkgs: nixos-26.05
+          - runner: ubuntu-latest
+            nixpkgs: nixpkgs-unstable
           - runner: ubuntu-24.04-arm
             nixpkgs: nixos-25.11
           - runner: ubuntu-24.04-arm
             nixpkgs: nixos-26.05
+          - runner: ubuntu-24.04-arm
+            nixpkgs: nixpkgs-unstable
     name: validate-nix-prebuilt (${{ matrix.nixpkgs }}, ${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout GlobalProtect-openconnect
         uses: actions/checkout@v6
-        with:
-          submodules: recursive
 
       - name: Download updated flake
         uses: actions/download-artifact@v8
@@ -75,11 +86,19 @@ jobs:
         uses: cachix/install-nix-action@v31
 
       - name: Build prebuilt Nix package
+        env:
+          NIXPKGS: ${{ matrix.nixpkgs }}
         run: |
-          nix build .#prebuilt \
-            --override-input nixpkgs "github:NixOS/nixpkgs/${{ matrix.nixpkgs }}" \
-            --extra-experimental-features "nix-command flakes" \
-            --print-build-logs
+          if [[ "$NIXPKGS" == "locked" ]]; then
+            nix build .#prebuilt \
+              --extra-experimental-features "nix-command flakes" \
+              --print-build-logs
+          else
+            nix build .#prebuilt \
+              --override-input nixpkgs "github:NixOS/nixpkgs/$NIXPKGS" \
+              --extra-experimental-features "nix-command flakes" \
+              --print-build-logs
+          fi
 
       - name: Inspect prebuilt Nix package
         run: |

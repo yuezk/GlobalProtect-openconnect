@@ -246,7 +246,10 @@ Add the flake input and package to your `flake.nix`:
 {
   inputs = {
     # ... other inputs
-    globalprotect-openconnect.url = "github:yuezk/GlobalProtect-openconnect";
+    globalprotect-openconnect = {
+      url = "github:yuezk/GlobalProtect-openconnect";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = { self, nixpkgs, globalprotect-openconnect, ... }:

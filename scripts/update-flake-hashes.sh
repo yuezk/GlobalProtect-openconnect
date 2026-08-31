@@ -11,7 +11,7 @@ FLAKE_FILE="$PROJECT_DIR/flake.nix"
 usage() {
   echo "Usage: $0 [version] [release-tag]"
   echo
-  echo "Updates flake.nix fetchzip hashes from the published GitHub release assets."
+  echo "Updates flake.nix fetchurl hashes from the published GitHub release assets."
   echo "When version is omitted, the workspace package version from Cargo.toml is used."
   echo "When release-tag is omitted, v<version> is used. Use snapshot to test snapshot assets."
 }
@@ -22,7 +22,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 if ! command -v nix > /dev/null; then
-  echo "nix is required to calculate unpacked fetchzip hashes" >&2
+  echo "nix is required to calculate release asset hashes" >&2
   exit 1
 fi
 
@@ -61,7 +61,6 @@ prefetch_hash() {
       store prefetch-file \
       --hash-type sha256 \
       --json \
-      --unpack \
       "$url" \
       | jq -r '.hash'; then
       return 0
