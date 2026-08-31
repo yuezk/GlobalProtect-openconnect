@@ -40,6 +40,19 @@ struct RealTimeProtection {
   value: bool,
 }
 
+#[derive(Debug, Clone)]
+struct UfwInfo {
+  version: String,
+  is_enabled: bool,
+}
+
+#[derive(Debug, Clone)]
+struct ClamAvInfo {
+  version: String,
+  defver: String,
+  real_time_protection: bool,
+}
+
 /// Host information for HIP reporting
 struct HostInfo {
   /// Common for all OSes, e.g., "Apple", "Microsoft", "Linux"
@@ -55,6 +68,8 @@ struct HostInfo {
   domain: String,
   network_interfaces: Vec<NetworkInterface>,
   defender: Option<DefenderInfo>,
+  clamav: Option<ClamAvInfo>,
+  ufw: Option<UfwInfo>,
 }
 
 impl HostInfo {
@@ -286,6 +301,8 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
       domain: self.domain_for_profile(),
       network_interfaces: interfaces,
       defender: self.defender_for_profile(),
+      clamav: self.clamav_for_profile(),
+      ufw: self.ufw_for_profile(),
     }
   }
 
@@ -339,6 +356,72 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
       ClientOs::Mac | ClientOs::Windows => None,
     }
   }
+
+  fn clamav_for_profile(&self) -> Option<ClamAvInfo> {
+    match self.profile.client_os() {
+      ClientOs::Linux => detect_clamav(),
+      ClientOs::Mac | ClientOs::Windows => None,
+    }
+  }
+
+  fn ufw_for_profile(&self) -> Option<UfwInfo> {
+    match self.profile.client_os() {
+      ClientOs::Linux => detect_ufw(),
+      ClientOs::Mac | ClientOs::Windows => None,
+    }
+  }
+}
+
+fn detect_clamav() -> Option<ClamAvInfo> {
+  let version_out = Command::new("clamscan").arg("--version").output().ok()?;
+  if !version_out.status.success() {
+    debug!("clamscan not found or failed");
+    return None;
+  }
+  
+  let version_str = String::from_utf8(version_out.stdout).ok()?;
+  let ver_part = version_str.split_whitespace().nth(1)?;
+  let mut parts = ver_part.split('/');
+  let version = parts.next()?.to_string();
+  let defver = parts.next().unwrap_or("0").to_string();
+
+  let rtp_out = Command::new("systemctl")
+    .args(["is-active", "clamav-onaccess.service"])
+    .output()
+    .ok()?;
+  
+  let real_time_protection = rtp_out.status.success();
+
+  Some(ClamAvInfo {
+    version,
+    defver,
+    real_time_protection,
+  })
+}
+
+fn detect_ufw() -> Option<UfwInfo> {
+  let version_out = Command::new("ufw").arg("version").output().ok()?;
+  if !version_out.status.success() {
+    debug!("ufw not found or failed");
+    return None;
+  }
+  
+  let version_str = String::from_utf8(version_out.stdout).ok()?;
+  let version = version_str.split_whitespace().nth(1)?.to_string();
+
+  let status_out = Command::new("sudo").args(["-n", "ufw", "status"]).output().ok()?;
+  if !status_out.status.success() {
+    log::warn!("sudo ufw status failed. You may need to configure sudoers to allow execution without a password.");
+    return None;
+  }
+  
+  let status_str = String::from_utf8(status_out.stdout).ok()?;
+  let is_enabled = status_str.contains("Status: active");
+
+  Some(UfwInfo {
+    version,
+    is_enabled,
+  })
 }
 
 fn detect_microsoft_defender_blocking() -> Option<DefenderInfo> {
