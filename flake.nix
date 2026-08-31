@@ -41,31 +41,53 @@
           rustc = toolchain;
         };
 
-        src = pkgs.fetchzip {
+        unpackReleaseAsset =
+          { name, archive }:
+          pkgs.runCommand name { nativeBuildInputs = [ pkgs.libarchive ]; } ''
+            mkdir -p "$out"
+            bsdtar --extract --file ${archive} --directory "$out" --strip-components 1
+          '';
+
+        sourceArchive = pkgs.fetchurl {
           url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect-${version}.tar.gz";
-          hash = "sha256-T4jze6/25YTsfuQdcuDfz3kX/ooDB1T0hnWsEBu4xMQ=";
+          hash = "sha256-VFWbF2BfJ9CtXkjQjkgmBGCZnYgB5ZLctqcqUKuhswg=";
+        };
+
+        src = unpackReleaseAsset {
+          name = "globalprotect-openconnect-${version}-source";
+          archive = sourceArchive;
         };
 
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
         gpguiHashes = {
-          x86_64 = "sha256-wPLsH/b/ZSo2pA/kU1HUGiQ98k8xSihyxGyf5o6tvyU=";
-          aarch64 = "sha256-WFyPhGD9fLAVYGeMSrMcZhSdfM99uVmWPrH68O+4BfE=";
+          x86_64 = "sha256-uVn3hJkKrjKz3mzRamxFu+0rE7OjLtMlT16d14XPcq4=";
+          aarch64 = "sha256-g4HKQwFAM4YCP+Afew1AhzC1wPrCS8ICw3GeA7KIeFU=";
         };
 
-        gpgui = pkgs.fetchzip {
+        gpguiArchive = pkgs.fetchurl {
           url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/gpgui_${cpu}.bin.tar.xz";
           hash = gpguiHashes.${cpu};
         };
 
-        binaryHashes = {
-          x86_64 = "sha256-spaKxruu15ro5lir14nAfy8MPXNQhaoCXcG4PDZ9lfM=";
-          aarch64 = "sha256-iu/zE4B4gjk1I5PQY0m/59ZoJ/k5focT0CxYYlJi7+A=";
+        gpgui = unpackReleaseAsset {
+          name = "gpgui-${version}-${cpu}";
+          archive = gpguiArchive;
         };
 
-        binaryPackage = pkgs.fetchzip {
+        binaryHashes = {
+          x86_64 = "sha256-jgHZC00q+2GnO18/aPGONDCz2CeiF/e1DucefSacv2w=";
+          aarch64 = "sha256-FDCZN0bmKWKjPiF9wkRaqMUu0PfSVHDUveJVFts25qg=";
+        };
+
+        binaryArchive = pkgs.fetchurl {
           url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect_${version}_${cpu}.bin.tar.xz";
           hash = binaryHashes.${cpu};
+        };
+
+        binaryPackage = unpackReleaseAsset {
+          name = "globalprotect-openconnect-${version}-${cpu}-binary";
+          archive = binaryArchive;
         };
 
         linuxRuntimeDependencies = with pkgs; [
