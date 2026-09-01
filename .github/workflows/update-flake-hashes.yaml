@@ -55,21 +55,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: ubuntu-latest
+        runner:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+        nixpkgs:
+          - locked
+          - nixos-25.11
+          - nixos-26.05
+          - nixpkgs-unstable
+        exclude:
+          - runner: ubuntu-24.04-arm
             nixpkgs: locked
-          - runner: ubuntu-latest
-            nixpkgs: nixos-25.11
-          - runner: ubuntu-latest
-            nixpkgs: nixos-26.05
-          - runner: ubuntu-latest
-            nixpkgs: nixpkgs-unstable
-          - runner: ubuntu-24.04-arm
-            nixpkgs: nixos-25.11
-          - runner: ubuntu-24.04-arm
-            nixpkgs: nixos-26.05
-          - runner: ubuntu-24.04-arm
-            nixpkgs: nixpkgs-unstable
     name: validate-nix-prebuilt (${{ matrix.nixpkgs }}, ${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     steps:

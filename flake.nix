@@ -20,13 +20,10 @@
       nixpkgs,
       rust-overlay,
     }:
-    flake-utils.lib.eachDefaultSystem (
-      system:
+    let
+      mkPackageSet =
+        pkgs:
       let
-        pkgs = (import nixpkgs) {
-          inherit system;
-          overlays = [ (import rust-overlay) ];
-        };
         inherit (pkgs) lib;
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
@@ -400,6 +397,49 @@
         };
       in
       {
+        inherit fromSource prebuilt;
+      };
+
+      nixosModule =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.programs.globalprotect-openconnect;
+        in
+        {
+          options.programs.globalprotect-openconnect = {
+            enable = lib.mkEnableOption "GlobalProtect-openconnect";
+
+            package = lib.mkOption {
+              type = lib.types.package;
+              # Use the NixOS module's package set so WebKit and graphics
+              # dependencies match the rest of the system.
+              default = (mkPackageSet pkgs).prebuilt;
+              description = "GlobalProtect-openconnect package to install.";
+            };
+          };
+
+          config = lib.mkIf cfg.enable {
+            environment.systemPackages = [ cfg.package ];
+            services.ayatana-indicators.enable = lib.mkDefault true;
+          };
+        };
+    in
+    (flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        pkgs = (import nixpkgs) {
+          inherit system;
+          overlays = [ (import rust-overlay) ];
+        };
+        inherit (pkgs) lib;
+        inherit (mkPackageSet pkgs) fromSource prebuilt;
+      in
+      {
         # For `nix build`
         packages = {
           fromSource = fromSource;
@@ -425,5 +465,8 @@
           ];
         };
       }
-    );
+    ))
+    // {
+      nixosModules.default = nixosModule;
+    };
 }
