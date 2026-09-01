@@ -31,6 +31,7 @@ compile-time.workspace = true
 netdev.workspace = true
 xmltree.workspace = true
 uuid = { workspace = true, features = ["v5"] }
+uzers.workspace = true
 
 [features]
 default = ["webview-auth"]

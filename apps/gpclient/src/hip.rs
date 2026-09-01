@@ -40,6 +40,19 @@ struct RealTimeProtection {
   value: bool,
 }
 
+#[derive(Debug, Clone)]
+struct UfwInfo {
+  version: String,
+  is_enabled: bool,
+}
+
+#[derive(Debug, Clone)]
+struct ClamAvInfo {
+  version: String,
+  definitions_version: Option<String>,
+  real_time_protection: bool,
+}
+
 /// Host information for HIP reporting
 struct HostInfo {
   /// Common for all OSes, e.g., "Apple", "Microsoft", "Linux"
@@ -55,6 +68,8 @@ struct HostInfo {
   domain: String,
   network_interfaces: Vec<NetworkInterface>,
   defender: Option<DefenderInfo>,
+  clamav: Option<ClamAvInfo>,
+  ufw: Option<UfwInfo>,
 }
 
 impl HostInfo {
@@ -286,6 +301,8 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
       domain: self.domain_for_profile(),
       network_interfaces: interfaces,
       defender: self.defender_for_profile(),
+      clamav: self.clamav_for_profile(),
+      ufw: self.ufw_for_profile(),
     }
   }
 
@@ -338,6 +355,126 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
       ClientOs::Linux => detect_microsoft_defender_blocking(),
       ClientOs::Mac | ClientOs::Windows => None,
     }
+  }
+
+  fn clamav_for_profile(&self) -> Option<ClamAvInfo> {
+    match self.profile.client_os() {
+      ClientOs::Linux => detect_clamav(),
+      ClientOs::Mac | ClientOs::Windows => None,
+    }
+  }
+
+  fn ufw_for_profile(&self) -> Option<UfwInfo> {
+    match self.profile.client_os() {
+      ClientOs::Linux => detect_ufw(),
+      ClientOs::Mac | ClientOs::Windows => None,
+    }
+  }
+}
+
+fn detect_clamav() -> Option<ClamAvInfo> {
+  let version_out = Command::new("clamscan").arg("--version").output().ok()?;
+  if !version_out.status.success() {
+    debug!("clamscan not found or failed");
+    return None;
+  }
+
+  let version_str = String::from_utf8(version_out.stdout).ok()?;
+  let (version, definitions_version) = parse_clamav_version(&version_str)?;
+
+  let rtp_out = Command::new("systemctl")
+    .args(["is-active", "clamav-onaccess.service"])
+    .output()
+    .ok()?;
+
+  let real_time_protection = rtp_out.status.success();
+
+  Some(ClamAvInfo {
+    version,
+    definitions_version,
+    real_time_protection,
+  })
+}
+
+fn detect_ufw() -> Option<UfwInfo> {
+  let version_out = Command::new("ufw").arg("version").output().ok()?;
+  if !version_out.status.success() {
+    debug!("ufw not found or failed");
+    return None;
+  }
+
+  let version_str = String::from_utf8(version_out.stdout).ok()?;
+  let version = parse_ufw_version(&version_str)?;
+
+  let is_root = uzers::get_effective_uid() == 0;
+  let status_out = ufw_status_command(is_root).output().ok()?;
+  if !status_out.status.success() {
+    if is_root {
+      log::warn!("ufw status failed while running as root");
+    } else {
+      log::warn!("sudo -n ufw status failed. You may need to configure sudoers to allow execution without a password.");
+    }
+    return None;
+  }
+
+  let status_str = String::from_utf8(status_out.stdout).ok()?;
+  let is_enabled = parse_ufw_status(&status_str)?;
+
+  Some(UfwInfo { version, is_enabled })
+}
+
+fn ufw_status_command(is_root: bool) -> Command {
+  let mut command = if is_root {
+    Command::new("ufw")
+  } else {
+    let mut command = Command::new("sudo");
+    command.args(["-n", "ufw"]);
+    command
+  };
+
+  command.arg("status").env("LC_ALL", "C");
+  command
+}
+
+fn parse_clamav_version(output: &str) -> Option<(String, Option<String>)> {
+  let mut output_parts = output.split_whitespace();
+  if output_parts.next()? != "ClamAV" {
+    return None;
+  }
+
+  let mut version_parts = output_parts.next()?.split('/');
+  let version = version_parts.next()?;
+  if version.is_empty() {
+    return None;
+  }
+
+  let definitions_version = version_parts
+    .next()
+    .filter(|definitions_version| !definitions_version.is_empty())
+    .map(str::to_string);
+
+  Some((version.to_string(), definitions_version))
+}
+
+fn parse_ufw_version(output: &str) -> Option<String> {
+  let mut output_parts = output.split_whitespace();
+  if output_parts.next()? != "ufw" {
+    return None;
+  }
+
+  output_parts.next().map(str::to_string)
+}
+
+fn parse_ufw_status(output: &str) -> Option<bool> {
+  let status = output
+    .lines()
+    .find_map(|line| line.trim().strip_prefix("Status:"))?
+    .trim();
+
+  match status {
+    "active" => Some(true),
+    "inactive" => Some(false),
+    _ => None,
   }
 }
 
@@ -438,6 +575,7 @@ fn derive_windows_network_name(host_id: &str, iface: &NetworkInterface) -> Strin
 mod tests {
   use super::*;
   use gpapi::os_profile::runtime_client_os;
+  use std::ffi::OsStr;
 
   fn make_hip_args(client_os: Os) -> HipArgs {
     HipArgs {
@@ -576,5 +714,51 @@ mod tests {
   #[test]
   fn rejects_invalid_microsoft_defender_health_json() {
     assert!(parse_defender_info("{}").is_none());
+  }
+
+  #[test]
+  fn parses_clamav_version() {
+    let version =
+      parse_clamav_version("ClamAV 1.4.3/27562/Sun Aug 31 10:23:42 2026").expect("ClamAV version should parse");
+
+    assert_eq!(version, ("1.4.3".to_string(), Some("27562".to_string())));
+  }
+
+  #[test]
+  fn parses_clamav_version_without_definitions_version() {
+    assert_eq!(parse_clamav_version("ClamAV 1.4.3"), Some(("1.4.3".to_string(), None)));
+  }
+
+  #[test]
+  fn parses_ufw_version() {
+    assert_eq!(parse_ufw_version("ufw 0.36.2\n"), Some("0.36.2".to_string()));
+    assert_eq!(parse_ufw_version("unexpected output\n"), None);
+  }
+
+  #[test]
+  fn parses_ufw_status() {
+    assert_eq!(parse_ufw_status("Status: active\n"), Some(true));
+    assert_eq!(parse_ufw_status("Status: inactive\n"), Some(false));
+    assert_eq!(parse_ufw_status("Status: unknown\n"), None);
+  }
+
+  #[test]
+  fn runs_ufw_status_directly_as_root() {
+    let command = ufw_status_command(true);
+
+    assert_eq!(command.get_program(), OsStr::new("ufw"));
+    assert!(command.get_args().eq(["status"].into_iter().map(OsStr::new)));
+  }
+
+  #[test]
+  fn runs_ufw_status_through_non_interactive_sudo_as_non_root() {
+    let command = ufw_status_command(false);
+
+    assert_eq!(command.get_program(), OsStr::new("sudo"));
+    assert!(
+      command
+        .get_args()
+        .eq(["-n", "ufw", "status"].into_iter().map(OsStr::new))
+    );
   }
 }

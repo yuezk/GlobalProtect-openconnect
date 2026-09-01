@@ -5,8 +5,8 @@ set -euo pipefail
 release_version="${1:-}"
 release_tag="${2:-}"
 
-if git diff --quiet -- flake.nix; then
-  echo "flake.nix hashes are already up to date"
+if git diff --quiet -- flake.nix flake.lock; then
+  echo "flake hashes and lock are already up to date"
   exit 0
 fi
 
@@ -21,12 +21,12 @@ fi
 
 branch_suffix="v${version}"
 title="chore: update flake hashes for v${version}"
-body="Updates the Nix flake fetchzip hashes for v${version} release assets."
+body="Updates the Nix flake fetchurl hashes for v${version} release assets and refreshes the Nixpkgs lock."
 
 if [[ "$release_tag" != "v$version" ]]; then
   branch_suffix="${branch_suffix}-${release_tag}"
   title="chore: update flake hashes for v${version} from ${release_tag}"
-  body="Updates the Nix flake fetchzip hashes for v${version} using ${release_tag} release assets."
+  body="Updates the Nix flake fetchurl hashes for v${version} using ${release_tag} release assets and refreshes the Nixpkgs lock."
 fi
 
 git config user.name "github-actions[bot]"
@@ -37,7 +37,7 @@ if [[ "$release_tag" == "snapshot" ]]; then
   source_branch_slug="$(printf '%s' "$source_branch" | sed -E 's#[/[:space:]]+#-#g; s#[^A-Za-z0-9._-]##g; s#^-+##; s#-+$##')"
   branch="chore/flake-${source_branch_slug}"
   git switch -C "$branch"
-  git add flake.nix
+  git add flake.nix flake.lock
   git commit -m "$title"
   git push --force origin "$branch"
   echo "Updated snapshot flake hashes on branch $branch from $source_branch; skipping PR creation"
@@ -47,12 +47,12 @@ fi
 branch="chore/update-flake-hashes-${branch_suffix}"
 
 git switch -C "$branch"
-git add flake.nix
+git add flake.nix flake.lock
 git commit -m "$title"
 git push --force origin "$branch"
 
-if gh pr view "$branch" --json number > /tmp/flake-pr.json 2> /dev/null; then
-  pr_number="$(jq -r '.number' /tmp/flake-pr.json)"
+pr_number="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+if [[ -n "$pr_number" ]]; then
   gh pr edit "$pr_number" --title "$title" --body "$body"
 else
   gh pr create --title "$title" --body "$body" --base main --head "$branch"

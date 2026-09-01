@@ -218,8 +218,8 @@
 		</entry>
     {% elif host_info.os_vendor == "Linux" -%}
 		<entry name="anti-malware">
-			{% if let Some(defender) = &host_info.defender -%}
 			<list>
+			{% if let Some(defender) = &host_info.defender %}
 				<entry>
 					<ProductInfo>
 						<Prod name="Microsoft Defender ATP" version="{{ defender.app_version }}" defver="{{ defender.definitions_version }}" prodType="3" engver="{{ defender.engine_version }}" osType="1" vendor="Microsoft Corporation" dateday="{{ day }}" dateyear="{{ year }}" datemon="{{ month }}">
@@ -228,10 +228,17 @@
 						<last-full-scan-time>n/a</last-full-scan-time>
 					</ProductInfo>
 				</entry>
-			</list>
-			{% else -%}
-			<list/>
 			{% endif -%}
+			{% if let Some(clamav) = &host_info.clamav %}
+				<entry>
+					<ProductInfo>
+						<Prod vendor="Cisco Systems, Inc." name="ClamAV" version="{{ clamav.version }}"{% if let Some(definitions_version) = &clamav.definitions_version %} defver="{{ definitions_version }}"{% endif %} engver="" datemon="{{ month }}" dateday="{{ day }}" dateyear="{{ year }}" prodType="3" osType="1"/>
+						<real-time-protection>{% if clamav.real_time_protection %}yes{% else %}no{% endif %}</real-time-protection>
+						<last-full-scan-time>n/a</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+			{% endif -%}
+			</list>
 		</entry>
 		<entry name="disk-backup">
 			<list/>
@@ -254,6 +261,14 @@
 		</entry>
 		<entry name="firewall">
 			<list>
+			{% if let Some(ufw) = &host_info.ufw %}
+				<entry>
+					<ProductInfo>
+						<Prod vendor="Canonical Ltd." name="UFW" version="{{ ufw.version }}"/>
+						<is-enabled>{% if ufw.is_enabled %}yes{% else %}no{% endif %}</is-enabled>
+					</ProductInfo>
+				</entry>
+			{% endif -%}
 				<entry>
 					<ProductInfo>
 						<Prod name="IPTables" version="1.8.4" vendor="IPTables">

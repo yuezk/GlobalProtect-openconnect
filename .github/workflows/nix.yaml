@@ -1,0 +1,118 @@
+name: Nix
+
+on:
+  pull_request:
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - ".github/workflows/nix.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - ".github/workflows/nix.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  standalone-package:
+    name: standalone-package (${{ matrix.platform.system }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+      - name: Checkout GlobalProtect-openconnect
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build standalone prebuilt package
+        run: |
+          nix build .#prebuilt \
+            --extra-experimental-features "nix-command flakes" \
+            --print-build-logs
+
+      - name: Inspect prebuilt package
+        run: |
+          test -x result/bin/gpclient
+          test -x result/bin/gpauth
+          test -x result/bin/gpservice
+          test -x result/bin/gpgui-helper
+          test -x result/bin/gpgui
+
+  nixos-module:
+    name: nixos-module (${{ matrix.platform.system }}, ${{ matrix.nixpkgs }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+        nixpkgs:
+          - nixos-25.11
+          - nixos-26.05
+          - nixpkgs-unstable
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+      - name: Checkout GlobalProtect-openconnect
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build package through host NixOS module
+        env:
+          NIXPKGS_URL: github:NixOS/nixpkgs/${{ matrix.nixpkgs }}
+          NIX_SYSTEM: ${{ matrix.platform.system }}
+        run: |
+          nix build \
+            --impure \
+            --extra-experimental-features "nix-command flakes" \
+            --print-build-logs \
+            --expr '
+              let
+                gp = builtins.getFlake (toString ./.);
+                hostNixpkgs =
+                  builtins.getFlake (builtins.getEnv "NIXPKGS_URL");
+
+                hostSystem = hostNixpkgs.lib.nixosSystem {
+                  system = builtins.getEnv "NIX_SYSTEM";
+                  modules = [
+                    gp.nixosModules.default
+                    {
+                      programs.globalprotect-openconnect.enable = true;
+                      system.stateVersion = "25.11";
+                    }
+                  ];
+                };
+
+                package =
+                  hostSystem.config.programs.globalprotect-openconnect.package;
+              in
+              assert builtins.elem package
+                hostSystem.config.environment.systemPackages;
+              assert hostSystem.config.services.ayatana-indicators.enable;
+              package
+            '
+
+      - name: Inspect module package
+        run: |
+          test -x result/bin/gpclient
+          test -x result/bin/gpauth
+          test -x result/bin/gpservice
+          test -x result/bin/gpgui-helper
+          test -x result/bin/gpgui
