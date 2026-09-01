@@ -406,9 +406,14 @@ fn detect_ufw() -> Option<UfwInfo> {
   let version_str = String::from_utf8(version_out.stdout).ok()?;
   let version = parse_ufw_version(&version_str)?;
 
-  let status_out = ufw_status_command(uzers::get_effective_uid() == 0).output().ok()?;
+  let is_root = uzers::get_effective_uid() == 0;
+  let status_out = ufw_status_command(is_root).output().ok()?;
   if !status_out.status.success() {
-    log::warn!("ufw status failed");
+    if is_root {
+      log::warn!("ufw status failed while running as root");
+    } else {
+      log::warn!("sudo -n ufw status failed. You may need to configure sudoers to allow execution without a password.");
+    }
     return None;
   }
 
