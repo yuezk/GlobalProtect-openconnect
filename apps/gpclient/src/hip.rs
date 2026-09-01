@@ -406,7 +406,7 @@ fn detect_ufw() -> Option<UfwInfo> {
   let version_str = String::from_utf8(version_out.stdout).ok()?;
   let version = parse_ufw_version(&version_str)?;
 
-  let status_out = Command::new("ufw").arg("status").env("LC_ALL", "C").output().ok()?;
+  let status_out = ufw_status_command(uzers::get_effective_uid() == 0).output().ok()?;
   if !status_out.status.success() {
     log::warn!("ufw status failed");
     return None;
@@ -416,6 +416,19 @@ fn detect_ufw() -> Option<UfwInfo> {
   let is_enabled = parse_ufw_status(&status_str)?;
 
   Some(UfwInfo { version, is_enabled })
+}
+
+fn ufw_status_command(is_root: bool) -> Command {
+  let mut command = if is_root {
+    Command::new("ufw")
+  } else {
+    let mut command = Command::new("sudo");
+    command.args(["-n", "ufw"]);
+    command
+  };
+
+  command.arg("status").env("LC_ALL", "C");
+  command
 }
 
 fn parse_clamav_version(output: &str) -> Option<(String, Option<String>)> {
@@ -557,6 +570,7 @@ fn derive_windows_network_name(host_id: &str, iface: &NetworkInterface) -> Strin
 mod tests {
   use super::*;
   use gpapi::os_profile::runtime_client_os;
+  use std::ffi::OsStr;
 
   fn make_hip_args(client_os: Os) -> HipArgs {
     HipArgs {
@@ -721,5 +735,25 @@ mod tests {
     assert_eq!(parse_ufw_status("Status: active\n"), Some(true));
     assert_eq!(parse_ufw_status("Status: inactive\n"), Some(false));
     assert_eq!(parse_ufw_status("Status: unknown\n"), None);
+  }
+
+  #[test]
+  fn runs_ufw_status_directly_as_root() {
+    let command = ufw_status_command(true);
+
+    assert_eq!(command.get_program(), OsStr::new("ufw"));
+    assert!(command.get_args().eq(["status"].into_iter().map(OsStr::new)));
+  }
+
+  #[test]
+  fn runs_ufw_status_through_non_interactive_sudo_as_non_root() {
+    let command = ufw_status_command(false);
+
+    assert_eq!(command.get_program(), OsStr::new("sudo"));
+    assert!(
+      command
+        .get_args()
+        .eq(["-n", "ufw", "status"].into_iter().map(OsStr::new))
+    );
   }
 }
