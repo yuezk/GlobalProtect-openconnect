@@ -49,7 +49,7 @@ struct UfwInfo {
 #[derive(Debug, Clone)]
 struct ClamAvInfo {
   version: String,
-  defver: String,
+  definitions_version: Option<String>,
   real_time_protection: bool,
 }
 
@@ -378,23 +378,20 @@ fn detect_clamav() -> Option<ClamAvInfo> {
     debug!("clamscan not found or failed");
     return None;
   }
-  
+
   let version_str = String::from_utf8(version_out.stdout).ok()?;
-  let ver_part = version_str.split_whitespace().nth(1)?;
-  let mut parts = ver_part.split('/');
-  let version = parts.next()?.to_string();
-  let defver = parts.next().unwrap_or("0").to_string();
+  let (version, definitions_version) = parse_clamav_version(&version_str)?;
 
   let rtp_out = Command::new("systemctl")
     .args(["is-active", "clamav-onaccess.service"])
     .output()
     .ok()?;
-  
+
   let real_time_protection = rtp_out.status.success();
 
   Some(ClamAvInfo {
     version,
-    defver,
+    definitions_version,
     real_time_protection,
   })
 }
@@ -405,23 +402,62 @@ fn detect_ufw() -> Option<UfwInfo> {
     debug!("ufw not found or failed");
     return None;
   }
-  
-  let version_str = String::from_utf8(version_out.stdout).ok()?;
-  let version = version_str.split_whitespace().nth(1)?.to_string();
 
-  let status_out = Command::new("sudo").args(["-n", "ufw", "status"]).output().ok()?;
+  let version_str = String::from_utf8(version_out.stdout).ok()?;
+  let version = parse_ufw_version(&version_str)?;
+
+  let status_out = Command::new("ufw").arg("status").env("LC_ALL", "C").output().ok()?;
   if !status_out.status.success() {
-    log::warn!("sudo ufw status failed. You may need to configure sudoers to allow execution without a password.");
+    log::warn!("ufw status failed");
     return None;
   }
-  
-  let status_str = String::from_utf8(status_out.stdout).ok()?;
-  let is_enabled = status_str.contains("Status: active");
 
-  Some(UfwInfo {
-    version,
-    is_enabled,
-  })
+  let status_str = String::from_utf8(status_out.stdout).ok()?;
+  let is_enabled = parse_ufw_status(&status_str)?;
+
+  Some(UfwInfo { version, is_enabled })
+}
+
+fn parse_clamav_version(output: &str) -> Option<(String, Option<String>)> {
+  let mut output_parts = output.split_whitespace();
+  if output_parts.next()? != "ClamAV" {
+    return None;
+  }
+
+  let mut version_parts = output_parts.next()?.split('/');
+  let version = version_parts.next()?;
+  if version.is_empty() {
+    return None;
+  }
+
+  let definitions_version = version_parts
+    .next()
+    .filter(|definitions_version| !definitions_version.is_empty())
+    .map(str::to_string);
+
+  Some((version.to_string(), definitions_version))
+}
+
+fn parse_ufw_version(output: &str) -> Option<String> {
+  let mut output_parts = output.split_whitespace();
+  if output_parts.next()? != "ufw" {
+    return None;
+  }
+
+  output_parts.next().map(str::to_string)
+}
+
+fn parse_ufw_status(output: &str) -> Option<bool> {
+  let status = output
+    .lines()
+    .find_map(|line| line.trim().strip_prefix("Status:"))?
+    .trim();
+
+  match status {
+    "active" => Some(true),
+    "inactive" => Some(false),
+    _ => None,
+  }
 }
 
 fn detect_microsoft_defender_blocking() -> Option<DefenderInfo> {
@@ -659,5 +695,31 @@ mod tests {
   #[test]
   fn rejects_invalid_microsoft_defender_health_json() {
     assert!(parse_defender_info("{}").is_none());
+  }
+
+  #[test]
+  fn parses_clamav_version() {
+    let version =
+      parse_clamav_version("ClamAV 1.4.3/27562/Sun Aug 31 10:23:42 2026").expect("ClamAV version should parse");
+
+    assert_eq!(version, ("1.4.3".to_string(), Some("27562".to_string())));
+  }
+
+  #[test]
+  fn parses_clamav_version_without_definitions_version() {
+    assert_eq!(parse_clamav_version("ClamAV 1.4.3"), Some(("1.4.3".to_string(), None)));
+  }
+
+  #[test]
+  fn parses_ufw_version() {
+    assert_eq!(parse_ufw_version("ufw 0.36.2\n"), Some("0.36.2".to_string()));
+    assert_eq!(parse_ufw_version("unexpected output\n"), None);
+  }
+
+  #[test]
+  fn parses_ufw_status() {
+    assert_eq!(parse_ufw_status("Status: active\n"), Some(true));
+    assert_eq!(parse_ufw_status("Status: inactive\n"), Some(false));
+    assert_eq!(parse_ufw_status("Status: unknown\n"), None);
   }
 }
