@@ -92,6 +92,12 @@
           libayatana-appindicator
         ];
 
+        rewriteVpncScriptToolPaths = lib.optionalString pkgs.stdenv.isLinux ''
+          substituteInPlace $out/libexec/gpclient/vpnc-script \
+            --replace-fail /usr/bin/resolvectl ${pkgs.systemd}/bin/resolvectl \
+            --replace-fail /usr/bin/busctl ${pkgs.systemd}/bin/busctl
+        '';
+
         linuxBuildInputs =
           with pkgs;
           [
@@ -229,6 +235,7 @@
             ${installNixosPolkitRule}
           ''
           + ''
+            ${rewriteVpncScriptToolPaths}
             ${rewriteSourceInstallPaths}
           '';
         };
@@ -260,6 +267,8 @@
             fi
 
             install -Dm755 ${gpgui}/gpgui $out/bin/gpgui
+
+            ${rewriteVpncScriptToolPaths}
 
             runHook postInstall
           '';
