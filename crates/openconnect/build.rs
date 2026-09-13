@@ -117,10 +117,7 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
 
   #[cfg(target_os = "macos")]
   {
-    config
-      .disable_static()
-      .enable_shared()
-      .without("gnutls", None);
+    config.disable_static().enable_shared().without("gnutls", None);
     config.ldflag("-liconv");
     config.env("LIBS", "-liconv");
   }
