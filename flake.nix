@@ -297,14 +297,15 @@
             --service-type=exec
           )
 
-          while IFS= read -r env_name; do
+          while IFS= read -r -d "" env_entry; do
+            env_name="''${env_entry%%=*}"
             case "$env_name" in
               *[!A-Za-z0-9_]* | [0-9]* | PATH | GP_VPNC_SCRIPT_INSTALLER_BINARY | INVOCATION_ID | JOURNAL_STREAM | LISTEN_* | NOTIFY_SOCKET | SYSTEMD_EXEC_PID)
                 continue
                 ;;
             esac
             systemd_run_args+=("--setenv=$env_name")
-          done < <(compgen -e)
+          done < <(${pkgs.coreutils}/bin/env --null)
 
           gui_path="/run/wrappers/bin:''${PATH:-}"
           systemd_run_args+=(
