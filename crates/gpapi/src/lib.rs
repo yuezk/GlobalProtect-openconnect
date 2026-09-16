@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod cookie_store;
+pub mod cached_auth;
 pub mod credential;
 pub mod error;
 pub mod gateway;

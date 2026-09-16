@@ -12,6 +12,7 @@ use gpapi::{
   credential::{AuthCookieCredential, Credential},
   gateway::{GatewayLogin, GatewayLoginContext, SessionExtensionAuth, gateway_login, gateway_login_with_context},
   gp_params::GpParams,
+  cached_auth::{try_cached_path, CachedAuthOptions},
   os_profile::OsProfile,
   portal::prelogin,
   process::users::{get_non_root_user, get_user_by_name},
@@ -79,55 +80,31 @@ impl GatewayConnectError {
 impl ConnectHandler<'_> {
   pub(super) async fn try_cached_cookie(&self, server: &str) -> Option<()> {
     let path = cookie_cache_path(self.args)?;
-    let host_id = self.os_profile.borrow().host_identity().host_id().to_string();
-    let stored = cookie_store::load(&path, server, &host_id)?;
+    let gp_params = self.build_gp_params();
+    let options = CachedAuthOptions{path};
 
-    if !stored.auth_cookie.can_authenticate_gateway() {
-      warn!(
-        "Cached portal cookie for {} is not usable for gateway authentication. Clearing cache.",
-        stored.server
-      );
-      cookie_store::clear(&path);
-      return None;
-    }
-
-    info!(
-      "Using cached portal cookie for {} (saved_at={}, gateway={})",
-      stored.server, stored.saved_at, stored.last_gateway
-    );
-
-    let cred: Credential = (&stored.auth_cookie).into();
-    let mut gp_params = self.build_gp_params();
-    gp_params.set_is_gateway(true);
-
-    let login_session = match self.login_gateway(&stored.last_gateway, &cred, &gp_params, None).await {
-      Ok(session) => session,
+    let cached = match try_cached_path(&options, server, &gp_params).await {
+      Ok(cached) => cached?,
       Err(err) => {
-        warn!(
-          "Cached portal cookie rejected by gateway {}: {}. Clearing cache and falling back to portal auth.",
-          stored.last_gateway, err
-        );
-        cookie_store::clear(&path);
+        warn!("Cookie-cache lookup failed: {}", err);
         return None;
       }
     };
 
-    match self
+    let gateway_params = gp_params.as_gateway();
+    let credential: Credential = (&cached.stored.auth_cookie).into();
+    let extension_auth = SessionExtensionAuth::new(credential.clone(), gateway_params);
+
+    self
       .connect_gateway(
         server,
-        &stored.last_gateway,
-        &login_session.cookie,
+        &cached.stored.last_gateway,
+        &cached.gateway_cookie,
         false,
-        login_session.extension_auth,
+        extension_auth,
       )
       .await
-    {
-      Ok(()) => Some(()),
-      Err(err) => {
-        warn!("Gateway connect failed after cached-cookie login: {}", err.as_error());
-        None
-      }
-    }
+      .ok()
   }
 
   pub(super) async fn connect_gateway_with_prelogin(

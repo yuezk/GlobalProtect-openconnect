@@ -1,6 +1,10 @@
+use std::path::PathBuf;
+
 use auth::{BrowserAuthenticator, auth_prelogin};
 use clap::Parser;
 use gpapi::{
+  cached_auth::{try_cached_path, CachedAuthOptions},
+  cookie_store,
   auth::{SamlAuthData, SamlAuthResult},
   clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
   gp_params::GpParams,
@@ -8,7 +12,7 @@ use gpapi::{
   os_profile::{ClientOs, OsProfile},
   utils::{normalize_server, openssl},
 };
-use log::info;
+use log::{warn, info};
 use serde_json::json;
 use tempfile::NamedTempFile;
 
@@ -57,6 +61,14 @@ struct Cli {
 
   #[arg(long, help = "Override the GlobalProtect client version reported to the server")]
   client_version: Option<String>,
+
+  #[arg(
+    long,
+    help = "Read the portal cookie cache, optionally specify the cache file path",
+    default_missing_value = "",
+    num_args = 0..=1
+  )]
+  cookie_cache: Option<String>,
 
   #[arg(
     short,
@@ -147,10 +159,28 @@ impl Cli {
 
     let server = normalize_server(&self.server)?;
     let gp_params = self.build_gp_params();
-    info!(
-      "gpauth auth host-id: {}",
-      gp_params.os_profile().host_identity().host_id()
-    );
+    info!("gpauth auth host-id: {}", gp_params.os_profile().host_identity().host_id());
+    if !self.gateway {
+      if let Some(path) = self.cookie_cache_path() {
+        let options = CachedAuthOptions{path};
+        match try_cached_path(&options, &server, &gp_params).await {
+          Ok(Some(cached)) => {
+            let host_id = gp_params.os_profile().host_identity().host_id();
+            info!("gpauth auth host-id: {}", host_id);
+            let auth_data = SamlAuthData::from_auth_cookie(&cached.stored.auth_cookie)?;
+            print_auth_result(Ok(auth_data), Some(host_id));
+            return Ok(());
+          }
+          Ok(None) => {
+            info!("No valid cached portal authentification found");
+          }
+          Err(err) => {
+            warn!("Cookie-cache lookup failed: {}", err);
+            info!("Continuing with normal authentication");
+          }
+        }
+      }
+    }
 
     let auth_request = match self.saml_request.as_deref() {
       Some(auth_request) => auth_request.to_string(),
@@ -215,6 +245,13 @@ impl Cli {
     {
       true
     }
+  }
+
+  fn cookie_cache_path(&self) -> Option<PathBuf> {
+    self.cookie_cache.as_deref().map(|path| {
+      let custom = (!path.is_empty()).then_some(path);
+      cookie_store::cookie_path(custom)
+    })
   }
 }
 

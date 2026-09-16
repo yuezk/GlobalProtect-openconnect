@@ -6,6 +6,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::{error::AuthDataParseError, utils::base64::decode_to_string};
+use crate::credential::AuthCookieCredential;
 
 pub type AuthDataParseResult = anyhow::Result<SamlAuthData, AuthDataParseError>;
 
@@ -133,6 +134,14 @@ impl SamlAuthData {
     let auth_data = Self::from_html(&auth_data)?;
 
     Ok(auth_data)
+  }
+
+  pub fn from_auth_cookie(credential: &AuthCookieCredential) -> anyhow::Result<Self> {
+    Self::new(
+      Some(credential.username().to_string()),
+      Some(credential.prelogon_user_auth_cookie().to_string()),
+      Some(credential.user_auth_cookie().to_string()),
+    )
   }
 
   pub fn username(&self) -> &str {
