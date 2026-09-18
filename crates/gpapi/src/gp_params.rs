@@ -64,6 +64,12 @@ impl GpParams {
     self.is_gateway = is_gateway;
   }
 
+  pub fn as_gateway(&self) -> Self {
+    let mut params = self.clone();
+    params.is_gateway = true;
+    params
+  }
+
   pub(crate) fn user_agent(&self) -> &str {
     self.os_profile.user_agent()
   }

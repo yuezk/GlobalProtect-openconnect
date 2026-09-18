@@ -15,6 +15,7 @@ pub struct SamlAuthLauncher<'a> {
   server: &'a str,
   auth_executable: Option<&'a str>,
   gateway: bool,
+  cookie_cache: Option<PathBuf>,
   saml_request: Option<&'a str>,
   os: Option<&'a str>,
   host_id: Option<&'a str>,
@@ -41,6 +42,7 @@ impl<'a> SamlAuthLauncher<'a> {
       server,
       auth_executable: None,
       gateway: false,
+      cookie_cache: None,
       saml_request: None,
       os: None,
       host_id: None,
@@ -69,6 +71,11 @@ impl<'a> SamlAuthLauncher<'a> {
 
   pub fn gateway(mut self, gateway: bool) -> Self {
     self.gateway = gateway;
+    self
+  }
+
+  pub fn cookie_cache(mut self, path: Option<PathBuf>) -> Self {
+    self.cookie_cache = path;
     self
   }
 
@@ -157,6 +164,10 @@ impl<'a> SamlAuthLauncher<'a> {
 
     if self.gateway {
       auth_cmd.arg("--gateway");
+    }
+
+    if let Some(path) = &self.cookie_cache {
+      auth_cmd.arg("--cookie-cache").arg(path);
     }
 
     if let Some(saml_request) = self.saml_request {

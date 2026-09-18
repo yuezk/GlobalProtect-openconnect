@@ -75,8 +75,10 @@ impl ConnectHandler<'_> {
         let verbose = self.shared_args.verbose.to_verbose_arg();
         let os_profile = self.os_profile.borrow().clone();
         let key_password = self.latest_key_password.borrow().clone();
+        let cookie_cache = super::args::cookie_cache_path(self.args);
         let auth_launcher = SamlAuthLauncher::new(server)
           .gateway(is_gateway)
+          .cookie_cache(cookie_cache)
           .saml_request(prelogin.saml_request())
           .os_profile(&os_profile)
           .fix_openssl(self.shared_args.fix_openssl)
