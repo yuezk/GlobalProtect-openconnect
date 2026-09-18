@@ -1,6 +1,6 @@
-use std::{env::temp_dir, fs, os::unix::fs::PermissionsExt};
+use std::{fs, os::unix::fs::PermissionsExt};
 
-use common::constants::GP_CALLBACK_PORT_FILENAME;
+use common::constants::{gp_callback_log_file, gp_callback_port_file};
 use gpapi::auth::SamlAuthData;
 use log::info;
 use tokio::{
@@ -159,14 +159,14 @@ async fn wait_auth_data() -> anyhow::Result<SamlAuthData> {
   // Start a local server to receive the browser authentication data
   let listener = TcpListener::bind("127.0.0.1:0").await?;
   let port = listener.local_addr()?.port();
-  let port_file = temp_dir().join(GP_CALLBACK_PORT_FILENAME);
+  let port_file = gp_callback_port_file();
 
   // Write the port to a file
   fs::write(&port_file, port.to_string())?;
   fs::set_permissions(&port_file, fs::Permissions::from_mode(0o600))?;
 
   // Remove the previous log file
-  let callback_log = temp_dir().join("gpcallback.log");
+  let callback_log = gp_callback_log_file();
   let _ = fs::remove_file(&callback_log);
 
   info!("Listening authentication data on port {}", port);

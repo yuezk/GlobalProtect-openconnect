@@ -1,7 +1,7 @@
-use std::{collections::HashMap, env::temp_dir, fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use clap::Args;
-use common::constants::GP_CALLBACK_PORT_FILENAME;
+use common::constants::gp_callback_port_file;
 use directories::ProjectDirs;
 use gpapi::{
   process::service_launcher::ServiceLauncher,
@@ -91,7 +91,7 @@ async fn feed_auth_data(auth_data: &str) -> anyhow::Result<()> {
 async fn feed_auth_data_cli(auth_data: &str) -> anyhow::Result<()> {
   info!("Feeding auth data to the CLI");
 
-  let port_file = temp_dir().join(GP_CALLBACK_PORT_FILENAME);
+  let port_file = gp_callback_port_file();
   let port = tokio::fs::read_to_string(port_file).await?;
   let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port.trim())).await?;
 
