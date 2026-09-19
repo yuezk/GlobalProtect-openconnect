@@ -3,6 +3,8 @@ mod cli;
 mod credential_lease;
 #[cfg(debug_assertions)]
 mod dev_bootstrap;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", all(test, unix)))]
+mod device_anchor;
 mod handlers;
 #[cfg(target_os = "macos")]
 mod macos_broker;

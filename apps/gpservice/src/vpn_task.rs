@@ -1,65 +1,330 @@
-use std::{io::Write, os::unix::fs::PermissionsExt, sync::Arc, thread};
+use std::{
+  io::Write,
+  os::unix::fs::PermissionsExt,
+  sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+  },
+  thread,
+};
 
 use gpapi::{
-  logger,
   service::{
-    request::{ConnectRequest, MAX_CLIENT_IDENTITY_DATA, UpdateLogLevelRequest, WsRequest},
-    vpn_state::{ConnectedInfo, VpnState},
+    request::{ConnectRequest, MAX_CLIENT_IDENTITY_DATA},
+    transport::{ServiceErrorCode, ServiceResult},
+    vpn_state::{ConnectInfo, ConnectedInfo, VpnState},
   },
   session::{SessionInfo, SessionWarning},
 };
 use log::{info, warn};
-use openconnect::Vpn;
-use tokio::sync::{RwLock, mpsc, oneshot, watch};
+use openconnect::{Vpn, VpnSessionInfo};
+use tokio::sync::{Notify, mpsc, watch};
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
-pub(crate) struct VpnTaskContext {
-  vpn_handle: Arc<RwLock<Option<Vpn>>>,
-  vpn_state_tx: Arc<watch::Sender<VpnState>>,
-  disconnect_rx: RwLock<Option<oneshot::Receiver<()>>>,
-  brokered_macos: bool,
-  trusted_csd_uid: Option<u32>,
-  identity_files: Arc<RwLock<Vec<tempfile::NamedTempFile>>>,
+#[derive(Clone)]
+pub(crate) struct LifecycleHandle {
+  events: mpsc::Sender<LifecycleEvent>,
+  admissions: Arc<Mutex<Admissions>>,
 }
 
-impl VpnTaskContext {
-  pub fn new(vpn_state_tx: watch::Sender<VpnState>, brokered_macos: bool, trusted_csd_uid: Option<u32>) -> Self {
-    Self {
-      vpn_handle: Default::default(),
-      vpn_state_tx: Arc::new(vpn_state_tx),
-      disconnect_rx: Default::default(),
-      brokered_macos,
-      trusted_csd_uid,
-      identity_files: Default::default(),
+impl LifecycleHandle {
+  pub fn submit_connect(&self, request: ConnectRequest) -> ServiceResult {
+    let attempt = {
+      let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
+      if admissions.current.is_some() {
+        return ServiceResult::rejected(ServiceErrorCode::Busy, "A VPN connection is already in progress");
+      }
+      let attempt = admissions.next_attempt;
+      admissions.next_attempt += 1;
+      admissions.current = Some(Admission {
+        attempt,
+        phase: AdmissionPhase::Pending,
+        stop_requested: false,
+        completion: Arc::new(AttemptCompletion::default()),
+      });
+      attempt
+    };
+
+    match self.events.try_send(LifecycleEvent::Start { attempt, request }) {
+      Ok(()) => ServiceResult::Accepted,
+      Err(mpsc::error::TrySendError::Full(_)) => {
+        self.clear_attempt(attempt);
+        ServiceResult::rejected(ServiceErrorCode::Busy, "VPN lifecycle queue is full")
+      }
+      Err(mpsc::error::TrySendError::Closed(_)) => {
+        self.clear_attempt(attempt);
+        ServiceResult::rejected(ServiceErrorCode::Internal, "VPN task is unavailable")
+      }
     }
   }
 
-  pub async fn connect(&self, req: ConnectRequest) {
-    let vpn_state = self.vpn_state_tx.borrow().clone();
-    if !matches!(vpn_state, VpnState::Disconnected) {
-      info!("VPN is not disconnected, ignore the request");
+  pub fn request_disconnect(&self) -> ServiceResult {
+    let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
+    let Some(admission) = admissions.current.as_mut() else {
+      return ServiceResult::Accepted;
+    };
+    if admission.stop_requested {
+      return ServiceResult::Accepted;
+    }
+
+    match self.events.try_send(LifecycleEvent::Stop {
+      attempt: admission.attempt,
+    }) {
+      Ok(()) => {
+        admission.stop_requested = true;
+        admission.phase = AdmissionPhase::Stopping;
+        ServiceResult::Accepted
+      }
+      Err(mpsc::error::TrySendError::Full(_)) => {
+        ServiceResult::rejected(ServiceErrorCode::Busy, "VPN lifecycle queue is full")
+      }
+      Err(mpsc::error::TrySendError::Closed(_)) => {
+        ServiceResult::rejected(ServiceErrorCode::Internal, "VPN task is unavailable")
+      }
+    }
+  }
+
+  pub async fn disconnect_and_wait(&self) -> bool {
+    let completion = {
+      let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
+      let Some(admission) = admissions.current.as_mut() else {
+        return false;
+      };
+      if !admission.stop_requested {
+        if self
+          .events
+          .try_send(LifecycleEvent::Stop {
+            attempt: admission.attempt,
+          })
+          .is_err()
+        {
+          return false;
+        }
+        admission.stop_requested = true;
+        admission.phase = AdmissionPhase::Stopping;
+      }
+      Arc::clone(&admission.completion)
+    };
+
+    loop {
+      let notified = completion.notify.notified();
+      if completion.completed.load(Ordering::Acquire) {
+        return true;
+      }
+      notified.await;
+    }
+  }
+
+  #[cfg(test)]
+  fn has_attempt(&self, attempt: u64) -> bool {
+    self
+      .admissions
+      .lock()
+      .expect("VPN lifecycle admissions mutex poisoned")
+      .current
+      .as_ref()
+      .is_some_and(|admission| admission.attempt == attempt)
+  }
+
+  fn is_stop_requested(&self, attempt: u64) -> bool {
+    self
+      .admissions
+      .lock()
+      .expect("VPN lifecycle admissions mutex poisoned")
+      .current
+      .as_ref()
+      .is_some_and(|admission| admission.attempt == attempt && admission.stop_requested)
+  }
+
+  fn activate_attempt(&self, attempt: u64) -> bool {
+    let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
+    let Some(admission) = admissions.current.as_mut() else {
+      return false;
+    };
+    if admission.attempt != attempt || admission.stop_requested || admission.phase != AdmissionPhase::Pending {
+      return false;
+    }
+    admission.phase = AdmissionPhase::Active;
+    true
+  }
+
+  fn clear_attempt(&self, attempt: u64) {
+    let completion = {
+      let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
+      let Some(admission) = admissions.current.as_ref() else {
+        return;
+      };
+      if admission.attempt != attempt {
+        return;
+      }
+      let completion = Arc::clone(&admission.completion);
+      admissions.current = None;
+      completion
+    };
+    completion.completed.store(true, Ordering::Release);
+    completion.notify.notify_waiters();
+  }
+
+  #[cfg(test)]
+  pub(crate) fn for_tests() -> Self {
+    let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
+    let (_task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    lifecycle
+  }
+}
+
+#[derive(Default)]
+struct Admissions {
+  next_attempt: u64,
+  current: Option<Admission>,
+}
+
+#[derive(Clone)]
+struct Admission {
+  attempt: u64,
+  phase: AdmissionPhase,
+  stop_requested: bool,
+  completion: Arc<AttemptCompletion>,
+}
+
+#[derive(Default)]
+struct AttemptCompletion {
+  completed: AtomicBool,
+  notify: Notify,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum AdmissionPhase {
+  Pending,
+  Active,
+  Stopping,
+}
+
+enum LifecycleEvent {
+  Start { attempt: u64, request: ConnectRequest },
+  Stop { attempt: u64 },
+  Established { attempt: u64, session: VpnSessionInfo },
+  Ended { attempt: u64 },
+}
+
+struct ActiveAttempt {
+  attempt: u64,
+  vpn: Arc<Vpn>,
+  info: ConnectInfo,
+  allow_extend_session: bool,
+  _identity_files: Vec<tempfile::NamedTempFile>,
+}
+
+pub(crate) struct VpnTask {
+  events: mpsc::Receiver<LifecycleEvent>,
+  lifecycle: LifecycleHandle,
+  vpn_state_tx: watch::Sender<VpnState>,
+  brokered_macos: bool,
+  trusted_csd_uid: Option<u32>,
+  active: Option<ActiveAttempt>,
+  cancel_token: CancellationToken,
+}
+
+impl VpnTask {
+  pub fn new(
+    vpn_state_tx: watch::Sender<VpnState>,
+    brokered_macos: bool,
+    trusted_csd_uid: Option<u32>,
+  ) -> (Self, LifecycleHandle) {
+    let (events_tx, events) = mpsc::channel(4);
+    let lifecycle = LifecycleHandle {
+      events: events_tx,
+      admissions: Arc::new(Mutex::new(Admissions::default())),
+    };
+    let task = Self {
+      events,
+      lifecycle: lifecycle.clone(),
+      vpn_state_tx,
+      brokered_macos,
+      trusted_csd_uid,
+      active: None,
+      cancel_token: CancellationToken::new(),
+    };
+    (task, lifecycle)
+  }
+
+  pub fn cancel_token(&self) -> CancellationToken {
+    self.cancel_token.clone()
+  }
+
+  pub async fn start(&mut self, server_cancel_token: CancellationToken) {
+    let cancel_token = self.cancel_token.clone();
+    let mut shutting_down = false;
+
+    loop {
+      if shutting_down {
+        if self.active.is_none() && !self.has_admission() {
+          break;
+        }
+        let Some(event) = self.events.recv().await else { break };
+        self.handle_event(event);
+        continue;
+      }
+
+      tokio::select! {
+        event = self.events.recv() => {
+          let Some(event) = event else { break };
+          self.handle_event(event);
+        }
+        _ = cancel_token.cancelled() => {
+          info!("VPN task cancelled");
+          shutting_down = true;
+          self.lifecycle.request_disconnect();
+        }
+      }
+    }
+
+    server_cancel_token.cancel();
+    info!("VPN task stopped");
+  }
+
+  fn has_admission(&self) -> bool {
+    self
+      .lifecycle
+      .admissions
+      .lock()
+      .expect("VPN lifecycle admissions mutex poisoned")
+      .current
+      .is_some()
+  }
+
+  fn handle_event(&mut self, event: LifecycleEvent) {
+    match event {
+      LifecycleEvent::Start { attempt, request } => self.start_attempt(attempt, request),
+      LifecycleEvent::Stop { attempt } => self.stop_attempt(attempt),
+      LifecycleEvent::Established { attempt, session } => self.establish_attempt(attempt, session),
+      LifecycleEvent::Ended { attempt } => self.end_attempt(attempt),
+    }
+  }
+
+  fn start_attempt(&mut self, attempt: u64, request: ConnectRequest) {
+    if !self.lifecycle.activate_attempt(attempt) {
+      self.finish_attempt(attempt);
       return;
     }
 
-    let vpn_state_tx = self.vpn_state_tx.clone();
-    let info = req.info().clone();
-    let vpn_handle = Arc::clone(&self.vpn_handle);
-    let args = req.args();
+    let info = request.info().clone();
+    let args = request.args();
     let identity = match prepare_identity(args, self.brokered_macos) {
       Ok(identity) => identity,
       Err(err) => {
         warn!("Failed to prepare client identity: {err}");
-        vpn_state_tx.send(VpnState::Disconnected).ok();
+        self.finish_attempt(attempt);
         return;
       }
     };
     let allow_extend_session = args.allow_extend_session();
-    let vpn_builder = match crate::vpn_script::builder(req.gateway().server(), args.cookie(), args) {
+    let vpn_builder = match crate::vpn_script::builder(request.gateway().server(), args.cookie(), args) {
       Ok(builder) => builder,
       Err(err) => {
         warn!("Failed to select the VPNC script: {err}");
-        vpn_state_tx.send(VpnState::Disconnected).ok();
+        self.finish_attempt(attempt);
         return;
       }
     };
@@ -67,7 +332,7 @@ impl VpnTaskContext {
       Ok(uid) => uid,
       Err(err) => {
         warn!("Failed to select the HIP script user: {err}");
-        vpn_state_tx.send(VpnState::Disconnected).ok();
+        self.finish_attempt(attempt);
         return;
       }
     };
@@ -92,128 +357,120 @@ impl VpnTaskContext {
       .no_xmlpost(args.no_xmlpost())
       .build()
     {
-      Ok(vpn) => vpn,
+      Ok(vpn) => Arc::new(vpn),
       Err(err) => {
-        warn!("Failed to create VPN: {}", err);
-        vpn_state_tx.send(VpnState::Disconnected).ok();
+        warn!("Failed to create VPN: {err}");
+        self.finish_attempt(attempt);
         return;
       }
     };
 
-    // Save the VPN handle
-    vpn_handle.write().await.replace(vpn);
-    *self.identity_files.write().await = identity.files;
-    let connect_info = Box::new(info.clone());
-    vpn_state_tx.send(VpnState::Connecting(connect_info)).ok();
+    if self.lifecycle.is_stop_requested(attempt) {
+      self.finish_attempt(attempt);
+      return;
+    }
 
-    let (disconnect_tx, disconnect_rx) = oneshot::channel::<()>();
-    self.disconnect_rx.write().await.replace(disconnect_rx);
-    let identity_files = Arc::clone(&self.identity_files);
-
-    // Spawn a new thread to process the VPN connection, cannot use tokio::spawn here.
-    // Otherwise, it will block the tokio runtime and cannot send the VPN state to the channel
-    thread::spawn(move || {
-      let vpn_state_tx_clone = vpn_state_tx.clone();
-
-      vpn_handle.blocking_read().as_ref().map(|vpn| {
-        vpn.connect(move |vpn_session_info| {
-          let session_info = SessionInfo::from_vpn_session_fields(
-            vpn_session_info.lifetime_secs,
-            vpn_session_info.user_expires,
-            vpn_session_info.lifetime_warning.map(|warning| SessionWarning {
-              prior_secs: warning.prior_secs,
-              message: warning.message,
-            }),
-            allow_extend_session,
-          );
-          info!("VPN session info: {}", session_info.log_summary());
-          let connected_info = Box::new(ConnectedInfo::new(info.clone(), Some(session_info)));
-          vpn_state_tx.send(VpnState::Connected(connected_info)).ok();
-        })
+    let events = self.lifecycle.events.clone();
+    let started = {
+      let admissions = self
+        .lifecycle
+        .admissions
+        .lock()
+        .expect("VPN lifecycle admissions mutex poisoned");
+      let can_start = admissions.current.as_ref().is_some_and(|admission| {
+        admission.attempt == attempt && admission.phase == AdmissionPhase::Active && !admission.stop_requested
       });
-
-      // Notify the VPN is disconnected
-      vpn_state_tx_clone.send(VpnState::Disconnected).ok();
-      // Remove the VPN handle
-      vpn_handle.blocking_write().take();
-      identity_files.blocking_write().clear();
-
-      disconnect_tx.send(()).ok();
-    });
-  }
-
-  pub async fn disconnect(&self) -> bool {
-    if let Some(disconnect_rx) = self.disconnect_rx.write().await.take() {
-      info!("Disconnecting VPN...");
-      if let Some(vpn) = self.vpn_handle.read().await.as_ref() {
-        info!("VPN is connected, start disconnecting...");
-        self.vpn_state_tx.send(VpnState::Disconnecting).ok();
-        vpn.disconnect()
+      if !can_start {
+        false
+      } else {
+        self.active = Some(ActiveAttempt {
+          attempt,
+          vpn: Arc::clone(&vpn),
+          info: info.clone(),
+          allow_extend_session,
+          _identity_files: identity.files,
+        });
+        self.send_state(VpnState::Connecting(Box::new(info)));
+        thread::spawn(move || {
+          let established_events = events.clone();
+          vpn.connect(move |vpn_session_info| {
+            let _ = established_events.blocking_send(LifecycleEvent::Established {
+              attempt,
+              session: vpn_session_info,
+            });
+          });
+          let _ = events.blocking_send(LifecycleEvent::Ended { attempt });
+        });
+        true
       }
-      // Wait for the VPN to be disconnected
-      disconnect_rx.await.ok();
-      info!("VPN disconnected");
-
-      true
-    } else {
-      info!("VPN is not connected, skip disconnect");
-      self.vpn_state_tx.send(VpnState::Disconnected).ok();
-      false
-    }
-  }
-}
-
-pub(crate) struct VpnTask {
-  ws_req_rx: mpsc::Receiver<WsRequest>,
-  ctx: Arc<VpnTaskContext>,
-  cancel_token: CancellationToken,
-}
-
-impl VpnTask {
-  pub fn new(
-    ws_req_rx: mpsc::Receiver<WsRequest>,
-    vpn_state_tx: watch::Sender<VpnState>,
-    brokered_macos: bool,
-    trusted_csd_uid: Option<u32>,
-  ) -> Self {
-    let ctx = Arc::new(VpnTaskContext::new(vpn_state_tx, brokered_macos, trusted_csd_uid));
-    let cancel_token = CancellationToken::new();
-
-    Self {
-      ws_req_rx,
-      ctx,
-      cancel_token,
+    };
+    if !started {
+      self.finish_attempt(attempt);
     }
   }
 
-  pub fn cancel_token(&self) -> CancellationToken {
-    self.cancel_token.clone()
-  }
-
-  pub async fn start(&mut self, server_cancel_token: CancellationToken) {
-    let cancel_token = self.cancel_token.clone();
-
-    tokio::select! {
-        _ = self.recv() => {
-            info!("VPN task stopped");
-        }
-        _ = cancel_token.cancelled() => {
-            info!("VPN task cancelled");
-            self.ctx.disconnect().await;
-        }
+  fn stop_attempt(&mut self, attempt: u64) {
+    let Some(active) = self.active.as_ref() else {
+      return;
+    };
+    if active.attempt != attempt || !self.lifecycle.is_stop_requested(attempt) {
+      return;
     }
 
-    server_cancel_token.cancel();
+    info!("Disconnecting VPN...");
+    self.send_state(VpnState::Disconnecting);
+    active.vpn.disconnect();
   }
 
-  pub fn context(&self) -> Arc<VpnTaskContext> {
-    Arc::clone(&self.ctx)
-  }
-
-  async fn recv(&mut self) {
-    while let Some(req) = self.ws_req_rx.recv().await {
-      tokio::spawn(process_ws_req(req, self.ctx.clone()));
+  fn establish_attempt(&mut self, attempt: u64, vpn_session_info: VpnSessionInfo) {
+    let Some(active) = self.active.as_ref() else {
+      return;
+    };
+    if active.attempt != attempt {
+      return;
     }
+
+    let session_info = SessionInfo::from_vpn_session_fields(
+      vpn_session_info.lifetime_secs,
+      vpn_session_info.user_expires,
+      vpn_session_info.lifetime_warning.map(|warning| SessionWarning {
+        prior_secs: warning.prior_secs,
+        message: warning.message,
+      }),
+      active.allow_extend_session,
+    );
+    self.publish_connected(attempt, active.info.clone(), session_info);
+  }
+
+  fn publish_connected(&self, attempt: u64, info: ConnectInfo, session_info: SessionInfo) {
+    let connected = VpnState::Connected(Box::new(ConnectedInfo::new(info, Some(session_info))));
+    let admissions = self
+      .lifecycle
+      .admissions
+      .lock()
+      .expect("VPN lifecycle admissions mutex poisoned");
+    if admissions.current.as_ref().is_some_and(|admission| {
+      admission.attempt == attempt && admission.phase == AdmissionPhase::Active && !admission.stop_requested
+    }) {
+      self.send_state(connected);
+    }
+  }
+
+  fn end_attempt(&mut self, attempt: u64) {
+    if self.active.as_ref().is_none_or(|active| active.attempt != attempt) {
+      return;
+    }
+    self.active = None;
+    self.finish_attempt(attempt);
+  }
+
+  fn finish_attempt(&self, attempt: u64) {
+    self.send_state(VpnState::Disconnected);
+    self.lifecycle.clear_attempt(attempt);
+  }
+
+  fn send_state(&self, state: VpnState) {
+    let _ = self.vpn_state_tx.send(state);
   }
 }
 
@@ -274,30 +531,126 @@ fn write_identity_file(
   Ok(Some(path))
 }
 
-async fn process_ws_req(req: WsRequest, ctx: Arc<VpnTaskContext>) {
-  match req {
-    WsRequest::Connect(req) => {
-      ctx.connect(*req).await;
-    }
-    WsRequest::Disconnect(_) => {
-      ctx.disconnect().await;
-    }
-    WsRequest::UpdateLogLevel(UpdateLogLevelRequest(level)) => {
-      let level = level.parse().unwrap_or(log::Level::Info);
-      info!("Updating log level to: {}", level);
-      if let Err(err) = logger::set_max_level(level) {
-        warn!("Failed to update log level: {}", err);
-      }
-    }
-    WsRequest::RestartGui | WsRequest::UpdateGui(_) | WsRequest::GetVpncScriptMetadata => {
-      warn!("Non-VPN request reached the VPN task");
-    }
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn disconnect_before_start_discards_the_pending_attempt() {
+    let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
+    let (mut task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let request = ConnectRequest::new(
+      ConnectInfo::new(
+        "portal.example.com".to_string(),
+        gpapi::gateway::Gateway::new("vpn".to_string(), "vpn.example.com".to_string()),
+        vec![],
+      ),
+      "cookie".to_string(),
+    );
+
+    assert!(matches!(lifecycle.submit_connect(request), ServiceResult::Accepted));
+    assert!(matches!(lifecycle.request_disconnect(), ServiceResult::Accepted));
+    let start = task.events.try_recv().unwrap();
+    task.handle_event(start);
+
+    assert!(!lifecycle.has_attempt(0));
+    assert!(task.active.is_none());
+  }
+
+  #[test]
+  fn late_established_event_is_ignored_after_disconnect_is_accepted() {
+    let (vpn_state_tx, vpn_state_rx) = watch::channel(VpnState::Disconnected);
+    let state_rx = vpn_state_rx.clone();
+    let (task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let info = ConnectInfo::new(
+      "portal.example.com".to_string(),
+      gpapi::gateway::Gateway::new("vpn".to_string(), "vpn.example.com".to_string()),
+      vec![],
+    );
+    let request = ConnectRequest::new(info.clone(), "cookie".to_string());
+
+    assert!(matches!(lifecycle.submit_connect(request), ServiceResult::Accepted));
+    assert!(lifecycle.activate_attempt(0));
+    assert!(matches!(lifecycle.request_disconnect(), ServiceResult::Accepted));
+    task.publish_connected(0, info, SessionInfo::default());
+
+    assert!(matches!(*state_rx.borrow(), VpnState::Disconnected));
+  }
+
+  #[tokio::test]
+  async fn disconnect_waiter_completes_for_its_attempt_before_a_later_connect() {
+    let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
+    let (task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let request = || {
+      ConnectRequest::new(
+        ConnectInfo::new(
+          "portal.example.com".to_string(),
+          gpapi::gateway::Gateway::new("vpn".to_string(), "vpn.example.com".to_string()),
+          vec![],
+        ),
+        "cookie".to_string(),
+      )
+    };
+
+    assert!(matches!(lifecycle.submit_connect(request()), ServiceResult::Accepted));
+    let waiter_lifecycle = lifecycle.clone();
+    let waiter = tokio::spawn(async move { waiter_lifecycle.disconnect_and_wait().await });
+    while !lifecycle.is_stop_requested(0) {
+      tokio::task::yield_now().await;
+    }
+
+    task.finish_attempt(0);
+    assert!(matches!(lifecycle.submit_connect(request()), ServiceResult::Accepted));
+    assert!(
+      tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+        .await
+        .unwrap()
+        .unwrap()
+    );
+  }
+
+  #[test]
+  fn repeated_disconnects_enqueue_one_stop_for_an_attempt() {
+    let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
+    let (mut task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let request = ConnectRequest::new(
+      ConnectInfo::new(
+        "portal.example.com".to_string(),
+        gpapi::gateway::Gateway::new("vpn".to_string(), "vpn.example.com".to_string()),
+        vec![],
+      ),
+      "cookie".to_string(),
+    );
+
+    assert!(matches!(lifecycle.submit_connect(request), ServiceResult::Accepted));
+    assert!(matches!(lifecycle.request_disconnect(), ServiceResult::Accepted));
+    assert!(matches!(lifecycle.request_disconnect(), ServiceResult::Accepted));
+    assert!(matches!(task.events.try_recv(), Ok(LifecycleEvent::Start { .. })));
+    assert!(matches!(task.events.try_recv(), Ok(LifecycleEvent::Stop { .. })));
+    assert!(matches!(task.events.try_recv(), Err(mpsc::error::TryRecvError::Empty)));
+  }
+
+  #[test]
+  fn second_connect_is_rejected_while_an_attempt_is_admitted() {
+    let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
+    let (_task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let request = || {
+      ConnectRequest::new(
+        ConnectInfo::new(
+          "portal.example.com".to_string(),
+          gpapi::gateway::Gateway::new("vpn".to_string(), "vpn.example.com".to_string()),
+          vec![],
+        ),
+        "cookie".to_string(),
+      )
+    };
+
+    assert!(matches!(lifecycle.submit_connect(request()), ServiceResult::Accepted));
+    assert!(matches!(
+      lifecycle.submit_connect(request()),
+      ServiceResult::Rejected(rejection) if rejection.code() == ServiceErrorCode::Busy
+    ));
+  }
 
   #[test]
   fn trusted_csd_uid_overrides_request_uid() {

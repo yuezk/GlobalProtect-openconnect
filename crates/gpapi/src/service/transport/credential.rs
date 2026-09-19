@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+use crate::device_anchor::DeviceAnchor;
 use crate::utils::base64;
 
 use super::{MAX_CREDENTIAL_FRAME, MAX_PRODUCT_VERSION, TransportError};
@@ -14,6 +15,7 @@ pub struct SessionCredential {
   session_id: Uuid,
   secret: Zeroizing<[u8; 32]>,
   product_version: String,
+  device_anchor: Option<DeviceAnchor>,
 }
 
 impl SessionCredential {
@@ -30,6 +32,7 @@ impl SessionCredential {
       session_id: Uuid::new_v4(),
       secret,
       product_version: product_version.to_owned(),
+      device_anchor: None,
     })
   }
 
@@ -49,6 +52,18 @@ impl SessionCredential {
     &self.product_version
   }
 
+  pub fn with_device_anchor(mut self, anchor: DeviceAnchor) -> Result<Self, TransportError> {
+    if !anchor.validate() {
+      return Err(TransportError::InvalidCredential);
+    }
+    self.device_anchor = Some(anchor);
+    Ok(self)
+  }
+
+  pub fn device_anchor(&self) -> Option<&DeviceAnchor> {
+    self.device_anchor.as_ref()
+  }
+
   pub fn encode_frame(&self) -> Result<Zeroizing<Vec<u8>>, TransportError> {
     let encoded_secret = Zeroizing::new(base64::encode(self.secret()));
     let dto = CredentialDtoRef {
@@ -56,6 +71,7 @@ impl SessionCredential {
       session_id: self.session_id,
       secret: encoded_secret.as_str(),
       product_version: &self.product_version,
+      device_anchor: self.device_anchor.as_ref(),
     };
     let payload = Zeroizing::new(serde_json::to_vec(&dto)?);
 
@@ -85,8 +101,12 @@ impl SessionCredential {
       session_id,
       secret,
       product_version,
+      device_anchor,
     } = dto;
     let encoded_secret = secret;
+    if device_anchor.as_ref().is_some_and(|anchor| !anchor.validate()) {
+      return Err(TransportError::InvalidCredential);
+    }
     if product_version.is_empty() || product_version.len() > MAX_PRODUCT_VERSION {
       return Err(TransportError::InvalidCredential);
     }
@@ -104,6 +124,7 @@ impl SessionCredential {
       session_id,
       secret,
       product_version,
+      device_anchor,
     })
   }
 }
@@ -126,6 +147,7 @@ struct CredentialDtoRef<'a> {
   session_id: Uuid,
   secret: &'a str,
   product_version: &'a str,
+  device_anchor: Option<&'a DeviceAnchor>,
 }
 
 #[derive(Deserialize)]
@@ -135,6 +157,7 @@ struct CredentialDto {
   session_id: Uuid,
   secret: Zeroizing<String>,
   product_version: String,
+  device_anchor: Option<DeviceAnchor>,
 }
 
 #[cfg(test)]
@@ -160,5 +183,19 @@ mod tests {
     assert!(SessionCredential::decode_frame(&[0, 0]).is_err());
     assert!(SessionCredential::decode_frame(&[0, 2, b'{']).is_err());
     assert!(SessionCredential::decode_frame(&vec![0; MAX_CREDENTIAL_FRAME + 1]).is_err());
+  }
+
+  #[test]
+  fn credential_round_trips_a_validated_device_anchor() {
+    let anchor = DeviceAnchor {
+      hardware_id: general_purpose::URL_SAFE_NO_PAD.encode([1_u8; 32]),
+      source: crate::device_anchor::AnchorSource::LinuxMac,
+    };
+    let credential = SessionCredential::generate(Uuid::new_v4(), "2.6.5")
+      .unwrap()
+      .with_device_anchor(anchor.clone())
+      .unwrap();
+    let decoded = SessionCredential::decode_frame(&credential.encode_frame().unwrap()).unwrap();
+    assert_eq!(decoded.device_anchor(), Some(&anchor));
   }
 }

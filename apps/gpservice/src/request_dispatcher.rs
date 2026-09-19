@@ -9,7 +9,7 @@ use std::{
 use common::binary_paths;
 use gpapi::{
   service::{
-    request::{UpdateGuiRequest, WsRequest},
+    request::{UpdateGuiRequest, UpdateLogLevelRequest, WsRequest},
     transport::{ServiceErrorCode, ServiceResult},
   },
   utils::{checksum::verify_checksum, redact::Redaction},
@@ -17,7 +17,7 @@ use gpapi::{
 use log::{info, warn};
 use tar::Archive;
 use tempfile::NamedTempFile;
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::Mutex;
 use xz2::read::XzDecoder;
 
 const MAX_GUI_ARCHIVE_SIZE: u64 = 256 * 1024 * 1024;
@@ -25,7 +25,7 @@ const MAX_GUI_ARCHIVE_CONTENT_SIZE: u64 = 512 * 1024 * 1024;
 const MAX_GUI_BINARY_SIZE: u64 = 256 * 1024 * 1024;
 
 pub struct RequestDispatcher {
-  ws_req_tx: mpsc::Sender<WsRequest>,
+  lifecycle: crate::vpn_task::LifecycleHandle,
   gui_restart_requested: Arc<AtomicBool>,
   redaction: Arc<Redaction>,
   install_lock: Mutex<()>,
@@ -35,14 +35,14 @@ pub struct RequestDispatcher {
 
 impl RequestDispatcher {
   pub fn new(
-    ws_req_tx: mpsc::Sender<WsRequest>,
+    lifecycle: crate::vpn_task::LifecycleHandle,
     gui_restart_requested: Arc<AtomicBool>,
     redaction: Arc<Redaction>,
     gui_management_enabled: bool,
     brokered_scripts_dir: Option<std::path::PathBuf>,
   ) -> Self {
     Self {
-      ws_req_tx,
+      lifecycle,
       gui_restart_requested,
       redaction,
       install_lock: Mutex::new(()),
@@ -51,7 +51,35 @@ impl RequestDispatcher {
     }
   }
 
+  pub fn dispatch_lifecycle(&self, request: WsRequest) -> Result<WsRequest, ServiceResult> {
+    match request {
+      WsRequest::Connect(request) => {
+        if let Err(message) = self.validate_connect_paths(&request) {
+          return Err(ServiceResult::rejected(ServiceErrorCode::InvalidRequest, message));
+        }
+        if let Err(err) = self
+          .redaction
+          .add_values(&[request.gateway().server(), request.args().cookie()])
+        {
+          warn!("Failed to update log redaction: {err}");
+          return Err(ServiceResult::rejected(
+            ServiceErrorCode::Internal,
+            "Request could not be accepted",
+          ));
+        }
+        Err(self.lifecycle.submit_connect(*request))
+      }
+      WsRequest::Disconnect(_) => Err(self.lifecycle.request_disconnect()),
+      request => Ok(request),
+    }
+  }
+
   pub async fn dispatch(&self, request: WsRequest) -> ServiceResult {
+    let request = match self.dispatch_lifecycle(request) {
+      Ok(request) => request,
+      Err(result) => return result,
+    };
+
     match request {
       WsRequest::RestartGui => {
         if !self.gui_management_enabled {
@@ -85,30 +113,15 @@ impl RequestDispatcher {
           ServiceResult::VpncScriptMetadata(None)
         }
       }
-      request => {
-        if let WsRequest::Connect(ref connect) = request {
-          if let Err(message) = self.validate_connect_paths(connect) {
-            return ServiceResult::rejected(ServiceErrorCode::InvalidRequest, message);
-          }
-          if let Err(err) = self
-            .redaction
-            .add_values(&[connect.gateway().server(), connect.args().cookie()])
-          {
-            warn!("Failed to update log redaction: {err}");
-            return ServiceResult::rejected(ServiceErrorCode::Internal, "Request could not be accepted");
-          }
+      WsRequest::UpdateLogLevel(UpdateLogLevelRequest(level)) => {
+        let level = level.parse().unwrap_or(log::Level::Info);
+        info!("Updating log level to: {level}");
+        if let Err(err) = gpapi::logger::set_max_level(level) {
+          warn!("Failed to update log level: {err}");
         }
-
-        match self.ws_req_tx.try_send(request) {
-          Ok(()) => ServiceResult::Accepted,
-          Err(mpsc::error::TrySendError::Full(_)) => {
-            ServiceResult::rejected(ServiceErrorCode::Busy, "Service request queue is full")
-          }
-          Err(mpsc::error::TrySendError::Closed(_)) => {
-            ServiceResult::rejected(ServiceErrorCode::Internal, "VPN task is unavailable")
-          }
-        }
+        ServiceResult::Accepted
       }
+      WsRequest::Connect(_) | WsRequest::Disconnect(_) => unreachable!("lifecycle request was already dispatched"),
     }
   }
 
@@ -379,9 +392,8 @@ mod tests {
 
   #[tokio::test]
   async fn brokered_mode_rejects_gui_management_and_root_readable_identity_paths() {
-    let (request_tx, _request_rx) = mpsc::channel(1);
     let dispatcher = RequestDispatcher::new(
-      request_tx,
+      crate::vpn_task::LifecycleHandle::for_tests(),
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       false,
@@ -406,9 +418,8 @@ mod tests {
 
   #[test]
   fn brokered_mode_accepts_only_resource_script_paths() {
-    let (request_tx, _request_rx) = mpsc::channel(1);
     let dispatcher = RequestDispatcher::new(
-      request_tx,
+      crate::vpn_task::LifecycleHandle::for_tests(),
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       false,

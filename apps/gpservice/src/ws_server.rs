@@ -290,9 +290,8 @@ mod tests {
         credential.product_version(),
       )
       .unwrap();
-    let (request_tx, _request_rx) = mpsc::channel(1);
     let dispatcher = Arc::new(RequestDispatcher::new(
-      request_tx,
+      crate::vpn_task::LifecycleHandle::for_tests(),
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       true,
@@ -341,9 +340,8 @@ mod tests {
   async fn removed_prepared_candidate_cannot_commit_takeover() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
     let credential = registry.issue(env!("CARGO_PKG_VERSION")).unwrap();
-    let (request_tx, _request_rx) = mpsc::channel(1);
     let dispatcher = Arc::new(RequestDispatcher::new(
-      request_tx,
+      crate::vpn_task::LifecycleHandle::for_tests(),
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       true,

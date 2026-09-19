@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod cookie_store;
 pub mod credential;
+pub mod device_anchor;
 pub mod error;
 pub mod gateway;
 pub mod gp_params;
