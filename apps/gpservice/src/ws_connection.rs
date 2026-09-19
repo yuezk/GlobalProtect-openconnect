@@ -324,6 +324,16 @@ async fn handle_client_message(
       }
 
       let dispatcher = ctx.dispatcher();
+      let request = match dispatcher.dispatch_lifecycle(request) {
+        Ok(request) => request,
+        Err(result) => {
+          if control.send(ConnectionCommand::Reply { id, result }).is_err() {
+            pending_requests.remove(&id);
+            control.close(CloseReason::InternalError);
+          }
+          return Ok(());
+        }
+      };
       let control = control.clone();
       tokio::spawn(async move {
         let result = dispatcher.dispatch(request).await;
@@ -396,7 +406,7 @@ mod tests {
     },
     utils::redact::Redaction,
   };
-  use tokio::sync::{mpsc, watch};
+  use tokio::sync::watch;
   use tokio_tungstenite::{connect_async, tungstenite::Message as ClientFrame};
 
   use super::*;
@@ -408,9 +418,8 @@ mod tests {
   async fn authenticates_attaches_and_replies_to_a_request() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
     let credential = registry.issue(env!("CARGO_PKG_VERSION")).unwrap();
-    let (request_tx, mut request_rx) = mpsc::channel(4);
     let dispatcher = Arc::new(RequestDispatcher::new(
-      request_tx,
+      crate::vpn_task::LifecycleHandle::for_tests(),
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       true,
@@ -475,7 +484,6 @@ mod tests {
       .send(ClientFrame::Binary(noise.encrypt(&request).unwrap().into()))
       .await
       .unwrap();
-    assert!(matches!(request_rx.recv().await, Some(WsRequest::UpdateLogLevel(_))));
     let reply = noise
       .decrypt::<ServerMessage>(&receive_client_binary(&mut socket).await)
       .unwrap();

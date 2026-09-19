@@ -16,7 +16,7 @@ use gpapi::logger;
 use gpapi::utils::lock_file::dev_service_lock_file_path;
 use gpapi::{
   process::gui_launcher::GuiLauncher,
-  service::{request::WsRequest, vpn_state::VpnState},
+  service::vpn_state::VpnState,
   utils::{env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
 };
 #[cfg(target_os = "macos")]
@@ -95,9 +95,7 @@ impl Cli {
       bail!("Another instance of the service is already running");
     }
 
-    // Channel for sending requests to the VPN task
-    let (ws_req_tx, ws_req_rx) = mpsc::channel::<WsRequest>(32);
-    // Channel for receiving the VPN state from the VPN task
+    // Channel for receiving VPN state from the lifecycle actor
     let (vpn_state_tx, vpn_state_rx) = watch::channel(VpnState::Disconnected);
     let gui_restart_requested = Arc::new(AtomicBool::new(false));
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
@@ -113,15 +111,14 @@ impl Cli {
     } else {
       None
     };
+    let (mut vpn_task, lifecycle) = VpnTask::new(vpn_state_tx, externally_brokered, trusted_csd_uid);
     let dispatcher = Arc::new(RequestDispatcher::new(
-      ws_req_tx.clone(),
+      lifecycle.clone(),
       Arc::clone(&gui_restart_requested),
       Arc::clone(&redaction),
       !externally_brokered,
       brokered_scripts_dir,
     ));
-
-    let mut vpn_task = VpnTask::new(ws_req_rx, vpn_state_tx, externally_brokered, trusted_csd_uid);
     #[cfg(target_os = "macos")]
     let idle_vpn_state_rx = vpn_state_rx.clone();
     let ws_server = WsServer::new(
@@ -179,10 +176,10 @@ impl Cli {
 
     #[cfg(unix)]
     {
-      let vpn_ctx = vpn_task.context();
+      let lifecycle = lifecycle.clone();
       let ws_ctx = ws_server.context();
 
-      tokio::spawn(async move { signals::handle_signals(vpn_ctx, ws_ctx).await });
+      tokio::spawn(async move { signals::handle_signals(lifecycle, ws_ctx).await });
     }
 
     let vpn_task_handle = tokio::spawn(async move { vpn_task.start(server_token).await });
@@ -324,12 +321,12 @@ mod signals {
 
   use log::{info, warn};
 
-  use crate::vpn_task::VpnTaskContext;
+  use crate::vpn_task::LifecycleHandle;
   use crate::ws_server::WsServerContext;
 
   const DISCONNECTED_PID_FILE: &str = "/tmp/gpservice_disconnected.pid";
 
-  pub async fn handle_signals(vpn_ctx: Arc<VpnTaskContext>, ws_ctx: Arc<WsServerContext>) {
+  pub async fn handle_signals(lifecycle: LifecycleHandle, ws_ctx: Arc<WsServerContext>) {
     use gpapi::service::event::WsEvent;
     use tokio::signal::unix::{Signal, SignalKind, signal};
 
@@ -349,7 +346,7 @@ mod signals {
       tokio::select! {
         _ = user_sig1.recv() => {
           info!("Received SIGUSR1 signal");
-          if vpn_ctx.disconnect().await {
+          if lifecycle.disconnect_and_wait().await {
             // Write the PID to a dedicated file to indicate that the VPN task is disconnected via SIGUSR1
             let pid = std::process::id();
             if let Err(err) = tokio::fs::write(DISCONNECTED_PID_FILE, pid.to_string()).await {

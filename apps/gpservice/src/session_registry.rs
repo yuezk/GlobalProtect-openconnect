@@ -90,9 +90,19 @@ impl SessionRegistry {
       return Err(SessionError::TooManyPending);
     }
 
-    let credential = Arc::new(
-      SessionCredential::generate(self.service_instance_id, product_version).map_err(|_| SessionError::Unavailable)?,
-    );
+    let credential =
+      SessionCredential::generate(self.service_instance_id, product_version).map_err(|_| SessionError::Unavailable)?;
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+    let credential = {
+      let anchor = crate::device_anchor::resolve().map_err(|error| {
+        log::warn!("GUI device anchor unavailable: {error:#}");
+        SessionError::Unavailable
+      })?;
+      credential
+        .with_device_anchor(anchor)
+        .map_err(|_| SessionError::Unavailable)?
+    };
+    let credential = Arc::new(credential);
     sessions.insert(
       credential.session_id(),
       SessionRecord {
