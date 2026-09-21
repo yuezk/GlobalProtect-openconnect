@@ -52,7 +52,9 @@ typedef struct vpn_options {
 } vpn_options;
 
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback);
-void vpn_disconnect();
+
+extern int vpn_attach_command_pipe(void *user_data, int fd);
+extern void vpn_detach_command_pipe(void *user_data);
 
 extern void vpn_log(int level, const char *msg);
 

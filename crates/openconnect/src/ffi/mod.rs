@@ -53,22 +53,36 @@ pub(crate) struct VpnSessionInfoRaw {
 
 #[link(name = "vpn")]
 unsafe extern "C" {
+  fn vpn_write_cancel(fd: c_int) -> c_int;
   #[link_name = "vpn_connect"]
   fn vpn_connect(
     options: *const ConnectOptions,
     callback: extern "C" fn(i32, *const VpnSessionInfoRaw, *mut c_void),
   ) -> c_int;
 
-  #[link_name = "vpn_disconnect"]
-  fn vpn_disconnect();
+}
+
+pub(crate) fn write_cancel(fd: i32) -> std::io::Result<()> {
+  let error = unsafe { vpn_write_cancel(fd) };
+  if error == 0 {
+    Ok(())
+  } else {
+    Err(std::io::Error::from_raw_os_error(error))
+  }
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn vpn_attach_command_pipe(vpn: *mut c_void, fd: c_int) -> c_int {
+  unsafe { &*(vpn as *const Vpn) }.attach_command_pipe(fd).into()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn vpn_detach_command_pipe(vpn: *mut c_void) {
+  unsafe { &*(vpn as *const Vpn) }.detach_command_pipe();
 }
 
 pub(crate) fn connect(options: &ConnectOptions) -> i32 {
   unsafe { vpn_connect(options, on_vpn_connected) }
-}
-
-pub(crate) fn disconnect() {
-  unsafe { vpn_disconnect() }
 }
 
 #[unsafe(no_mangle)]
