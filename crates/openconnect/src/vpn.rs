@@ -1,10 +1,10 @@
 use std::{
   ffi::{CStr, CString, c_char},
-  fmt,
-  sync::{Arc, RwLock},
+  fmt, io,
+  sync::{Arc, Mutex, RwLock},
 };
 
-use log::info;
+use log::{info, warn};
 
 use crate::ffi;
 use crate::vpn_utils::{check_executable, find_csd_wrapper, find_vpnc_script};
@@ -60,7 +60,45 @@ fn positive_i64_to_u32(value: i64) -> Option<u32> {
   u32::try_from(value).ok().filter(|value| *value > 0)
 }
 
+// The descriptor is borrowed only between attach and detach. Serialize writes
+// against teardown and retain cancellation before the pipe exists.
+#[derive(Default)]
+struct Cancellation {
+  state: Mutex<CancellationState>,
+}
+
+#[derive(Default)]
+struct CancellationState {
+  requested: bool,
+  command_fd: Option<i32>,
+}
+
+impl Cancellation {
+  fn attach(&self, fd: i32) -> bool {
+    let mut state = self.state.lock().unwrap();
+    state.command_fd = Some(fd);
+    state.requested
+  }
+
+  fn detach(&self) {
+    self.state.lock().unwrap().command_fd = None;
+  }
+
+  fn cancel(&self) -> io::Result<()> {
+    let mut state = self.state.lock().unwrap();
+    if state.requested {
+      return Ok(());
+    }
+    state.requested = true;
+    if let Some(fd) = state.command_fd {
+      ffi::write_cancel(fd)?;
+    }
+    Ok(())
+  }
+}
+
 pub struct Vpn {
+  cancellation: Cancellation,
   server: CString,
   cookie: CString,
 
@@ -114,8 +152,18 @@ impl Vpn {
     }
   }
 
+  pub(crate) fn attach_command_pipe(&self, fd: i32) -> bool {
+    self.cancellation.attach(fd)
+  }
+
+  pub(crate) fn detach_command_pipe(&self) {
+    self.cancellation.detach();
+  }
+
   pub fn disconnect(&self) {
-    ffi::disconnect();
+    if let Err(error) = self.cancellation.cancel() {
+      warn!("Failed to signal VPN cancellation: {error}");
+    }
   }
 
   fn build_connect_options(&self) -> ffi::ConnectOptions {
@@ -401,6 +449,7 @@ impl VpnBuilder {
     let os = self.os.unwrap_or("linux".to_string());
 
     Ok(Vpn {
+      cancellation: Cancellation::default(),
       server: Self::to_cstring(&self.server),
       cookie: Self::to_cstring(&self.cookie),
 
@@ -529,6 +578,7 @@ mod tests {
   #[test]
   fn connect_options_include_host_id() {
     let vpn = Vpn {
+      cancellation: Cancellation::default(),
       server: CString::new("gateway.example.com").unwrap(),
       cookie: CString::new("cookie").unwrap(),
       user_agent: CString::new("agent").unwrap(),
@@ -559,5 +609,177 @@ mod tests {
 
     let host_id = unsafe { CStr::from_ptr(options.host_id) }.to_str().unwrap();
     assert_eq!(host_id, "profile-host-id");
+  }
+
+  #[test]
+  fn disconnect_before_connect_is_retained_without_contacting_server() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let vpn = Vpn::builder(&format!("https://{}", listener.local_addr().unwrap()), "test-cookie")
+      .script_path("/bin/sh".to_string())
+      .build()
+      .unwrap();
+    vpn.disconnect();
+    vpn.disconnect();
+    assert_ne!(vpn.connect(|_| panic!("Canceled attempt connected")), 0);
+    assert_eq!(listener.accept().unwrap_err().kind(), io::ErrorKind::WouldBlock);
+  }
+
+  #[test]
+  fn command_pipe_failure_preserves_stdin() {
+    use std::{
+      ffi::{c_int, c_void},
+      fs::File,
+      os::fd::AsFd,
+      process::{Command, Stdio},
+    };
+
+    const CHILD: &str = "OPENCONNECT_TEST_PIPE_FAILURE";
+    if std::env::var_os(CHILD).is_none() {
+      // Limit descriptors only in a subprocess, leaving the test runner untouched.
+      let output = Command::new("sh")
+        .args([
+          "-c",
+          "ulimit -n 64 && exec \"$1\" --exact vpn::tests::command_pipe_failure_preserves_stdin --nocapture",
+          "sh",
+        ])
+        .arg(std::env::current_exe().unwrap())
+        .env(CHILD, "1")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+      assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+      );
+      return;
+    }
+
+    unsafe extern "C" {
+      fn openconnect_vpninfo_new(
+        agent: *const c_char,
+        validate: Option<unsafe extern "C" fn(*mut c_void, *const c_char) -> c_int>,
+        config: Option<unsafe extern "C" fn(*mut c_void, *const c_char, c_int) -> c_int>,
+        auth: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_int>,
+        progress: Option<unsafe extern "C" fn(*mut c_void, c_int, *const c_char, ...)>,
+        data: *mut c_void,
+      ) -> *mut c_void;
+      fn openconnect_setup_cmd_pipe(info: *mut c_void) -> c_int;
+      fn openconnect_vpninfo_free(info: *mut c_void);
+    }
+    // Construct first so resource exhaustion targets pipe creation specifically.
+    let info = unsafe { openconnect_vpninfo_new(c"test".as_ptr(), None, None, None, None, std::ptr::null_mut()) };
+    assert!(!info.is_null());
+    let mut descriptors = Vec::new();
+    loop {
+      match File::open("/dev/null") {
+        Ok(file) => descriptors.push(file),
+        Err(error) => {
+          assert_eq!(error.raw_os_error(), Some(24)); // EMFILE on supported Unix platforms.
+          break;
+        }
+      }
+    }
+    assert!(unsafe { openconnect_setup_cmd_pipe(info) } < 0);
+    unsafe { openconnect_vpninfo_free(info) };
+    // Constructor resource acquisition may also fail before selecting a protocol.
+    let info = unsafe { openconnect_vpninfo_new(c"test".as_ptr(), None, None, None, None, std::ptr::null_mut()) };
+    if !info.is_null() {
+      unsafe { openconnect_vpninfo_free(info) };
+    }
+    drop(descriptors);
+    std::io::stdin()
+      .as_fd()
+      .try_clone_to_owned()
+      .expect("Cleanup closed stdin");
+  }
+
+  #[test]
+  fn disconnect_interrupts_in_progress_tls_and_cannot_cancel_another_attempt() {
+    use std::{io::Read, sync::mpsc, thread, time::Duration};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let vpn = Arc::new(
+      Vpn::builder(&format!("https://{}", listener.local_addr().unwrap()), "test-cookie")
+        .script_path("/bin/sh".to_string())
+        .build()
+        .unwrap(),
+    );
+    let (tx, rx) = mpsc::channel();
+    let worker_vpn = vpn.clone();
+    let worker = thread::spawn(move || {
+      tx.send(worker_vpn.connect(|_| panic!("Test peer never completes TLS")))
+        .unwrap();
+    });
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let peer = loop {
+      match listener.accept() {
+        Ok((peer, _)) => break peer,
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock && std::time::Instant::now() < deadline => {
+          thread::sleep(Duration::from_millis(5));
+        }
+        other => {
+          vpn.disconnect();
+          worker.join().unwrap();
+          panic!("Connection did not reach test peer: {other:?}");
+        }
+      }
+    };
+    vpn.disconnect();
+    let result = rx.recv_timeout(Duration::from_secs(2));
+    drop(peer); // Release the peer even if cancellation regresses.
+    worker.join().unwrap();
+    assert_ne!(result.expect("Cancellation did not interrupt TLS"), 0);
+    use std::os::{fd::AsRawFd, unix::net::UnixStream};
+    let next = Cancellation::default();
+    let (mut reader, writer) = UnixStream::pair().unwrap();
+    reader.set_nonblocking(true).unwrap();
+    assert!(!next.attach(writer.as_raw_fd()));
+    vpn.disconnect(); // A late stop of the old attempt cannot affect the new one.
+    assert_eq!(reader.read(&mut [0]).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    next.detach();
+  }
+
+  #[test]
+  fn cancellation_racing_pipe_attachment_is_never_lost() {
+    use std::{
+      io::Read,
+      os::{fd::AsRawFd, unix::net::UnixStream},
+      thread,
+    };
+    for _ in 0..100 {
+      let cancellation = Cancellation::default();
+      let (mut reader, writer) = UnixStream::pair().unwrap();
+      reader.set_nonblocking(true).unwrap();
+      let pending = thread::scope(|scope| {
+        let cancel = scope.spawn(|| cancellation.cancel().unwrap());
+        let pending = cancellation.attach(writer.as_raw_fd());
+        cancel.join().unwrap();
+        pending
+      });
+      if !pending {
+        let mut command = [0];
+        assert_eq!(reader.read(&mut command).unwrap(), 1);
+        assert_eq!(command[0], b'x');
+      }
+      cancellation.detach();
+    }
+  }
+
+  #[test]
+  fn disconnect_after_detach_never_writes_to_the_old_descriptor() {
+    use std::{
+      io::Read,
+      os::{fd::AsRawFd, unix::net::UnixStream},
+    };
+    let cancellation = Cancellation::default();
+    let (mut reader, writer) = UnixStream::pair().unwrap();
+    reader.set_nonblocking(true).unwrap();
+    assert!(!cancellation.attach(writer.as_raw_fd()));
+    cancellation.detach();
+    cancellation.cancel().unwrap();
+    assert_eq!(reader.read(&mut [0]).unwrap_err().kind(), io::ErrorKind::WouldBlock);
   }
 }
