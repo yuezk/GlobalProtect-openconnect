@@ -39,15 +39,11 @@ pub fn load_env_vars<T: AsRef<Path>>(env_file: T) -> anyhow::Result<HashMap<Stri
 }
 
 pub fn patch_gui_runtime_env(hidpi: bool) {
-  // This is to avoid blank screen on some systems
-  unsafe { std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1") };
-
   if is_wayland_session(
     env::var_os("WAYLAND_DISPLAY").as_deref(),
     env::var("XDG_SESSION_TYPE").ok().as_deref(),
   ) {
-    info!("Wayland session detected, enabling Linux WebKit rendering fallbacks");
-    set_env_if_missing("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    info!("Wayland session detected, enabling software GL");
     set_env_if_missing("LIBGL_ALWAYS_SOFTWARE", "1");
   }
 
