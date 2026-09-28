@@ -119,6 +119,7 @@ impl Cli {
   fn can_run_alongside_client(&self) -> bool {
     match &self.command {
       CliCommand::Disconnect(_) => true,
+      CliCommand::Hip(_) => true,
       CliCommand::LaunchGui(args) => args.is_auth_callback(),
       _ => false,
     }
@@ -238,6 +239,25 @@ mod tests {
     .expect("global lock file option should parse after subcommand");
 
     assert_eq!(cli.lock_file, PathBuf::from("/tmp/gpclient-portal.lock"));
+  }
+
+  #[test]
+  fn hip_can_run_alongside_connected_client() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "hip",
+      "--client-version",
+      "6.2.4-49",
+      "--client-os",
+      "Mac",
+      "--cookie",
+      "user=alice",
+      "--md5",
+      "test",
+    ])
+    .expect("HIP arguments should parse");
+
+    assert!(cli.can_run_alongside_client());
   }
 
   #[test]
