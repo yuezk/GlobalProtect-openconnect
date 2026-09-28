@@ -45,7 +45,7 @@ Install build and runtime dependencies:
 ```sh
 doas pkg_add git rust libiconv gettext-tools autoconf-2.72 automake-1.17 \
   libtool patch gmake pkgconf libxml gnutls p11-kit nettle gmp \
-  gnome-keyring polkit webkitgtk41 xdg-utils
+  gnome-keyring libappindicator polkit webkitgtk41 xdg-utils
 ```
 
 Use the installed Autoconf and Automake versions:

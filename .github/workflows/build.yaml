@@ -608,6 +608,7 @@ jobs:
             nettle \
             gmp \
             gnome-keyring \
+            libappindicator \
             polkit \
             webkitgtk41 \
             xdg-utils

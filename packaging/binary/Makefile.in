@@ -24,6 +24,12 @@ install:
 	install -Dm644 artifacts/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
 	install -Dm644 artifacts/usr/share/icons/hicolor/256x256/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	install -Dm644 artifacts/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
 	install -Dm644 artifacts/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
 uninstall:
@@ -48,6 +54,12 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
 	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
 	rm -f $(DESTDIR)/var/lib/gpclient/scripts/vpnc-script \
