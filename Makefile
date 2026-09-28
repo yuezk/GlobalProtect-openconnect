@@ -169,6 +169,12 @@ install:
 	install -Dm644 packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
 	install -Dm644 packaging/files/usr/share/icons/hicolor/256x256/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	install -Dm644 packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
+	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
+	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
+	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
+	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
+	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
+	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
 	install -Dm644 packaging/files/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
 install-bsd:
@@ -199,11 +205,18 @@ install-bsd:
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256/apps
 	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256@2/apps
+	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status
 	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/gpgui.svg
 	install -m 644 packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/32x32/apps/gpgui.png
 	install -m 644 packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps/gpgui.png
 	install -m 644 packaging/files/usr/share/icons/hicolor/256x256/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256/apps/gpgui.png
 	install -m 644 packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256@2/apps/gpgui.png
+	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
+	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
+	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
+	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
+	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
+	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
 	install -d $(DESTDIR)$(PREFIX)/share/polkit-1/actions
 	install -m 644 packaging/bsd/com.yuezk.gpgui.policy $(DESTDIR)$(PREFIX)/share/polkit-1/actions/com.yuezk.gpgui.policy
 
@@ -259,6 +272,7 @@ package-openbsd: clean-bsd-package
 	comment=$$(cat .build/openbsd/+COMMENT); \
 		openbsd_arch=$$(uname -m | sed 's/x86_64/amd64/'); \
 		gnome_keyring_pkg=$$(pkg_info -e 'gnome-keyring-*' | sed 's/^inst://' | head -n 1); \
+		libappindicator_pkg=$$(pkg_info -e 'libappindicator-*' | sed 's/^inst://' | head -n 1); \
 		polkit_pkg=$$(pkg_info -e 'polkit-*' | sed 's/^inst://' | head -n 1); \
 		webkitgtk_pkg=$$(pkg_info -e 'webkitgtk41-*' | sed 's/^inst://' | head -n 1); \
 		xdg_utils_pkg=$$(pkg_info -e 'xdg-utils-*' | sed 's/^inst://' | head -n 1); \
@@ -269,6 +283,7 @@ package-openbsd: clean-bsd-package
 			-f .build/openbsd/PLIST \
 			-p $(PREFIX) \
 			-P x11/gnome/keyring:gnome-keyring-*:$$gnome_keyring_pkg \
+			-P x11/libappindicator:libappindicator-*:$$libappindicator_pkg \
 			-P sysutils/polkit:polkit-*:$$polkit_pkg \
 			-P www/webkitgtk4,webkitgtk41:webkitgtk41-*:$$webkitgtk_pkg \
 			-P devel/xdg-utils:xdg-utils-*:$$xdg_utils_pkg \
@@ -297,6 +312,12 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
 	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
 	rm -f $(DESTDIR)/var/lib/gpclient/gpgui \
