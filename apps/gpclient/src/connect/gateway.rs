@@ -341,6 +341,16 @@ impl ConnectHandler<'_> {
     allow_extend_session: bool,
     extension_auth: SessionExtensionAuth,
   ) -> Result<(), GatewayConnectError> {
+    // --cookie-only: print the gateway cookie and exit without opening a tunnel.
+    // No tun device is allocated, no root is required, and no logout is issued
+    // against the gateway — the cookie remains valid for subsequent use.
+    // Output format matches openconnect --authenticate for easy shell consumption.
+    if self.args.cookie_only {
+      println!("COOKIE='{}'", cookie);
+      println!("HOST='{}'", gateway);
+      return Ok(());
+    }
+
     let mtu = self.args.mtu.unwrap_or(0);
     let (hip, csd_wrapper) = self.determine_hip_script();
     let hip_user = self.determine_hip_user();
