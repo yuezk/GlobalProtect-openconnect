@@ -103,10 +103,16 @@ pub fn revoke(approval_id: &str, approving_uid: u32) -> anyhow::Result<()> {
 }
 
 pub fn status(approval_id: &str, desktop_uid: u32) -> anyhow::Result<HipApprovalStatus> {
-  status_at(Path::new(APPROVAL_DIRECTORY), approval_id, desktop_uid, 0)
+  status_at(Path::new(APPROVAL_DIRECTORY), approval_id, desktop_uid, 0, true)
 }
 
-fn status_at(base: &Path, approval_id: &str, desktop_uid: u32, file_owner: u32) -> anyhow::Result<HipApprovalStatus> {
+fn status_at(
+  base: &Path,
+  approval_id: &str,
+  desktop_uid: u32,
+  file_owner: u32,
+  validate_root_ancestors: bool,
+) -> anyhow::Result<HipApprovalStatus> {
   ensure!(desktop_uid != 0, "HIP approval status requires a desktop user");
   validate_id(approval_id)?;
   for path in [
@@ -121,7 +127,7 @@ fn status_at(base: &Path, approval_id: &str, desktop_uid: u32, file_owner: u32) 
     }
   }
   if validate_private_dir(base, file_owner).is_err()
-    || (file_owner == 0 && validate_root_owned_path(base, false).is_err())
+    || (validate_root_ancestors && validate_root_owned_path(base, false).is_err())
   {
     return Ok(HipApprovalStatus::Corrupt);
   }
@@ -355,22 +361,22 @@ mod tests {
     )
     .unwrap();
     assert_eq!(
-      status_at(base.path(), &info.approval_id, 1000, owner).unwrap(),
+      status_at(base.path(), &info.approval_id, 1000, owner, false).unwrap(),
       HipApprovalStatus::Valid
     );
     assert_eq!(
-      status_at(base.path(), &info.approval_id, 1001, owner).unwrap(),
+      status_at(base.path(), &info.approval_id, 1001, owner, false).unwrap(),
       HipApprovalStatus::OtherUser
     );
     let script = base.path().join(&info.approval_id).join(SCRIPT_NAME);
     fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
     assert_eq!(
-      status_at(base.path(), &info.approval_id, 1000, owner).unwrap(),
+      status_at(base.path(), &info.approval_id, 1000, owner, false).unwrap(),
       HipApprovalStatus::Corrupt
     );
     fs::remove_file(base.path().join(&info.approval_id).join(METADATA_NAME)).unwrap();
     assert_eq!(
-      status_at(base.path(), &info.approval_id, 1000, owner).unwrap(),
+      status_at(base.path(), &info.approval_id, 1000, owner, false).unwrap(),
       HipApprovalStatus::Revoked
     );
   }
