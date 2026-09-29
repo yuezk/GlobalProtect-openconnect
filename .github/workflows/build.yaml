@@ -313,11 +313,14 @@ jobs:
         cd gpgui-source
         tar -czf gpgui.tar.gz gpgui gp
     - name: Build gpgui in Docker
+      env:
+        GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
       run: |
         docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -e GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }} \
           -e GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }} \
+          -e GPGUI_LICENSE_SIGNING_KEYS \
           -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:${{ matrix.libc.builder }}
     - name: Install gpgui in Docker
       run: |
@@ -568,6 +571,7 @@ jobs:
           set -eu
           export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
           export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }}
+          export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
           cd "${{ matrix.workspace }}/gp"
           cargo build --release --workspace
@@ -624,6 +628,7 @@ jobs:
           export AUTOMAKE_VERSION=1.17
           export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
           export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }}
+          export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
           cd "${{ matrix.workspace }}/gp"
           cargo build --release --workspace
