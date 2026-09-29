@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-rust-version = "1.89"
+rust-version = "1.91"
 version = "2.6.5"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"

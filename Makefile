@@ -4,7 +4,7 @@ SHELL := /bin/sh
 INCLUDE_GUI ?= 0
 CARGO ?= cargo
 DISABLE_RUST_TOOLCHAIN ?= 0
-RUST_VERSION ?= 1.89
+RUST_VERSION ?= 1.91
 IGNORE_RUST_VERSION ?= 0
 
 VERSION = $(shell grep '^version' Cargo.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')
