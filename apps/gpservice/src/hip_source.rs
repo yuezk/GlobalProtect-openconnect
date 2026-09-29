@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{Context, bail, ensure};
-use gpapi::service::hip::HipSource;
+use gpapi::hip::HipSource;
 use gpservice::hip_runner_state::{MAX_STATE_BYTES, RUNNER_NAME, RunnerReport, STATE_NAME, validate_root_owned_path};
 use tempfile::{Builder, TempDir};
 

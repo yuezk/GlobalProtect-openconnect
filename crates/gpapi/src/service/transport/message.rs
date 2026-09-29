@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::service::hip::HipApprovalStatus;
+use crate::hip::HipApprovalStatus;
 use crate::service::{event::WsEvent, request::WsRequest, vpn_env::VpnEnv, vpnc_script::VpncScriptMetadata};
 
 use super::{MAX_PLAINTEXT, MAX_SERVICE_MESSAGE, ServiceErrorCode, TransportError};

@@ -1,7 +1,7 @@
 use std::{os::unix::process::CommandExt, process::Stdio, sync::Arc, time::Duration};
 
 use anyhow::{Context, bail, ensure};
-use gpapi::service::{hip::HipSource, request::PreviewHipReportRequest};
+use gpapi::{hip::HipSource, service::request::PreviewHipReportRequest};
 use tokio::{io::AsyncReadExt, process::Command};
 
 const MAX_PREVIEW_BYTES: u64 = 1024 * 1024;

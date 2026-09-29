@@ -6,10 +6,11 @@ use zeroize::Zeroize;
 
 use crate::{
   gateway::Gateway,
+  hip::HipSource,
   os_profile::{ClientOs, OsProfile},
 };
 
-use super::{hip::HipSource, vpn_state::ConnectInfo};
+use super::vpn_state::ConnectInfo;
 
 pub const MAX_CLIENT_IDENTITY_DATA: usize = 32 * 1024;
 

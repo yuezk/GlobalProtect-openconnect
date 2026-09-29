@@ -153,7 +153,7 @@ impl RequestDispatcher {
     }
     if matches!(
       request.args().hip_source(),
-      gpapi::service::hip::HipSource::UserScript { .. } | gpapi::service::hip::HipSource::ApprovedRootScript { .. }
+      gpapi::hip::HipSource::UserScript { .. } | gpapi::hip::HipSource::ApprovedRootScript { .. }
     ) {
       return Err("macOS does not support custom HIP scripts");
     }
@@ -459,7 +459,7 @@ mod tests {
 
     let custom = ConnectRequest::new(info, "cookie".into())
       .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
-      .with_hip_source(gpapi::service::hip::HipSource::UserScript {
+      .with_hip_source(gpapi::hip::HipSource::UserScript {
         path: "/tmp/hip.sh".into(),
       });
     assert_eq!(
