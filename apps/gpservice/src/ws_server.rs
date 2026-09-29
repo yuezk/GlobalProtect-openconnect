@@ -12,7 +12,7 @@ use gpapi::{
   utils::lock_file::LockFile,
 };
 use log::{info, warn};
-use openconnect::{find_csd_wrapper, find_vpnc_script};
+use openconnect::find_vpnc_script;
 use tokio::{
   net::TcpListener,
   sync::{Mutex, Semaphore, mpsc, oneshot, watch},
@@ -259,7 +259,6 @@ fn build_snapshot(vpn_state: VpnState) -> VpnEnv {
   VpnEnv {
     vpn_state,
     vpnc_script: find_vpnc_script().map(ToOwned::to_owned),
-    csd_wrapper: find_csd_wrapper().map(ToOwned::to_owned),
     auth_executable: binary_paths::gpauth().to_string_lossy().into_owned(),
     host_info: HostInfo {
       host_identity: HostIdentity::collect(),
@@ -282,7 +281,7 @@ mod tests {
   #[tokio::test]
   async fn resync_snapshot_is_ordered_with_state_events() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
-    let credential = registry.issue(env!("CARGO_PKG_VERSION")).unwrap();
+    let credential = registry.issue(env!("CARGO_PKG_VERSION"), None).unwrap();
     let permit = registry
       .begin_handshake(
         credential.service_instance_id(),
@@ -339,7 +338,7 @@ mod tests {
   #[tokio::test]
   async fn removed_prepared_candidate_cannot_commit_takeover() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
-    let credential = registry.issue(env!("CARGO_PKG_VERSION")).unwrap();
+    let credential = registry.issue(env!("CARGO_PKG_VERSION"), None).unwrap();
     let dispatcher = Arc::new(RequestDispatcher::new(
       crate::vpn_task::LifecycleHandle::for_tests(),
       Arc::new(AtomicBool::new(false)),

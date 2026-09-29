@@ -13,9 +13,11 @@ use crate::ws_connection::ConnectionControl;
 
 const ACTIVATION_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_PENDING_SESSIONS: usize = 16;
+const HIP_PREVIEW_CHUNK_BYTES: usize = 16 * 1024;
 
 pub struct HandshakePermit {
   pub session_id: Uuid,
+  pub desktop_uid: Option<u32>,
   pub observed_generation: u64,
   pub secret: Zeroizing<[u8; 32]>,
   token: Uuid,
@@ -38,6 +40,13 @@ pub enum SessionError {
   ReconnectSuperseded,
   #[error("session registry is unavailable")]
   Unavailable,
+  #[error("invalid HIP report upload")]
+  InvalidHipUpload,
+}
+
+pub enum HipUploadResult {
+  Progress(Uuid),
+  Stored(Uuid),
 }
 
 enum SessionStatus {
@@ -55,6 +64,11 @@ enum SessionStatus {
 struct SessionRecord {
   secret: Zeroizing<[u8; 32]>,
   product_version: String,
+  desktop_uid: Option<u32>,
+  edited_hip_report: Option<(Uuid, Arc<str>)>,
+  edited_hip_upload: Option<(Uuid, String)>,
+  hip_preview: Option<(Uuid, Arc<str>)>,
+  last_successful_hip_report: Option<Arc<str>>,
   status: SessionStatus,
 }
 
@@ -71,7 +85,7 @@ impl SessionRegistry {
     }
   }
 
-  pub fn issue(&self, product_version: &str) -> Result<Arc<SessionCredential>, SessionError> {
+  pub fn issue(&self, product_version: &str, desktop_uid: Option<u32>) -> Result<Arc<SessionCredential>, SessionError> {
     let mut sessions = self.sessions.lock().map_err(|_| SessionError::Unavailable)?;
     let now = Instant::now();
     sessions.retain(|_, record| {
@@ -108,6 +122,11 @@ impl SessionRegistry {
       SessionRecord {
         secret: Zeroizing::new(*credential.secret()),
         product_version: credential.product_version().to_owned(),
+        desktop_uid,
+        edited_hip_report: None,
+        edited_hip_upload: None,
+        hip_preview: None,
+        last_successful_hip_report: None,
         status: SessionStatus::Pending {
           activation_deadline: Instant::now() + ACTIVATION_TIMEOUT,
           handshake_token: None,
@@ -186,6 +205,7 @@ impl SessionRegistry {
     let record = sessions.get(&session_id).ok_or(SessionError::Unauthorized)?;
     Ok(HandshakePermit {
       session_id,
+      desktop_uid: record.desktop_uid,
       observed_generation,
       secret: Zeroizing::new(*record.secret),
       token,
@@ -278,6 +298,122 @@ impl SessionRegistry {
     )
   }
 
+  pub fn append_edited_hip_report_chunk(
+    &self,
+    session_id: Uuid,
+    upload_id: Option<Uuid>,
+    offset: usize,
+    chunk: String,
+    complete: bool,
+  ) -> Result<HipUploadResult, SessionError> {
+    let mut sessions = self.sessions.lock().map_err(|_| SessionError::Unavailable)?;
+    let record = sessions.get_mut(&session_id).ok_or(SessionError::Unauthorized)?;
+    if !matches!(record.status, SessionStatus::Active { .. }) {
+      return Err(SessionError::Unauthorized);
+    }
+    if upload_id.is_none() {
+      if offset != 0 {
+        return Err(SessionError::InvalidHipUpload);
+      }
+      record.edited_hip_upload = Some((Uuid::new_v4(), String::new()));
+    }
+    let (current_id, xml) = record
+      .edited_hip_upload
+      .as_mut()
+      .ok_or(SessionError::InvalidHipUpload)?;
+    if upload_id.is_some_and(|id| id != *current_id) || offset != xml.len() || chunk.len() > 8 * 1024 {
+      return Err(SessionError::InvalidHipUpload);
+    }
+    if xml.len() + chunk.len() > gphip::MAX_EDITED_REPORT_BYTES {
+      record.edited_hip_upload = None;
+      return Err(SessionError::InvalidHipUpload);
+    }
+    xml.push_str(&chunk);
+    if !complete {
+      return Ok(HipUploadResult::Progress(*current_id));
+    }
+    if gphip::validate_edited_report(xml).is_err() {
+      record.edited_hip_upload = None;
+      return Err(SessionError::InvalidHipUpload);
+    }
+    let (_, xml) = record.edited_hip_upload.take().ok_or(SessionError::InvalidHipUpload)?;
+    let report_id = Uuid::new_v4();
+    record.edited_hip_report = Some((report_id, Arc::from(xml)));
+    Ok(HipUploadResult::Stored(report_id))
+  }
+
+  pub fn edited_hip_report(&self, session_id: Uuid, report_id: Uuid) -> Result<Arc<str>, SessionError> {
+    let sessions = self.sessions.lock().map_err(|_| SessionError::Unavailable)?;
+    let record = sessions.get(&session_id).ok_or(SessionError::Unauthorized)?;
+    record
+      .edited_hip_report
+      .as_ref()
+      .filter(|(id, _)| *id == report_id)
+      .map(|(_, xml)| Arc::clone(xml))
+      .ok_or(SessionError::Unauthorized)
+  }
+
+  pub fn store_hip_preview(&self, session_id: Uuid, xml: String) -> Result<Uuid, SessionError> {
+    let mut sessions = self.sessions.lock().map_err(|_| SessionError::Unavailable)?;
+    let record = sessions.get_mut(&session_id).ok_or(SessionError::Unauthorized)?;
+    if !matches!(record.status, SessionStatus::Active { .. }) {
+      return Err(SessionError::Unauthorized);
+    }
+    let preview_id = Uuid::new_v4();
+    record.hip_preview = Some((preview_id, Arc::from(xml)));
+    Ok(preview_id)
+  }
+
+  pub fn hip_preview_chunk(
+    &self,
+    session_id: Uuid,
+    preview_id: Uuid,
+    offset: usize,
+  ) -> Result<(String, bool), SessionError> {
+    let sessions = self.sessions.lock().map_err(|_| SessionError::Unavailable)?;
+    let record = sessions.get(&session_id).ok_or(SessionError::Unauthorized)?;
+    let (_, xml) = record
+      .hip_preview
+      .as_ref()
+      .filter(|(id, _)| *id == preview_id)
+      .ok_or(SessionError::Unauthorized)?;
+    if offset > xml.len() || !xml.is_char_boundary(offset) {
+      return Err(SessionError::Unauthorized);
+    }
+    let mut end = (offset + HIP_PREVIEW_CHUNK_BYTES).min(xml.len());
+    while !xml.is_char_boundary(end) {
+      end -= 1;
+    }
+    Ok((xml[offset..end].to_owned(), end == xml.len()))
+  }
+
+  pub fn store_successful_hip_report(&self, session_id: Uuid, xml: &str) -> Result<(), SessionError> {
+    if xml.len() > 1024 * 1024 {
+      return Err(SessionError::Unavailable);
+    }
+    let mut sessions = self.sessions.lock().map_err(|_| SessionError::Unavailable)?;
+    let record = sessions.get_mut(&session_id).ok_or(SessionError::Unauthorized)?;
+    if !matches!(record.status, SessionStatus::Active { .. }) {
+      return Err(SessionError::Unauthorized);
+    }
+    record.last_successful_hip_report = Some(Arc::from(xml));
+    Ok(())
+  }
+
+  pub fn last_successful_hip_report(&self, session_id: Uuid) -> Result<Option<Arc<str>>, SessionError> {
+    let sessions = self.sessions.lock().map_err(|_| SessionError::Unavailable)?;
+    let record = sessions.get(&session_id).ok_or(SessionError::Unauthorized)?;
+    Ok(record.last_successful_hip_report.as_ref().map(Arc::clone))
+  }
+
+  pub fn clear_successful_hip_report(&self, session_id: Uuid) {
+    if let Ok(mut sessions) = self.sessions.lock()
+      && let Some(record) = sessions.get_mut(&session_id)
+    {
+      record.last_successful_hip_report = None;
+    }
+  }
+
   pub fn disconnect_if_current(&self, session_id: Uuid, generation: u64) {
     let Ok(mut sessions) = self.sessions.lock() else {
       return;
@@ -333,9 +469,143 @@ mod tests {
   }
 
   #[test]
+  fn credential_retains_verified_desktop_user_across_reconnect() {
+    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let credential = registry.issue("2.6.4", Some(1000)).unwrap();
+    let first = registry
+      .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
+      .unwrap();
+    assert_eq!(first.desktop_uid, Some(1000));
+    registry.commit_attach(&first, control()).unwrap();
+
+    let reconnect = registry
+      .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
+      .unwrap();
+    assert_eq!(reconnect.desktop_uid, Some(1000));
+  }
+
+  #[test]
+  fn edited_hip_report_is_session_bound_and_replaced_without_affecting_pinned_content() {
+    fn upload(registry: &SessionRegistry, session_id: Uuid, xml: &str) -> Uuid {
+      let mut upload_id = None;
+      let mut offset = 0;
+      while offset < xml.len() {
+        let mut end = (offset + 8 * 1024).min(xml.len());
+        while !xml.is_char_boundary(end) {
+          end -= 1;
+        }
+        let complete = end == xml.len();
+        match registry
+          .append_edited_hip_report_chunk(session_id, upload_id, offset, xml[offset..end].into(), complete)
+          .unwrap()
+        {
+          HipUploadResult::Progress(id) => upload_id = Some(id),
+          HipUploadResult::Stored(id) => return id,
+        }
+        offset = end;
+      }
+      panic!("upload did not complete")
+    }
+
+    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let first_credential = registry.issue("2.6.4", Some(1000)).unwrap();
+    let second_credential = registry.issue("2.6.4", Some(1001)).unwrap();
+    for credential in [&first_credential, &second_credential] {
+      let permit = registry
+        .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
+        .unwrap();
+      registry.commit_attach(&permit, control()).unwrap();
+    }
+
+    let valid = gphip::generate_report(&gphip::ReportInput {
+      profile: gpapi::os_profile::OsProfile::builder(gpapi::os_profile::ClientOs::Linux).build(),
+      context: gphip::ReportContext::Preview,
+    })
+    .unwrap();
+    let first_id = upload(&registry, first_credential.session_id(), &valid);
+    let pinned = registry
+      .edited_hip_report(first_credential.session_id(), first_id)
+      .unwrap();
+    assert!(matches!(
+      registry.edited_hip_report(second_credential.session_id(), first_id),
+      Err(SessionError::Unauthorized)
+    ));
+    let second_id = upload(&registry, first_credential.session_id(), &valid);
+    assert!(matches!(
+      registry.edited_hip_report(first_credential.session_id(), first_id),
+      Err(SessionError::Unauthorized)
+    ));
+    assert_eq!(
+      &*registry
+        .edited_hip_report(first_credential.session_id(), second_id)
+        .unwrap(),
+      valid
+    );
+    assert_eq!(&*pinned, valid);
+    registry.revoke(first_credential.session_id());
+    assert!(matches!(
+      registry.edited_hip_report(first_credential.session_id(), second_id),
+      Err(SessionError::Unauthorized)
+    ));
+  }
+
+  #[test]
+  fn submitted_report_changes_only_after_success_callback_and_is_session_bound() {
+    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let credential = registry.issue("2.6.4", Some(1000)).unwrap();
+    let permit = registry
+      .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
+      .unwrap();
+    registry.commit_attach(&permit, control()).unwrap();
+    assert!(
+      registry
+        .last_successful_hip_report(credential.session_id())
+        .unwrap()
+        .is_none()
+    );
+    registry
+      .store_successful_hip_report(credential.session_id(), "first")
+      .unwrap();
+    assert_eq!(
+      registry
+        .last_successful_hip_report(credential.session_id())
+        .unwrap()
+        .as_deref(),
+      Some("first")
+    );
+    let preview_id = registry
+      .store_hip_preview(credential.session_id(), "é".repeat(8193))
+      .unwrap();
+    let (first_chunk, complete) = registry
+      .hip_preview_chunk(credential.session_id(), preview_id, 0)
+      .unwrap();
+    assert!(!complete);
+    assert!(first_chunk.len() <= HIP_PREVIEW_CHUNK_BYTES);
+    assert!(
+      registry
+        .hip_preview_chunk(credential.session_id(), preview_id, 1)
+        .is_err()
+    );
+    assert_eq!(
+      registry
+        .last_successful_hip_report(credential.session_id())
+        .unwrap()
+        .as_deref(),
+      Some("first")
+    );
+    registry.clear_successful_hip_report(credential.session_id());
+    assert!(
+      registry
+        .last_successful_hip_report(credential.session_id())
+        .unwrap()
+        .is_none()
+    );
+  }
+
+  #[test]
   fn reconnect_uses_generation_compare_and_swap() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
-    let credential = registry.issue("2.6.4").unwrap();
+    let credential = registry.issue("2.6.4", None).unwrap();
     let first = registry
       .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
       .unwrap();
@@ -356,7 +626,7 @@ mod tests {
   #[test]
   fn failed_initial_handshake_only_revokes_its_own_reservation() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
-    let credential = registry.issue("2.6.4").unwrap();
+    let credential = registry.issue("2.6.4", None).unwrap();
     let first = registry
       .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
       .unwrap();
@@ -370,7 +640,7 @@ mod tests {
   #[test]
   fn failed_reconnect_keeps_active_connection_authoritative() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
-    let credential = registry.issue("2.6.4").unwrap();
+    let credential = registry.issue("2.6.4", None).unwrap();
     let first = registry
       .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
       .unwrap();

@@ -45,7 +45,7 @@ impl CredentialServer {
           }
           let registry = Arc::clone(&self.registry);
           tokio::spawn(async move {
-            if let Err(err) = credential_lease::serve(stream, registry).await {
+            if let Err(err) = credential_lease::serve(stream, registry, None).await {
               warn!("Broker credential lease ended: {err}");
             }
           });

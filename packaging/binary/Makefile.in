@@ -3,6 +3,8 @@ install:
 
 	install -Dm755 artifacts/usr/bin/gpclient $(DESTDIR)/usr/bin/gpclient
 	install -Dm755 artifacts/usr/bin/gpservice $(DESTDIR)/usr/bin/gpservice
+	install -Dm755 artifacts/usr/libexec/gpclient/gp-hip-runner $(DESTDIR)/usr/libexec/gpclient/gp-hip-runner
+	install -Dm755 artifacts/usr/libexec/gpclient/gp-hip-script-installer $(DESTDIR)/usr/libexec/gpclient/gp-hip-script-installer
 	install -Dm755 artifacts/usr/bin/gpauth $(DESTDIR)/usr/bin/gpauth
 	install -Dm755 artifacts/usr/bin/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper
 
@@ -37,6 +39,8 @@ uninstall:
 
 	rm -f $(DESTDIR)/usr/bin/gpclient
 	rm -f $(DESTDIR)/usr/bin/gpservice
+	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-hip-runner
+	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-hip-script-installer
 	rm -f $(DESTDIR)/usr/bin/gpauth
 	rm -f $(DESTDIR)/usr/bin/gpgui-helper
 	rm -f $(DESTDIR)/usr/bin/gpgui

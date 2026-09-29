@@ -16,9 +16,12 @@ typedef struct vpn_session_info {
 typedef void (*vpn_connected_callback)(int cmd_pipe_fd,
 				       const vpn_session_info *session_info,
 				       void *user_data);
+typedef void (*vpn_hip_report_callback)(void *user_data, const char *report,
+					 size_t length);
 
 typedef struct vpn_options {
 	void *user_data;
+	vpn_hip_report_callback on_hip_report_submitted;
 
 	const char *server;
 	const char *cookie;

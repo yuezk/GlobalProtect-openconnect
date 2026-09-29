@@ -6,6 +6,8 @@ mod dev_bootstrap;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", all(test, unix)))]
 mod device_anchor;
 mod handlers;
+mod hip_preview;
+mod hip_source;
 #[cfg(target_os = "macos")]
 mod macos_broker;
 mod request_dispatcher;

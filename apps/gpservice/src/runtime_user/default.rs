@@ -1,3 +1,3 @@
-pub(crate) fn trusted_csd_uid() -> anyhow::Result<Option<u32>> {
-  Ok(None)
+pub(crate) fn desktop_uid() -> Option<u32> {
+  None
 }

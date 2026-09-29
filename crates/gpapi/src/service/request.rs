@@ -9,9 +9,31 @@ use crate::{
   os_profile::{ClientOs, OsProfile},
 };
 
-use super::vpn_state::ConnectInfo;
+use super::{hip::HipSource, vpn_state::ConnectInfo};
 
 pub const MAX_CLIENT_IDENTITY_DATA: usize = 32 * 1024;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct StoreEditedHipReportChunkRequest {
+  pub upload_id: Option<String>,
+  pub offset: usize,
+  pub xml: String,
+  pub complete: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PreviewHipReportRequest {
+  pub source: HipSource,
+  pub client_os: ClientOs,
+  pub client_version: String,
+  pub host_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ReadHipPreviewChunkRequest {
+  pub preview_id: String,
+  pub offset: usize,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct LaunchGuiRequest {
@@ -50,9 +72,7 @@ pub struct ConnectArgs {
   sslkey_data: Option<String>,
   key_password: Option<String>,
 
-  hip: bool,
-  csd_uid: u32,
-  csd_wrapper: Option<String>,
+  hip_source: HipSource,
 
   reconnect_timeout: u32,
   mtu: u32,
@@ -80,9 +100,7 @@ impl ConnectArgs {
       certificate_data: None,
       sslkey_data: None,
       key_password: None,
-      hip: false,
-      csd_uid: 0,
-      csd_wrapper: None,
+      hip_source: HipSource::Disabled,
       reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,
@@ -154,16 +172,8 @@ impl ConnectArgs {
     self.key_password.clone()
   }
 
-  pub fn hip(&self) -> bool {
-    self.hip
-  }
-
-  pub fn csd_uid(&self) -> u32 {
-    self.csd_uid
-  }
-
-  pub fn csd_wrapper(&self) -> Option<String> {
-    self.csd_wrapper.clone()
+  pub fn hip_source(&self) -> &HipSource {
+    &self.hip_source
   }
 
   pub fn reconnect_timeout(&self) -> u32 {
@@ -212,9 +222,7 @@ impl fmt::Debug for ConnectArgs {
         "client_auth_data",
         &(self.certificate_data.is_some() || self.sslkey_data.is_some()),
       )
-      .field("hip", &self.hip)
-      .field("csd_uid", &self.csd_uid)
-      .field("csd_wrapper", &self.csd_wrapper)
+      .field("hip_source", &self.hip_source)
       .field("reconnect_timeout", &self.reconnect_timeout)
       .field("mtu", &self.mtu)
       .field("disable_ipv6", &self.disable_ipv6)
@@ -252,18 +260,8 @@ impl ConnectRequest {
     self
   }
 
-  pub fn with_hip(mut self, hip: bool) -> Self {
-    self.args.hip = hip;
-    self
-  }
-
-  pub fn with_csd_uid(mut self, csd_uid: u32) -> Self {
-    self.args.csd_uid = csd_uid;
-    self
-  }
-
-  pub fn with_csd_wrapper<T: Into<Option<String>>>(mut self, csd_wrapper: T) -> Self {
-    self.args.csd_wrapper = csd_wrapper.into();
+  pub fn with_hip_source(mut self, hip_source: HipSource) -> Self {
+    self.args.hip_source = hip_source;
     self
   }
 
@@ -371,6 +369,11 @@ pub struct UpdateLogLevelRequest(pub String);
 pub enum WsRequest {
   Connect(Box<ConnectRequest>),
   Disconnect(DisconnectRequest),
+  StoreEditedHipReportChunk(StoreEditedHipReportChunkRequest),
+  PreviewHipReport(PreviewHipReportRequest),
+  GetHipApprovalStatus { approval_id: String },
+  ReadHipPreviewChunk(ReadHipPreviewChunkRequest),
+  GetLastSubmittedHipReport,
   UpdateLogLevel(UpdateLogLevelRequest),
   RestartGui,
   UpdateGui(UpdateGuiRequest),

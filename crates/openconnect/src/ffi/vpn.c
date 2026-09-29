@@ -105,6 +105,8 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	}
 
 	context.vpninfo = vpninfo;
+	openconnect_set_gp_hip_report_callback(vpninfo, options->user_data,
+					options->on_hip_report_submitted);
 	context.command_fd = openconnect_setup_cmd_pipe(vpninfo);
 	if (context.command_fd < 0) {
 		ERROR("openconnect_setup_cmd_pipe failed");

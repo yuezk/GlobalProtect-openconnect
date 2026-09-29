@@ -100,7 +100,7 @@ impl Cli {
     let gui_restart_requested = Arc::new(AtomicBool::new(false));
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
     let externally_brokered = self.externally_brokered();
-    let trusted_csd_uid = crate::runtime_user::trusted_csd_uid()?;
+    let desktop_uid = crate::runtime_user::desktop_uid();
     let brokered_scripts_dir = if externally_brokered {
       let executable = std::env::current_exe().context("Failed to locate the gpservice executable")?;
       let contents_dir = executable
@@ -111,7 +111,7 @@ impl Cli {
     } else {
       None
     };
-    let (mut vpn_task, lifecycle) = VpnTask::new(vpn_state_tx, externally_brokered, trusted_csd_uid);
+    let (mut vpn_task, lifecycle) = VpnTask::new(vpn_state_tx, externally_brokered, Arc::clone(&registry));
     let dispatcher = Arc::new(RequestDispatcher::new(
       lifecycle.clone(),
       Arc::clone(&gui_restart_requested),
@@ -196,7 +196,7 @@ impl Cli {
       let envs = self.env_file.as_ref().map(env_utils::load_env_vars).transpose()?;
       let minimized = self.minimized;
       tokio::spawn(async move {
-        launch_gui(envs, registry, minimized, gui_restart_requested).await;
+        launch_gui(envs, registry, desktop_uid, minimized, gui_restart_requested).await;
         let _ = shutdown_tx.send(()).await;
       });
     } else {
@@ -366,11 +366,12 @@ mod signals {
 async fn launch_gui(
   envs: Option<HashMap<String, String>>,
   registry: Arc<SessionRegistry>,
+  desktop_uid: Option<u32>,
   mut minimized: bool,
   restart_requested: Arc<AtomicBool>,
 ) {
   loop {
-    let credential = match registry.issue(env!("CARGO_PKG_VERSION")) {
+    let credential = match registry.issue(env!("CARGO_PKG_VERSION"), desktop_uid) {
       Ok(credential) => credential,
       Err(err) => {
         warn!("Failed to issue GUI credential: {err}");

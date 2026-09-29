@@ -7,6 +7,9 @@ license.workspace = true
 [dependencies]
 common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap", "logger"] }
+gphip = { path = "../../crates/gphip" }
+base64.workspace = true
+sha256.workspace = true
 openconnect = { path = "../../crates/openconnect" }
 clap.workspace = true
 anyhow.workspace = true
@@ -31,4 +34,3 @@ nix = { version = "0.31", features = ["fs", "socket", "user"] }
 
 [dev-dependencies]
 tokio-tungstenite = "0.29"
-sha256.workspace = true

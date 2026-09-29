@@ -22,6 +22,7 @@ pub enum TransportError {
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
 pub enum HandshakeRejection {
   VersionMismatch { client: String, service: String },
+  HipProtocolMismatch { client: u16, service: u16 },
   ServiceRestarted { service_instance_id: Uuid },
   ReconnectSuperseded,
   Unauthorized,

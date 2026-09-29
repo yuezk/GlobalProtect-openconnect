@@ -51,7 +51,13 @@ impl RequestDispatcher {
     }
   }
 
-  pub fn dispatch_lifecycle(&self, request: WsRequest) -> Result<WsRequest, ServiceResult> {
+  pub fn dispatch_lifecycle(
+    &self,
+    request: WsRequest,
+    desktop_uid: Option<u32>,
+    edited_report: Option<Arc<str>>,
+    session_id: Option<uuid::Uuid>,
+  ) -> Result<WsRequest, ServiceResult> {
     match request {
       WsRequest::Connect(request) => {
         if let Err(message) = self.validate_connect_paths(&request) {
@@ -67,7 +73,11 @@ impl RequestDispatcher {
             "Request could not be accepted",
           ));
         }
-        Err(self.lifecycle.submit_connect(*request))
+        Err(
+          self
+            .lifecycle
+            .submit_connect(*request, desktop_uid, edited_report, session_id),
+        )
       }
       WsRequest::Disconnect(_) => Err(self.lifecycle.request_disconnect()),
       request => Ok(request),
@@ -75,7 +85,7 @@ impl RequestDispatcher {
   }
 
   pub async fn dispatch(&self, request: WsRequest) -> ServiceResult {
-    let request = match self.dispatch_lifecycle(request) {
+    let request = match self.dispatch_lifecycle(request, None, None, None) {
       Ok(request) => request,
       Err(result) => return result,
     };
@@ -121,7 +131,15 @@ impl RequestDispatcher {
         }
         ServiceResult::Accepted
       }
-      WsRequest::Connect(_) | WsRequest::Disconnect(_) => unreachable!("lifecycle request was already dispatched"),
+      WsRequest::Connect(_)
+      | WsRequest::Disconnect(_)
+      | WsRequest::StoreEditedHipReportChunk(_)
+      | WsRequest::PreviewHipReport(_)
+      | WsRequest::GetHipApprovalStatus { .. }
+      | WsRequest::ReadHipPreviewChunk(_)
+      | WsRequest::GetLastSubmittedHipReport => {
+        unreachable!("session-bound request was already dispatched")
+      }
     }
   }
 
@@ -130,12 +148,14 @@ impl RequestDispatcher {
       return Ok(());
     };
     let expected_script = scripts.join("vpnc-script").to_string_lossy().into_owned();
-    let expected_wrapper = scripts.join("hipreport.sh").to_string_lossy().into_owned();
     if request.args().vpnc_script().as_deref() != Some(expected_script.as_str()) {
       return Err("macOS VPN script must be the bundled script");
     }
-    if request.args().csd_wrapper().as_deref() != Some(expected_wrapper.as_str()) {
-      return Err("macOS HIP wrapper must be the bundled wrapper");
+    if matches!(
+      request.args().hip_source(),
+      gpapi::service::hip::HipSource::UserScript { .. } | gpapi::service::hip::HipSource::ApprovedRootScript { .. }
+    ) {
+      return Err("macOS does not support custom HIP scripts");
     }
     if request.args().certificate().is_some() || request.args().sslkey().is_some() {
       return Err("macOS client identity must be provided as protected data, not root-readable paths");
@@ -408,7 +428,6 @@ mod tests {
     let info = gpapi::service::vpn_state::ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway]);
     let request = ConnectRequest::new(info, "cookie".into())
       .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
-      .with_csd_wrapper(Some("/app/Contents/Resources/Scripts/hipreport.sh".to_string()))
       .with_certificate(Some("/Users/example/client.pem".to_string()));
     let ServiceResult::Rejected(rejection) = dispatcher.dispatch(WsRequest::Connect(Box::new(request))).await else {
       panic!("brokered mode accepted a root-readable identity path");
@@ -428,16 +447,24 @@ mod tests {
     let gateway = Gateway::new("Gateway".into(), "vpn.example.com".into());
     let info = gpapi::service::vpn_state::ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway]);
     let bundled = ConnectRequest::new(info.clone(), "cookie".into())
-      .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
-      .with_csd_wrapper(Some("/app/Contents/Resources/Scripts/hipreport.sh".to_string()));
+      .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()));
     assert_eq!(dispatcher.validate_connect_paths(&bundled), Ok(()));
 
-    let old_layout = ConnectRequest::new(info, "cookie".into())
-      .with_vpnc_script(Some("/app/Contents/Helpers/vpnc-script".to_string()))
-      .with_csd_wrapper(Some("/app/Contents/Helpers/hipreport.sh".to_string()));
+    let old_layout = ConnectRequest::new(info.clone(), "cookie".into())
+      .with_vpnc_script(Some("/app/Contents/Helpers/vpnc-script".to_string()));
     assert_eq!(
       dispatcher.validate_connect_paths(&old_layout),
       Err("macOS VPN script must be the bundled script")
+    );
+
+    let custom = ConnectRequest::new(info, "cookie".into())
+      .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
+      .with_hip_source(gpapi::service::hip::HipSource::UserScript {
+        path: "/tmp/hip.sh".into(),
+      });
+    assert_eq!(
+      dispatcher.validate_connect_paths(&custom),
+      Err("macOS does not support custom HIP scripts")
     );
   }
 }
