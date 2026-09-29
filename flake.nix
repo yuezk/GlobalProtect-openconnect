@@ -133,6 +133,11 @@
             --replace-fail /usr/bin/gpservice $out/bin/gpservice \
             --replace-fail /usr/libexec/gpclient/gp-vpnc-script-installer $out/bin/gp-vpnc-script-installer
 
+          if [ -f $out/libexec/gpclient/gp-hip-script-installer ]; then
+            substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
+              --replace-fail /usr/libexec/gpclient/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
+          fi
+
           if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
             substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
               --replace-fail /usr/bin/gpclient $out/bin/gpclient
@@ -146,6 +151,11 @@
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice \
             --replace-fail /usr/libexec/gpclient/gp-vpnc-script-installer ${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer
+
+          if [ -f ${prebuiltFiles}/libexec/gpclient/gp-hip-script-installer ]; then
+            substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
+              --replace-fail /usr/libexec/gpclient/gp-hip-script-installer ${prebuiltFiles}/libexec/gpclient/gp-hip-script-installer
+          fi
 
           if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
             substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
@@ -225,6 +235,13 @@
                   --replace-fail /usr/bin/gpservice $out/bin/gpservice \
                   --replace-fail /usr/bin/gpgui-helper $out/bin/gpgui-helper \
                   --replace-fail /usr/bin/gpgui $out/bin/gpgui
+
+                if [ -f apps/gpservice/src/hip_source.rs ]; then
+                  substituteInPlace crates/common/src/constants.rs \
+                    --replace-fail /usr/libexec/gpclient/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
+                  substituteInPlace apps/gpservice/src/hip_source.rs \
+                    --replace-fail /usr/libexec/gpclient/gp-hip-runner $out/libexec/gpclient/gp-hip-runner
+                fi
               '';
             };
 
@@ -232,6 +249,11 @@
             cp -r packaging/files/usr/libexec $out/libexec
           ''
           + lib.optionalString pkgs.stdenv.isLinux ''
+            if [ -f $out/bin/gp-hip-runner ]; then
+              install -Dm755 $out/bin/gp-hip-runner $out/libexec/gpclient/gp-hip-runner
+              install -Dm755 $out/bin/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
+            fi
+
             # Copy the prebuilt gpgui binary to the output bin directory
             cp ${gpgui}/gpgui $out/bin/gpgui
             chmod +x $out/bin/gpgui
@@ -300,7 +322,7 @@
           while IFS= read -r -d "" env_entry; do
             env_name="''${env_entry%%=*}"
             case "$env_name" in
-              *[!A-Za-z0-9_]* | [0-9]* | PATH | GP_VPNC_SCRIPT_INSTALLER_BINARY | INVOCATION_ID | JOURNAL_STREAM | LISTEN_* | NOTIFY_SOCKET | SYSTEMD_EXEC_PID)
+              *[!A-Za-z0-9_]* | [0-9]* | PATH | GP_VPNC_SCRIPT_INSTALLER_BINARY | GP_HIP_SCRIPT_INSTALLER_BINARY | INVOCATION_ID | JOURNAL_STREAM | LISTEN_* | NOTIFY_SOCKET | SYSTEMD_EXEC_PID)
                 continue
                 ;;
             esac
@@ -311,6 +333,7 @@
           systemd_run_args+=(
             "--setenv=PATH=$gui_path"
             "--setenv=GP_VPNC_SCRIPT_INSTALLER_BINARY=${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer"
+            "--setenv=GP_HIP_SCRIPT_INSTALLER_BINARY=${prebuiltFiles}/libexec/gpclient/gp-hip-script-installer"
           )
 
           exec ${pkgs.systemd}/bin/systemd-run \
@@ -331,6 +354,7 @@
             profile = ''
               export PATH=/run/wrappers/bin:$PATH
               export GP_VPNC_SCRIPT_INSTALLER_BINARY='${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer'
+              export GP_HIP_SCRIPT_INSTALLER_BINARY='${prebuiltFiles}/libexec/gpclient/gp-hip-script-installer'
               ${extraProfile}
             '';
             extraBwrapArgs = [
