@@ -6,7 +6,7 @@ use gpapi::service::transport::{
   ClientMessage, ClientPrelude, CloseReason, HandshakeRejection, NoiseResponder, NoiseTransport, ServerMessage,
   ServerPrelude, ServiceErrorCode, ServiceResult,
 };
-use gpapi::service::{hip::HipSource, request::WsRequest};
+use gpapi::{hip::HipSource, service::request::WsRequest};
 use log::{info, warn};
 use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;

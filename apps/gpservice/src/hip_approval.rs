@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Context, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use gpapi::service::hip::HipApprovalStatus;
+use gpapi::hip::HipApprovalStatus;
 use serde::{Deserialize, Serialize};
 use tempfile::Builder;
 use uuid::Uuid;
