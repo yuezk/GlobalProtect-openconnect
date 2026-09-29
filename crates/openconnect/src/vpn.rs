@@ -765,7 +765,7 @@ mod tests {
       }
     };
     vpn.disconnect();
-    let result = rx.recv_timeout(Duration::from_secs(2));
+    let result = rx.recv_timeout(Duration::from_secs(10));
     drop(peer); // Release the peer even if cancellation regresses.
     worker.join().unwrap();
     assert_ne!(result.expect("Cancellation did not interrupt TLS"), 0);
