@@ -189,13 +189,35 @@ mod tests {
   fn credential_round_trips_a_validated_device_anchor() {
     let anchor = DeviceAnchor {
       hardware_id: general_purpose::URL_SAFE_NO_PAD.encode([1_u8; 32]),
-      source: crate::device_anchor::AnchorSource::LinuxMac,
+      source: crate::device_anchor::AnchorSource::UnixMac,
     };
     let credential = SessionCredential::generate(Uuid::new_v4(), "2.6.5")
       .unwrap()
       .with_device_anchor(anchor.clone())
       .unwrap();
-    let decoded = SessionCredential::decode_frame(&credential.encode_frame().unwrap()).unwrap();
+    let frame = credential.encode_frame().unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&frame[2..]).unwrap();
+    assert_eq!(payload["device_anchor"]["source"], 1);
+    let decoded = SessionCredential::decode_frame(&frame).unwrap();
     assert_eq!(decoded.device_anchor(), Some(&anchor));
+  }
+
+  #[test]
+  fn credential_rejects_reserved_and_unknown_anchor_sources() {
+    let credential = SessionCredential::generate(Uuid::new_v4(), "2.6.5").unwrap();
+    let frame = credential.encode_frame().unwrap();
+    let mut payload: serde_json::Value = serde_json::from_slice(&frame[2..]).unwrap();
+    let hardware_id = general_purpose::URL_SAFE_NO_PAD.encode([1_u8; 32]);
+
+    for source in [0, 4] {
+      payload["device_anchor"] = serde_json::json!({
+        "hardware_id": hardware_id,
+        "source": source
+      });
+      let bytes = serde_json::to_vec(&payload).unwrap();
+      let mut invalid_frame = (bytes.len() as u16).to_be_bytes().to_vec();
+      invalid_frame.extend_from_slice(&bytes);
+      assert!(SessionCredential::decode_frame(&invalid_frame).is_err());
+    }
   }
 }

@@ -17,8 +17,28 @@ struct Record {
 }
 
 pub fn resolve() -> anyhow::Result<DeviceAnchor> {
-  resolve_in(Path::new("/var/lib/gp"), 0, gpapi::device_anchor::collect_unix)
-    .context("cannot resolve persistent GUI device anchor")
+  resolve_in(Path::new("/var/lib/gp"), 0, collect_unix).context("cannot resolve persistent GUI device anchor")
+}
+
+fn collect_unix() -> anyhow::Result<DeviceAnchor> {
+  collect_from(mac_address::get_mac_address()?, || {
+    let mut random = [0_u8; 32];
+    getrandom::fill(&mut random).map_err(|_| anyhow::anyhow!("cannot initialize device anchor"))?;
+    Ok(random)
+  })
+}
+
+fn collect_from(
+  mac: Option<mac_address::MacAddress>,
+  random: impl FnOnce() -> anyhow::Result<[u8; 32]>,
+) -> anyhow::Result<DeviceAnchor> {
+  if let Some(mac) = mac {
+    let bytes = mac.bytes();
+    if bytes != [0; 6] && bytes[0] & 1 == 0 {
+      return Ok(DeviceAnchor::derive(AnchorSource::UnixMac, bytes));
+    }
+  }
+  Ok(DeviceAnchor::derive(AnchorSource::UnixRandom, random()?))
 }
 
 fn validate_metadata(metadata: &fs::Metadata, owner: u32, directory: bool) -> anyhow::Result<()> {
@@ -61,7 +81,7 @@ fn read_record(path: &Path, owner: u32) -> anyhow::Result<Option<DeviceAnchor>> 
     "unsupported or invalid device anchor record"
   );
   ensure!(
-    matches!(record.anchor.source, AnchorSource::LinuxMac | AnchorSource::LinuxRandom),
+    matches!(record.anchor.source, AnchorSource::UnixMac | AnchorSource::UnixRandom),
     "invalid Unix device anchor source"
   );
   Ok(Some(record.anchor))
@@ -98,7 +118,7 @@ fn resolve_in(
   }
   let anchor = collect()?;
   ensure!(
-    anchor.validate() && matches!(anchor.source, AnchorSource::LinuxMac | AnchorSource::LinuxRandom),
+    anchor.validate() && matches!(anchor.source, AnchorSource::UnixMac | AnchorSource::UnixRandom),
     "invalid collected Unix device anchor"
   );
   let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
@@ -120,7 +140,7 @@ mod tests {
   fn anchor() -> anyhow::Result<DeviceAnchor> {
     Ok(DeviceAnchor {
       hardware_id: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
-      source: AnchorSource::LinuxMac,
+      source: AnchorSource::UnixMac,
     })
   }
 
@@ -135,5 +155,226 @@ mod tests {
       resolve_in(&path, owner, || anyhow::bail!("must not rediscover")).unwrap(),
       anchor().unwrap()
     );
+  }
+
+  #[test]
+  fn collector_preserves_an_eligible_mac_and_randomizes_ineligible_addresses() {
+    use mac_address::MacAddress;
+
+    let eligible = collect_from(Some(MacAddress::new([0, 17, 34, 51, 68, 85])), || {
+      anyhow::bail!("must not randomize")
+    })
+    .unwrap();
+    assert_eq!(
+      eligible,
+      DeviceAnchor::derive(AnchorSource::UnixMac, [0, 17, 34, 51, 68, 85])
+    );
+
+    for rejected in [[0; 6], [1, 2, 3, 4, 5, 6], [0xff; 6]] {
+      assert_eq!(
+        collect_from(Some(MacAddress::new(rejected)), || Ok([9; 32])).unwrap(),
+        DeviceAnchor::derive(AnchorSource::UnixRandom, [9; 32])
+      );
+    }
+    assert_eq!(
+      collect_from(None, || Ok([8; 32])).unwrap(),
+      DeviceAnchor::derive(AnchorSource::UnixRandom, [8; 32])
+    );
+  }
+
+  #[test]
+  fn deleting_the_record_recreates_the_same_mac_anchor() {
+    let temporary = tempfile::tempdir().unwrap();
+    let path = temporary.path().join("state");
+    let owner = nix::unistd::Uid::current().as_raw();
+    let first = resolve_in(&path, owner, anchor).unwrap();
+    fs::remove_file(path.join("hardware-id")).unwrap();
+    assert_eq!(resolve_in(&path, owner, anchor).unwrap(), first);
+  }
+
+  #[test]
+  fn parallel_first_start_converges_on_one_record() {
+    use std::sync::{Arc, Barrier};
+
+    let temporary = tempfile::tempdir().unwrap();
+    let path = Arc::new(temporary.path().join("state"));
+    fs::create_dir(&*path).unwrap();
+    fs::set_permissions(&*path, fs::Permissions::from_mode(0o700)).unwrap();
+    let owner = nix::unistd::Uid::current().as_raw();
+    let barrier = Arc::new(Barrier::new(2));
+    let handles: Vec<_> = [AnchorSource::UnixMac, AnchorSource::UnixRandom]
+      .into_iter()
+      .map(|source| {
+        let path = Arc::clone(&path);
+        let barrier = Arc::clone(&barrier);
+        std::thread::spawn(move || {
+          barrier.wait();
+          resolve_in(&path, owner, || Ok(DeviceAnchor::derive(source, [source.into()])))
+        })
+      })
+      .collect();
+    let results: Vec<_> = handles
+      .into_iter()
+      .map(|handle| handle.join().unwrap().unwrap())
+      .collect();
+    assert_eq!(results[0], results[1]);
+    assert_eq!(
+      read_record(&path.join("hardware-id"), owner).unwrap(),
+      Some(results[0].clone())
+    );
+  }
+
+  #[test]
+  fn rejects_malformed_linked_and_unsafe_records() {
+    use std::os::unix::fs::symlink;
+
+    let owner = nix::unistd::Uid::current().as_raw();
+    for case in ["malformed", "symlink", "hard-link", "permissions"] {
+      let temporary = tempfile::tempdir().unwrap();
+      let directory = temporary.path().join("state");
+      fs::create_dir(&directory).unwrap();
+      fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+      let record = directory.join("hardware-id");
+      match case {
+        "malformed" => fs::write(&record, b"not-json").unwrap(),
+        "symlink" => {
+          let target = temporary.path().join("target");
+          fs::write(
+            &target,
+            serde_json::to_vec(&Record {
+              version: 1,
+              anchor: anchor().unwrap(),
+            })
+            .unwrap(),
+          )
+          .unwrap();
+          symlink(target, &record).unwrap();
+        }
+        "hard-link" => {
+          fs::write(
+            &record,
+            serde_json::to_vec(&Record {
+              version: 1,
+              anchor: anchor().unwrap(),
+            })
+            .unwrap(),
+          )
+          .unwrap();
+          fs::hard_link(&record, temporary.path().join("second-link")).unwrap();
+        }
+        "permissions" => {
+          fs::write(
+            &record,
+            serde_json::to_vec(&Record {
+              version: 1,
+              anchor: anchor().unwrap(),
+            })
+            .unwrap(),
+          )
+          .unwrap();
+          fs::set_permissions(&record, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        _ => unreachable!(),
+      }
+      if case != "symlink" && case != "permissions" {
+        fs::set_permissions(&record, fs::Permissions::from_mode(0o600)).unwrap();
+      }
+      assert!(resolve_in(&directory, owner, anchor).is_err(), "accepted {case}");
+    }
+  }
+
+  #[test]
+  fn recovers_with_an_interrupted_temporary_file_present() {
+    let temporary = tempfile::tempdir().unwrap();
+    let directory = temporary.path().join("state");
+    fs::create_dir(&directory).unwrap();
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::write(directory.join(".hardware-id.interrupted"), b"partial").unwrap();
+    assert_eq!(
+      resolve_in(&directory, nix::unistd::Uid::current().as_raw(), anchor).unwrap(),
+      anchor().unwrap()
+    );
+  }
+
+  #[test]
+  fn rejects_unsafe_directory_and_lock_metadata_and_read_only_storage() {
+    use std::os::unix::fs::symlink;
+
+    let owner = nix::unistd::Uid::current().as_raw();
+
+    let temporary = tempfile::tempdir().unwrap();
+    let directory = temporary.path().join("state");
+    fs::create_dir(&directory).unwrap();
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(resolve_in(&directory, owner, anchor).is_err());
+
+    let temporary = tempfile::tempdir().unwrap();
+    let directory = temporary.path().join("state");
+    fs::create_dir(&directory).unwrap();
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(resolve_in(&directory, owner.wrapping_add(1), anchor).is_err());
+
+    let temporary = tempfile::tempdir().unwrap();
+    let directory = temporary.path().join("state");
+    fs::write(&directory, b"not-a-directory").unwrap();
+    assert!(resolve_in(&directory, owner, anchor).is_err());
+
+    for case in ["symlink", "hard-link", "permissions"] {
+      let temporary = tempfile::tempdir().unwrap();
+      let directory = temporary.path().join("state");
+      fs::create_dir(&directory).unwrap();
+      fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+      let lock = directory.join("hardware-id.lock");
+      match case {
+        "symlink" => {
+          let target = temporary.path().join("target");
+          fs::write(&target, b"").unwrap();
+          symlink(target, &lock).unwrap();
+        }
+        "hard-link" => {
+          fs::write(&lock, b"").unwrap();
+          fs::set_permissions(&lock, fs::Permissions::from_mode(0o600)).unwrap();
+          fs::hard_link(&lock, temporary.path().join("second-link")).unwrap();
+        }
+        "permissions" => {
+          fs::write(&lock, b"").unwrap();
+          fs::set_permissions(&lock, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        _ => unreachable!(),
+      }
+      assert!(resolve_in(&directory, owner, anchor).is_err(), "accepted {case} lock");
+    }
+
+    let temporary = tempfile::tempdir().unwrap();
+    let directory = temporary.path().join("state");
+    fs::create_dir(&directory).unwrap();
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o500)).unwrap();
+    assert!(resolve_in(&directory, owner, anchor).is_err());
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+  }
+
+  #[test]
+  fn record_serializes_source_as_a_number_and_rejects_unknown_codes() {
+    let record = Record {
+      version: 1,
+      anchor: anchor().unwrap(),
+    };
+    let json = serde_json::to_value(&record).unwrap();
+    assert_eq!(json["anchor"]["source"], 1);
+    assert_eq!(
+      serde_json::to_string(&record).unwrap(),
+      r#"{"version":1,"anchor":{"hardware_id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","source":1}}"#
+    );
+
+    for source in [0, 4] {
+      let json = serde_json::json!({
+        "version": 1,
+        "anchor": {
+          "hardware_id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "source": source
+        }
+      });
+      assert!(serde_json::from_value::<Record>(json).is_err());
+    }
   }
 }
