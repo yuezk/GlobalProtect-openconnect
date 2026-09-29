@@ -22,7 +22,7 @@ export default defineConfig(async () => {
     build: {
       rolldownOptions: {
         input: {
-          main: resolve(__dirname, "index.html"),
+          main: resolve(import.meta.dirname, "index.html"),
         },
       },
     },
