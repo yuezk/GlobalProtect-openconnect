@@ -9,7 +9,6 @@ license = "MIT"
 common = { path = "../common" }
 anyhow.workspace = true
 base64.workspace = true
-mac_address = "1"
 dns-lookup.workspace = true
 log.workspace = true
 reqwest.workspace = true

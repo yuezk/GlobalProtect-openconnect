@@ -28,6 +28,8 @@ thiserror.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 zeroize.workspace = true
 tempfile.workspace = true
+getrandom = "0.4"
+mac_address = "1"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["fs", "socket", "user"] }
