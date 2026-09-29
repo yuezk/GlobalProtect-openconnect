@@ -7,6 +7,8 @@ use super::{HandshakeRejection, MAX_PRELUDE, MAX_PRODUCT_VERSION, TransportError
 #[serde(deny_unknown_fields)]
 pub struct ClientPrelude {
   pub product_version: String,
+  #[serde(default)]
+  pub hip_protocol_version: u16,
   pub service_instance_id: Uuid,
   pub session_id: Uuid,
 }
@@ -71,9 +73,16 @@ mod tests {
       r#"{{"product_version":"2.6.4","service_instance_id":"{instance}","session_id":"{session}","extra":true}}"#
     );
     assert!(ClientPrelude::decode(unknown.as_bytes()).is_err());
+    let legacy =
+      format!(r#"{{"product_version":"2.6.4","service_instance_id":"{instance}","session_id":"{session}"}}"#);
+    assert_eq!(
+      ClientPrelude::decode(legacy.as_bytes()).unwrap().hip_protocol_version,
+      0
+    );
     assert!(
       ClientPrelude {
         product_version: String::new(),
+        hip_protocol_version: super::super::HIP_PROTOCOL_VERSION,
         service_instance_id: instance,
         session_id: session,
       }

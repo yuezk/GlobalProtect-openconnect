@@ -246,9 +246,7 @@ async fn run_installer_connection(
                   rejection.code(),
                   rejection.message()
                 )),
-                ServiceResult::VpncScriptMetadata(_) => {
-                  Err(anyhow::anyhow!("Service sent an unexpected VPNC script metadata reply"))
-                }
+                _ => Err(anyhow::anyhow!("Service sent an unexpected GUI installation reply")),
               };
               let _ = command.reply.send(result);
             }
@@ -301,6 +299,7 @@ async fn connect_installer_at(
   let (mut socket, _) = connect_async_with_config(endpoint, Some(config), false).await?;
   let prelude = ClientPrelude {
     product_version: credential.product_version().to_owned(),
+    hip_protocol_version: gpapi::service::transport::HIP_PROTOCOL_VERSION,
     service_instance_id: credential.service_instance_id(),
     session_id: credential.session_id(),
   };
@@ -633,7 +632,6 @@ mod tests {
         snapshot: VpnEnv {
           vpn_state: VpnState::Disconnected,
           vpnc_script: None,
-          csd_wrapper: None,
           auth_executable: String::new(),
           host_info: HostInfo {
             host_identity: HostIdentity::collect(),

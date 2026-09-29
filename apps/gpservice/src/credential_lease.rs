@@ -7,8 +7,12 @@ use tokio::{
 
 use crate::session_registry::SessionRegistry;
 
-pub(crate) async fn serve(mut stream: UnixStream, registry: Arc<SessionRegistry>) -> anyhow::Result<()> {
-  let credential = registry.issue(env!("CARGO_PKG_VERSION"))?;
+pub(crate) async fn serve(
+  mut stream: UnixStream,
+  registry: Arc<SessionRegistry>,
+  desktop_uid: Option<u32>,
+) -> anyhow::Result<()> {
+  let credential = registry.issue(env!("CARGO_PKG_VERSION"), desktop_uid)?;
   let session_id = credential.session_id();
   let result = async {
     stream.write_all(&credential.encode_frame()?).await?;

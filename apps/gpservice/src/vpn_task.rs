@@ -20,6 +20,7 @@ use log::{info, warn};
 use openconnect::{Vpn, VpnSessionInfo};
 use tokio::sync::{Notify, mpsc, watch};
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 use zeroize::Zeroizing;
 
 #[derive(Clone)]
@@ -29,7 +30,13 @@ pub(crate) struct LifecycleHandle {
 }
 
 impl LifecycleHandle {
-  pub fn submit_connect(&self, request: ConnectRequest) -> ServiceResult {
+  pub fn submit_connect(
+    &self,
+    request: ConnectRequest,
+    desktop_uid: Option<u32>,
+    edited_report: Option<Arc<str>>,
+    session_id: Option<Uuid>,
+  ) -> ServiceResult {
     let attempt = {
       let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
       if admissions.current.is_some() {
@@ -46,7 +53,13 @@ impl LifecycleHandle {
       attempt
     };
 
-    match self.events.try_send(LifecycleEvent::Start { attempt, request }) {
+    match self.events.try_send(LifecycleEvent::Start {
+      attempt,
+      request,
+      desktop_uid,
+      edited_report,
+      session_id,
+    }) {
       Ok(()) => ServiceResult::Accepted,
       Err(mpsc::error::TrySendError::Full(_)) => {
         self.clear_attempt(attempt);
@@ -169,7 +182,8 @@ impl LifecycleHandle {
   #[cfg(test)]
   pub(crate) fn for_tests() -> Self {
     let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
-    let (_task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let registry = Arc::new(crate::session_registry::SessionRegistry::new(Uuid::new_v4()));
+    let (_task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry);
     lifecycle
   }
 }
@@ -202,18 +216,33 @@ enum AdmissionPhase {
 }
 
 enum LifecycleEvent {
-  Start { attempt: u64, request: ConnectRequest },
-  Stop { attempt: u64 },
-  Established { attempt: u64, session: VpnSessionInfo },
-  Ended { attempt: u64 },
+  Start {
+    attempt: u64,
+    request: ConnectRequest,
+    desktop_uid: Option<u32>,
+    edited_report: Option<Arc<str>>,
+    session_id: Option<Uuid>,
+  },
+  Stop {
+    attempt: u64,
+  },
+  Established {
+    attempt: u64,
+    session: VpnSessionInfo,
+  },
+  Ended {
+    attempt: u64,
+  },
 }
 
 struct ActiveAttempt {
   attempt: u64,
+  session_id: Option<Uuid>,
   vpn: Arc<Vpn>,
   info: ConnectInfo,
   allow_extend_session: bool,
   _identity_files: Vec<tempfile::NamedTempFile>,
+  _hip_execution: crate::hip_source::HipExecution,
 }
 
 pub(crate) struct VpnTask {
@@ -221,7 +250,7 @@ pub(crate) struct VpnTask {
   lifecycle: LifecycleHandle,
   vpn_state_tx: watch::Sender<VpnState>,
   brokered_macos: bool,
-  trusted_csd_uid: Option<u32>,
+  registry: Arc<crate::session_registry::SessionRegistry>,
   active: Option<ActiveAttempt>,
   cancel_token: CancellationToken,
 }
@@ -230,7 +259,7 @@ impl VpnTask {
   pub fn new(
     vpn_state_tx: watch::Sender<VpnState>,
     brokered_macos: bool,
-    trusted_csd_uid: Option<u32>,
+    registry: Arc<crate::session_registry::SessionRegistry>,
   ) -> (Self, LifecycleHandle) {
     let (events_tx, events) = mpsc::channel(4);
     let lifecycle = LifecycleHandle {
@@ -242,7 +271,7 @@ impl VpnTask {
       lifecycle: lifecycle.clone(),
       vpn_state_tx,
       brokered_macos,
-      trusted_csd_uid,
+      registry,
       active: None,
       cancel_token: CancellationToken::new(),
     };
@@ -256,6 +285,7 @@ impl VpnTask {
   pub async fn start(&mut self, server_cancel_token: CancellationToken) {
     let cancel_token = self.cancel_token.clone();
     let mut shutting_down = false;
+    let mut approval_poll = tokio::time::interval(std::time::Duration::from_secs(1));
 
     loop {
       if shutting_down {
@@ -277,6 +307,14 @@ impl VpnTask {
           shutting_down = true;
           self.lifecycle.request_disconnect();
         }
+        _ = approval_poll.tick() => {
+          if self.active.as_ref().is_some_and(|active| {
+            active._hip_execution.approval_id().is_some() && !active._hip_execution.approval_is_valid()
+          }) {
+            warn!("Active HIP script approval is no longer valid; disconnecting VPN");
+            self.lifecycle.request_disconnect();
+          }
+        }
       }
     }
 
@@ -296,14 +334,27 @@ impl VpnTask {
 
   fn handle_event(&mut self, event: LifecycleEvent) {
     match event {
-      LifecycleEvent::Start { attempt, request } => self.start_attempt(attempt, request),
+      LifecycleEvent::Start {
+        attempt,
+        request,
+        desktop_uid,
+        edited_report,
+        session_id,
+      } => self.start_attempt(attempt, request, desktop_uid, edited_report, session_id),
       LifecycleEvent::Stop { attempt } => self.stop_attempt(attempt),
       LifecycleEvent::Established { attempt, session } => self.establish_attempt(attempt, session),
       LifecycleEvent::Ended { attempt } => self.end_attempt(attempt),
     }
   }
 
-  fn start_attempt(&mut self, attempt: u64, request: ConnectRequest) {
+  fn start_attempt(
+    &mut self,
+    attempt: u64,
+    request: ConnectRequest,
+    desktop_uid: Option<u32>,
+    edited_report: Option<Arc<str>>,
+    session_id: Option<Uuid>,
+  ) {
     if !self.lifecycle.activate_attempt(attempt) {
       self.finish_attempt(attempt);
       return;
@@ -328,8 +379,8 @@ impl VpnTask {
         return;
       }
     };
-    let csd_uid = match resolve_csd_uid(self.trusted_csd_uid, args.csd_uid(), args.hip()) {
-      Ok(uid) => uid,
+    let hip = match crate::hip_source::resolve(args.hip_source(), desktop_uid, self.brokered_macos, edited_report) {
+      Ok(execution) => execution,
       Err(err) => {
         warn!("Failed to select the HIP script user: {err}");
         self.finish_attempt(attempt);
@@ -345,9 +396,9 @@ impl VpnTask {
       .certificate(identity.certificate.clone())
       .sslkey(identity.sslkey.clone())
       .key_password(args.key_password())
-      .hip(args.hip())
-      .csd_uid(csd_uid)
-      .csd_wrapper(args.csd_wrapper())
+      .hip(hip.enabled)
+      .csd_uid(hip.uid)
+      .csd_wrapper(hip.wrapper.clone())
       .reconnect_timeout(args.reconnect_timeout())
       .mtu(args.mtu())
       .disable_ipv6(args.disable_ipv6())
@@ -364,6 +415,15 @@ impl VpnTask {
         return;
       }
     };
+
+    if let Some(session_id) = session_id {
+      let registry = Arc::clone(&self.registry);
+      vpn.set_hip_report_callback(move |xml| {
+        if let Err(error) = registry.store_successful_hip_report(session_id, xml) {
+          warn!("Could not retain the submitted HIP report: {error}");
+        }
+      });
+    }
 
     if self.lifecycle.is_stop_requested(attempt) {
       self.finish_attempt(attempt);
@@ -385,10 +445,12 @@ impl VpnTask {
       } else {
         self.active = Some(ActiveAttempt {
           attempt,
+          session_id,
           vpn: Arc::clone(&vpn),
           info: info.clone(),
           allow_extend_session,
           _identity_files: identity.files,
+          _hip_execution: hip,
         });
         self.send_state(VpnState::Connecting(Box::new(info)));
         thread::spawn(move || {
@@ -460,6 +522,9 @@ impl VpnTask {
     if self.active.as_ref().is_none_or(|active| active.attempt != attempt) {
       return;
     }
+    if let Some(session_id) = self.active.as_ref().and_then(|active| active.session_id) {
+      self.registry.clear_successful_hip_report(session_id);
+    }
     self.active = None;
     self.finish_attempt(attempt);
   }
@@ -472,14 +537,6 @@ impl VpnTask {
   fn send_state(&self, state: VpnState) {
     let _ = self.vpn_state_tx.send(state);
   }
-}
-
-fn resolve_csd_uid(trusted_uid: Option<u32>, requested_uid: u32, hip_enabled: bool) -> anyhow::Result<u32> {
-  let uid = trusted_uid.unwrap_or(requested_uid);
-  if hip_enabled && uid == 0 {
-    anyhow::bail!("HIP scripts must not run as root");
-  }
-  Ok(uid)
 }
 
 struct PreparedIdentity {
@@ -534,11 +591,16 @@ fn write_identity_file(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::session_registry::SessionRegistry;
+
+  fn registry() -> Arc<SessionRegistry> {
+    Arc::new(SessionRegistry::new(Uuid::new_v4()))
+  }
 
   #[test]
   fn disconnect_before_start_discards_the_pending_attempt() {
     let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
-    let (mut task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let (mut task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry());
     let request = ConnectRequest::new(
       ConnectInfo::new(
         "portal.example.com".to_string(),
@@ -548,7 +610,10 @@ mod tests {
       "cookie".to_string(),
     );
 
-    assert!(matches!(lifecycle.submit_connect(request), ServiceResult::Accepted));
+    assert!(matches!(
+      lifecycle.submit_connect(request, None, None, None),
+      ServiceResult::Accepted
+    ));
     assert!(matches!(lifecycle.request_disconnect(), ServiceResult::Accepted));
     let start = task.events.try_recv().unwrap();
     task.handle_event(start);
@@ -561,7 +626,7 @@ mod tests {
   fn late_established_event_is_ignored_after_disconnect_is_accepted() {
     let (vpn_state_tx, vpn_state_rx) = watch::channel(VpnState::Disconnected);
     let state_rx = vpn_state_rx.clone();
-    let (task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let (task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry());
     let info = ConnectInfo::new(
       "portal.example.com".to_string(),
       gpapi::gateway::Gateway::new("vpn".to_string(), "vpn.example.com".to_string()),
@@ -569,7 +634,10 @@ mod tests {
     );
     let request = ConnectRequest::new(info.clone(), "cookie".to_string());
 
-    assert!(matches!(lifecycle.submit_connect(request), ServiceResult::Accepted));
+    assert!(matches!(
+      lifecycle.submit_connect(request, None, None, None),
+      ServiceResult::Accepted
+    ));
     assert!(lifecycle.activate_attempt(0));
     assert!(matches!(lifecycle.request_disconnect(), ServiceResult::Accepted));
     task.publish_connected(0, info, SessionInfo::default());
@@ -580,7 +648,7 @@ mod tests {
   #[tokio::test]
   async fn disconnect_waiter_completes_for_its_attempt_before_a_later_connect() {
     let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
-    let (task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let (task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry());
     let request = || {
       ConnectRequest::new(
         ConnectInfo::new(
@@ -592,7 +660,10 @@ mod tests {
       )
     };
 
-    assert!(matches!(lifecycle.submit_connect(request()), ServiceResult::Accepted));
+    assert!(matches!(
+      lifecycle.submit_connect(request(), None, None, None),
+      ServiceResult::Accepted
+    ));
     let waiter_lifecycle = lifecycle.clone();
     let waiter = tokio::spawn(async move { waiter_lifecycle.disconnect_and_wait().await });
     while !lifecycle.is_stop_requested(0) {
@@ -600,7 +671,10 @@ mod tests {
     }
 
     task.finish_attempt(0);
-    assert!(matches!(lifecycle.submit_connect(request()), ServiceResult::Accepted));
+    assert!(matches!(
+      lifecycle.submit_connect(request(), None, None, None),
+      ServiceResult::Accepted
+    ));
     assert!(
       tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
         .await
@@ -612,7 +686,7 @@ mod tests {
   #[test]
   fn repeated_disconnects_enqueue_one_stop_for_an_attempt() {
     let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
-    let (mut task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let (mut task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry());
     let request = ConnectRequest::new(
       ConnectInfo::new(
         "portal.example.com".to_string(),
@@ -622,7 +696,10 @@ mod tests {
       "cookie".to_string(),
     );
 
-    assert!(matches!(lifecycle.submit_connect(request), ServiceResult::Accepted));
+    assert!(matches!(
+      lifecycle.submit_connect(request, None, None, None),
+      ServiceResult::Accepted
+    ));
     assert!(matches!(lifecycle.request_disconnect(), ServiceResult::Accepted));
     assert!(matches!(lifecycle.request_disconnect(), ServiceResult::Accepted));
     assert!(matches!(task.events.try_recv(), Ok(LifecycleEvent::Start { .. })));
@@ -633,7 +710,7 @@ mod tests {
   #[test]
   fn second_connect_is_rejected_while_an_attempt_is_admitted() {
     let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
-    let (_task, lifecycle) = VpnTask::new(vpn_state_tx, false, None);
+    let (_task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry());
     let request = || {
       ConnectRequest::new(
         ConnectInfo::new(
@@ -645,22 +722,14 @@ mod tests {
       )
     };
 
-    assert!(matches!(lifecycle.submit_connect(request()), ServiceResult::Accepted));
     assert!(matches!(
-      lifecycle.submit_connect(request()),
+      lifecycle.submit_connect(request(), None, None, None),
+      ServiceResult::Accepted
+    ));
+    assert!(matches!(
+      lifecycle.submit_connect(request(), None, None, None),
       ServiceResult::Rejected(rejection) if rejection.code() == ServiceErrorCode::Busy
     ));
-  }
-
-  #[test]
-  fn trusted_csd_uid_overrides_request_uid() {
-    assert_eq!(resolve_csd_uid(Some(1000), 0, true).unwrap(), 1000);
-  }
-
-  #[test]
-  fn root_csd_uid_is_rejected_when_hip_is_enabled() {
-    assert!(resolve_csd_uid(None, 0, true).is_err());
-    assert_eq!(resolve_csd_uid(None, 0, false).unwrap(), 0);
   }
 
   #[test]

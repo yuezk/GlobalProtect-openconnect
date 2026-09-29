@@ -15,7 +15,7 @@ use gpapi::{
   gp_params::GpParams,
   os_profile::OsProfile,
   portal::prelogin,
-  process::users::{get_non_root_user, get_user_by_name},
+  process::users::get_user_by_name,
   utils::shutdown_signal,
 };
 use inquire::Text;
@@ -499,7 +499,7 @@ fn get_uid(user: &Option<String>) -> anyhow::Result<u32> {
   if let Some(user) = user {
     get_user_by_name(user).map(|user| user.uid())
   } else {
-    get_non_root_user().map_or_else(|_| Ok(0), |user| Ok(user.uid()))
+    Ok(uzers::get_effective_uid())
   }
 }
 
@@ -515,6 +515,23 @@ fn apply_os_profile(builder: VpnBuilder, profile: &OsProfile) -> VpnBuilder {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn hip_script_defaults_to_process_effective_uid() {
+    assert_eq!(get_uid(&None).unwrap(), uzers::get_effective_uid());
+  }
+
+  #[test]
+  fn explicit_hip_user_must_exist() {
+    assert!(get_uid(&Some("gpclient-nonexistent-hip-user".to_string())).is_err());
+  }
+
+  #[test]
+  fn explicit_hip_user_resolves_to_the_selected_account() {
+    let current = uzers::get_user_by_uid(uzers::get_effective_uid()).unwrap();
+    let name = current.name().to_string_lossy().into_owned();
+    assert_eq!(get_uid(&Some(name)).unwrap(), current.uid());
+  }
 
   #[test]
   fn openconnect_success_is_not_a_gateway_failure() {

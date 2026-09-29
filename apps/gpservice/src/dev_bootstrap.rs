@@ -54,7 +54,7 @@ impl DevBootstrap {
           }
           let registry = Arc::clone(&self.registry);
           tokio::spawn(async move {
-            if let Err(err) = credential_lease::serve(stream, registry).await {
+            if let Err(err) = credential_lease::serve(stream, registry, Some(self.allowed_uid)).await {
               warn!("Debug credential client ended: {err}");
             }
           });
@@ -188,7 +188,7 @@ mod tests {
   async fn anchor_eof_revokes_issued_credential() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
     let (service, mut client) = UnixStream::pair().unwrap();
-    let task = tokio::spawn(credential_lease::serve(service, Arc::clone(&registry)));
+    let task = tokio::spawn(credential_lease::serve(service, Arc::clone(&registry), Some(1234)));
 
     let mut header = [0_u8; 2];
     client.read_exact(&mut header).await.unwrap();

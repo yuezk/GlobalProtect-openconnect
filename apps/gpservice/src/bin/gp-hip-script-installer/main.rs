@@ -2,7 +2,9 @@
 #[path = "privileged_unix.rs"]
 mod platform;
 #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))]
-#[path = "default.rs"]
+#[path = "unsupported.rs"]
 mod platform;
 
-pub(crate) use platform::desktop_uid;
+fn main() {
+  platform::run();
+}

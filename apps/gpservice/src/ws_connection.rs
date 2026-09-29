@@ -4,8 +4,9 @@ use axum::extract::ws::{CloseFrame, Message, Utf8Bytes, WebSocket};
 use futures::StreamExt;
 use gpapi::service::transport::{
   ClientMessage, ClientPrelude, CloseReason, HandshakeRejection, NoiseResponder, NoiseTransport, ServerMessage,
-  ServerPrelude, ServiceResult,
+  ServerPrelude, ServiceErrorCode, ServiceResult,
 };
+use gpapi::service::{hip::HipSource, request::WsRequest};
 use log::{info, warn};
 use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
@@ -148,6 +149,7 @@ impl WsConnection {
                 &ctx,
                 &control,
                 permit.session_id,
+                permit.desktop_uid,
                 generation,
                 &mut pending_requests,
               ).await.is_err() {
@@ -210,6 +212,17 @@ async fn establish(
       ServerPrelude::Rejected(HandshakeRejection::VersionMismatch {
         client: prelude.product_version,
         service: ctx.product_version().to_owned(),
+      }),
+    )
+    .await?;
+    return Err(CloseReason::VersionMismatch);
+  }
+  if prelude.hip_protocol_version != gpapi::service::transport::HIP_PROTOCOL_VERSION {
+    send_server_prelude(
+      socket,
+      ServerPrelude::Rejected(HandshakeRejection::HipProtocolMismatch {
+        client: prelude.hip_protocol_version,
+        service: gpapi::service::transport::HIP_PROTOCOL_VERSION,
       }),
     )
     .await?;
@@ -308,6 +321,7 @@ async fn handle_client_message(
   ctx: &Arc<WsServerContext>,
   control: &ConnectionControl,
   session_id: Uuid,
+  desktop_uid: Option<u32>,
   generation: u64,
   pending_requests: &mut HashSet<Uuid>,
 ) -> Result<(), ()> {
@@ -323,8 +337,192 @@ async fn handle_client_message(
         return Err(());
       }
 
+      if let WsRequest::StoreEditedHipReportChunk(report) = request {
+        let upload_id = report.upload_id.as_deref().and_then(|id| Uuid::parse_str(id).ok());
+        let result = if report.upload_id.is_some() && upload_id.is_none() {
+          ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Invalid HIP upload ID")
+        } else {
+          match ctx.registry().append_edited_hip_report_chunk(
+            session_id,
+            upload_id,
+            report.offset,
+            report.xml,
+            report.complete,
+          ) {
+            Ok(crate::session_registry::HipUploadResult::Progress(upload_id)) => ServiceResult::HipUploadProgress {
+              upload_id: upload_id.to_string(),
+            },
+            Ok(crate::session_registry::HipUploadResult::Stored(report_id)) => ServiceResult::StoredHipReport {
+              report_id: report_id.to_string(),
+            },
+            Err(_) => ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Invalid HIP report upload"),
+          }
+        };
+        if control.send(ConnectionCommand::Reply { id, result }).is_err() {
+          pending_requests.remove(&id);
+          control.close(CloseReason::InternalError);
+        }
+        return Ok(());
+      }
+
+      if let WsRequest::ReadHipPreviewChunk(chunk) = request {
+        let result = Uuid::parse_str(&chunk.preview_id)
+          .ok()
+          .and_then(|preview_id| {
+            ctx
+              .registry()
+              .hip_preview_chunk(session_id, preview_id, chunk.offset)
+              .ok()
+              .map(|(xml, complete)| ServiceResult::HipPreviewChunk {
+                preview_id: preview_id.to_string(),
+                offset: chunk.offset,
+                xml,
+                complete,
+              })
+          })
+          .unwrap_or_else(|| ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "HIP preview is unavailable"));
+        control.send(ConnectionCommand::Reply { id, result }).map_err(|_| ())?;
+        return Ok(());
+      }
+
+      if let WsRequest::GetLastSubmittedHipReport = request {
+        let result = match ctx.registry().last_successful_hip_report(session_id) {
+          Ok(Some(report)) => match ctx.registry().store_hip_preview(session_id, report.to_string()) {
+            Ok(preview_id) => match ctx.registry().hip_preview_chunk(session_id, preview_id, 0) {
+              Ok((xml, complete)) => ServiceResult::HipPreviewChunk {
+                preview_id: preview_id.to_string(),
+                offset: 0,
+                xml,
+                complete,
+              },
+              Err(_) => ServiceResult::rejected(ServiceErrorCode::Internal, "Submitted HIP report is unavailable"),
+            },
+            Err(_) => ServiceResult::rejected(ServiceErrorCode::Internal, "Submitted HIP report is unavailable"),
+          },
+          Ok(None) => ServiceResult::NoSubmittedHipReport,
+          Err(_) => ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Session is unavailable"),
+        };
+        control.send(ConnectionCommand::Reply { id, result }).map_err(|_| ())?;
+        return Ok(());
+      }
+
+      if let WsRequest::GetHipApprovalStatus { approval_id } = request {
+        let result = if let Some(uid) = desktop_uid.filter(|uid| *uid != 0) {
+          #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+          {
+            match gpservice::hip_approval::status(&approval_id, uid) {
+              Ok(status) => ServiceResult::HipApprovalStatus(status),
+              Err(_) => ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Invalid HIP approval ID"),
+            }
+          }
+          #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))]
+          {
+            let _ = (uid, approval_id);
+            ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "HIP script approvals are unavailable")
+          }
+        } else {
+          ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Desktop user is unavailable")
+        };
+        control.send(ConnectionCommand::Reply { id, result }).map_err(|_| ())?;
+        return Ok(());
+      }
+
+      if let WsRequest::PreviewHipReport(preview) = request {
+        let edited_report = if let HipSource::Edited { report_id } = &preview.source {
+          let report_id = match Uuid::parse_str(report_id) {
+            Ok(id) => id,
+            Err(_) => {
+              control
+                .send(ConnectionCommand::Reply {
+                  id,
+                  result: ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Invalid HIP report ID"),
+                })
+                .map_err(|_| ())?;
+              return Ok(());
+            }
+          };
+          match ctx.registry().edited_hip_report(session_id, report_id) {
+            Ok(report) => Some(report),
+            Err(_) => {
+              control
+                .send(ConnectionCommand::Reply {
+                  id,
+                  result: ServiceResult::rejected(
+                    ServiceErrorCode::InvalidRequest,
+                    "HIP report is unavailable for this session",
+                  ),
+                })
+                .map_err(|_| ())?;
+              return Ok(());
+            }
+          }
+        } else {
+          None
+        };
+        let registry = Arc::clone(ctx.registry());
+        let control = control.clone();
+        tokio::spawn(async move {
+          let result = match crate::hip_preview::generate(preview, edited_report, desktop_uid).await {
+            Ok(xml) => match registry.store_hip_preview(session_id, xml) {
+              Ok(preview_id) => match registry.hip_preview_chunk(session_id, preview_id, 0) {
+                Ok((xml, complete)) => ServiceResult::HipPreviewChunk {
+                  preview_id: preview_id.to_string(),
+                  offset: 0,
+                  xml,
+                  complete,
+                },
+                Err(_) => ServiceResult::rejected(ServiceErrorCode::Internal, "HIP preview is unavailable"),
+              },
+              Err(_) => ServiceResult::rejected(ServiceErrorCode::Internal, "HIP preview is unavailable"),
+            },
+            Err(error) => {
+              warn!("HIP preview failed: {error:#}");
+              ServiceResult::rejected(ServiceErrorCode::Internal, "HIP preview failed")
+            }
+          };
+          control.send_reply(id, result).await;
+        });
+        return Ok(());
+      }
+
+      let edited_report = if let WsRequest::Connect(connect) = &request {
+        if let HipSource::Edited { report_id } = connect.args().hip_source() {
+          let report_id = match Uuid::parse_str(report_id) {
+            Ok(id) => id,
+            Err(_) => {
+              control
+                .send(ConnectionCommand::Reply {
+                  id,
+                  result: ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Invalid HIP report ID"),
+                })
+                .map_err(|_| ())?;
+              return Ok(());
+            }
+          };
+          match ctx.registry().edited_hip_report(session_id, report_id) {
+            Ok(report) => Some(report),
+            Err(_) => {
+              control
+                .send(ConnectionCommand::Reply {
+                  id,
+                  result: ServiceResult::rejected(
+                    ServiceErrorCode::InvalidRequest,
+                    "HIP report is unavailable for this session",
+                  ),
+                })
+                .map_err(|_| ())?;
+              return Ok(());
+            }
+          }
+        } else {
+          None
+        }
+      } else {
+        None
+      };
+
       let dispatcher = ctx.dispatcher();
-      let request = match dispatcher.dispatch_lifecycle(request) {
+      let request = match dispatcher.dispatch_lifecycle(request, desktop_uid, edited_report, Some(session_id)) {
         Ok(request) => request,
         Err(result) => {
           if control.send(ConnectionCommand::Reply { id, result }).is_err() {
@@ -417,7 +615,7 @@ mod tests {
   #[tokio::test]
   async fn authenticates_attaches_and_replies_to_a_request() {
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
-    let credential = registry.issue(env!("CARGO_PKG_VERSION")).unwrap();
+    let credential = registry.issue(env!("CARGO_PKG_VERSION"), None).unwrap();
     let dispatcher = Arc::new(RequestDispatcher::new(
       crate::vpn_task::LifecycleHandle::for_tests(),
       Arc::new(AtomicBool::new(false)),
@@ -441,6 +639,7 @@ mod tests {
     let (mut socket, _) = connect_async(format!("ws://{address}/ws")).await.unwrap();
     let prelude = ClientPrelude {
       product_version: env!("CARGO_PKG_VERSION").to_owned(),
+      hip_protocol_version: gpapi::service::transport::HIP_PROTOCOL_VERSION,
       service_instance_id: credential.service_instance_id(),
       session_id: credential.session_id(),
     };

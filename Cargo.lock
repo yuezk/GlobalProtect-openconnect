@@ -1905,29 +1905,24 @@ name = "gpclient"
 version = "2.6.5"
 dependencies = [
  "anyhow",
- "askama",
- "chrono",
  "clap",
  "common",
  "compile-time",
  "directories",
  "env_logger",
  "gpapi",
+ "gphip",
  "inquire",
  "log",
- "netdev",
  "openconnect",
  "reqwest",
  "serde",
  "serde_json",
- "serde_urlencoded",
  "sysinfo",
  "tempfile",
  "tokio",
- "uuid",
  "uzers",
  "whoami",
- "xmltree",
 ]
 
 [[package]]
@@ -1952,17 +1947,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "gphip"
+version = "2.6.5"
+dependencies = [
+ "anyhow",
+ "askama",
+ "chrono",
+ "gpapi",
+ "log",
+ "netdev",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "uuid",
+ "uzers",
+ "xmltree",
+]
+
+[[package]]
 name = "gpservice"
 version = "2.6.5"
 dependencies = [
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "clap",
  "common",
  "compile-time",
  "env_logger",
  "futures",
  "gpapi",
+ "gphip",
  "log",
  "nix 0.31.3",
  "openconnect",

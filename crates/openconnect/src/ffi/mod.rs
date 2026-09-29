@@ -7,6 +7,7 @@ use std::ffi::{c_char, c_int, c_long, c_void};
 #[derive(Debug)]
 pub(crate) struct ConnectOptions {
   pub user_data: *mut c_void,
+  pub on_hip_report_submitted: Option<extern "C" fn(*mut c_void, *const c_char, usize)>,
 
   pub server: *const c_char,
   pub cookie: *const c_char,
@@ -83,6 +84,18 @@ extern "C" fn vpn_detach_command_pipe(vpn: *mut c_void) {
 
 pub(crate) fn connect(options: &ConnectOptions) -> i32 {
   unsafe { vpn_connect(options, on_vpn_connected) }
+}
+
+#[unsafe(no_mangle)]
+pub(crate) extern "C" fn on_hip_report_submitted(vpn: *mut c_void, report: *const c_char, length: usize) {
+  let vpn = unsafe { &*(vpn as *const Vpn) };
+  if report.is_null() || length > 1024 * 1024 {
+    return;
+  }
+  let bytes = unsafe { std::slice::from_raw_parts(report.cast::<u8>(), length) };
+  if let Ok(report) = std::str::from_utf8(bytes) {
+    vpn.on_hip_report_submitted(report);
+  }
 }
 
 #[unsafe(no_mangle)]

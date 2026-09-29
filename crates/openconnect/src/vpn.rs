@@ -10,6 +10,7 @@ use crate::ffi;
 use crate::vpn_utils::{check_executable, find_csd_wrapper, find_vpnc_script};
 
 type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce(VpnSessionInfo) + 'static + Send + Sync>>>>;
+type OnHipReportCallback = RwLock<Option<Arc<dyn Fn(&str) + Send + Sync>>>;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VpnSessionInfo {
@@ -130,6 +131,7 @@ pub struct Vpn {
   no_xmlpost: bool,
 
   callback: OnConnectedCallback,
+  hip_report_callback: OnHipReportCallback,
 }
 
 impl Vpn {
@@ -142,6 +144,19 @@ impl Vpn {
     let options = self.build_connect_options();
 
     ffi::connect(&options)
+  }
+
+  /// Receives a borrowed report after the gateway accepts its HIP submission.
+  /// The callback must copy the XML if it needs to retain it.
+  pub fn set_hip_report_callback(&self, callback: impl Fn(&str) + Send + Sync + 'static) {
+    *self.hip_report_callback.write().unwrap() = Some(Arc::new(callback));
+  }
+
+  pub(crate) fn on_hip_report_submitted(&self, report: &str) {
+    let callback = self.hip_report_callback.read().unwrap().clone();
+    if let Some(callback) = callback {
+      callback(report);
+    }
   }
 
   pub(crate) fn on_connected(&self, pipe_fd: i32, session_info: VpnSessionInfo) {
@@ -169,6 +184,7 @@ impl Vpn {
   fn build_connect_options(&self) -> ffi::ConnectOptions {
     ffi::ConnectOptions {
       user_data: self as *const _ as *mut _,
+      on_hip_report_submitted: Some(ffi::on_hip_report_submitted),
 
       server: self.server.as_ptr(),
       cookie: self.cookie.as_ptr(),
@@ -480,6 +496,7 @@ impl VpnBuilder {
       no_xmlpost: self.no_xmlpost,
 
       callback: Default::default(),
+      hip_report_callback: Default::default(),
     })
   }
 
@@ -603,12 +620,32 @@ mod tests {
       dpd_interval: 0,
       no_xmlpost: false,
       callback: Default::default(),
+      hip_report_callback: Default::default(),
     };
 
     let options = vpn.build_connect_options();
 
     let host_id = unsafe { CStr::from_ptr(options.host_id) }.to_str().unwrap();
     assert_eq!(host_id, "profile-host-id");
+  }
+
+  #[test]
+  fn hip_report_callback_copies_only_bounded_utf8() {
+    let vpn = Vpn::builder("vpn.example.com", "cookie")
+      .script_path("/bin/sh".to_string())
+      .build()
+      .unwrap();
+    let reports = Arc::new(Mutex::new(Vec::new()));
+    let received = Arc::clone(&reports);
+    vpn.set_hip_report_callback(move |report| received.lock().unwrap().push(report.to_owned()));
+
+    let options = vpn.build_connect_options();
+    let callback = options.on_hip_report_submitted.unwrap();
+    callback(options.user_data, b"<report/>".as_ptr().cast(), 9);
+    callback(options.user_data, b"\xff".as_ptr().cast(), 1);
+    callback(options.user_data, b"x".as_ptr().cast(), 1024 * 1024 + 1);
+
+    assert_eq!(*reports.lock().unwrap(), ["<report/>"]);
   }
 
   #[test]
