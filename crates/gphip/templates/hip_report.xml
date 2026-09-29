@@ -139,6 +139,15 @@
     {% elif host_info.os_vendor == "Apple" -%}
 		<entry name="anti-malware">
 			<list>
+			{% if let Some(sentinel) = &host_info.sentinel %}
+				<entry>
+					<ProductInfo>
+						<Prod vendor="SentinelOne" name="Sentinel Agent" version="{{ sentinel.version }}" engver="" datemon="{{ month }}" dateday="{{ day }}" dateyear="{{ year }}" prodType="3" osType="4"/>
+						<real-time-protection>{% if sentinel.real_time_protection %}yes{% else %}no{% endif %}</real-time-protection>
+						<last-full-scan-time>n/a</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+			{% endif -%}
 				<entry>
 					<ProductInfo>
 						<Prod vendor="Apple Inc." name="Xprotect" version="2167" defver="235000000000000" engver="" datemon="{{ month }}" dateday="{{ day }}" dateyear="{{ year }}" prodType="3" osType="4"/>
@@ -190,6 +199,16 @@
 		</entry>
 		<entry name="firewall">
 			<list>
+			{% if let Some(sentinel) = &host_info.sentinel %}
+				{% if let Some(firewall_enabled) = sentinel.firewall_enabled %}
+					<entry>
+						<ProductInfo>
+							<Prod vendor="SentinelOne" name="Sentinel Agent" version="{{ sentinel.version }}"/>
+							<is-enabled>{% if firewall_enabled %}yes{% else %}no{% endif %}</is-enabled>
+						</ProductInfo>
+					</entry>
+				{% endif -%}
+			{% endif -%}
 				<entry>
 					<ProductInfo>
 						<Prod vendor="Apple Inc." name="Mac OS X Builtin Firewall" version="{{ host_info.software_version }}"/>

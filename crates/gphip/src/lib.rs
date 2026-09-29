@@ -7,6 +7,9 @@ use std::collections::HashMap;
 use std::process::Command;
 use xmltree::Element;
 
+#[cfg(target_os = "macos")]
+mod sentinel_macos;
+
 pub const MAX_EDITED_REPORT_BYTES: usize = 48 * 1024;
 
 /// Validate an edited report before it is stored or used as a submission body.
@@ -252,6 +255,12 @@ struct ClamAvInfo {
   real_time_protection: bool,
 }
 
+struct SentinelInfo {
+  version: String,
+  real_time_protection: bool,
+  firewall_enabled: Option<bool>,
+}
+
 /// Host information for HIP reporting
 struct HostInfo {
   /// Common for all OSes, e.g., "Apple", "Microsoft", "Linux"
@@ -268,6 +277,7 @@ struct HostInfo {
   network_interfaces: Vec<NetworkInterface>,
   defender: Option<DefenderInfo>,
   clamav: Option<ClamAvInfo>,
+  sentinel: Option<SentinelInfo>,
   ufw: Option<UfwInfo>,
 }
 
@@ -402,6 +412,7 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
       network_interfaces: interfaces,
       defender: self.defender_for_profile(),
       clamav: self.clamav_for_profile(),
+      sentinel: self.sentinel_for_profile(),
       ufw: self.ufw_for_profile(),
     }
   }
@@ -469,6 +480,14 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
       ClientOs::Linux => detect_ufw(),
       ClientOs::Mac | ClientOs::Windows => None,
     }
+  }
+
+  fn sentinel_for_profile(&self) -> Option<SentinelInfo> {
+    #[cfg(target_os = "macos")]
+    if self.profile.client_os() == ClientOs::Mac && self.profile.is_native() {
+      return sentinel_macos::detect();
+    }
+    None
   }
 }
 
@@ -769,6 +788,37 @@ mod tests {
     assert!(report.contains("test-user"));
     assert!(report.contains("test-digest"));
     validate_edited_report(&report).unwrap();
+  }
+
+  #[test]
+  fn mac_report_renders_detected_sentinel_products() {
+    let input = make_input(make_profile(ClientOs::Mac));
+    let cookie_params = HashMap::new();
+    let mut host_info = HostInfoCollector::new(&input.profile, &input, &cookie_params).collect();
+    host_info.sentinel = Some(SentinelInfo {
+      version: "25.3.4.8365".to_string(),
+      real_time_protection: true,
+      firewall_enabled: Some(false),
+    });
+    let (generate_time, day, month, year) = get_current_time_components();
+    let report = HipReportTemplate {
+      client_version: input.profile.client_version(),
+      generate_time,
+      day,
+      month,
+      year,
+      user_name: "test-user",
+      host_info,
+      md5: "test-digest",
+    }
+    .render()
+    .unwrap();
+    let report = format_xml(&report).unwrap();
+    validate_edited_report(&report).unwrap();
+    assert!(report.contains("vendor=\"SentinelOne\" name=\"Sentinel Agent\" version=\"25.3.4.8365\""));
+    assert!(report.contains("<real-time-protection>yes</real-time-protection>"));
+    assert!(report.contains("<is-enabled>no</is-enabled>"));
+    assert_eq!(report.matches("name=\"Sentinel Agent\"").count(), 2);
   }
 
   #[test]
