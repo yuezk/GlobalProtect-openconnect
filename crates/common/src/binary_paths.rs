@@ -33,7 +33,10 @@ pub fn gp_vpnc_script_installer() -> PathBuf {
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 pub fn gp_hip_script_installer() -> PathBuf {
-  PathBuf::from(GP_HIP_SCRIPT_INSTALLER_BINARY)
+  env::var_os("GP_HIP_SCRIPT_INSTALLER_BINARY")
+    .filter(|value| !value.is_empty())
+    .map(PathBuf::from)
+    .unwrap_or_else(|| PathBuf::from(GP_HIP_SCRIPT_INSTALLER_BINARY))
 }
 
 pub fn gpauth() -> PathBuf {
