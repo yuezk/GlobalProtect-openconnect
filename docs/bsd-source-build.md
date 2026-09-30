@@ -44,7 +44,7 @@ Install build and runtime dependencies:
 
 ```sh
 doas pkg_add -u -I
-doas pkg_add -I git rust libiconv gettext-tools autoconf-2.72 automake-1.17 \
+doas pkg_add -I git rust libiconv gettext-tools autoconf%2.72 automake%1.17 \
   libtool gmake libxml gnutls p11-kit gmp lz4 dbus \
   gnome-keyring polkit webkitgtk41 xdg-utils
 ```
