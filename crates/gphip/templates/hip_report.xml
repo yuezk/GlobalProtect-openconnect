@@ -238,6 +238,15 @@
     {% elif host_info.os_vendor == "Linux" -%}
 		<entry name="anti-malware">
 			<list>
+			{% if let Some(sentinel) = &host_info.sentinel %}
+				<entry>
+					<ProductInfo>
+						<Prod vendor="SentinelOne" name="Sentinel Agent" version="{{ sentinel.version }}" engver="" datemon="{{ month }}" dateday="{{ day }}" dateyear="{{ year }}" prodType="3" osType="1"/>
+						<real-time-protection>{% if sentinel.real_time_protection %}yes{% else %}no{% endif %}</real-time-protection>
+						<last-full-scan-time>n/a</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+			{% endif -%}
 			{% if let Some(defender) = &host_info.defender %}
 				<entry>
 					<ProductInfo>

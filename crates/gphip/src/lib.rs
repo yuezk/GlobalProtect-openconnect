@@ -9,6 +9,8 @@ use xmltree::Element;
 
 #[cfg(target_os = "macos")]
 mod sentinel_macos;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+mod sentinel_unix;
 
 pub const MAX_EDITED_REPORT_BYTES: usize = 48 * 1024;
 
@@ -487,6 +489,10 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
     if self.profile.client_os() == ClientOs::Mac && self.profile.is_native() {
       return sentinel_macos::detect();
     }
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+    if self.profile.client_os() == ClientOs::Linux && self.profile.is_native() {
+      return sentinel_unix::detect();
+    }
     None
   }
 }
@@ -819,6 +825,37 @@ mod tests {
     assert!(report.contains("<real-time-protection>yes</real-time-protection>"));
     assert!(report.contains("<is-enabled>no</is-enabled>"));
     assert_eq!(report.matches("name=\"Sentinel Agent\"").count(), 2);
+  }
+
+  #[test]
+  fn linux_report_renders_detected_sentinel_antimalware() {
+    let input = make_input(make_profile(ClientOs::Linux));
+    let cookie_params = HashMap::new();
+    let mut host_info = HostInfoCollector::new(&input.profile, &input, &cookie_params).collect();
+    host_info.sentinel = Some(SentinelInfo {
+      version: "25.2.2.14".to_string(),
+      real_time_protection: true,
+      firewall_enabled: None,
+    });
+    let (generate_time, day, month, year) = get_current_time_components();
+    let report = HipReportTemplate {
+      client_version: input.profile.client_version(),
+      generate_time,
+      day,
+      month,
+      year,
+      user_name: "test-user",
+      host_info,
+      md5: "test-digest",
+    }
+    .render()
+    .unwrap();
+    let report = format_xml(&report).unwrap();
+    validate_edited_report(&report).unwrap();
+    assert!(report.contains("vendor=\"SentinelOne\" name=\"Sentinel Agent\" version=\"25.2.2.14\""));
+    assert!(report.contains("osType=\"1\""));
+    assert!(report.contains("<real-time-protection>yes</real-time-protection>"));
+    assert_eq!(report.matches("name=\"Sentinel Agent\"").count(), 1);
   }
 
   #[test]
