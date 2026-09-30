@@ -70,6 +70,8 @@ proptest = "1"
 [patch.crates-io]
 # Restore BSD GTK resize hit testing until https://github.com/tauri-apps/tao/pull/1356 is released.
 tao = { git = "https://github.com/yuezk/tao", rev = "1452ae7a42c9f134296ba199f91f514fc9077f61" }
+# Use one macro source for Tao and Wry so Cargo can vendor the workspace.
+tao-macros = { git = "https://github.com/yuezk/tao", rev = "1452ae7a42c9f134296ba199f91f514fc9077f61" }
 
 [profile.release]
 opt-level = 'z'   # Optimize for size

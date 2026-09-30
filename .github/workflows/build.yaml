@@ -602,8 +602,8 @@ jobs:
             rust \
             libiconv \
             gettext-tools \
-            autoconf-2.72 \
-            automake-1.17 \
+            autoconf%2.72 \
+            automake%1.17 \
             libtool \
             gmake \
             libxml \
