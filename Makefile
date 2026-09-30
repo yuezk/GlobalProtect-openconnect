@@ -276,7 +276,7 @@ package-openbsd: clean-bsd-package
 	comment=$$(cat .build/openbsd/+COMMENT); \
 		openbsd_arch=$$(uname -m | sed 's/x86_64/amd64/'); \
 		gnome_keyring_pkg=$$(pkg_info -e 'gnome-keyring-*' | sed 's/^inst://' | head -n 1); \
-		libappindicator_pkg=$$(pkg_info -e 'libappindicator-*' | sed 's/^inst://' | head -n 1); \
+		dbus_pkg=$$(pkg_info -e 'dbus-*' | sed 's/^inst://' | head -n 1); \
 		polkit_pkg=$$(pkg_info -e 'polkit-*' | sed 's/^inst://' | head -n 1); \
 		webkitgtk_pkg=$$(pkg_info -e 'webkitgtk41-*' | sed 's/^inst://' | head -n 1); \
 		xdg_utils_pkg=$$(pkg_info -e 'xdg-utils-*' | sed 's/^inst://' | head -n 1); \
@@ -287,7 +287,7 @@ package-openbsd: clean-bsd-package
 			-f .build/openbsd/PLIST \
 			-p $(PREFIX) \
 			-P x11/gnome/keyring:gnome-keyring-*:$$gnome_keyring_pkg \
-			-P x11/libappindicator:libappindicator-*:$$libappindicator_pkg \
+			-P x11/dbus:dbus-*:$$dbus_pkg \
 			-P sysutils/polkit:polkit-*:$$polkit_pkg \
 			-P www/webkitgtk4,webkitgtk41:webkitgtk41-*:$$webkitgtk_pkg \
 			-P devel/xdg-utils:xdg-utils-*:$$xdg_utils_pkg \
