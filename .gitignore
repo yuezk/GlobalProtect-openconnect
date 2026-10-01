@@ -16,3 +16,7 @@ gen
 
 # Nix files
 result
+
+# Claude Code: keep committed settings, ignore personal/local state
+.claude/*
+!.claude/settings.json

@@ -1,0 +1,18 @@
+{
+  "env": {
+    "AI_GUARD_PROTECT_BRANCHES": "main",
+    "AI_GUARD_ENABLE": "git-add-all,git-no-verify"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo test:*)",
+      "Bash(make build:*)",
+      "Bash(make tarball:*)",
+      "Bash(./target/release/gpclient --help)",
+      "Bash(git submodule update --init --recursive)"
+    ]
+  }
+}
