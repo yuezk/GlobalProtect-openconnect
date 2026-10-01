@@ -17,6 +17,7 @@ lock = threading.Lock()
 
 def serve(connection):
     try:
+        connection.settimeout(5)
         with context.wrap_socket(connection, server_side=True) as stream:
             buffer = b""
             while True:
@@ -27,6 +28,7 @@ def serve(connection):
                     buffer += data
                 headers, buffer = buffer.split(b"\r\n\r\n", 1)
                 method, path, _ = headers.split(b"\r\n", 1)[0].decode().split()
+                print(f"Gateway received {method} {path.split('?')[0]}", file=sys.stderr, flush=True)
                 if method == "GET" and path.startswith("/ssl-tunnel-connect.sslvpn?"):
                     stream.sendall(b"START_TUNNEL")
                     while stream.recv(4096):
@@ -38,7 +40,10 @@ def serve(connection):
                     if name.lower() == b"content-length":
                         length = int(value)
                 while len(buffer) < length:
-                    buffer += stream.recv(4096)
+                    data = stream.recv(4096)
+                    if not data:
+                        raise EOFError(f"Incomplete body for {path}: {len(buffer)}/{length}")
+                    buffer += data
                 body, buffer = buffer[:length], buffer[length:]
                 form = parse_qs(body.decode())
                 status = "200 OK"
@@ -68,6 +73,7 @@ def serve(connection):
                         raise AssertionError(path)
                 payload = response.encode()
                 stream.sendall(f"HTTP/1.1 {status}\r\nContent-Length: {len(payload)}\r\nContent-Type: text/xml\r\nConnection: keep-alive\r\n\r\n".encode() + payload)
+                print(f"Gateway responded {status} to {path.split('?')[0]}", file=sys.stderr, flush=True)
     except (ConnectionError, ssl.SSLError):
         pass
 
