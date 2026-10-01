@@ -143,13 +143,14 @@
             --replace-fail /usr/bin/gpclient $out/bin/gpclient
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
-            --replace-fail /usr/bin/gpservice $out/bin/gpservice \
-            --replace-fail /usr/libexec/gpclient/gp-vpnc-script-installer ${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer
+            --replace-fail /usr/bin/gpservice $out/bin/gpservice
 
-          if [ -f ${prebuiltFiles}/libexec/gpclient/gp-hip-script-installer ]; then
-            substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
-              --replace-fail /usr/libexec/gpclient/gp-hip-script-installer ${prebuiltFiles}/libexec/gpclient/gp-hip-script-installer
-          fi
+          for installer in gp-vpnc-script-installer gp-hip-script-installer; do
+            if [ -x "${prebuiltFiles}/libexec/gpclient/$installer" ]; then
+              substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
+                --replace-fail "/usr/libexec/gpclient/$installer" "${prebuiltFiles}/libexec/gpclient/$installer"
+            fi
+          done
 
           if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
             substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
@@ -324,11 +325,15 @@
           done < <(${pkgs.coreutils}/bin/env --null)
 
           gui_path="/run/wrappers/bin:''${PATH:-}"
-          systemd_run_args+=(
-            "--setenv=PATH=$gui_path"
-            "--setenv=GP_VPNC_SCRIPT_INSTALLER_BINARY=${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer"
-            "--setenv=GP_HIP_SCRIPT_INSTALLER_BINARY=${prebuiltFiles}/libexec/gpclient/gp-hip-script-installer"
-          )
+          systemd_run_args+=("--setenv=PATH=$gui_path")
+          for helper in \
+            GP_VPNC_SCRIPT_INSTALLER_BINARY=gp-vpnc-script-installer \
+            GP_HIP_SCRIPT_INSTALLER_BINARY=gp-hip-script-installer; do
+            helper_path="${prebuiltFiles}/libexec/gpclient/''${helper#*=}"
+            if [ -x "$helper_path" ]; then
+              systemd_run_args+=("--setenv=''${helper%%=*}=$helper_path")
+            fi
+          done
 
           exec ${pkgs.systemd}/bin/systemd-run \
             "''${systemd_run_args[@]}" \
@@ -347,8 +352,14 @@
             runScript = "/usr/bin/${binaryName}";
             profile = ''
               export PATH=/run/wrappers/bin:$PATH
-              export GP_VPNC_SCRIPT_INSTALLER_BINARY='${prebuiltFiles}/libexec/gpclient/gp-vpnc-script-installer'
-              export GP_HIP_SCRIPT_INSTALLER_BINARY='${prebuiltFiles}/libexec/gpclient/gp-hip-script-installer'
+              for helper in \
+                GP_VPNC_SCRIPT_INSTALLER_BINARY=gp-vpnc-script-installer \
+                GP_HIP_SCRIPT_INSTALLER_BINARY=gp-hip-script-installer; do
+                helper_path="${prebuiltFiles}/libexec/gpclient/''${helper#*=}"
+                if [ -x "$helper_path" ]; then
+                  export "''${helper%%=*}=$helper_path"
+                fi
+              done
               ${extraProfile}
             '';
             extraBwrapArgs = [
