@@ -1,6 +1,10 @@
+mod hip;
 use crate::Vpn;
+use hip::HipGenerateFn;
+pub(crate) use hip::{HipControlRaw, HipScriptRaw, generate_hip_report, preview_hip_script, script_environment};
 use log::{debug, info, trace, warn};
 use std::ffi::{c_char, c_int, c_long, c_void};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 /// ConnectOptions struct for FFI, the field names and order must match the C definition.
 #[repr(C)]
@@ -28,8 +32,8 @@ pub(crate) struct ConnectOptions {
   pub key_password: *const c_char,
   pub servercert: *const c_char,
 
-  pub csd_uid: u32,
-  pub csd_wrapper: *const c_char,
+  pub hip_script: HipScriptRaw,
+  pub generate_hip: Option<HipGenerateFn>,
 
   pub reconnect_timeout: u32,
   pub mtu: u32,
@@ -94,7 +98,9 @@ pub(crate) extern "C" fn on_hip_report_submitted(vpn: *mut c_void, report: *cons
   }
   let bytes = unsafe { std::slice::from_raw_parts(report.cast::<u8>(), length) };
   if let Ok(report) = std::str::from_utf8(bytes) {
-    vpn.on_hip_report_submitted(report);
+    if catch_unwind(AssertUnwindSafe(|| vpn.on_hip_report_submitted(report))).is_err() {
+      warn!("HIP submission observer failed");
+    }
   }
 }
 

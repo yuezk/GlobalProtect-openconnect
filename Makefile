@@ -145,7 +145,6 @@ install:
 	install -Dm755 target/release/gpclient $(DESTDIR)/usr/bin/gpclient
 	install -Dm755 target/release/gpauth $(DESTDIR)/usr/bin/gpauth
 	install -Dm755 target/release/gpservice $(DESTDIR)/usr/bin/gpservice
-	install -Dm755 target/release/gp-hip-runner $(DESTDIR)/usr/libexec/gpclient/gp-hip-runner
 	install -Dm755 target/release/gp-hip-script-installer $(DESTDIR)/usr/libexec/gpclient/gp-hip-script-installer
 	install -Dm755 target/release/gp-vpnc-script-installer $(DESTDIR)/usr/libexec/gpclient/gp-vpnc-script-installer
 
@@ -159,7 +158,6 @@ install:
 	fi
 
 	install -Dm755 packaging/files/usr/libexec/gpclient/vpnc-script $(DESTDIR)/usr/libexec/gpclient/vpnc-script
-	install -Dm755 packaging/files/usr/libexec/gpclient/hipreport.sh $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
 
 	# Install the disconnect hooks
 	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
@@ -196,11 +194,9 @@ install-bsd:
 	fi
 
 	install -d $(DESTDIR)$(PREFIX)/libexec/gpclient
-	install -m 755 target/release/gp-hip-runner $(DESTDIR)$(PREFIX)/libexec/gpclient/gp-hip-runner
 	install -m 755 target/release/gp-hip-script-installer $(DESTDIR)$(PREFIX)/libexec/gpclient/gp-hip-script-installer
 	install -m 755 target/release/gp-vpnc-script-installer $(DESTDIR)$(PREFIX)/libexec/gpclient/gp-vpnc-script-installer
 	install -m 755 packaging/files/usr/libexec/gpclient/vpnc-script $(DESTDIR)$(PREFIX)/libexec/gpclient/vpnc-script
-	install -m 755 packaging/files/usr/libexec/gpclient/hipreport.sh $(DESTDIR)$(PREFIX)/libexec/gpclient/hipreport.sh
 
 	install -d $(DESTDIR)$(PREFIX)/share/applications
 	install -m 644 packaging/bsd/gpgui.desktop $(DESTDIR)$(PREFIX)/share/applications/gpgui.desktop
@@ -300,13 +296,11 @@ uninstall:
 	rm -f $(DESTDIR)/usr/bin/gpclient
 	rm -f $(DESTDIR)/usr/bin/gpauth
 	rm -f $(DESTDIR)/usr/bin/gpservice
-	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-hip-runner
 	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-hip-script-installer
 	rm -f $(DESTDIR)/usr/bin/gpgui-helper
 	rm -f $(DESTDIR)/usr/bin/gpgui
 
 	rm -f $(DESTDIR)/usr/libexec/gpclient/vpnc-script
-	rm -f $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
 	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-vpnc-script-installer
 
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down

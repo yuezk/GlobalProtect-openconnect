@@ -1,6 +1,6 @@
 use std::{
   fs::{self, File, OpenOptions},
-  io::Write,
+  io::{Read, Write},
   os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
   path::{Path, PathBuf},
 };
@@ -11,8 +11,6 @@ use gpapi::hip::HipApprovalStatus;
 use serde::{Deserialize, Serialize};
 use tempfile::Builder;
 use uuid::Uuid;
-
-use crate::hip_runner_state::validate_root_owned_path;
 
 #[cfg(target_os = "linux")]
 pub const APPROVAL_DIRECTORY: &str = "/var/lib/gpclient/hip-approvals";
@@ -83,22 +81,32 @@ pub fn install(request: InstallRequest, approving_uid: u32) -> anyhow::Result<Ap
   let contents = request.contents()?;
   let base = Path::new(APPROVAL_DIRECTORY);
   fs::create_dir_all(base).context("Cannot create HIP approval directory")?;
-  validate_root_owned_path(base, false)?;
+  validate_approval_ancestors(base)?;
   fs::set_permissions(base, fs::Permissions::from_mode(0o700))?;
   install_at(base, &contents, request.original_path, approving_uid, 0)
 }
 
 pub fn resolve(approval_id: &str, desktop_uid: u32) -> anyhow::Result<ApprovedScript> {
+  let budget = gpapi::process::collection::CollectionBudget::new(std::time::Duration::from_secs(60));
+  resolve_with_control(approval_id, desktop_uid, &budget)
+}
+
+pub fn resolve_with_control(
+  approval_id: &str,
+  desktop_uid: u32,
+  control: &dyn gpapi::process::collection::CollectionControl,
+) -> anyhow::Result<ApprovedScript> {
+  control.check()?;
   ensure!(desktop_uid != 0, "Root is not a desktop HIP approval owner");
   let base = Path::new(APPROVAL_DIRECTORY);
-  validate_root_owned_path(base, false)?;
-  resolve_at(base, approval_id, desktop_uid, 0)
+  validate_approval_ancestors(base)?;
+  resolve_at_with_control(base, approval_id, desktop_uid, 0, control)
 }
 
 pub fn revoke(approval_id: &str, approving_uid: u32) -> anyhow::Result<()> {
   ensure!(approving_uid != 0, "Root cannot revoke another user's HIP approval");
   let base = Path::new(APPROVAL_DIRECTORY);
-  validate_root_owned_path(base, false)?;
+  validate_approval_ancestors(base)?;
   revoke_at(base, approval_id, approving_uid, 0)
 }
 
@@ -127,7 +135,7 @@ fn status_at(
     }
   }
   if validate_private_dir(base, file_owner).is_err()
-    || (validate_root_ancestors && validate_root_owned_path(base, false).is_err())
+    || (validate_root_ancestors && validate_approval_ancestors(base).is_err())
   {
     return Ok(HipApprovalStatus::Corrupt);
   }
@@ -191,15 +199,43 @@ fn install_at(
 }
 
 fn resolve_at(base: &Path, approval_id: &str, desktop_uid: u32, file_owner: u32) -> anyhow::Result<ApprovedScript> {
+  let budget = gpapi::process::collection::CollectionBudget::new(std::time::Duration::from_secs(60));
+  resolve_at_with_control(base, approval_id, desktop_uid, file_owner, &budget)
+}
+
+fn resolve_at_with_control(
+  base: &Path,
+  approval_id: &str,
+  desktop_uid: u32,
+  file_owner: u32,
+  control: &dyn gpapi::process::collection::CollectionControl,
+) -> anyhow::Result<ApprovedScript> {
+  control.check()?;
   let info = read_metadata_at(base, approval_id, desktop_uid, file_owner)?;
+  control.check()?;
   let script = base.join(approval_id).join(SCRIPT_NAME);
   validate_file(&script, file_owner, 0o500, MAX_SCRIPT_SIZE as u64)?;
-  let contents = fs::read(&script)?;
+  let mut file = File::open(&script)?;
+  let mut contents = Vec::new();
+  let mut chunk = [0_u8; 8192];
+  loop {
+    control.check()?;
+    let read = file.read(&mut chunk)?;
+    if read == 0 {
+      break;
+    }
+    ensure!(
+      contents.len() + read <= MAX_SCRIPT_SIZE,
+      "Approved HIP script is too large"
+    );
+    contents.extend_from_slice(&chunk[..read]);
+  }
   ensure!(!contents.is_empty(), "Approved HIP script is empty");
   ensure!(
     sha256::digest(&contents) == info.sha256,
     "Approved HIP script digest mismatch"
   );
+  control.check()?;
   Ok(ApprovedScript { info, path: script })
 }
 
@@ -291,6 +327,27 @@ fn validate_file(path: &Path, owner_uid: u32, mode: u32, max_size: u64) -> anyho
     "HIP approval file has unsafe ownership or mode"
   );
   ensure!(metadata.len() <= max_size, "HIP approval file is too large");
+  Ok(())
+}
+
+/// Check every component because a trusted file below a writable parent can
+/// be replaced before a later HIP refresh.
+fn validate_approval_ancestors(path: &Path) -> anyhow::Result<()> {
+  ensure!(path.is_absolute(), "HIP approval path must be absolute");
+  for component in path.ancestors().take_while(|part| part.as_os_str() != "/") {
+    let metadata =
+      fs::symlink_metadata(component).with_context(|| format!("Cannot inspect {}", component.display()))?;
+    ensure!(
+      !metadata.file_type().is_symlink(),
+      "HIP approval path contains a symlink"
+    );
+    ensure!(metadata.uid() == 0, "HIP approval path is not root-owned");
+    ensure!(
+      metadata.permissions().mode() & 0o022 == 0,
+      "HIP approval path is writable by another user"
+    );
+    ensure!(metadata.is_dir(), "HIP approval parent is not a directory");
+  }
   Ok(())
 }
 

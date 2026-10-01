@@ -1,33 +1,47 @@
 use std::{
-  fs,
+  fs, io,
   os::unix::fs::{MetadataExt, PermissionsExt},
   path::{Path, PathBuf},
-  process::Command,
 };
+
+use gpapi::process::collection::CollectorCommands;
 
 use super::SentinelInfo;
 
 const SENTINEL_DIR: &str = "/opt/sentinelone";
 
-pub(super) fn detect() -> Option<SentinelInfo> {
-  let cli = trusted_cli()?;
-
-  let version = parse_version(&run(&cli, &["version"])?)?;
-  let agent_enabled = parse_enabled(&run(&cli, &["control", "status"])?, "Agent state")?;
+pub(super) fn detect(commands: &CollectorCommands<'_>) -> io::Result<Option<SentinelInfo>> {
+  let Some(cli) = trusted_cli() else {
+    return Ok(None);
+  };
+  let Some(version) = run(commands, &cli, &["version"])?.as_deref().and_then(parse_version) else {
+    return Ok(None);
+  };
+  let Some(agent_enabled) = run(commands, &cli, &["control", "status"])?
+    .as_deref()
+    .and_then(|status| parse_enabled(status, "Agent state"))
+  else {
+    return Ok(None);
+  };
   let real_time_protection = if agent_enabled {
-    let policy = run(&cli, &["policy", "status"])?;
-    let on_write = parse_enabled(&policy, "On-Write:")?;
-    let on_execute = parse_enabled(&policy, "On-Execute:")?;
+    let Some(policy) = run(commands, &cli, &["policy", "status"])? else {
+      return Ok(None);
+    };
+    let (Some(on_write), Some(on_execute)) = (
+      parse_enabled(&policy, "On-Write:"),
+      parse_enabled(&policy, "On-Execute:"),
+    ) else {
+      return Ok(None);
+    };
     on_write || on_execute
   } else {
     false
   };
-
-  Some(SentinelInfo {
+  Ok(Some(SentinelInfo {
     version,
     real_time_protection,
     firewall_enabled: None,
-  })
+  }))
 }
 
 fn trusted_cli() -> Option<PathBuf> {
@@ -72,17 +86,13 @@ fn trusted_dir(path: &Path, owner: u32) -> bool {
   metadata.is_dir() && metadata.uid() == owner && metadata.permissions().mode() & 0o022 == 0
 }
 
-fn run(cli: &Path, args: &[&str]) -> Option<String> {
-  let output = Command::new(cli)
-    .args(args)
-    .env("LC_ALL", "C")
-    .env_remove("SENTINEL_OUTPUT_JSON")
-    .output()
-    .ok()?;
-  if !output.status.success() {
-    return None;
-  }
-  String::from_utf8(output.stdout).ok()
+fn run(commands: &CollectorCommands<'_>, cli: &Path, args: &[&str]) -> io::Result<Option<String>> {
+  Ok(
+    commands
+      .run_path(cli, args)?
+      .filter(|output| output.status.success())
+      .and_then(|output| String::from_utf8(output.stdout).ok()),
+  )
 }
 
 fn parse_version(output: &str) -> Option<String> {

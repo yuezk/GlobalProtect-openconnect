@@ -1,34 +1,44 @@
 use std::{
-  fs,
+  fs, io,
   os::unix::fs::{MetadataExt, PermissionsExt},
   path::Path,
-  process::Command,
 };
+
+use gpapi::process::collection::CollectorCommands;
 
 use super::SentinelInfo;
 
 const SENTINELCTL: &str = "/Library/Sentinel/sentinel-agent.bundle/Contents/MacOS/sentinelctl";
 
-pub(super) fn detect() -> Option<SentinelInfo> {
+pub(super) fn detect(commands: &CollectorCommands<'_>) -> io::Result<Option<SentinelInfo>> {
   if !trusted_cli(Path::new(SENTINELCTL)) {
-    return None;
+    return Ok(None);
   }
-
-  let status = run(&["status"])?;
-  let status = parse_status(&status)?;
+  let Some(status) = run(commands, &["status"])? else {
+    return Ok(None);
+  };
+  let Some(status) = parse_status(&status) else {
+    return Ok(None);
+  };
   let real_time_protection = if status.active {
-    let scan_status = run(&["scan-on-write"])?;
-    parse_yes_no(scan_status.trim().strip_prefix("scan-on-write:")?)?
+    let Some(scan_status) = run(commands, &["scan-on-write"])? else {
+      return Ok(None);
+    };
+    let Some(enabled) = scan_status.trim().strip_prefix("scan-on-write:").and_then(parse_yes_no) else {
+      return Ok(None);
+    };
+    enabled
   } else {
     false
   };
-  let firewall_enabled = run(&["firewall", "enabled"]).as_deref().and_then(parse_yes_no);
-
-  Some(SentinelInfo {
+  let firewall_enabled = run(commands, &["firewall", "enabled"])?
+    .as_deref()
+    .and_then(parse_yes_no);
+  Ok(Some(SentinelInfo {
     version: status.version,
     real_time_protection,
     firewall_enabled,
-  })
+  }))
 }
 
 fn trusted_cli(path: &Path) -> bool {
@@ -47,17 +57,13 @@ fn trusted_cli(path: &Path) -> bool {
   })
 }
 
-fn run(args: &[&str]) -> Option<String> {
-  let output = Command::new(SENTINELCTL)
-    .args(args)
-    .env("LC_ALL", "C")
-    .env_remove("SENTINEL_OUTPUT_JSON")
-    .output()
-    .ok()?;
-  if !output.status.success() {
-    return None;
-  }
-  String::from_utf8(output.stdout).ok()
+fn run(commands: &CollectorCommands<'_>, args: &[&str]) -> io::Result<Option<String>> {
+  Ok(
+    commands
+      .run_path(Path::new(SENTINELCTL), args)?
+      .filter(|output| output.status.success())
+      .and_then(|output| String::from_utf8(output.stdout).ok()),
+  )
 }
 
 struct AgentStatus {

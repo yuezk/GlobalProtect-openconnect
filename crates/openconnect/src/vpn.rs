@@ -6,8 +6,8 @@ use std::{
 
 use log::{info, warn};
 
-use crate::ffi;
-use crate::vpn_utils::{check_executable, find_csd_wrapper, find_vpnc_script};
+use crate::vpn_utils::{check_executable, find_vpnc_script};
+use crate::{HipSource, ffi};
 
 type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce(VpnSessionInfo) + 'static + Send + Sync>>>>;
 type OnHipReportCallback = RwLock<Option<Arc<dyn Fn(&str) + Send + Sync>>>;
@@ -119,8 +119,7 @@ pub struct Vpn {
   key_password: Option<CString>,
   servercert: Option<CString>,
 
-  csd_uid: u32,
-  csd_wrapper: Option<CString>,
+  pub(crate) hip_source: HipSource,
 
   reconnect_timeout: u32,
   mtu: u32,
@@ -141,8 +140,14 @@ impl Vpn {
 
   pub fn connect(&self, on_connected: impl FnOnce(VpnSessionInfo) + 'static + Send + Sync) -> i32 {
     self.callback.write().unwrap().replace(Box::new(on_connected));
-    let options = self.build_connect_options();
-
+    let mut options = self.build_connect_options();
+    let environment = match &self.hip_source {
+      HipSource::Script(script) => ffi::script_environment(script),
+      _ => Vec::new(),
+    };
+    if !environment.is_empty() {
+      options.hip_script.environment = environment.as_ptr();
+    }
     ffi::connect(&options)
   }
 
@@ -205,8 +210,14 @@ impl Vpn {
       key_password: Self::option_to_ptr(&self.key_password),
       servercert: Self::option_to_ptr(&self.servercert),
 
-      csd_uid: self.csd_uid,
-      csd_wrapper: Self::option_to_ptr(&self.csd_wrapper),
+      hip_script: match &self.hip_source {
+        HipSource::Script(script) => ffi::HipScriptRaw::from_script(script),
+        _ => Default::default(),
+      },
+      generate_hip: match &self.hip_source {
+        HipSource::Generator(_) => Some(ffi::generate_hip_report),
+        _ => None,
+      },
 
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
@@ -263,9 +274,7 @@ pub struct VpnBuilder {
   sslkey: Option<String>,
   key_password: Option<String>,
 
-  hip: bool,
-  csd_uid: u32,
-  csd_wrapper: Option<String>,
+  hip_source: HipSource,
 
   reconnect_timeout: u32,
   mtu: u32,
@@ -297,9 +306,7 @@ impl VpnBuilder {
       sslkey: None,
       key_password: None,
 
-      hip: false,
-      csd_uid: 0,
-      csd_wrapper: None,
+      hip_source: HipSource::Disabled,
 
       reconnect_timeout: 300,
       mtu: 0,
@@ -377,18 +384,8 @@ impl VpnBuilder {
     self
   }
 
-  pub fn hip(mut self, hip: bool) -> Self {
-    self.hip = hip;
-    self
-  }
-
-  pub fn csd_uid(mut self, csd_uid: u32) -> Self {
-    self.csd_uid = csd_uid;
-    self
-  }
-
-  pub fn csd_wrapper<T: Into<Option<String>>>(mut self, csd_wrapper: T) -> Self {
-    self.csd_wrapper = csd_wrapper.into();
+  pub fn hip_source(mut self, hip_source: HipSource) -> Self {
+    self.hip_source = hip_source;
     self
   }
 
@@ -435,23 +432,6 @@ impl VpnBuilder {
     }
   }
 
-  fn determine_csd_wrapper(&self) -> Result<Option<&str>, VpnError> {
-    if !self.hip {
-      return Ok(None);
-    }
-
-    match &self.csd_wrapper {
-      Some(csd_wrapper) if !csd_wrapper.is_empty() => {
-        check_executable(csd_wrapper).map_err(|e| VpnError::new(e.to_string()))?;
-        Ok(Some(csd_wrapper))
-      }
-      _ => {
-        let s = find_csd_wrapper().ok_or_else(|| VpnError::new(String::from("Failed to find csd wrapper")))?;
-        Ok(Some(s))
-      }
-    }
-  }
-
   pub fn build(self) -> Result<Vpn, VpnError> {
     let script = self.determine_script()?.to_owned();
     let script = if self.script_is_path {
@@ -459,7 +439,6 @@ impl VpnBuilder {
     } else {
       script
     };
-    let csd_wrapper = self.determine_csd_wrapper()?.map(|s| s.to_owned());
 
     let user_agent = self.user_agent.unwrap_or_default();
     let os = self.os.unwrap_or("linux".to_string());
@@ -485,8 +464,7 @@ impl VpnBuilder {
       key_password: self.key_password.as_deref().map(Self::to_cstring),
       servercert: None,
 
-      csd_uid: self.csd_uid,
-      csd_wrapper: csd_wrapper.as_deref().map(Self::to_cstring),
+      hip_source: self.hip_source,
 
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
@@ -611,8 +589,7 @@ mod tests {
       sslkey: None,
       key_password: None,
       servercert: None,
-      csd_uid: 0,
-      csd_wrapper: None,
+      hip_source: HipSource::Disabled,
       reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,

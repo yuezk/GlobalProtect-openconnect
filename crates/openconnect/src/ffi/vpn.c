@@ -86,8 +86,8 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	INFO("HOST_ID: %s", options->host_id ? options->host_id : "(not set)");
 	INFO("VPNC_SCRIPT: %s", options->script);
 	INFO("SCRIPT_TUN: %d", options->script_tun);
-	INFO("CSD_USER: %d", options->csd_uid);
-	INFO("CSD_WRAPPER: %s", options->csd_wrapper);
+	INFO("CSD_USER: %d", options->hip_script.uid);
+	INFO("CSD_WRAPPER: %s", options->hip_script.path);
 	INFO("RECONNECT_TIMEOUT: %d", options->reconnect_timeout);
 	INFO("MTU: %d", options->mtu);
 	INFO("DISABLE_IPV6: %d", options->disable_ipv6);
@@ -168,9 +168,14 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 		openconnect_set_xmlpost(vpninfo, 0);
 	}
 
-	if (options->csd_wrapper) {
-		openconnect_setup_csd(vpninfo, options->csd_uid, 1,
-				      options->csd_wrapper);
+	openconnect_set_gp_hip_generator(vpninfo, options->user_data, options->generate_hip);
+	if (options->hip_script.path) {
+		result = openconnect_set_gp_hip_script(vpninfo, options->hip_script.path,
+			options->hip_script.uid_present, options->hip_script.uid,
+			options->hip_script.validation_data, options->hip_script.validate,
+			options->hip_script.environment, options->hip_script.cwd);
+		if (result)
+			goto cleanup;
 	}
 
 	if (options->mtu > 0) {
@@ -224,4 +229,21 @@ int vpn_write_cancel(int fd)
 		written = write(fd, &command, 1);
 	} while (written < 0 && errno == EINTR);
 	return written == 1 ? 0 : (written < 0 ? errno : EIO);
+}
+
+int vpn_collect_hip_report(const vpn_hip_script *script,
+	const struct openconnect_gp_hip_request *request,
+	const struct openconnect_gp_hip_control *control, openconnect_gp_hip_generate_fn generate, void *data,
+	char *output, size_t capacity, size_t *written)
+{
+	struct openconnect_info *vpninfo = openconnect_vpninfo_new("HIP preview", NULL, NULL, NULL, print_progress, NULL);
+	int result;
+	if (!vpninfo)
+		return -ENOMEM;
+	openconnect_set_gp_hip_generator(vpninfo, data, generate);
+	result = openconnect_set_gp_hip_script(vpninfo, script->path, script->uid_present,
+		script->uid, script->validation_data, script->validate, script->environment, script->cwd);
+	if (!result) result = openconnect_collect_gp_hip_report(vpninfo, request, control, output, capacity, written);
+	openconnect_vpninfo_free(vpninfo);
+	return result;
 }

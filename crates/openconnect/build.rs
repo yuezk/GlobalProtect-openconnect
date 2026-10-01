@@ -157,6 +157,14 @@ fn main() {
   let deps_dir = PathBuf::from(manifest_dir).join("deps");
 
   let oc_dst = build_openconnect(&deps_dir, &out_dir);
+  println!(
+    "cargo:rustc-env=OPENCONNECT_PROTOCOL_BUILD={}",
+    oc_dst.join("build").display()
+  );
+  println!(
+    "cargo:rustc-env=OPENCONNECT_PROTOCOL_SOURCE={}",
+    out_dir.join("openconnect_build").display()
+  );
 
   // Only statically link libxml2 if `LIBXML2_STATIC` is set
   if env::var("LIBXML2_STATIC").is_ok() {

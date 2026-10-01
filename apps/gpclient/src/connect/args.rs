@@ -54,13 +54,16 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use HIP (Host Integrity Protection) extension, optionally specify the HIP script path",
+    help = "Enable HIP (Host Information Profile), optionally specify a custom executable",
     default_missing_value = "",
     num_args=0..=1
   )]
   pub(super) hip: Option<String>,
 
-  #[arg(long, help = "The user used to run the HIP script")]
+  #[arg(
+    long,
+    help = "Run a custom HIP executable as this user; otherwise inherit the process user"
+  )]
   pub(super) hip_user: Option<String>,
 
   #[arg(

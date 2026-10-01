@@ -1,10 +1,11 @@
 use anyhow::{bail, ensure};
 use askama::Template;
 use gpapi::os_profile::{ClientOs, OsProfile};
-use log::debug;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::process::Command;
+use std::{io, time::Duration};
+
+use gpapi::process::collection::{CollectionBudget, CollectionControl, CollectorCommands};
 use xmltree::Element;
 
 #[cfg(target_os = "macos")]
@@ -82,49 +83,62 @@ fn unique_child<'a>(parent: &'a Element, name: &str) -> anyhow::Result<&'a Eleme
   Ok(child)
 }
 
-const CURRENT_TOP_LEVEL_FIELDS: &[&str] = &[
-  "md5-sum",
-  "user-name",
-  "domain",
-  "host-name",
-  "host-id",
-  "ip-address",
-  "ipv6-address",
-  "generate-time",
-];
-
-const CURRENT_HOST_INFO_FIELDS: &[&str] = &["client-version", "os", "os-vendor", "domain", "host-name", "host-id"];
-
-/// Refresh only session and current-host fields in a saved HIP report.
-/// User-edited categories, products, and network-interface entries remain intact.
+/// Refresh current identity/session values without running product collectors.
 pub fn refresh_edited_report(edited_xml: &str, input: &ReportInput) -> anyhow::Result<String> {
+  let budget = CollectionBudget::new(Duration::from_secs(60));
+  refresh_edited_report_with_control(edited_xml, input, &budget)
+}
+
+pub fn refresh_edited_report_with_control(
+  edited_xml: &str,
+  input: &ReportInput,
+  control: &dyn CollectionControl,
+) -> anyhow::Result<String> {
+  control.check()?;
   let mut edited = validate_edited_report(edited_xml)?;
-  let current = validate_edited_report(&generate_report(input)?)?;
-
-  for field in CURRENT_TOP_LEVEL_FIELDS {
-    copy_field(&mut edited, &current, field)?;
+  let cookie_params = cookie_params(input);
+  let identity = HostInfoCollector::new(&input.profile, input, &cookie_params).collect_identity();
+  control.check()?;
+  let domain = format!("{}.internal", identity.domain);
+  let generate_time = get_current_time_components().0;
+  for (name, value) in [
+    ("md5-sum", input.context.md5()),
+    ("user-name", report_user_name(input, &cookie_params)),
+    ("domain", domain.as_str()),
+    ("host-name", identity.host_name.as_str()),
+    ("host-id", identity.host_id.as_str()),
+    ("ip-address", identity.default_ipv4()),
+    ("ipv6-address", identity.default_ipv6()),
+    ("generate-time", generate_time.as_str()),
+  ] {
+    set_field(&mut edited, name, value)?;
   }
-
-  let edited_host = host_info_mut(&mut edited)?;
-  let current_host = host_info(&current)?;
-  for field in CURRENT_HOST_INFO_FIELDS {
-    copy_field(edited_host, current_host, field)?;
+  let host_info = host_info_mut(&mut edited)?;
+  for (name, value) in [
+    ("client-version", input.profile.client_version()),
+    ("os", identity.os_version.as_str()),
+    ("os-vendor", identity.os_vendor.as_str()),
+    ("domain", domain.as_str()),
+    ("host-name", identity.host_name.as_str()),
+    ("host-id", identity.host_id.as_str()),
+  ] {
+    set_field(host_info, name, value)?;
   }
-
   let refreshed = write_xml(&edited)?;
   validate_edited_report(&refreshed)?;
+  control.check()?;
   Ok(refreshed)
 }
 
-fn copy_field(target: &mut Element, source: &Element, name: &str) -> anyhow::Result<()> {
-  let value = unique_child(source, name)?.children.clone();
+fn set_field(target: &mut Element, name: &str, value: &str) -> anyhow::Result<()> {
   let field = target
     .get_mut_child(name)
     .ok_or_else(|| anyhow::anyhow!("HIP report is missing <{name}>"))?;
-  field.children = value;
+  field.children = vec![xmltree::XMLNode::Text(value.to_owned())];
   Ok(())
 }
 
+#[cfg(test)]
 fn host_info(root: &Element) -> anyhow::Result<&Element> {
   unique_child(root, "categories")?
     .children
@@ -194,24 +208,39 @@ pub struct ReportInput {
 
 /// Generate the same XML report used by `gpclient hip`.
 pub fn generate_report(input: &ReportInput) -> anyhow::Result<String> {
-  let cookie_params: HashMap<String, String> = serde_urlencoded::from_str(input.context.cookie()).unwrap_or_default();
+  let budget = CollectionBudget::new(Duration::from_secs(60));
+  generate_report_with_control(input, &budget)
+}
+
+pub fn generate_report_with_control(input: &ReportInput, control: &dyn CollectionControl) -> anyhow::Result<String> {
+  control.check()?;
+  let cookie_params = cookie_params(input);
   let (generate_time, day, month, year) = get_current_time_components();
-  let user_name = match input.context {
-    ReportContext::Preview => "[available after connection]",
-    ReportContext::Connected { .. } => cookie_params.get("user").map(String::as_str).unwrap_or(""),
-  };
-  let host_info = HostInfoCollector::new(&input.profile, input, &cookie_params).collect();
+  let host_info = HostInfoCollector::new(&input.profile, input, &cookie_params).collect(control)?;
   let template = HipReportTemplate {
     client_version: input.profile.client_version(),
     generate_time,
     day,
     month,
     year,
-    user_name,
+    user_name: report_user_name(input, &cookie_params),
     host_info,
     md5: input.context.md5(),
   };
-  format_xml(&template.render()?)
+  let report = format_xml(&template.render()?)?;
+  control.check()?;
+  Ok(report)
+}
+
+fn cookie_params(input: &ReportInput) -> HashMap<String, String> {
+  serde_urlencoded::from_str(input.context.cookie()).unwrap_or_default()
+}
+
+fn report_user_name<'a>(input: &ReportInput, cookie_params: &'a HashMap<String, String>) -> &'a str {
+  match input.context {
+    ReportContext::Preview => "[available after connection]",
+    ReportContext::Connected { .. } => cookie_params.get("user").map(String::as_str).unwrap_or(""),
+  }
 }
 
 #[derive(Template)]
@@ -397,7 +426,7 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
 
   /// Single entry point for collecting host info — dispatches per-OS
   /// behavior via `OsProfile` methods rather than `#[cfg(target_os)]`.
-  fn collect(&self) -> HostInfo {
+  fn collect_identity(&self) -> HostInfo {
     let runtime_iface = self.collect_network_interface();
     let primary = self.adapt_primary_interface(&runtime_iface);
 
@@ -412,10 +441,10 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
       software_version: self.profile.software_version().to_string(),
       domain: self.domain_for_profile(),
       network_interfaces: interfaces,
-      defender: self.defender_for_profile(),
-      clamav: self.clamav_for_profile(),
-      sentinel: self.sentinel_for_profile(),
-      ufw: self.ufw_for_profile(),
+      defender: None,
+      clamav: None,
+      sentinel: None,
+      ufw: None,
     }
   }
 
@@ -463,102 +492,81 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
     }
   }
 
-  fn defender_for_profile(&self) -> Option<DefenderInfo> {
-    match self.profile.client_os() {
-      ClientOs::Linux => detect_microsoft_defender_blocking(),
-      ClientOs::Mac | ClientOs::Windows => None,
+  fn collect(&self, control: &dyn CollectionControl) -> io::Result<HostInfo> {
+    control.check()?;
+    let mut info = self.collect_identity();
+    control.check()?;
+    let commands = CollectorCommands::new(control);
+    if self.profile.client_os() == ClientOs::Linux && self.profile.is_native() {
+      info.defender = detect_microsoft_defender(&commands)?;
+      info.clamav = detect_clamav(&commands)?;
+      info.ufw = detect_ufw(&commands)?;
     }
-  }
-
-  fn clamav_for_profile(&self) -> Option<ClamAvInfo> {
-    match self.profile.client_os() {
-      ClientOs::Linux => detect_clamav(),
-      ClientOs::Mac | ClientOs::Windows => None,
-    }
-  }
-
-  fn ufw_for_profile(&self) -> Option<UfwInfo> {
-    match self.profile.client_os() {
-      ClientOs::Linux => detect_ufw(),
-      ClientOs::Mac | ClientOs::Windows => None,
-    }
-  }
-
-  fn sentinel_for_profile(&self) -> Option<SentinelInfo> {
     #[cfg(target_os = "macos")]
     if self.profile.client_os() == ClientOs::Mac && self.profile.is_native() {
-      return sentinel_macos::detect();
+      info.sentinel = sentinel_macos::detect(&commands)?;
     }
     #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
     if self.profile.client_os() == ClientOs::Linux && self.profile.is_native() {
-      return sentinel_unix::detect();
+      info.sentinel = sentinel_unix::detect(&commands)?;
     }
-    None
+    control.check()?;
+    Ok(info)
   }
 }
 
-fn detect_clamav() -> Option<ClamAvInfo> {
-  let version_out = Command::new("clamscan").arg("--version").output().ok()?;
-  if !version_out.status.success() {
-    debug!("clamscan not found or failed");
-    return None;
-  }
-
-  let version_str = String::from_utf8(version_out.stdout).ok()?;
-  let (version, definitions_version) = parse_clamav_version(&version_str)?;
-
-  let rtp_out = Command::new("systemctl")
-    .args(["is-active", "clamav-onaccess.service"])
-    .output()
-    .ok()?;
-
-  let real_time_protection = rtp_out.status.success();
-
-  Some(ClamAvInfo {
+fn detect_clamav(commands: &CollectorCommands<'_>) -> io::Result<Option<ClamAvInfo>> {
+  let Some(version_str) = command_text(commands, "clamscan", &["--version"])? else {
+    return Ok(None);
+  };
+  let Some((version, definitions_version)) = parse_clamav_version(&version_str) else {
+    return Ok(None);
+  };
+  let real_time_protection = commands
+    .run("systemctl", &["is-active", "clamav-onaccess.service"])?
+    .is_some_and(|output| output.status.success());
+  Ok(Some(ClamAvInfo {
     version,
     definitions_version,
     real_time_protection,
-  })
+  }))
 }
 
-fn detect_ufw() -> Option<UfwInfo> {
-  let version_out = Command::new("ufw").arg("version").output().ok()?;
-  if !version_out.status.success() {
-    debug!("ufw not found or failed");
-    return None;
-  }
-
-  let version_str = String::from_utf8(version_out.stdout).ok()?;
-  let version = parse_ufw_version(&version_str)?;
-
-  let is_root = uzers::get_effective_uid() == 0;
-  let status_out = ufw_status_command(is_root).output().ok()?;
-  if !status_out.status.success() {
-    if is_root {
-      log::warn!("ufw status failed while running as root");
-    } else {
-      log::warn!("sudo -n ufw status failed. You may need to configure sudoers to allow execution without a password.");
-    }
-    return None;
-  }
-
-  let status_str = String::from_utf8(status_out.stdout).ok()?;
-  let is_enabled = parse_ufw_status(&status_str)?;
-
-  Some(UfwInfo { version, is_enabled })
-}
-
-fn ufw_status_command(is_root: bool) -> Command {
-  let mut command = if is_root {
-    Command::new("ufw")
-  } else {
-    let mut command = Command::new("sudo");
-    command.args(["-n", "ufw"]);
-    command
+fn detect_ufw(commands: &CollectorCommands<'_>) -> io::Result<Option<UfwInfo>> {
+  let Some(version_str) = command_text(commands, "ufw", &["version"])? else {
+    return Ok(None);
   };
+  let Some(version) = parse_ufw_version(&version_str) else {
+    return Ok(None);
+  };
+  let Some(ufw) = commands.resolve("ufw") else {
+    return Ok(None);
+  };
+  let output = if uzers::get_effective_uid() == 0 {
+    commands.run_path(&ufw, &["status"])?
+  } else {
+    commands.run("sudo", &["-n", &ufw.to_string_lossy(), "status"])?
+  };
+  let Some(output) = output.filter(|output| output.status.success()) else {
+    return Ok(None);
+  };
+  let Some(is_enabled) = String::from_utf8(output.stdout)
+    .ok()
+    .as_deref()
+    .and_then(parse_ufw_status)
+  else {
+    return Ok(None);
+  };
+  Ok(Some(UfwInfo { version, is_enabled }))
+}
 
-  command.arg("status").env("LC_ALL", "C");
-  command
+fn command_text(commands: &CollectorCommands<'_>, name: &str, args: &[&str]) -> io::Result<Option<String>> {
+  Ok(
+    commands
+      .run(name, args)?
+      .filter(|output| output.status.success())
+      .and_then(|output| String::from_utf8(output.stdout).ok()),
+  )
 }
 
 fn parse_clamav_version(output: &str) -> Option<(String, Option<String>)> {
@@ -603,24 +611,11 @@ fn parse_ufw_status(output: &str) -> Option<bool> {
   }
 }
 
-fn detect_microsoft_defender_blocking() -> Option<DefenderInfo> {
-  let output = Command::new("mdatp")
-    .arg("health")
-    .arg("--output")
-    .arg("json")
-    .output()
-    .ok()?;
-
-  if !output.status.success() {
-    debug!("mdatp health command failed");
-    return None;
-  }
-
-  let json = String::from_utf8(output.stdout).ok()?;
-  let defender = parse_defender_info(&json)?;
-
-  debug!("Detected Microsoft Defender: {:?}", defender);
-  Some(defender)
+fn detect_microsoft_defender(commands: &CollectorCommands<'_>) -> io::Result<Option<DefenderInfo>> {
+  let Some(json) = command_text(commands, "mdatp", &["health", "--output", "json"])? else {
+    return Ok(None);
+  };
+  Ok(parse_defender_info(&json))
 }
 
 fn parse_defender_info(json: &str) -> Option<DefenderInfo> {
@@ -702,9 +697,19 @@ fn derive_windows_network_name(host_id: &str, iface: &NetworkInterface) -> Strin
 
 #[cfg(test)]
 mod tests {
+  const CURRENT_TOP_LEVEL_FIELDS: &[&str] = &[
+    "md5-sum",
+    "user-name",
+    "domain",
+    "host-name",
+    "host-id",
+    "ip-address",
+    "ipv6-address",
+    "generate-time",
+  ];
+  const CURRENT_HOST_INFO_FIELDS: &[&str] = &["client-version", "os", "os-vendor", "domain", "host-name", "host-id"];
   use super::*;
   use gpapi::os_profile::OsProfileBuilder;
-  use std::ffi::OsStr;
 
   fn make_input(profile: OsProfile) -> ReportInput {
     ReportInput {
@@ -728,7 +733,7 @@ mod tests {
     let profile = make_profile(ClientOs::Linux);
     let cookie_params: HashMap<String, String> = HashMap::new();
 
-    let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect();
+    let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect_identity();
 
     assert_eq!(info.os_vendor, "Linux");
   }
@@ -739,7 +744,7 @@ mod tests {
     let profile = make_profile(ClientOs::Mac);
     let cookie_params: HashMap<String, String> = HashMap::new();
 
-    let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect();
+    let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect_identity();
 
     assert_eq!(info.os_vendor, "Apple");
   }
@@ -750,7 +755,7 @@ mod tests {
     let profile = make_profile(ClientOs::Windows);
     let cookie_params: HashMap<String, String> = HashMap::new();
 
-    let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect();
+    let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect_identity();
 
     assert_eq!(info.os_vendor, "Microsoft");
   }
@@ -761,7 +766,7 @@ mod tests {
     let profile = make_profile(ClientOs::Linux);
     let cookie_params: HashMap<String, String> = HashMap::new();
 
-    let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect();
+    let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect_identity();
 
     assert_eq!(info.host_id, profile.host_id());
   }
@@ -775,7 +780,7 @@ mod tests {
       let profile = make_profile(client_os);
       let cookie_params: HashMap<String, String> = HashMap::new();
 
-      let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect();
+      let info = HostInfoCollector::new(&profile, &input, &cookie_params).collect_identity();
 
       assert_eq!(info.host_id, profile.host_id());
     }
@@ -800,7 +805,7 @@ mod tests {
   fn mac_report_renders_detected_sentinel_products() {
     let input = make_input(make_profile(ClientOs::Mac));
     let cookie_params = HashMap::new();
-    let mut host_info = HostInfoCollector::new(&input.profile, &input, &cookie_params).collect();
+    let mut host_info = HostInfoCollector::new(&input.profile, &input, &cookie_params).collect_identity();
     host_info.sentinel = Some(SentinelInfo {
       version: "25.3.4.8365".to_string(),
       real_time_protection: true,
@@ -831,7 +836,7 @@ mod tests {
   fn linux_report_renders_detected_sentinel_antimalware() {
     let input = make_input(make_profile(ClientOs::Linux));
     let cookie_params = HashMap::new();
-    let mut host_info = HostInfoCollector::new(&input.profile, &input, &cookie_params).collect();
+    let mut host_info = HostInfoCollector::new(&input.profile, &input, &cookie_params).collect_identity();
     host_info.sentinel = Some(SentinelInfo {
       version: "25.2.2.14".to_string(),
       real_time_protection: true,
@@ -911,9 +916,22 @@ mod tests {
       .children
       .push(xmltree::XMLNode::Element(custom_category));
 
+    let earliest = chrono::Local::now().naive_local().and_utc().timestamp();
     let refreshed_xml = refresh_edited_report(&write_xml(&saved).unwrap(), &input).unwrap();
+    let latest = chrono::Local::now().naive_local().and_utc().timestamp();
     let refreshed = validate_edited_report(&refreshed_xml).unwrap();
-    for field in CURRENT_TOP_LEVEL_FIELDS {
+    let timestamp = chrono::NaiveDateTime::parse_from_str(
+      &unique_child(&refreshed, "generate-time").unwrap().get_text().unwrap(),
+      "%m/%d/%Y %H:%M:%S",
+    )
+    .unwrap()
+    .and_utc()
+    .timestamp();
+    assert!((earliest..=latest).contains(&timestamp));
+    for field in CURRENT_TOP_LEVEL_FIELDS
+      .iter()
+      .filter(|field| **field != "generate-time")
+    {
       assert_eq!(
         unique_child(&refreshed, field).unwrap().get_text(),
         unique_child(&current, field).unwrap().get_text()
@@ -991,25 +1009,5 @@ mod tests {
     assert_eq!(parse_ufw_status("Status: active\n"), Some(true));
     assert_eq!(parse_ufw_status("Status: inactive\n"), Some(false));
     assert_eq!(parse_ufw_status("Status: unknown\n"), None);
-  }
-
-  #[test]
-  fn runs_ufw_status_directly_as_root() {
-    let command = ufw_status_command(true);
-
-    assert_eq!(command.get_program(), OsStr::new("ufw"));
-    assert!(command.get_args().eq(["status"].into_iter().map(OsStr::new)));
-  }
-
-  #[test]
-  fn runs_ufw_status_through_non_interactive_sudo_as_non_root() {
-    let command = ufw_status_command(false);
-
-    assert_eq!(command.get_program(), OsStr::new("sudo"));
-    assert!(
-      command
-        .get_args()
-        .eq(["-n", "ufw", "status"].into_iter().map(OsStr::new))
-    );
   }
 }

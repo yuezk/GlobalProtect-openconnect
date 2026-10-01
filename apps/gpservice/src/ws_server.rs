@@ -39,6 +39,7 @@ pub(crate) struct WsServerContext {
   dispatcher: Arc<RequestDispatcher>,
   state: Mutex<ServiceState>,
   handshake_slots: Arc<Semaphore>,
+  pub(crate) hip_previews: crate::hip_preview::HipPreviews,
 }
 
 impl WsServerContext {
@@ -58,11 +59,16 @@ impl WsServerContext {
         connections: HashMap::new(),
       }),
       handshake_slots: Arc::new(Semaphore::new(16)),
+      hip_previews: crate::hip_preview::HipPreviews::new(),
     }
   }
 
   pub fn product_version(&self) -> &'static str {
     self.product_version
+  }
+
+  pub async fn host_identity(&self) -> HostIdentity {
+    self.state.lock().await.snapshot.host_info.host_identity.clone()
   }
 
   pub fn registry(&self) -> &Arc<SessionRegistry> {
@@ -243,6 +249,7 @@ impl WsServer {
         info!("WS server cancelled");
       }
     }
+    self.ctx.hip_previews.shutdown().await;
     let _ = shutdown_tx.send(()).await;
   }
 

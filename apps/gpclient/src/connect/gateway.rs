@@ -20,7 +20,7 @@ use gpapi::{
 };
 use inquire::Text;
 use log::{Level, info, warn};
-use openconnect::{Vpn, VpnBuilder};
+use openconnect::{HipScript, HipSource, Vpn, VpnBuilder};
 use tokio::{runtime::Handle, task::JoinHandle};
 
 use crate::session::{
@@ -352,10 +352,10 @@ impl ConnectHandler<'_> {
     }
 
     let mtu = self.args.mtu.unwrap_or(0);
-    let (hip, csd_wrapper) = self.determine_hip_script();
-    let hip_user = self.determine_hip_user();
-    let csd_uid = get_uid(&hip_user).map_err(GatewayConnectError::before_tunnel)?;
     let os_profile = self.os_profile.borrow().clone();
+    let hip_source = self
+      .hip_source(os_profile.clone())
+      .map_err(GatewayConnectError::before_tunnel)?;
 
     let session_ctx = build_session_context(SessionContextInput {
       portal: portal.to_string(),
@@ -375,9 +375,7 @@ impl ConnectHandler<'_> {
       .certificate(self.args.certificate.clone())
       .sslkey(self.args.sslkey.clone())
       .key_password(self.latest_key_password.borrow().clone())
-      .hip(hip)
-      .csd_uid(csd_uid)
-      .csd_wrapper(csd_wrapper)
+      .hip_source(hip_source)
       .reconnect_timeout(self.args.reconnect_timeout)
       .mtu(mtu)
       .disable_ipv6(self.args.disable_ipv6)
@@ -439,16 +437,32 @@ impl ConnectHandler<'_> {
     classify_openconnect_result(connect_result, tunnel_established, disconnect_requested)
   }
 
-  fn determine_hip_script(&self) -> (bool, Option<String>) {
-    if let Some(hip) = &self.args.hip {
-      return if hip.is_empty() {
-        (true, None)
-      } else {
-        (true, Some(hip.clone()))
-      };
+  fn hip_source(&self, profile: OsProfile) -> anyhow::Result<HipSource> {
+    let user = self.determine_hip_user();
+    let script = self.args.hip.as_ref().or(self.args.csd_wrapper.as_ref());
+    match script {
+      Some(path) if !path.is_empty() => Ok(HipSource::Script(HipScript::new(path.clone(), get_uid(&user)?)?)),
+      Some(_) => {
+        anyhow::ensure!(user.is_none(), "--hip-user requires an explicit HIP script");
+        Ok(HipSource::Generator(Arc::new(move |request, control| {
+          let input = gphip::ReportInput {
+            profile: profile.clone(),
+            context: gphip::ReportContext::Connected {
+              cookie: request.cookie.clone(),
+              client_ip: request.client_ip.clone(),
+              client_ipv6: request.client_ipv6.clone(),
+              md5: request.md5.clone(),
+            },
+          };
+          gphip::generate_report_with_control(&input, &|| control.check())
+            .map_err(|error| error.downcast::<std::io::Error>().unwrap_or_else(std::io::Error::other))
+        })))
+      }
+      None => {
+        anyhow::ensure!(user.is_none(), "--hip-user requires an explicit HIP script");
+        Ok(HipSource::Disabled)
+      }
     }
-
-    (self.args.csd_wrapper.is_some(), self.args.csd_wrapper.clone())
   }
 
   fn determine_hip_user(&self) -> Option<String> {
@@ -495,12 +509,11 @@ fn write_pid_file(lock_file: &Path) {
   }
 }
 
-fn get_uid(user: &Option<String>) -> anyhow::Result<u32> {
-  if let Some(user) = user {
-    get_user_by_name(user).map(|user| user.uid())
-  } else {
-    Ok(uzers::get_effective_uid())
-  }
+fn get_uid(user: &Option<String>) -> anyhow::Result<Option<u32>> {
+  user
+    .as_ref()
+    .map(|user| get_user_by_name(user).map(|user| user.uid()))
+    .transpose()
 }
 
 fn apply_os_profile(builder: VpnBuilder, profile: &OsProfile) -> VpnBuilder {
@@ -517,8 +530,8 @@ mod tests {
   use super::*;
 
   #[test]
-  fn hip_script_defaults_to_process_effective_uid() {
-    assert_eq!(get_uid(&None).unwrap(), uzers::get_effective_uid());
+  fn hip_script_defaults_to_inherited_process_identity() {
+    assert_eq!(get_uid(&None).unwrap(), None);
   }
 
   #[test]
@@ -530,7 +543,7 @@ mod tests {
   fn explicit_hip_user_resolves_to_the_selected_account() {
     let current = uzers::get_user_by_uid(uzers::get_effective_uid()).unwrap();
     let name = current.name().to_string_lossy().into_owned();
-    assert_eq!(get_uid(&Some(name)).unwrap(), current.uid());
+    assert_eq!(get_uid(&Some(name)).unwrap(), Some(current.uid()));
   }
 
   #[test]

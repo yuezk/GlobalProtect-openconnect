@@ -1846,6 +1846,7 @@ dependencies = [
  "log-reload",
  "md5",
  "netdev",
+ "nix 0.31.3",
  "openssl",
  "os_info",
  "oslog",
@@ -1947,7 +1948,6 @@ dependencies = [
  "askama",
  "chrono",
  "gpapi",
- "log",
  "netdev",
  "serde",
  "serde_json",
@@ -3385,6 +3385,7 @@ dependencies = [
  "cc",
  "fs_extra",
  "is_executable",
+ "libc",
  "log",
  "pkg-config",
 ]

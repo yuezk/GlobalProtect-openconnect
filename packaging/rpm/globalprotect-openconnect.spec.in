@@ -72,8 +72,6 @@ make build
 %defattr(-,root,root)
 %{_bindir}/*
 %{_libexecdir}/gpclient/vpnc-script
-%{_libexecdir}/gpclient/hipreport.sh
-%{_libexecdir}/gpclient/gp-hip-runner
 %{_libexecdir}/gpclient/gp-hip-script-installer
 %{_libexecdir}/gpclient/gp-vpnc-script-installer
 %{_datadir}/applications/gpgui.desktop

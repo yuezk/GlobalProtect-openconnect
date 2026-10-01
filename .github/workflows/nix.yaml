@@ -1,6 +1,7 @@
 name: Nix
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "flake.nix"
@@ -20,6 +21,41 @@ permissions:
   contents: read
 
 jobs:
+  source-package:
+    name: source-package (${{ matrix.platform.system }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+      - name: Checkout source and dependencies
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build current source package
+        run: |
+          nix build .#fromSource \
+            --extra-experimental-features "nix-command flakes" \
+            --print-build-logs
+
+      - name: Inspect source package
+        run: |
+          test -x result/bin/gpclient
+          test -x result/bin/gpauth
+          test -x result/bin/gpservice
+          test -x result/libexec/gpclient/gp-hip-script-installer
+          test ! -e result/libexec/gpclient/gp-hip-runner
+          test ! -e result/libexec/gpclient/hipreport.sh
+
   standalone-package:
     name: standalone-package (${{ matrix.platform.system }})
     strategy:

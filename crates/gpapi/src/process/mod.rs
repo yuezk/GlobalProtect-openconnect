@@ -8,3 +8,5 @@ pub mod auth_launcher;
 pub mod gui_launcher;
 pub mod service_launcher;
 pub mod users;
+
+pub mod collection;

@@ -1,5 +1,6 @@
 {
   inputs = {
+    self.submodules = true;
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     naersk = {
@@ -30,6 +31,7 @@
         pname = "globalprotect-openconnect";
         version = cargoToml.workspace.package.version;
         releaseTag = "v2.6.5";
+        releaseVersion = "2.6.5";
 
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
@@ -45,14 +47,10 @@
             bsdtar --extract --file ${archive} --directory "$out" --strip-components 1
           '';
 
-        sourceArchive = pkgs.fetchurl {
-          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect-${version}.tar.gz";
-          hash = "sha256-VFWbF2BfJ9CtXkjQjkgmBGCZnYgB5ZLctqcqUKuhswg=";
-        };
-
-        src = unpackReleaseAsset {
-          name = "globalprotect-openconnect-${version}-source";
-          archive = sourceArchive;
+        src = lib.cleanSourceWith {
+          src = lib.cleanSource ./.;
+          filter = path: type:
+            !(builtins.elem (builtins.baseNameOf path) [ "target" ".build" "node_modules" ]);
         };
 
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
@@ -68,7 +66,7 @@
         };
 
         gpgui = unpackReleaseAsset {
-          name = "gpgui-${version}-${cpu}";
+          name = "gpgui-${releaseVersion}-${cpu}";
           archive = gpguiArchive;
         };
 
@@ -78,12 +76,12 @@
         };
 
         binaryArchive = pkgs.fetchurl {
-          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect_${version}_${cpu}.bin.tar.xz";
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/globalprotect-openconnect_${releaseVersion}_${cpu}.bin.tar.xz";
           hash = binaryHashes.${cpu};
         };
 
         binaryPackage = unpackReleaseAsset {
-          name = "globalprotect-openconnect-${version}-${cpu}-binary";
+          name = "globalprotect-openconnect-${releaseVersion}-${cpu}-binary";
           archive = binaryArchive;
         };
 
@@ -121,11 +119,7 @@
             libayatana-appindicator
           ];
 
-        rewriteSourceInstallPaths = ''
-          substituteInPlace $out/libexec/gpclient/hipreport.sh \
-            --replace-fail /usr/bin/gpclient $out/bin/gpclient
-        ''
-        + lib.optionalString pkgs.stdenv.isLinux ''
+        rewriteSourceInstallPaths = lib.optionalString pkgs.stdenv.isLinux ''
           substituteInPlace $out/share/applications/gpgui.desktop \
             --replace-fail /usr/bin/gpclient $out/bin/gpclient
 
@@ -180,7 +174,12 @@
         '';
 
         fromSource = naersk'.buildPackage {
-          inherit pname version src;
+          inherit pname version;
+          src = assert lib.assertMsg
+            (builtins.pathExists (src + "/crates/openconnect/deps/openconnect/configure.ac")
+              && builtins.pathExists (src + "/crates/openconnect/deps/libxml2/configure.ac"))
+            "Source builds require initialized Git submodules; use a git+ flake URL with submodules=1.";
+            src;
           name = "globalprotect-openconnect";
 
           # Must be set to true to avoid issues with the Tauri build process
@@ -222,8 +221,7 @@
             {
               postPatch = ''
                 substituteInPlace crates/openconnect/src/vpn_utils.rs \
-                  --replace-fail /usr/libexec/gpclient/vpnc-script $out/libexec/gpclient/vpnc-script \
-                  --replace-fail /usr/libexec/gpclient/hipreport.sh $out/libexec/gpclient/hipreport.sh
+                  --replace-fail /usr/libexec/gpclient/vpnc-script $out/libexec/gpclient/vpnc-script
 
                 substituteInPlace crates/common/src/constants.rs \
                   --replace-fail /usr/bin/gpclient $out/bin/gpclient \
@@ -236,12 +234,8 @@
                   --replace-fail /usr/bin/gpgui-helper $out/bin/gpgui-helper \
                   --replace-fail /usr/bin/gpgui $out/bin/gpgui
 
-                if [ -f apps/gpservice/src/hip_source.rs ]; then
-                  substituteInPlace crates/common/src/constants.rs \
-                    --replace-fail /usr/libexec/gpclient/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
-                  substituteInPlace apps/gpservice/src/hip_source.rs \
-                    --replace-fail /usr/libexec/gpclient/gp-hip-runner $out/libexec/gpclient/gp-hip-runner
-                fi
+                substituteInPlace crates/common/src/constants.rs \
+                  --replace-fail /usr/libexec/gpclient/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
               '';
             };
 
@@ -249,8 +243,7 @@
             cp -r packaging/files/usr/libexec $out/libexec
           ''
           + lib.optionalString pkgs.stdenv.isLinux ''
-            if [ -f $out/bin/gp-hip-runner ]; then
-              install -Dm755 $out/bin/gp-hip-runner $out/libexec/gpclient/gp-hip-runner
+            if [ -f $out/bin/gp-hip-script-installer ]; then
               install -Dm755 $out/bin/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
             fi
 
@@ -270,7 +263,8 @@
         };
 
         prebuiltFiles = pkgs.stdenv.mkDerivation {
-          inherit pname version;
+          inherit pname;
+          version = releaseVersion;
 
           src = binaryPackage;
           dontBuild = true;
@@ -381,7 +375,8 @@
         };
 
         prebuilt = pkgs.stdenv.mkDerivation {
-          inherit pname version;
+          inherit pname;
+          version = releaseVersion;
 
           dontUnpack = true;
 

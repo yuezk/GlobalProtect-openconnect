@@ -242,7 +242,7 @@ struct ActiveAttempt {
   info: ConnectInfo,
   allow_extend_session: bool,
   _identity_files: Vec<tempfile::NamedTempFile>,
-  _hip_execution: crate::hip_source::HipExecution,
+  _hip_approval: crate::hip_source::HipApproval,
 }
 
 pub(crate) struct VpnTask {
@@ -309,7 +309,7 @@ impl VpnTask {
         }
         _ = approval_poll.tick() => {
           if self.active.as_ref().is_some_and(|active| {
-            active._hip_execution.approval_id().is_some() && !active._hip_execution.approval_is_valid()
+            active._hip_approval.approval_id().is_some() && !active._hip_approval.approval_is_valid()
           }) {
             warn!("Active HIP script approval is no longer valid; disconnecting VPN");
             self.lifecycle.request_disconnect();
@@ -379,14 +379,57 @@ impl VpnTask {
         return;
       }
     };
-    let hip = match crate::hip_source::resolve(args.hip_source(), desktop_uid, self.brokered_macos, edited_report) {
+    let profile = if matches!(
+      args.hip_source(),
+      gpapi::hip::HipSource::Generated | gpapi::hip::HipSource::Edited { .. }
+    ) {
+      let budget = gpapi::process::collection::CollectionBudget::new(std::time::Duration::from_secs(60));
+      let check = || {
+        if self.cancel_token.is_cancelled() || self.lifecycle.is_stop_requested(attempt) {
+          return Err(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "HIP setup cancelled",
+          ));
+        }
+        gpapi::process::collection::CollectionControl::check(&budget)
+      };
+      let profile = gpapi::os_profile::HostIdentity::collect_with_control(&check).and_then(|identity| {
+        crate::hip_source::profile(
+          &identity,
+          args.os().unwrap_or(gpapi::os_profile::ClientOs::Linux),
+          args.client_version(),
+          args.os_version(),
+          args.host_id(),
+          args.local_hostname(),
+          &check,
+        )
+      });
+      match profile {
+        Ok(profile) => Some(profile),
+        Err(error) => {
+          warn!("Failed to collect the HIP identity: {error}");
+          self.finish_attempt(attempt);
+          return;
+        }
+      }
+    } else {
+      None
+    };
+    let hip = match crate::hip_source::resolve(
+      args.hip_source(),
+      desktop_uid,
+      self.brokered_macos,
+      edited_report,
+      profile,
+    ) {
       Ok(execution) => execution,
       Err(err) => {
-        warn!("Failed to select the HIP script user: {err}");
+        warn!("Failed to configure the HIP report: {err}");
         self.finish_attempt(attempt);
         return;
       }
     };
+    let (hip_source, hip_approval) = hip.into_parts();
     let vpn = match vpn_builder
       .user_agent(args.user_agent())
       .os(args.openconnect_os())
@@ -396,9 +439,7 @@ impl VpnTask {
       .certificate(identity.certificate.clone())
       .sslkey(identity.sslkey.clone())
       .key_password(args.key_password())
-      .hip(hip.enabled)
-      .csd_uid(hip.uid)
-      .csd_wrapper(hip.wrapper.clone())
+      .hip_source(hip_source)
       .reconnect_timeout(args.reconnect_timeout())
       .mtu(args.mtu())
       .disable_ipv6(args.disable_ipv6())
@@ -450,7 +491,7 @@ impl VpnTask {
           info: info.clone(),
           allow_extend_session,
           _identity_files: identity.files,
-          _hip_execution: hip,
+          _hip_approval: hip_approval,
         });
         self.send_state(VpnState::Connecting(Box::new(info)));
         thread::spawn(move || {

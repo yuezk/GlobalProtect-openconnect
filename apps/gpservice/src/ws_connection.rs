@@ -185,6 +185,10 @@ impl WsConnection {
     }
 
     ctx
+      .hip_previews
+      .cancel_connection(permit.session_id, control.connection_id())
+      .await;
+    ctx
       .remove_connection(control.connection_id(), permit.session_id, generation)
       .await;
     info!("GUI connection {} closed", control.connection_id());
@@ -459,29 +463,27 @@ async fn handle_client_message(
         } else {
           None
         };
-        let registry = Arc::clone(ctx.registry());
-        let control = control.clone();
-        tokio::spawn(async move {
-          let result = match crate::hip_preview::generate(preview, edited_report, desktop_uid).await {
-            Ok(xml) => match registry.store_hip_preview(session_id, xml) {
-              Ok(preview_id) => match registry.hip_preview_chunk(session_id, preview_id, 0) {
-                Ok((xml, complete)) => ServiceResult::HipPreviewChunk {
-                  preview_id: preview_id.to_string(),
-                  offset: 0,
-                  xml,
-                  complete,
-                },
-                Err(_) => ServiceResult::rejected(ServiceErrorCode::Internal, "HIP preview is unavailable"),
-              },
-              Err(_) => ServiceResult::rejected(ServiceErrorCode::Internal, "HIP preview is unavailable"),
-            },
-            Err(error) => {
-              warn!("HIP preview failed: {error:#}");
-              ServiceResult::rejected(ServiceErrorCode::Internal, "HIP preview failed")
-            }
-          };
-          control.send_reply(id, result).await;
-        });
+        if !ctx
+          .hip_previews
+          .start(crate::hip_preview::PreviewJob {
+            session_id,
+            request_id: id,
+            request: preview,
+            edited_report,
+            desktop_uid,
+            identity: ctx.host_identity().await,
+            registry: Arc::clone(ctx.registry()),
+            connection: control.clone(),
+          })
+          .await
+        {
+          control
+            .send(ConnectionCommand::Reply {
+              id,
+              result: ServiceResult::rejected(ServiceErrorCode::Busy, "HIP preview is already running"),
+            })
+            .map_err(|_| ())?;
+        }
         return Ok(());
       }
 

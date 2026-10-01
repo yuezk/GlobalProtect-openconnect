@@ -2,6 +2,11 @@ name: Build
 on:
   workflow_dispatch:
     inputs:
+      build_only:
+        description: 'Build and test artifacts without publishing releases, images, or update feeds'
+        required: true
+        default: false
+        type: boolean
       gp_branch:
         description: 'GlobalProtect-openconnect branch to use for the snapshot release'
         required: true
@@ -40,7 +45,7 @@ on:
       - v*.*.*
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && 'release' || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && (inputs.build_only && github.run_id || 'release') || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
@@ -233,11 +238,13 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v4
     - name: Login to Docker Hub
+      if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build_only }}
       uses: docker/login-action@v4
       with:
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_TOKEN }}
     - name: Build and push by digest
+      if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build_only }}
       id: build
       uses: docker/build-push-action@v7
       with:
@@ -245,20 +252,37 @@ jobs:
         file: packaging/docker/alpine/Dockerfile
         platforms: ${{ matrix.platform }}
         outputs: type=image,name=yuezk/globalprotect-openconnect,push-by-digest=true,name-canonical=true,push=true
+    - name: Build local image for verification
+      if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only }}
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: packaging/docker/alpine/Dockerfile
+        platforms: ${{ matrix.platform }}
+        tags: yuezk/globalprotect-openconnect:build-test
+        load: true
+        push: false
     - name: Verify CLI tools
       env:
         IMAGE: yuezk/globalprotect-openconnect
         DIGEST: ${{ steps.build.outputs.digest }}
+        BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only }}
       run: |
-        docker run --rm "$IMAGE@$DIGEST" --help
-        docker run --rm --entrypoint gpauth "$IMAGE@$DIGEST" --help
-        docker run --rm --entrypoint sh "$IMAGE@$DIGEST" -lc 'test "$(id -u gp)" = "1000" && test "$SUDO_UID" = "1000"'
+        image_ref="$IMAGE@$DIGEST"
+        if [[ "$BUILD_ONLY" == "true" ]]; then
+          image_ref="$IMAGE:build-test"
+        fi
+        docker run --rm "$image_ref" --help
+        docker run --rm --entrypoint gpauth "$image_ref" --help
+        docker run --rm --entrypoint sh "$image_ref" -lc 'test "$(id -u gp)" = "1000" && test "$SUDO_UID" = "1000"'
     - name: Export digest
+      if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build_only }}
       run: |
         mkdir -p /tmp/digests
         digest="${{ steps.build.outputs.digest }}"
         touch "/tmp/digests/${digest#sha256:}"
     - name: Upload digest
+      if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build_only }}
       uses: actions/upload-artifact@v7
       with:
         name: digests-${{ env.PLATFORM_PAIR }}
@@ -360,6 +384,7 @@ jobs:
           GPGUI_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
           BUILD_VERSION: ${{ github.run_number }}.${{ github.run_attempt }}
           REQUEST_ID: ${{ github.run_id }}.${{ github.run_attempt }}.macos
+          BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only }}
         run: |
           set -euo pipefail
 
@@ -387,6 +412,7 @@ jobs:
             --arg release_tag "$RELEASE_TAG" \
             --arg gp_ref "$gp_sha" \
             --arg gpgui_ref "$gpgui_sha" \
+            --argjson build_only "$BUILD_ONLY" \
             '{
               ref: $workflow_ref,
               inputs: {
@@ -395,7 +421,8 @@ jobs:
                 channel: $channel,
                 release_tag: $release_tag,
                 gp_ref: $gp_ref,
-                gpgui_ref: $gpgui_ref
+                gpgui_ref: $gpgui_ref,
+                build_only: $build_only
               }
             }' | gh api --method POST \
               repos/yuezk/gpgui/actions/workflows/release-macos.yaml/dispatches \
@@ -653,7 +680,7 @@ jobs:
           ${{ matrix.workspace }}/gp/.build/${{ matrix.artifact_dir }}/artifacts/*
 
   gh-release:
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) }}
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && !inputs.build_only) || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -774,6 +801,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GPGUI_ACTIONS_TOKEN }}
           PUBLIC_RELEASE_RESULT: ${{ needs.gh-release.result }}
+          BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only }}
           PRIVATE_RUN_ID: ${{ needs.trigger-gpgui-macos.outputs.run_id }}
           PRIVATE_RUN_URL: ${{ needs.trigger-gpgui-macos.outputs.run_url }}
         run: |
@@ -783,7 +811,7 @@ jobs:
             echo "The private macOS workflow was not started" >&2
             exit 1
           fi
-          if [[ "$PUBLIC_RELEASE_RESULT" != "success" ]]; then
+          if [[ "$BUILD_ONLY" != "true" && "$PUBLIC_RELEASE_RESULT" != "success" ]]; then
             gh api --method POST \
               "repos/yuezk/gpgui/actions/runs/$PRIVATE_RUN_ID/cancel" >/dev/null || true
             echo "The public release failed; cancelled $PRIVATE_RUN_URL" >&2
@@ -813,7 +841,7 @@ jobs:
   publish-docker-image:
     needs:
       - build-docker-image
-    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && !inputs.build_only) || startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     steps:
     - name: Download digests

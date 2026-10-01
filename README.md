@@ -71,6 +71,18 @@ Options:
 
 > **Tip:** Use `gpclient help <command>` for detailed information on a specific command.
 
+#### HIP reports
+
+HIP is disabled in the CLI unless enabled explicitly. Use `--hip` to generate reports inside `gpclient`, including later reports requested by the gateway:
+
+```bash
+sudo gpclient connect <portal> --hip
+```
+
+Use `--hip=/absolute/path/to/script` for a custom executable. It runs as the `gpclient` process user unless `--hip-user` specifies another user. No installed HIP script is discovered automatically. `--hip-user` applies only to custom executables.
+
+`gpclient hip` generates a report on demand for inspection; see `gpclient hip --help` for report inputs. The GUI's HIP tab supports generated reports, edited XML, and HIP Off on all desktop platforms. Linux, FreeBSD, and OpenBSD also support desktop-user scripts and explicitly approved root scripts.
+
 #### External Browser Authentication
 
 For browser-based authentication with the CLI:
@@ -293,6 +305,15 @@ gnome-extensions enable appindicatorsupport@rgcjonas.gmail.com
 NixOS does not run an imperative package-uninstall hook when a package is
 removed from the system configuration. Remove an installed replacement VPN
 script from the app settings before removing the package.
+
+The `prebuilt` package and NixOS module use the published release pinned in `flake.nix`. The `fromSource` package builds the current flake checkout, including its Git submodules:
+
+```bash
+git submodule update --init --recursive
+nix build .#fromSource
+```
+
+Source builds require Nix 2.27 or later for automatic submodule fetching. For a remote source flake, use a Git URL with submodules enabled, such as `git+https://github.com/yuezk/GlobalProtect-openconnect?submodules=1#fromSource`. Build output (`target`, `.build`, and `node_modules`) is excluded from the source input. Updating release asset hashes changes the prebuilt package, independently of source builds.
 
 ### Official Docker Image
 
