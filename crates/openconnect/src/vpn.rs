@@ -139,6 +139,22 @@ impl Vpn {
   }
 
   pub fn connect(&self, on_connected: impl FnOnce(VpnSessionInfo) + 'static + Send + Sync) -> i32 {
+    match &self.hip_source {
+      HipSource::Disabled => info!("HIP reporting: disabled"),
+      HipSource::Generator(_) => info!("HIP reporting: enabled, source=callback"),
+      HipSource::Script(script) => {
+        #[cfg(unix)]
+        {
+          let uid = script.user.unwrap_or_else(|| unsafe { libc::geteuid() });
+          info!("HIP reporting: enabled, source=script, uid={uid}");
+        }
+        #[cfg(not(unix))]
+        match script.user {
+          Some(uid) => info!("HIP reporting: enabled, source=script, uid={uid}"),
+          None => info!("HIP reporting: enabled, source=script, user=process-user"),
+        }
+      }
+    }
     self.callback.write().unwrap().replace(Box::new(on_connected));
     let mut options = self.build_connect_options();
     let environment = match &self.hip_source {
