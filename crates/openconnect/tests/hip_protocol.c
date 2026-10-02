@@ -38,6 +38,55 @@ static int periodic(struct openconnect_info *vpninfo) {
 	vpninfo->last_trojan = time(NULL) - 2;
 	return gpst_mainloop(vpninfo, &timeout, 0);
 }
+
+static int validate_script(void *data, const struct openconnect_gp_hip_control *control)
+{
+	return control->check(control->data);
+}
+
+static void script_registration_lifecycle(struct openconnect_info *vpninfo)
+{
+	const char *environment[] = { "PATH=/usr/bin:/bin", NULL };
+	char *path, **saved_environment, *cwd;
+	int validator_data;
+	uid_t uid = getuid();
+	gid_t gid;
+
+	assert(!openconnect_set_gp_hip_script(vpninfo, "/bin/true", 1, uid,
+		&validator_data, validate_script, environment, "/"));
+	path = vpninfo->csd_wrapper;
+	saved_environment = vpninfo->gp_hip_environment;
+	cwd = vpninfo->gp_hip_cwd;
+	gid = vpninfo->gid_csd;
+
+	/* A refused update must preserve the entire registered policy. */
+	assert(openconnect_set_gp_hip_script(vpninfo, "/bin/false", 1, (uid_t)-1,
+		NULL, NULL, NULL, NULL) < 0);
+	assert(vpninfo->csd_wrapper == path);
+	assert(vpninfo->gp_hip_environment == saved_environment);
+	assert(vpninfo->gp_hip_cwd == cwd);
+	assert(vpninfo->uid_csd_given == 1 && vpninfo->uid_csd == uid && vpninfo->gid_csd == gid);
+	assert(vpninfo->gp_hip_validate == validate_script);
+	assert(vpninfo->gp_hip_validate_data == &validator_data);
+
+	/* Re-registration may use pointers borrowed from the existing policy. */
+	assert(!openconnect_set_gp_hip_script(vpninfo, path, 0, 0,
+		&validator_data, validate_script, (const char *const *)saved_environment, cwd));
+	assert(!strcmp(vpninfo->csd_wrapper, "/bin/true"));
+	assert(!strcmp(vpninfo->gp_hip_environment[0], environment[0]));
+	assert(!strcmp(vpninfo->gp_hip_cwd, "/"));
+	assert(!vpninfo->uid_csd_given);
+
+	/* Legacy replacement must not retain another script's approval policy. */
+	assert(!openconnect_setup_csd(vpninfo, uid, 1, "/bin/false"));
+	assert(!strcmp(vpninfo->csd_wrapper, "/bin/false"));
+	assert(vpninfo->uid_csd_given == 2 && vpninfo->uid_csd == uid && vpninfo->gid_csd == gid);
+	assert(!vpninfo->gp_hip_validate && !vpninfo->gp_hip_validate_data);
+	assert(!vpninfo->gp_hip_environment && !vpninfo->gp_hip_cwd);
+	assert(!openconnect_set_gp_hip_script(vpninfo, NULL, 0, 0, NULL, NULL, NULL, NULL));
+	assert(!vpninfo->csd_wrapper);
+}
+
 int main(int argc, char **argv) {
 	struct state state = {0};
 	struct openconnect_info *vpninfo;
@@ -45,6 +94,7 @@ int main(int argc, char **argv) {
 	openconnect_init_ssl();
 	vpninfo = openconnect_vpninfo_new("HIP protocol test", accept_cert, NULL, NULL, progress, &state);
 	assert(vpninfo);
+	script_registration_lifecycle(vpninfo);
 	assert(!openconnect_set_protocol(vpninfo, "gp"));
 	assert(!openconnect_set_reported_os(vpninfo, "linux"));
 	assert(!openconnect_parse_url(vpninfo, argv[1]));
