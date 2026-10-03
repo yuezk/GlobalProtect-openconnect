@@ -81,8 +81,27 @@ fn sibling_binary(binary_name: &str) -> Option<PathBuf> {
   let current_exe = env::current_exe().ok()?;
   let bin_dir = current_exe.parent()?;
   let binary = bin_dir.join(binary_name);
+  if is_file(&binary) {
+    return Some(binary);
+  }
+  #[cfg(target_os = "macos")]
+  if let Some(binary) = bundled_helper_path(&current_exe, binary_name)
+    && is_file(&binary)
+  {
+    return Some(binary);
+  }
+  None
+}
 
-  is_file(&binary).then_some(binary)
+#[cfg(target_os = "macos")]
+fn bundled_helper_path(executable: &Path, binary_name: &str) -> Option<PathBuf> {
+  let bin_dir = executable.parent()?;
+  let contents = bin_dir.parent()?;
+  let bundle = contents.parent()?;
+  if bin_dir.file_name()? != "MacOS" || contents.file_name()? != "Contents" || bundle.extension()? != "app" {
+    return None;
+  }
+  Some(contents.join("Helpers").join(binary_name))
 }
 
 fn is_file(path: &Path) -> bool {
@@ -92,6 +111,20 @@ fn is_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  #[cfg(target_os = "macos")]
+  fn desktop_resolves_helpers_in_the_actual_app_bundle_layout() {
+    assert_eq!(
+      bundled_helper_path(
+        Path::new("/Applications/GP Connect.app/Contents/MacOS/gpgui"),
+        "gpclient"
+      ),
+      Some(PathBuf::from("/Applications/GP Connect.app/Contents/Helpers/gpclient"))
+    );
+    assert!(bundled_helper_path(Path::new("/usr/local/bin/gpgui"), "gpclient").is_none());
+    assert!(bundled_helper_path(Path::new("/tmp/Contents/MacOS/gpgui"), "gpclient").is_none());
+  }
 
   #[test]
   fn default_path_is_used_when_no_sibling_exists() {

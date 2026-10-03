@@ -212,6 +212,33 @@ pub fn generate_report(input: &ReportInput) -> anyhow::Result<String> {
   generate_report_with_control(input, &budget)
 }
 
+/// Identity-only maintenance report. This deliberately does not enumerate the
+/// machine or execute posture collectors; addresses come from the session owner.
+pub fn generate_identity_report(input: &ReportInput) -> anyhow::Result<String> {
+  let params = cookie_params(input);
+  let mut report = Element::new("hip-report");
+  for (name, value) in [
+    ("md5-sum", input.context.md5()),
+    ("user-name", report_user_name(input, &params)),
+    ("domain", params.get("domain").map(String::as_str).unwrap_or_default()),
+    ("host-name", input.profile.computer()),
+    ("host-id", input.profile.host_id()),
+    ("ip-address", input.context.client_ip().unwrap_or_default()),
+    ("ipv6-address", input.context.client_ipv6().unwrap_or_default()),
+    ("hip-report-version", "4"),
+  ] {
+    let mut field = Element::new(name);
+    field.children.push(xmltree::XMLNode::Text(value.to_owned()));
+    report.children.push(xmltree::XMLNode::Element(field));
+  }
+  let mut timestamp = Element::new("generate-time");
+  timestamp
+    .children
+    .push(xmltree::XMLNode::Text(get_current_time_components().0));
+  report.children.push(xmltree::XMLNode::Element(timestamp));
+  write_xml(&report)
+}
+
 pub fn generate_report_with_control(input: &ReportInput, control: &dyn CollectionControl) -> anyhow::Result<String> {
   control.check()?;
   let cookie_params = cookie_params(input);
@@ -725,6 +752,43 @@ mod tests {
 
   fn make_profile(client_os: ClientOs) -> OsProfile {
     OsProfileBuilder::new(client_os).build()
+  }
+
+  #[test]
+  fn identity_report_contains_session_identity_without_posture() {
+    for os in [ClientOs::Linux, ClientOs::Mac, ClientOs::Windows] {
+      let mut input = make_input(make_profile(os));
+      input.context = ReportContext::Connected {
+        cookie: "user=alice%26bob&domain=example".into(),
+        client_ip: Some("192.0.2.7".into()),
+        client_ipv6: Some("2001:db8::7".into()),
+        md5: "identity-token".into(),
+      };
+      let xml = generate_identity_report(&input).unwrap();
+      let root = Element::parse(xml.as_bytes()).unwrap();
+      assert_eq!(
+        unique_child(&root, "user-name").unwrap().get_text().unwrap(),
+        "alice&bob"
+      );
+      assert_eq!(
+        unique_child(&root, "ip-address").unwrap().get_text().unwrap(),
+        "192.0.2.7"
+      );
+      assert_eq!(
+        unique_child(&root, "ipv6-address").unwrap().get_text().unwrap(),
+        "2001:db8::7"
+      );
+      assert_eq!(
+        unique_child(&root, "host-id").unwrap().get_text().unwrap(),
+        input.profile.host_id()
+      );
+      assert_eq!(
+        unique_child(&root, "md5-sum").unwrap().get_text().unwrap(),
+        "identity-token"
+      );
+      assert!(root.get_child("categories").is_none());
+      assert!(!xml.contains("ProductInfo"));
+    }
   }
 
   #[test]

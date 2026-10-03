@@ -1,4 +1,7 @@
-use std::process::{Command, Stdio};
+use std::{
+  os::unix::process::CommandExt,
+  process::{Command, Stdio},
+};
 
 use anyhow::Context;
 use log::{debug, info, warn};
@@ -139,6 +142,7 @@ fn open_with_launcher(url: &str, launcher: &BrowserLauncher) -> anyhow::Result<(
       info!("Launching Flatpak browser: {app_id}");
       Command::new(executable)
         .args(["run", app_id, url])
+        .process_group(0)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

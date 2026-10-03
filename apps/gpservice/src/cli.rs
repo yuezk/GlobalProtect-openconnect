@@ -301,7 +301,7 @@ async fn wait_for_brokered_idle(
       _ = interval.tick() => {},
     }
 
-    let idle = matches!(*vpn_state_rx.borrow(), VpnState::Disconnected) && registry.is_empty();
+    let idle = matches!(*vpn_state_rx.borrow(), VpnState::Disconnected | VpnState::Failed(_)) && registry.is_empty();
     if !idle {
       idle_since = None;
       continue;

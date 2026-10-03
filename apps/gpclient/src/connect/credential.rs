@@ -116,7 +116,8 @@ impl ConnectHandler<'_> {
           .clean(clean_auth)
           .default_browser(use_default_browser);
 
-        let cred = auth_launcher.launch().await?;
+        let cred = auth_launcher.cancellation(&self.cancellation).launch().await?;
+        self.check_cancelled()?;
         Ok(cred)
       }
 

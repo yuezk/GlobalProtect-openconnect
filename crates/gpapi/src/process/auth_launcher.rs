@@ -1,20 +1,23 @@
 use std::{
   net::IpAddr,
   path::{Path, PathBuf},
-  process::Stdio,
 };
 
 use anyhow::bail;
 use common::binary_paths;
 use tokio::process::Command;
+use tokio_util::sync::CancellationToken;
 
 #[cfg(feature = "webview-auth")]
 use crate::auth::AuthWindowTheme;
 use crate::{auth::SamlAuthResult, credential::Credential, log_format::LogFormat, os_profile::OsProfile};
 
-use super::command_traits::CommandExt;
+use super::{command_runner::run_controlled, command_traits::CommandExt};
+
+const MAX_AUTH_RESULT_BYTES: usize = 256 * 1024;
 
 pub struct SamlAuthLauncher<'a> {
+  cancellation: CancellationToken,
   server: &'a str,
   auth_executable: Option<&'a str>,
   gateway: bool,
@@ -46,6 +49,7 @@ pub struct SamlAuthLauncher<'a> {
 impl<'a> SamlAuthLauncher<'a> {
   pub fn new(server: &'a str) -> Self {
     Self {
+      cancellation: CancellationToken::new(),
       server,
       auth_executable: None,
       gateway: false,
@@ -176,6 +180,11 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  pub fn cancellation(mut self, cancellation: &CancellationToken) -> Self {
+    self.cancellation = cancellation.clone();
+    self
+  }
+
   /// The command line this launcher will run.
   ///
   /// Split out from `launch` so a test can observe the argv the child actually
@@ -273,17 +282,29 @@ impl<'a> SamlAuthLauncher<'a> {
       .unwrap_or_else(binary_paths::gpauth);
     let auth_cmd = self.build_command(&program);
 
-    let mut non_root_cmd = auth_cmd.into_non_root()?;
-    let child = non_root_cmd.kill_on_drop(true).stdout(Stdio::piped()).spawn();
-
-    let child = match child {
-      Ok(child) => child,
-      Err(err) => {
-        bail!("Failed to spawn {}: {}", program.display(), err);
+    let command = auth_cmd.into_non_root()?.into_std();
+    let cancellation = self.cancellation;
+    let output = tokio::task::spawn_blocking(move || {
+      let check = || {
+        if cancellation.is_cancelled() {
+          Err(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "Authentication cancelled",
+          ))
+        } else {
+          Ok(())
+        }
+      };
+      run_controlled(command, &check, MAX_AUTH_RESULT_BYTES)
+    })
+    .await?;
+    let output = match output {
+      Ok(output) => output,
+      Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+        return Err(crate::auth::AuthenticationCancelled.into());
       }
+      Err(error) => return Err(error.into()),
     };
-
-    let output = child.wait_with_output().await?;
 
     let Ok(auth_result) = serde_json::from_slice::<SamlAuthResult>(&output.stdout) else {
       bail!("Failed to parse auth data")

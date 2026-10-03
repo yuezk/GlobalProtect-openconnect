@@ -151,8 +151,8 @@ impl WsServerContext {
   }
 
   pub async fn remove_connection(&self, connection_id: Uuid, session_id: Uuid, generation: u64) {
-    self.state.lock().await.connections.remove(&connection_id);
     self.registry.disconnect_if_current(session_id, generation);
+    self.state.lock().await.connections.remove(&connection_id);
   }
 
   pub async fn send_event(&self, event: WsEvent) {

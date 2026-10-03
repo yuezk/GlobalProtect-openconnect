@@ -13,6 +13,14 @@ pub enum HipSource {
   Script(HipScript),
 }
 
+impl HipSource {
+  /// Collect through the same bounded executor used by tunnel submissions.
+  /// Disabled posture is a caller policy; this method never invents a report.
+  pub fn collect(&self, request: &HipRequest, check: &dyn Fn() -> io::Result<()>) -> io::Result<String> {
+    ffi::collect_hip_source(self, request, check)
+  }
+}
+
 /// Current gateway and negotiated identity inputs for one report invocation.
 #[derive(Clone, Default)]
 pub struct HipRequest {
@@ -105,8 +113,8 @@ impl HipScript {
   }
 
   /// Collect using the same OpenConnect subprocess machinery as connected submissions.
-  pub fn preview(&self, request: &HipRequest, check: &dyn Fn() -> io::Result<()>) -> io::Result<String> {
-    ffi::preview_hip_script(self, request, check)
+  pub fn collect(&self, request: &HipRequest, check: &dyn Fn() -> io::Result<()>) -> io::Result<String> {
+    ffi::collect_hip_script(self, request, check)
   }
 }
 

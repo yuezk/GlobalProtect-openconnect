@@ -128,9 +128,28 @@ pub(crate) extern "C" fn generate_hip_report(
   capacity: usize,
   written: *mut usize,
 ) -> c_int {
+  let vpn = unsafe { &*(data as *const Vpn) };
+  generate_source_report(
+    vpn.hip_source.as_ref() as *const HipSource as *mut _,
+    request,
+    control,
+    output,
+    capacity,
+    written,
+  )
+}
+
+extern "C" fn generate_source_report(
+  data: *mut c_void,
+  request: *const HipRequestRaw,
+  control: *const HipControlRaw,
+  output: *mut c_char,
+  capacity: usize,
+  written: *mut usize,
+) -> c_int {
   let result = catch_unwind(AssertUnwindSafe(|| -> io::Result<()> {
-    let vpn = unsafe { &*(data as *const Vpn) };
-    let HipSource::Generator(generate) = &vpn.hip_source else {
+    let source = unsafe { &*(data as *const HipSource) };
+    let HipSource::Generator(generate) = source else {
       return Err(io::Error::new(io::ErrorKind::InvalidInput, "No HIP generator"));
     };
     let request = unsafe { read_hip_request(&*request)? };
@@ -175,7 +194,28 @@ extern "C" fn validate_hip_script(data: *mut c_void, control: *const HipControlR
     Err(_) => -libc::EIO,
   }
 }
-pub(crate) fn preview_hip_script(
+pub(crate) fn collect_hip_source(
+  source: &HipSource,
+  request: &HipRequest,
+  check: &dyn Fn() -> io::Result<()>,
+) -> io::Result<String> {
+  match source {
+    HipSource::Disabled => Err(io::Error::new(
+      io::ErrorKind::InvalidInput,
+      "HIP collection is disabled",
+    )),
+    HipSource::Script(script) => collect_hip_script(script, request, check),
+    HipSource::Generator(_) => collect_hip_report(
+      &HipScriptRaw::default(),
+      Some(generate_source_report),
+      source as *const _ as *mut _,
+      request,
+      check,
+    ),
+  }
+}
+
+pub(crate) fn collect_hip_script(
   script: &HipScript,
   request: &HipRequest,
   check: &dyn Fn() -> io::Result<()>,
@@ -224,7 +264,7 @@ fn collect_hip_report(
   };
   let control = HipControlRaw {
     data: &check as *const _ as *mut _,
-    check: preview_check,
+    check: collection_check,
   };
   let mut output = vec![0u8; 1024 * 1024 + 1];
   let mut written = 0;
@@ -246,7 +286,7 @@ fn collect_hip_report(
   output.truncate(written);
   String::from_utf8(output).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "HIP output is not UTF-8"))
 }
-unsafe extern "C" fn preview_check(data: *mut c_void) -> c_int {
+unsafe extern "C" fn collection_check(data: *mut c_void) -> c_int {
   let check = unsafe { &*(data as *const &dyn Fn() -> io::Result<()>) };
   match catch_unwind(AssertUnwindSafe(check)) {
     Ok(Ok(())) => 0,
@@ -306,6 +346,42 @@ mod hip_tests {
   }
 
   #[test]
+  fn standalone_source_uses_bounded_executor_without_a_vpn() {
+    let source = HipSource::Generator(std::sync::Arc::new(|request, control| {
+      control.check()?;
+      assert_eq!(request.client_ip.as_deref(), Some("192.0.2.42"));
+      assert_eq!(request.md5, "physical-session-token");
+      Ok("<hip-report/>".into())
+    }));
+    let request = HipRequest {
+      client_ip: Some("192.0.2.42".into()),
+      md5: "physical-session-token".into(),
+      ..Default::default()
+    };
+    assert_eq!(source.collect(&request, &|| Ok(())).unwrap(), "<hip-report/>");
+    let too_large = HipSource::Generator(std::sync::Arc::new(|_, _| Ok("x".repeat(1024 * 1024 + 1))));
+    assert_eq!(
+      too_large.collect(&request, &|| Ok(())).unwrap_err().raw_os_error(),
+      Some(libc::E2BIG)
+    );
+    assert!(HipSource::Disabled.collect(&request, &|| Ok(())).is_err());
+  }
+
+  #[test]
+  fn standalone_source_checks_cancellation_before_generation() {
+    let source = HipSource::Generator(std::sync::Arc::new(|_, _| panic!("Cancelled source must not run")));
+    assert_eq!(
+      source
+        .collect(&HipRequest::default(), &|| Err(io::Error::from(
+          io::ErrorKind::Interrupted
+        )))
+        .unwrap_err()
+        .raw_os_error(),
+      Some(libc::EINTR)
+    );
+  }
+
+  #[test]
   fn callback_outputs_are_bounded_and_validated_by_c() {
     let raw = HipScriptRaw::default();
     for (report, errno) in [
@@ -355,7 +431,7 @@ mod hip_tests {
     assert_eq!(collect(&vpn, &raw, &|| Ok(())).unwrap(), "<script/>");
     let script = fixture.script(Some(unsafe { libc::getuid() }));
     assert_eq!(HipScriptRaw::from_script(&script).uid_present, 1);
-    assert_eq!(script.preview(&HipRequest::default(), &|| Ok(())).unwrap(), "<script/>");
+    assert_eq!(script.collect(&HipRequest::default(), &|| Ok(())).unwrap(), "<script/>");
   }
   #[test]
   fn validator_refusal_prevents_execution_and_errors_propagate() {
@@ -365,7 +441,7 @@ mod hip_tests {
       .with_validator(|_| Err(io::Error::from(io::ErrorKind::PermissionDenied)));
     assert_eq!(
       script
-        .preview(&HipRequest::default(), &|| Ok(()))
+        .collect(&HipRequest::default(), &|| Ok(()))
         .unwrap_err()
         .raw_os_error(),
       Some(libc::EPERM)
@@ -374,7 +450,7 @@ mod hip_tests {
     let script = fixture.script(None).with_validator(|_| panic!("test validator panic"));
     assert_eq!(
       script
-        .preview(&HipRequest::default(), &|| Ok(()))
+        .collect(&HipRequest::default(), &|| Ok(()))
         .unwrap_err()
         .raw_os_error(),
       Some(libc::EIO)
@@ -392,7 +468,7 @@ mod hip_tests {
       })
       .unwrap();
     assert_eq!(
-      script.preview(&HipRequest::default(), &|| Ok(())).unwrap(),
+      script.collect(&HipRequest::default(), &|| Ok(())).unwrap(),
       format!("child:{cwd}")
     );
     assert!(std::env::var_os("HIP_TEST_VALUE").is_none());
@@ -404,7 +480,7 @@ mod hip_tests {
       assert_eq!(
         fixture
           .script(None)
-          .preview(&HipRequest::default(), &|| Ok(()))
+          .collect(&HipRequest::default(), &|| Ok(()))
           .unwrap_err()
           .raw_os_error(),
         Some(libc::EINVAL)
@@ -426,7 +502,7 @@ mod hip_tests {
       assert_eq!(
         fixture
           .script(None)
-          .preview(&HipRequest::default(), &check)
+          .collect(&HipRequest::default(), &check)
           .unwrap_err()
           .raw_os_error(),
         Some(errno)

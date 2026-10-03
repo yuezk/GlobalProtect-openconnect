@@ -24,16 +24,12 @@ pub(crate) struct HipApproval {
 }
 
 impl HipApproval {
-  pub(crate) fn approval_id(&self) -> Option<&str> {
-    self.identity.as_ref().map(|(id, _)| id.as_str())
-  }
-
   pub(crate) fn approval_is_valid(&self) -> bool {
     #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
     if let Some((id, uid)) = &self.identity {
       return gpservice::hip_approval::resolve(id, *uid).is_ok();
     }
-    true
+    self.identity.is_none()
   }
 }
 

@@ -20,6 +20,8 @@ static int generate(void *data, const struct openconnect_gp_hip_request *request
 	assert(!strcmp(request->client_version, "6.3.3"));
 	assert(!strcmp(request->host_id, "test-host"));
 	assert(request->cookie && request->md5 && strlen(request->md5) == 32);
+	/* Shared golden fixture with gpapi's non-tunnel HIP transport. */
+	assert(!strcmp(request->md5, "20f30054f721fd212925866b5778447d"));
 	if (state->generated >= 2) assert(strstr(request->cookie, "authcookie=refreshed"));
 	state->generated++;
 	length = snprintf(output, capacity, "<hip seq=\"%d\" ip=\"%s\"/>", state->generated, request->client_ip);
@@ -87,10 +89,41 @@ static void script_registration_lifecycle(struct openconnect_info *vpninfo)
 	assert(!vpninfo->csd_wrapper);
 }
 
+static int close_count;
+static int count_session_close(struct openconnect_info *vpninfo, const char *reason)
+{
+	assert(!strcmp(reason, "fixture exit"));
+	close_count++;
+	return 0;
+}
+
+static void native_session_logout(void)
+{
+	struct openconnect_info *vpninfo = openconnect_vpninfo_new("logout owner test",
+		accept_cert, NULL, NULL, progress, NULL);
+	const struct vpn_proto *original;
+	struct vpn_proto protocol;
+	assert(vpninfo);
+	assert(!openconnect_set_protocol(vpninfo, "gp"));
+	original = vpninfo->proto;
+	protocol = *original;
+	protocol.vpn_close_session = count_session_close;
+	vpninfo->proto = &protocol;
+	vpninfo->quit_reason = "fixture exit";
+	/* All exit causes use this same mainloop cleanup path. */
+	openconnect_mainloop(vpninfo, 0, 0);
+	assert(close_count == 1);
+	openconnect_mainloop(vpninfo, 0, 0);
+	assert(close_count == 2);
+	vpninfo->proto = original;
+	openconnect_vpninfo_free(vpninfo);
+}
+
 int main(int argc, char **argv) {
 	struct state state = {0};
 	struct openconnect_info *vpninfo;
 	assert(argc == 2);
+	native_session_logout();
 	openconnect_init_ssl();
 	vpninfo = openconnect_vpninfo_new("HIP protocol test", accept_cert, NULL, NULL, progress, &state);
 	assert(vpninfo);
@@ -98,7 +131,7 @@ int main(int argc, char **argv) {
 	assert(!openconnect_set_protocol(vpninfo, "gp"));
 	assert(!openconnect_set_reported_os(vpninfo, "linux"));
 	assert(!openconnect_parse_url(vpninfo, argv[1]));
-	assert(!openconnect_set_cookie(vpninfo, "user=test&authcookie=test&portal=test&domain=test&computer=test"));
+	assert(!openconnect_set_cookie(vpninfo, "user=test&authcookie=test&persistent-cookie=persistent%2Bcookie&portal=test&domain=test&preferred-ip=192.0.2.1&preferred-ipv6=2001%3Adb8%3A%3A1&computer=test"));
 	assert(!openconnect_set_gp_app_version(vpninfo, "6.3.3"));
 	assert(!openconnect_set_gp_host_id(vpninfo, "test-host"));
 	openconnect_disable_dtls(vpninfo);
@@ -110,7 +143,7 @@ int main(int argc, char **argv) {
 	assert(state.generated == 2 && state.accepted == 2);
 	/* A real reconnect re-fetches configuration and uses refreshed session inputs. */
 	openconnect_close_https(vpninfo, 0);
-	assert(!openconnect_set_cookie(vpninfo, "user=test&authcookie=refreshed&portal=test&domain=test&computer=test"));
+	assert(!openconnect_set_cookie(vpninfo, "user=test&authcookie=refreshed&persistent-cookie=persistent%2Bcookie&portal=test&domain=test&preferred-ip=192.0.2.2&preferred-ipv6=2001%3Adb8%3A%3A2&computer=test"));
 	assert(!openconnect_make_cstp_connection(vpninfo));
 	assert(state.generated == 3 && state.accepted == 3);
 	/* Fourth gateway check says no report needed. */

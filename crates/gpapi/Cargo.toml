@@ -18,9 +18,10 @@ version-compare = "0.2"
 pem.workspace = true
 xmltree.workspace = true
 serde.workspace = true
-specta = { workspace = true, features = ["derive"] }
+specta = { workspace = true, features = ["derive", "uuid"] }
 urlencoding.workspace = true
 tokio = { workspace = true, features = ["process", "signal", "macros"] }
+tokio-util.workspace = true
 serde_json.workspace = true
 whoami.workspace = true
 tempfile.workspace = true
@@ -59,6 +60,7 @@ gtk = { version = "0.18", optional = true }
 
 [dev-dependencies]
 proptest.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 tauri = ["dep:tauri", "dep:gtk"]

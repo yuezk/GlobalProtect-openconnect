@@ -119,7 +119,7 @@ pub struct Vpn {
   key_password: Option<CString>,
   servercert: Option<CString>,
 
-  pub(crate) hip_source: HipSource,
+  pub(crate) hip_source: Arc<HipSource>,
 
   reconnect_timeout: u32,
   mtu: u32,
@@ -139,7 +139,7 @@ impl Vpn {
   }
 
   pub fn connect(&self, on_connected: impl FnOnce(VpnSessionInfo) + 'static + Send + Sync) -> i32 {
-    match &self.hip_source {
+    match self.hip_source.as_ref() {
       HipSource::Disabled => info!("HIP reporting: disabled"),
       HipSource::Generator(_) => info!("HIP reporting: enabled, source=callback"),
       HipSource::Script(script) => {
@@ -157,7 +157,7 @@ impl Vpn {
     }
     self.callback.write().unwrap().replace(Box::new(on_connected));
     let mut options = self.build_connect_options();
-    let environment = match &self.hip_source {
+    let environment = match self.hip_source.as_ref() {
       HipSource::Script(script) => ffi::script_environment(script),
       _ => Vec::new(),
     };
@@ -226,11 +226,11 @@ impl Vpn {
       key_password: Self::option_to_ptr(&self.key_password),
       servercert: Self::option_to_ptr(&self.servercert),
 
-      hip_script: match &self.hip_source {
+      hip_script: match self.hip_source.as_ref() {
         HipSource::Script(script) => ffi::HipScriptRaw::from_script(script),
         _ => Default::default(),
       },
-      generate_hip: match &self.hip_source {
+      generate_hip: match self.hip_source.as_ref() {
         HipSource::Generator(_) => Some(ffi::generate_hip_report),
         _ => None,
       },
@@ -290,7 +290,7 @@ pub struct VpnBuilder {
   sslkey: Option<String>,
   key_password: Option<String>,
 
-  hip_source: HipSource,
+  hip_source: Arc<HipSource>,
 
   reconnect_timeout: u32,
   mtu: u32,
@@ -322,7 +322,7 @@ impl VpnBuilder {
       sslkey: None,
       key_password: None,
 
-      hip_source: HipSource::Disabled,
+      hip_source: Arc::new(HipSource::Disabled),
 
       reconnect_timeout: 300,
       mtu: 0,
@@ -400,8 +400,8 @@ impl VpnBuilder {
     self
   }
 
-  pub fn hip_source(mut self, hip_source: HipSource) -> Self {
-    self.hip_source = hip_source;
+  pub fn hip_source(mut self, hip_source: impl Into<Arc<HipSource>>) -> Self {
+    self.hip_source = hip_source.into();
     self
   }
 
@@ -605,7 +605,7 @@ mod tests {
       sslkey: None,
       key_password: None,
       servercert: None,
-      hip_source: HipSource::Disabled,
+      hip_source: Arc::new(HipSource::Disabled),
       reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,

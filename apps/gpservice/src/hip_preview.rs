@@ -198,7 +198,7 @@ fn generate(
       let openconnect::HipSource::Script(script) = execution.source else {
         bail!("HIP preview executable is unavailable");
       };
-      let xml = script.preview(&input, &check)?;
+      let xml = script.collect(&input, &check)?;
       gphip::validate_edited_report(&xml).context("Custom HIP script did not emit a valid HIP report")?;
       xml
     }

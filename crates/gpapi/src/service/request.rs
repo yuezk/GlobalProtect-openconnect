@@ -5,9 +5,9 @@ use specta::Type;
 use zeroize::Zeroize;
 
 use crate::{
-  gateway::Gateway,
   hip::HipSource,
-  os_profile::{ClientOs, OsProfile},
+  os_profile::{ClientOs, HostIdentity, OsProfile},
+  session::ConnectionPlan,
 };
 
 use super::vpn_state::ConnectInfo;
@@ -58,8 +58,9 @@ impl LaunchGuiRequest {
 
 #[derive(Deserialize, Serialize, Type, Clone)]
 pub struct ConnectArgs {
-  cookie: String,
   vpnc_script: Option<String>,
+  host_identity: Option<HostIdentity>,
+  ignore_tls_errors: bool,
 
   user_agent: Option<String>,
   os: Option<ClientOs>,
@@ -87,10 +88,11 @@ pub struct ConnectArgs {
 }
 
 impl ConnectArgs {
-  pub fn new(cookie: String) -> Self {
+  fn new() -> Self {
     Self {
-      cookie,
       vpnc_script: None,
+      host_identity: None,
+      ignore_tls_errors: false,
       user_agent: None,
       os: None,
       os_version: None,
@@ -113,8 +115,12 @@ impl ConnectArgs {
     }
   }
 
-  pub fn cookie(&self) -> &str {
-    &self.cookie
+  pub fn host_identity(&self) -> Option<&HostIdentity> {
+    self.host_identity.as_ref()
+  }
+
+  pub fn ignore_tls_errors(&self) -> bool {
+    self.ignore_tls_errors
   }
 
   pub fn vpnc_script(&self) -> Option<String> {
@@ -213,7 +219,6 @@ impl ConnectArgs {
 impl fmt::Debug for ConnectArgs {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("ConnectArgs")
-      .field("cookie", &"<redacted>")
       .field("vpnc_script", &self.vpnc_script)
       .field(
         "client_auth_path",
@@ -235,7 +240,6 @@ impl fmt::Debug for ConnectArgs {
 
 impl Drop for ConnectArgs {
   fn drop(&mut self) {
-    self.cookie.zeroize();
     self.key_password.zeroize();
     self.certificate_data.zeroize();
     self.sslkey_data.zeroize();
@@ -245,14 +249,16 @@ impl Drop for ConnectArgs {
 #[derive(Debug, Deserialize, Serialize, Type, Clone)]
 pub struct ConnectRequest {
   info: ConnectInfo,
+  plan: ConnectionPlan,
   args: ConnectArgs,
 }
 
 impl ConnectRequest {
-  pub fn new(info: ConnectInfo, cookie: String) -> Self {
+  pub fn new(info: ConnectInfo, plan: ConnectionPlan) -> Self {
     Self {
       info,
-      args: ConnectArgs::new(cookie),
+      plan,
+      args: ConnectArgs::new(),
     }
   }
 
@@ -267,11 +273,17 @@ impl ConnectRequest {
   }
 
   pub fn with_os_profile(mut self, profile: &OsProfile) -> Self {
+    self.args.host_identity = Some(profile.host_identity().clone());
     self.args.os = Some(profile.client_os());
     self.args.os_version = Some(profile.os_version().to_string());
     self.args.client_version = Some(profile.client_version().to_string());
     self.args.host_id = Some(profile.host_identity().host_id().to_string());
     self.args.user_agent = Some(profile.user_agent().to_string());
+    self
+  }
+
+  pub fn with_ignore_tls_errors(mut self, ignore_tls_errors: bool) -> Self {
+    self.args.ignore_tls_errors = ignore_tls_errors;
     self
   }
 
@@ -340,8 +352,8 @@ impl ConnectRequest {
     self
   }
 
-  pub fn gateway(&self) -> &Gateway {
-    self.info.gateway()
+  pub fn plan(&self) -> &ConnectionPlan {
+    &self.plan
   }
 
   pub fn info(&self) -> &ConnectInfo {
@@ -370,6 +382,7 @@ pub struct UpdateLogLevelRequest(pub String);
 pub enum WsRequest {
   Connect(Box<ConnectRequest>),
   Disconnect(DisconnectRequest),
+  StopNonTunnelAttachment { connection_id: uuid::Uuid },
   StoreEditedHipReportChunk(StoreEditedHipReportChunkRequest),
   PreviewHipReport(PreviewHipReportRequest),
   GetHipApprovalStatus { approval_id: String },
@@ -393,6 +406,25 @@ mod tests {
 
   use super::*;
   use crate::os_profile::OsProfileBuilder;
+  use crate::{
+    gateway::Gateway,
+    session::{AuthenticatedGateway, GatewayAuthentication, InternalSessionPolicy},
+  };
+
+  fn test_request(info: ConnectInfo) -> ConnectRequest {
+    let plan = ConnectionPlan::new(
+      vec![AuthenticatedGateway {
+        gateway: info.gateway().clone(),
+        binding: Some(crate::session::network::test_binding()),
+        authentication: GatewayAuthentication::new("authcookie=secret-cookie&user=user".into(), "tunnel".into())
+          .unwrap(),
+      }],
+      vec![],
+      InternalSessionPolicy::default(),
+    )
+    .unwrap();
+    ConnectRequest::new(info, plan)
+  }
 
   fn test_connect_info() -> ConnectInfo {
     let gateway = Gateway::new("Gateway".to_string(), "vpn.example.com".to_string());
@@ -400,10 +432,26 @@ mod tests {
   }
 
   #[test]
+  fn connect_request_round_trips_a_validated_plan_and_rejects_cookie_only_wire_input() {
+    let request = test_request(test_connect_info());
+    let mut value = serde_json::to_value(&request).unwrap();
+    assert!(value["args"].get("cookie").is_none());
+    let decoded: ConnectRequest = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(decoded.plan().members().len(), 1);
+    assert_eq!(decoded.plan().members()[0].authentication.connection_type(), "tunnel");
+    value["plan"]["members"] = json!([]);
+    assert!(serde_json::from_value::<ConnectRequest>(value).is_err());
+    let mut legacy = serde_json::to_value(&request).unwrap();
+    legacy.as_object_mut().unwrap().remove("plan");
+    legacy["args"]["cookie"] = json!("authcookie=secret-cookie&user=user");
+    assert!(serde_json::from_value::<ConnectRequest>(legacy).is_err());
+  }
+
+  #[test]
   fn connect_request_serializes_allow_extend_session() {
     let gateway = Gateway::new("Gateway".to_string(), "vpn.example.com".to_string());
     let info = ConnectInfo::new("portal.example.com".to_string(), gateway.clone(), vec![gateway]);
-    let req = ConnectRequest::new(info, "authcookie=AUTH".to_string()).with_allow_extend_session(true);
+    let req = test_request(info).with_allow_extend_session(true);
     let value = serde_json::to_value(req).unwrap();
 
     assert_eq!(value["args"]["allowExtendSession"], json!(true));
@@ -413,7 +461,7 @@ mod tests {
   fn with_os_profile_sets_user_agent_from_profile() {
     let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
 
-    let req = ConnectRequest::new(test_connect_info(), "cookie".to_string()).with_os_profile(&profile);
+    let req = test_request(test_connect_info()).with_os_profile(&profile);
 
     assert_eq!(req.args().user_agent(), Some(profile.user_agent().to_string()));
   }
@@ -422,7 +470,7 @@ mod tests {
   fn with_os_profile_sets_host_id_from_profile_runtime_identity() {
     let profile = OsProfileBuilder::new(ClientOs::Linux).build();
 
-    let req = ConnectRequest::new(test_connect_info(), "cookie".to_string()).with_os_profile(&profile);
+    let req = test_request(test_connect_info()).with_os_profile(&profile);
 
     assert_eq!(
       req.args().host_id(),
@@ -432,7 +480,7 @@ mod tests {
 
   #[test]
   fn client_identity_data_round_trips_without_debug_disclosure() {
-    let req = ConnectRequest::new(test_connect_info(), "secret-cookie".to_string())
+    let req = test_request(test_connect_info())
       .with_certificate_data(Some(b"certificate".to_vec()))
       .with_sslkey_data(Some(b"private-key".to_vec()));
     let encoded = serde_json::to_vec(&req).unwrap();

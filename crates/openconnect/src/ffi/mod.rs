@@ -1,7 +1,9 @@
 mod hip;
 use crate::Vpn;
 use hip::HipGenerateFn;
-pub(crate) use hip::{HipControlRaw, HipScriptRaw, generate_hip_report, preview_hip_script, script_environment};
+pub(crate) use hip::{
+  HipControlRaw, HipScriptRaw, collect_hip_script, collect_hip_source, generate_hip_report, script_environment,
+};
 use log::{debug, info, trace, warn};
 use std::ffi::{c_char, c_int, c_long, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};

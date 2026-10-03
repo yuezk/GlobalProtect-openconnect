@@ -4,7 +4,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use gpapi::service::transport::SessionCredential;
+use gpapi::service::transport::{ServiceErrorCode, ServiceResult, SessionCredential};
 use thiserror::Error;
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -62,6 +62,8 @@ enum SessionStatus {
 }
 
 struct SessionRecord {
+  non_tunnel: Option<AttachmentAttempt>,
+  closed_attachment: Option<Uuid>,
   secret: Zeroizing<[u8; 32]>,
   product_version: String,
   desktop_uid: Option<u32>,
@@ -72,12 +74,120 @@ struct SessionRecord {
   status: SessionStatus,
 }
 
+/// Only live preparation/execution is retained, never acceptance history.
+struct AttachmentAttempt {
+  generation: u64,
+  connection_id: Uuid,
+  drain: crate::vpn_task::AttemptDrain,
+}
+
 pub struct SessionRegistry {
   service_instance_id: Uuid,
   sessions: Mutex<HashMap<Uuid, SessionRecord>>,
 }
 
+fn unavailable_connection() -> ServiceResult {
+  ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Connection attachment is unavailable")
+}
+
+fn current_connection(record: &SessionRecord, expected: u64) -> Result<Uuid, ServiceResult> {
+  match &record.status {
+    SessionStatus::Active {
+      generation,
+      connection: Some(connection),
+      ..
+    } if *generation == expected && !connection.is_closed() => Ok(connection.connection_id()),
+    _ => Err(unavailable_connection()),
+  }
+}
+
 impl SessionRegistry {
+  pub(crate) fn reserve_connection(
+    &self,
+    session_id: Uuid,
+    generation: u64,
+    non_tunnel: bool,
+    reserve: impl FnOnce() -> Result<crate::vpn_task::ConnectReservation, ServiceResult>,
+  ) -> Result<crate::vpn_task::ConnectReservation, ServiceResult> {
+    let mut sessions = self.sessions.lock().map_err(|_| unavailable_connection())?;
+    let record = sessions.get_mut(&session_id).ok_or_else(unavailable_connection)?;
+    let connection_id = current_connection(record, generation)?;
+    if non_tunnel && record.closed_attachment == Some(connection_id) {
+      return Err(ServiceResult::rejected(
+        ServiceErrorCode::InvalidRequest,
+        "Non-tunnel attachment is closing",
+      ));
+    }
+    if record
+      .non_tunnel
+      .as_ref()
+      .is_some_and(|attempt| attempt.drain.is_complete())
+    {
+      record.non_tunnel = None;
+    }
+    let reservation = reserve()?;
+    if non_tunnel {
+      record.non_tunnel = Some(AttachmentAttempt {
+        generation,
+        connection_id,
+        drain: reservation.drain(),
+      });
+    }
+    Ok(reservation)
+  }
+
+  pub(crate) fn commit_connection(
+    &self,
+    session_id: Uuid,
+    generation: u64,
+    non_tunnel: bool,
+    commit: impl FnOnce() -> ServiceResult,
+  ) -> ServiceResult {
+    let Ok(sessions) = self.sessions.lock() else {
+      return unavailable_connection();
+    };
+    let Some(record) = sessions.get(&session_id) else {
+      return unavailable_connection();
+    };
+    if non_tunnel {
+      let connection_id = match current_connection(record, generation) {
+        Ok(id) => id,
+        Err(result) => return result,
+      };
+      if record.closed_attachment == Some(connection_id) {
+        return ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Non-tunnel attachment is closing");
+      }
+    } else if !matches!(record.status, SessionStatus::Active { .. }) {
+      return unavailable_connection();
+    }
+    // Non-tunnel attachment invalidation takes this same lock. An authorized
+    // tunnel reservation survives attachment loss as before; revoked sessions
+    // cannot commit either mode. Queue insertion transfers cleanup ownership.
+    commit()
+  }
+
+  pub(crate) fn stop_non_tunnel_attachment(
+    &self,
+    session_id: Uuid,
+    generation: u64,
+    connection_id: Uuid,
+  ) -> Result<Option<crate::vpn_task::AttemptDrain>, ServiceResult> {
+    let mut sessions = self.sessions.lock().map_err(|_| unavailable_connection())?;
+    let record = sessions.get_mut(&session_id).ok_or_else(unavailable_connection)?;
+    let current_id = current_connection(record, generation)?;
+    if current_id == connection_id {
+      record.closed_attachment = Some(connection_id);
+    }
+    if let Some(attempt) = &record.non_tunnel {
+      if attempt.connection_id == connection_id {
+        attempt.drain.cancel();
+        return Ok(Some(attempt.drain.clone()));
+      }
+    }
+    // No retained live work belongs to that attachment. Never stop a successor.
+    Ok(None)
+  }
+
   pub fn new(service_instance_id: Uuid) -> Self {
     Self {
       service_instance_id,
@@ -120,6 +230,8 @@ impl SessionRegistry {
     sessions.insert(
       credential.session_id(),
       SessionRecord {
+        non_tunnel: None,
+        closed_attachment: None,
         secret: Zeroizing::new(*credential.secret()),
         product_version: credential.product_version().to_owned(),
         desktop_uid,
@@ -258,6 +370,10 @@ impl SessionRegistry {
         connection: current,
         reconnect_token,
       } if *generation == permit.observed_generation && *reconnect_token == Some(permit.token) => {
+        if let Some(attempt) = &record.non_tunnel {
+          attempt.drain.cancel();
+        }
+        record.closed_attachment = None;
         *generation = generation.checked_add(1).ok_or(SessionError::Unavailable)?;
         *reconnect_token = None;
         Ok(current.replace(connection))
@@ -418,6 +534,13 @@ impl SessionRegistry {
     let Ok(mut sessions) = self.sessions.lock() else {
       return;
     };
+    if let Some(record) = sessions.get_mut(&session_id) {
+      if let Some(attempt) = &record.non_tunnel {
+        if attempt.generation == generation {
+          attempt.drain.cancel();
+        }
+      }
+    }
     if let Some(SessionRecord {
       status: SessionStatus::Active {
         generation: current,
@@ -438,9 +561,14 @@ impl SessionRegistry {
       .lock()
       .ok()
       .and_then(|mut sessions| sessions.remove(&session_id))
-      .and_then(|record| match record.status {
-        SessionStatus::Active { connection, .. } => connection,
-        SessionStatus::Pending { .. } => None,
+      .and_then(|record| {
+        if let Some(attempt) = &record.non_tunnel {
+          attempt.drain.cancel();
+        }
+        match record.status {
+          SessionStatus::Active { connection, .. } => connection,
+          SessionStatus::Pending { .. } => None,
+        }
       });
     if let Some(connection) = connection {
       connection.close(gpapi::service::transport::CloseReason::Unauthorized);
@@ -466,6 +594,140 @@ mod tests {
   fn control() -> ConnectionControl {
     let (tx, _rx) = mpsc::channel::<ConnectionCommand>(1);
     ConnectionControl::new(Uuid::new_v4(), tx).0
+  }
+
+  #[tokio::test]
+  async fn attachment_replacement_cancels_preparation_and_retains_drain_until_release() {
+    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let credential = registry.issue("fixture", None).unwrap();
+    let session = credential.session_id();
+    let first = registry
+      .begin_handshake(credential.service_instance_id(), session, "fixture")
+      .unwrap();
+    let (tx, _rx) = mpsc::channel(4);
+    let first_control = ConnectionControl::new(Uuid::new_v4(), tx).0;
+    let old_id = first_control.connection_id();
+    registry.commit_attach(&first, first_control).unwrap();
+    let (state, _state_rx) = tokio::sync::watch::channel(gpapi::service::vpn_state::VpnState::Disconnected);
+    let (_task, lifecycle) = crate::vpn_task::VpnTask::new(state, false, registry.clone());
+    let reservation = registry
+      .reserve_connection(session, 1, true, || lifecycle.reserve_connect())
+      .unwrap();
+    let drain = reservation.drain();
+    let cancel = reservation.cancellation();
+
+    let next = registry
+      .begin_handshake(credential.service_instance_id(), session, "fixture")
+      .unwrap();
+    let (tx, _next_rx) = mpsc::channel(4);
+    registry
+      .commit_attach(&next, ConnectionControl::new(Uuid::new_v4(), tx).0)
+      .unwrap();
+    assert!(cancel.is_cancelled());
+    assert!(!drain.is_complete());
+    assert!(
+      registry
+        .reserve_connection(session, 2, true, || lifecycle.reserve_connect())
+        .is_err()
+    );
+    assert!(matches!(
+      registry.commit_connection(session, 1, true, || panic!("stale start committed")),
+      ServiceResult::Rejected(_)
+    ));
+    drop(reservation);
+    drain.wait().await;
+
+    let next_reservation = registry
+      .reserve_connection(session, 2, true, || lifecycle.reserve_connect())
+      .unwrap();
+    assert!(
+      registry
+        .stop_non_tunnel_attachment(session, 2, old_id)
+        .unwrap()
+        .is_none()
+    );
+    assert!(!next_reservation.cancellation().is_cancelled());
+    registry.disconnect_if_current(session, 1);
+    assert!(!next_reservation.cancellation().is_cancelled());
+    registry.disconnect_if_current(session, 2);
+    assert!(next_reservation.cancellation().is_cancelled());
+  }
+
+  #[tokio::test]
+  async fn scoped_stop_closes_attachment_to_delayed_starts_without_receipt_history() {
+    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let credential = registry.issue("fixture", None).unwrap();
+    let session = credential.session_id();
+    let permit = registry
+      .begin_handshake(credential.service_instance_id(), session, "fixture")
+      .unwrap();
+    let (tx, _rx) = mpsc::channel(4);
+    let connection = ConnectionControl::new(Uuid::new_v4(), tx).0;
+    let id = connection.connection_id();
+    registry.commit_attach(&permit, connection).unwrap();
+    let (state, _state_rx) = tokio::sync::watch::channel(gpapi::service::vpn_state::VpnState::Disconnected);
+    let (_task, lifecycle) = crate::vpn_task::VpnTask::new(state, false, registry.clone());
+    let reservation = registry
+      .reserve_connection(session, 1, true, || lifecycle.reserve_connect())
+      .unwrap();
+    let drain = registry.stop_non_tunnel_attachment(session, 1, id).unwrap().unwrap();
+    assert!(reservation.cancellation().is_cancelled());
+    assert!(matches!(
+      registry.commit_connection(session, 1, true, || panic!("closing start committed")),
+      ServiceResult::Rejected(_)
+    ));
+    assert!(!drain.is_complete());
+    drop(reservation);
+    drain.wait().await;
+    assert!(
+      registry
+        .reserve_connection(session, 1, true, || panic!("closed attachment reserved"))
+        .is_err()
+    );
+    assert!(
+      registry
+        .reserve_connection(session, 1, false, || lifecycle.reserve_connect())
+        .is_ok()
+    );
+  }
+
+  #[tokio::test]
+  async fn tunnel_reservation_survives_attachment_loss_but_non_tunnel_revocation_cancels() {
+    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let credential = registry.issue("fixture", None).unwrap();
+    let session = credential.session_id();
+    let permit = registry
+      .begin_handshake(credential.service_instance_id(), session, "fixture")
+      .unwrap();
+    let (tx, _rx) = mpsc::channel(4);
+    registry
+      .commit_attach(&permit, ConnectionControl::new(Uuid::new_v4(), tx).0)
+      .unwrap();
+    let (state, _state_rx) = tokio::sync::watch::channel(gpapi::service::vpn_state::VpnState::Disconnected);
+    let (_task, lifecycle) = crate::vpn_task::VpnTask::new(state, false, registry.clone());
+    let tunnel = registry
+      .reserve_connection(session, 1, false, || lifecycle.reserve_connect())
+      .unwrap();
+    registry.disconnect_if_current(session, 1);
+    assert!(!tunnel.cancellation().is_cancelled());
+    assert_eq!(
+      registry.commit_connection(session, 1, false, || ServiceResult::Accepted),
+      ServiceResult::Accepted
+    );
+    drop(tunnel);
+    let permit = registry
+      .begin_handshake(credential.service_instance_id(), session, "fixture")
+      .unwrap();
+    let (tx, _next_rx) = mpsc::channel(4);
+    registry
+      .commit_attach(&permit, ConnectionControl::new(Uuid::new_v4(), tx).0)
+      .unwrap();
+    let session_work = registry
+      .reserve_connection(session, 2, true, || lifecycle.reserve_connect())
+      .unwrap();
+    registry.revoke(session);
+    assert!(session_work.cancellation().is_cancelled());
+    assert!(!session_work.drain().is_complete());
   }
 
   #[test]

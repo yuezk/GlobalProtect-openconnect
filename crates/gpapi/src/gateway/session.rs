@@ -5,15 +5,13 @@ use std::{
 
 use anyhow::bail;
 use log::{info, warn};
-use reqwest::Client;
 use xmltree::Element;
 
 use crate::{
   credential::Credential,
-  gateway::login::{GatewayLogin, gateway_login_with_extend_lifetime},
-  gp_params::GpParams,
+  gateway::login::{GatewayLogin, GatewayLoginClient},
   session::SessionRequestArgs,
-  utils::{normalize_server, parse_gp_response, request::create_identity, xml::ElementExt},
+  utils::{parse_gp_response, xml::ElementExt},
 };
 
 const EXTEND_SESSION_MESSAGE: &str = "User Session Extension";
@@ -22,12 +20,18 @@ const EXTEND_SESSION_COMMENT: &str = "User extends the login lifetime";
 #[derive(Clone)]
 pub struct SessionExtensionAuth {
   credential: Credential,
-  gp_params: GpParams,
+  client: GatewayLoginClient,
 }
 
 impl SessionExtensionAuth {
-  pub fn new(credential: Credential, gp_params: GpParams) -> Self {
-    Self { credential, gp_params }
+  pub fn new(credential: Credential, client: GatewayLoginClient) -> Self {
+    Self { credential, client }
+  }
+  pub fn client_identity(&self) -> Option<&crate::utils::request::ClientIdentity> {
+    self.client.client_identity()
+  }
+  pub fn binding(&self) -> Option<&crate::session::network::GatewayBinding> {
+    self.client.binding()
   }
 }
 
@@ -35,7 +39,7 @@ impl std::fmt::Debug for SessionExtensionAuth {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("SessionExtensionAuth")
       .field("username", &self.credential.username())
-      .field("gp_params", &"<redacted>")
+      .field("client", &"<redacted>")
       .finish()
   }
 }
@@ -83,10 +87,15 @@ impl SessionContext {
 pub async fn extend_session(ctx: &SessionContext) -> anyhow::Result<()> {
   extend_session_lifetime(ctx).await?;
 
-  let base_url = normalize_server(ctx.server())?;
-  let client = build_session_client(ctx.session_args())?;
+  let auth = ctx
+    .extension_auth()
+    .ok_or_else(|| anyhow::anyhow!("Session extension requires retained gateway auth state"))?;
+  let client = auth.client.request_client();
+  let url = format!(
+    "{}/ssl-vpn/agentmessage.esp",
+    auth.client.origin().as_str().trim_end_matches('/')
+  );
   let form = build_extend_session_form(ctx)?;
-  let url = format!("{base_url}/ssl-vpn/agentmessage.esp");
 
   info!("Sending extend-session request");
 
@@ -108,31 +117,15 @@ async fn extend_session_lifetime(ctx: &SessionContext) -> anyhow::Result<()> {
     .extension_auth()
     .ok_or_else(|| anyhow::anyhow!("Session extension requires retained gateway auth state"))?;
 
-  let login = gateway_login_with_extend_lifetime(ctx.server(), &auth.credential, &auth.gp_params).await?;
+  let login = auth.client.extend_lifetime(&auth.credential).await?;
   validate_extension_login(login)
 }
 
 fn validate_extension_login(login: GatewayLogin) -> anyhow::Result<()> {
   match login {
-    GatewayLogin::Cookie(_) => Ok(()),
+    GatewayLogin::Authenticated(_) => Ok(()),
     GatewayLogin::Mfa(_, _) => bail!("Session extension requires an interactive gateway challenge"),
   }
-}
-
-fn build_session_client(args: &SessionRequestArgs) -> anyhow::Result<Client> {
-  let mut builder = Client::builder();
-
-  if let Some(user_agent) = args.user_agent() {
-    builder = builder.user_agent(user_agent);
-  }
-
-  if let Some(cert) = args.certificate() {
-    info!("Using client certificate authentication...");
-    let identity = create_identity(&cert, args.sslkey().as_deref(), args.key_password().as_deref())?;
-    builder = builder.identity(identity);
-  }
-
-  Ok(builder.build()?)
 }
 
 fn parse_cookie_form(args: &SessionRequestArgs) -> anyhow::Result<HashMap<String, String>> {

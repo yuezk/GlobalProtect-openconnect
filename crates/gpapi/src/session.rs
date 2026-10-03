@@ -4,6 +4,14 @@ use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+mod connection;
+mod gateway_sessions;
+pub mod network;
+pub mod non_tunnel;
+pub mod transport;
+pub use connection::*;
+pub use gateway_sessions::{ClientAddresses, GatewaySession, GatewaySessions};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct SessionWarning {
   pub prior_secs: u32,

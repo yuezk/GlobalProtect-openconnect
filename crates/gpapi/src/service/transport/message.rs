@@ -167,7 +167,21 @@ mod tests {
     let gateway = Gateway::new("Gateway".to_string(), "vpn.example.com".to_string());
     let info = ConnectInfo::new("portal.example.com".to_string(), gateway.clone(), vec![gateway]);
     let certificate_size = MAX_CLIENT_IDENTITY_DATA / 2;
-    let request = ConnectRequest::new(info, "cookie".to_string())
+    let plan = crate::session::ConnectionPlan::new(
+      vec![crate::session::AuthenticatedGateway {
+        gateway: info.gateway().clone(),
+        binding: Some(crate::session::network::test_binding()),
+        authentication: crate::session::GatewayAuthentication::new(
+          "authcookie=token&user=user".into(),
+          "tunnel".into(),
+        )
+        .unwrap(),
+      }],
+      vec![],
+      crate::session::InternalSessionPolicy::default(),
+    )
+    .unwrap();
+    let request = ConnectRequest::new(info, plan)
       .with_certificate_data(Some(vec![b'c'; certificate_size]))
       .with_sslkey_data(Some(vec![b'k'; MAX_CLIENT_IDENTITY_DATA - certificate_size]));
     let message = ClientMessage::Request {

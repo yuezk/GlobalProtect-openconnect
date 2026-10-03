@@ -50,6 +50,21 @@ enum CliCommand {
   LaunchGui(LaunchGuiArgs),
   #[command(about = "Generate HIP report")]
   Hip(HipArgs),
+  #[command(hide = true)]
+  DetectInternalHost {
+    #[arg(long)]
+    address: std::net::IpAddr,
+    #[arg(long)]
+    hostname: String,
+  },
+  #[command(hide = true)]
+  ResolveGateway {
+    host: String,
+    #[arg(long, default_value_t = 443)]
+    port: u16,
+    #[arg(long)]
+    disable_ipv6: bool,
+  },
 }
 
 #[derive(Parser)]
@@ -118,10 +133,9 @@ impl Args for Cli {
 impl Cli {
   fn can_run_alongside_client(&self) -> bool {
     match &self.command {
-      CliCommand::Disconnect(_) => true,
-      CliCommand::Hip(_) => true,
+      CliCommand::Connect(_) => false,
       CliCommand::LaunchGui(args) => args.is_auth_callback(),
-      _ => false,
+      _ => true,
     }
   }
 
@@ -179,6 +193,20 @@ impl Cli {
       CliCommand::Disconnect(args) => DisconnectHandler::new(args, shared_args.lock_file).handle().await,
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
       CliCommand::Hip(args) => HipHandler::new(args).handle().await,
+      CliCommand::DetectInternalHost { address, hostname } => {
+        let internal = gpapi::session::network::native::detect_in_helper(*address, hostname)?;
+        println!("{}", serde_json::to_string(&internal)?);
+        Ok(())
+      }
+      CliCommand::ResolveGateway {
+        host,
+        port,
+        disable_ipv6,
+      } => {
+        let addresses = gpapi::session::network::native::lookup_in_helper(host, *port, *disable_ipv6)?;
+        println!("{}", serde_json::to_string(&addresses)?);
+        Ok(())
+      }
     }
   }
 }
@@ -219,6 +247,23 @@ mod tests {
   use log::Log;
 
   use super::*;
+
+  #[test]
+  fn resolver_helper_runs_alongside_client_and_is_hidden_from_help() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "resolve-gateway",
+      "localhost",
+      "--port",
+      "444",
+      "--disable-ipv6",
+    ])
+    .unwrap();
+    assert!(cli.can_run_alongside_client());
+    use clap::CommandFactory;
+    let help = Cli::command().render_help().to_string();
+    assert!(!help.contains("resolve-gateway"));
+  }
 
   #[test]
   fn lock_file_defaults_to_standard_path() {

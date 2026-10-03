@@ -1865,6 +1865,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-util",
  "url",
  "urlencoding",
  "uuid",
@@ -1915,6 +1916,7 @@ dependencies = [
  "sysinfo",
  "tempfile",
  "tokio",
+ "tokio-util",
  "uzers",
  "whoami",
 ]
@@ -1976,6 +1978,7 @@ dependencies = [
  "mac_address",
  "nix 0.31.3",
  "openconnect",
+ "openssl",
  "serde",
  "serde_json",
  "sha256",
@@ -4654,6 +4657,7 @@ checksum = "4ccbb212565d2dc177bc15ecb7b039d66c4490da892436a4eee5b394d620c9bc"
 dependencies = [
  "specta-macros",
  "thiserror 1.0.69",
+ "uuid",
 ]
 
 [[package]]

@@ -58,11 +58,11 @@ impl ConnectionControl {
   }
 
   pub fn is_closed(&self) -> bool {
-    self.tx.is_closed()
+    self.tx.is_closed() || self.close_tx.borrow().is_some()
   }
 
   pub fn close(&self, reason: CloseReason) {
-    let _ = self.close_tx.send(Some(reason));
+    self.close_tx.send_replace(Some(reason));
   }
 
   pub async fn send_reply(&self, id: Uuid, result: ServiceResult) {
@@ -185,11 +185,11 @@ impl WsConnection {
     }
 
     ctx
-      .hip_previews
-      .cancel_connection(permit.session_id, control.connection_id())
+      .remove_connection(control.connection_id(), permit.session_id, generation)
       .await;
     ctx
-      .remove_connection(control.connection_id(), permit.session_id, generation)
+      .hip_previews
+      .cancel_connection(permit.session_id, control.connection_id())
       .await;
     info!("GUI connection {} closed", control.connection_id());
   }
@@ -487,44 +487,17 @@ async fn handle_client_message(
         return Ok(());
       }
 
-      let edited_report = if let WsRequest::Connect(connect) = &request {
-        if let HipSource::Edited { report_id } = connect.args().hip_source() {
-          let report_id = match Uuid::parse_str(report_id) {
-            Ok(id) => id,
-            Err(_) => {
-              control
-                .send(ConnectionCommand::Reply {
-                  id,
-                  result: ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Invalid HIP report ID"),
-                })
-                .map_err(|_| ())?;
-              return Ok(());
-            }
-          };
-          match ctx.registry().edited_hip_report(session_id, report_id) {
-            Ok(report) => Some(report),
-            Err(_) => {
-              control
-                .send(ConnectionCommand::Reply {
-                  id,
-                  result: ServiceResult::rejected(
-                    ServiceErrorCode::InvalidRequest,
-                    "HIP report is unavailable for this session",
-                  ),
-                })
-                .map_err(|_| ())?;
-              return Ok(());
-            }
-          }
-        } else {
-          None
-        }
-      } else {
-        None
-      };
-
       let dispatcher = ctx.dispatcher();
-      let request = match dispatcher.dispatch_lifecycle(request, desktop_uid, edited_report, Some(session_id)) {
+      let request = match dispatcher.dispatch_lifecycle(
+        request,
+        desktop_uid,
+        None,
+        Some(crate::request_dispatcher::SessionAuthority {
+          registry: Arc::clone(ctx.registry()),
+          session_id,
+          generation,
+        }),
+      ) {
         Ok(request) => request,
         Err(result) => {
           if control.send(ConnectionCommand::Reply { id, result }).is_err() {
@@ -536,7 +509,7 @@ async fn handle_client_message(
       };
       let control = control.clone();
       tokio::spawn(async move {
-        let result = dispatcher.dispatch(request).await;
+        let result = dispatcher.dispatch_pending(request).await;
         control.send_reply(id, result).await;
       });
       Ok(())

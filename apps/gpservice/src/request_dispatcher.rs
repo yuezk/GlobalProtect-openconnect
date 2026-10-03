@@ -24,6 +24,54 @@ const MAX_GUI_ARCHIVE_SIZE: u64 = 256 * 1024 * 1024;
 const MAX_GUI_ARCHIVE_CONTENT_SIZE: u64 = 512 * 1024 * 1024;
 const MAX_GUI_BINARY_SIZE: u64 = 256 * 1024 * 1024;
 
+pub(crate) struct SessionAuthority {
+  pub registry: Arc<crate::session_registry::SessionRegistry>,
+  pub session_id: uuid::Uuid,
+  pub generation: u64,
+}
+
+pub(crate) enum PendingDispatch {
+  Connect {
+    preparation: ConnectionPreparation,
+    request: Box<gpapi::service::request::ConnectRequest>,
+    desktop_uid: Option<u32>,
+    edited_report: Option<Arc<str>>,
+  },
+  Drain(Option<crate::vpn_task::AttemptDrain>),
+  Other(WsRequest),
+}
+
+pub(crate) struct ConnectionPreparation {
+  authority: SessionAuthority,
+  non_tunnel: bool,
+  reservation: Option<crate::vpn_task::ConnectReservation>,
+}
+
+impl ConnectionPreparation {
+  fn cancellation(&self) -> tokio_util::sync::CancellationToken {
+    self
+      .reservation
+      .as_ref()
+      .expect("preparation retains reservation")
+      .cancellation()
+  }
+
+  fn commit(
+    mut self,
+    connection: crate::vpn_task::PreparedConnection,
+    desktop_uid: Option<u32>,
+    edited_report: Option<Arc<str>>,
+  ) -> ServiceResult {
+    let reservation = self.reservation.take().expect("preparation retains reservation");
+    self.authority.registry.commit_connection(
+      self.authority.session_id,
+      self.authority.generation,
+      self.non_tunnel,
+      || reservation.commit(connection, desktop_uid, edited_report, Some(self.authority.session_id)),
+    )
+  }
+}
+
 pub struct RequestDispatcher {
   lifecycle: crate::vpn_task::LifecycleHandle,
   gui_restart_requested: Arc<AtomicBool>,
@@ -56,38 +104,123 @@ impl RequestDispatcher {
     request: WsRequest,
     desktop_uid: Option<u32>,
     edited_report: Option<Arc<str>>,
-    session_id: Option<uuid::Uuid>,
-  ) -> Result<WsRequest, ServiceResult> {
+    authority: Option<SessionAuthority>,
+  ) -> Result<PendingDispatch, ServiceResult> {
     match request {
       WsRequest::Connect(request) => {
         if let Err(message) = self.validate_connect_paths(&request) {
           return Err(ServiceResult::rejected(ServiceErrorCode::InvalidRequest, message));
         }
-        if let Err(err) = self
-          .redaction
-          .add_values(&[request.gateway().server(), request.args().cookie()])
-        {
+        let redaction_values = request
+          .plan()
+          .members()
+          .iter()
+          .flat_map(|member| [member.gateway.server(), member.authentication.cookie()])
+          .collect::<Vec<_>>();
+        if let Err(err) = self.redaction.add_values(&redaction_values) {
           warn!("Failed to update log redaction: {err}");
           return Err(ServiceResult::rejected(
             ServiceErrorCode::Internal,
             "Request could not be accepted",
           ));
         }
-        Err(
-          self
-            .lifecycle
-            .submit_connect(*request, desktop_uid, edited_report, session_id),
-        )
+        let authority = authority
+          .ok_or_else(|| ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Connection session is missing"))?;
+        let non_tunnel = request
+          .plan()
+          .members()
+          .iter()
+          .all(|member| member.authentication.mode() == gpapi::session::SessionMode::NonTunnel);
+        let reservation =
+          authority
+            .registry
+            .reserve_connection(authority.session_id, authority.generation, non_tunnel, || {
+              self.lifecycle.reserve_connect()
+            })?;
+        let preparation = ConnectionPreparation {
+          authority,
+          non_tunnel,
+          reservation: Some(reservation),
+        };
+        let edited_report = if let gpapi::hip::HipSource::Edited { report_id } = request.args().hip_source() {
+          let report_id = uuid::Uuid::parse_str(report_id)
+            .map_err(|_| ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Invalid HIP report ID"))?;
+          Some(
+            preparation
+              .authority
+              .registry
+              .edited_hip_report(preparation.authority.session_id, report_id)
+              .map_err(|_| {
+                ServiceResult::rejected(
+                  ServiceErrorCode::InvalidRequest,
+                  "HIP report is unavailable for this session",
+                )
+              })?,
+          )
+        } else {
+          edited_report
+        };
+        Ok(PendingDispatch::Connect {
+          preparation,
+          request,
+          desktop_uid,
+          edited_report,
+        })
+      }
+      WsRequest::StopNonTunnelAttachment { connection_id } => {
+        let authority = authority
+          .ok_or_else(|| ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Connection session is missing"))?;
+        let drain =
+          authority
+            .registry
+            .stop_non_tunnel_attachment(authority.session_id, authority.generation, connection_id)?;
+        Ok(PendingDispatch::Drain(drain))
       }
       WsRequest::Disconnect(_) => Err(self.lifecycle.request_disconnect()),
-      request => Ok(request),
+      request => Ok(PendingDispatch::Other(request)),
     }
   }
 
+  #[cfg(test)]
   pub async fn dispatch(&self, request: WsRequest) -> ServiceResult {
-    let request = match self.dispatch_lifecycle(request, None, None, None) {
-      Ok(request) => request,
-      Err(result) => return result,
+    match self.dispatch_lifecycle(request, None, None, None) {
+      Ok(request) => self.dispatch_pending(request).await,
+      Err(result) => result,
+    }
+  }
+
+  pub(crate) async fn dispatch_pending(&self, request: PendingDispatch) -> ServiceResult {
+    let request = match request {
+      PendingDispatch::Connect {
+        preparation,
+        request,
+        desktop_uid,
+        edited_report,
+      } => {
+        let prepared = crate::vpn_task::prepare_connection(
+          *request,
+          self.brokered_scripts_dir.is_some(),
+          preparation.cancellation(),
+        )
+        .await;
+        return match prepared {
+          Ok(connection) => preparation.commit(connection, desktop_uid, edited_report),
+          Err(error) => {
+            warn!("Connection preparation failed: {error:#}");
+            ServiceResult::rejected(
+              ServiceErrorCode::InvalidRequest,
+              "Connection resources could not be prepared",
+            )
+          }
+        };
+      }
+      PendingDispatch::Drain(drain) => {
+        if let Some(drain) = drain {
+          drain.wait().await;
+        }
+        return ServiceResult::Accepted;
+      }
+      PendingDispatch::Other(request) => request,
     };
 
     match request {
@@ -132,6 +265,7 @@ impl RequestDispatcher {
         ServiceResult::Accepted
       }
       WsRequest::Connect(_)
+      | WsRequest::StopNonTunnelAttachment { .. }
       | WsRequest::Disconnect(_)
       | WsRequest::StoreEditedHipReportChunk(_)
       | WsRequest::PreviewHipReport(_)
@@ -296,14 +430,12 @@ fn extract_gui_binary<R: Read>(archive: &mut Archive<R>, dir: &Path) -> Result<N
 
 #[cfg(test)]
 mod tests {
+  use crate::vpn_task::test_connect_request as test_request;
   use std::{io::Cursor, os::unix::fs::PermissionsExt};
 
   use gpapi::{
     gateway::Gateway,
-    service::{
-      request::ConnectRequest,
-      transport::{ServiceErrorCode, ServiceResult},
-    },
+    service::transport::{ServiceErrorCode, ServiceResult},
   };
   use tar::{Builder, EntryType, Header};
   use xz2::write::XzEncoder;
@@ -426,7 +558,7 @@ mod tests {
 
     let gateway = Gateway::new("Gateway".into(), "vpn.example.com".into());
     let info = gpapi::service::vpn_state::ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway]);
-    let request = ConnectRequest::new(info, "cookie".into())
+    let request = test_request(info)
       .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
       .with_certificate(Some("/Users/example/client.pem".to_string()));
     let ServiceResult::Rejected(rejection) = dispatcher.dispatch(WsRequest::Connect(Box::new(request))).await else {
@@ -446,18 +578,17 @@ mod tests {
     );
     let gateway = Gateway::new("Gateway".into(), "vpn.example.com".into());
     let info = gpapi::service::vpn_state::ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway]);
-    let bundled = ConnectRequest::new(info.clone(), "cookie".into())
-      .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()));
+    let bundled =
+      test_request(info.clone()).with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()));
     assert_eq!(dispatcher.validate_connect_paths(&bundled), Ok(()));
 
-    let old_layout = ConnectRequest::new(info.clone(), "cookie".into())
-      .with_vpnc_script(Some("/app/Contents/Helpers/vpnc-script".to_string()));
+    let old_layout = test_request(info.clone()).with_vpnc_script(Some("/app/Contents/Helpers/vpnc-script".to_string()));
     assert_eq!(
       dispatcher.validate_connect_paths(&old_layout),
       Err("macOS VPN script must be the bundled script")
     );
 
-    let custom = ConnectRequest::new(info, "cookie".into())
+    let custom = test_request(info)
       .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
       .with_hip_source(gpapi::hip::HipSource::UserScript {
         path: "/tmp/hip.sh".into(),

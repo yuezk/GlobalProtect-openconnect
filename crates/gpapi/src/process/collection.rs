@@ -1,21 +1,12 @@
 use std::{
-  fs,
-  io::{self, Read},
-  os::unix::{
-    fs::{MetadataExt, PermissionsExt},
-    process::CommandExt,
-  },
+  fs, io,
+  os::unix::fs::{MetadataExt, PermissionsExt},
   path::{Path, PathBuf},
-  process::{Child, Command, Output, Stdio},
-  thread,
+  process::{Command, Output, Stdio},
   time::{Duration, Instant},
 };
 
-use nix::{
-  fcntl::{FcntlArg, OFlag, fcntl},
-  sys::signal::{Signal, killpg},
-  unistd::Pid,
-};
+use super::command_runner::run_controlled;
 
 /// Invocation control borrowed by collection; interruption must never be treated
 /// as an unavailable optional product.
@@ -87,6 +78,16 @@ impl<'a> CollectorCommands<'a> {
     self.run_path(&path, args)
   }
 
+  /// Run an installed helper with the same trust checks as system collectors.
+  /// Root never executes a helper in a user-writable directory.
+  pub fn run_executable(&self, path: &Path, args: &[&str]) -> io::Result<Option<Output>> {
+    self.control.check()?;
+    let Some(path) = resolve_executable(path, uzers::get_effective_uid() == 0) else {
+      return Ok(None);
+    };
+    self.run_path(&path, args)
+  }
+
   pub fn run_path(&self, path: &Path, args: &[&str]) -> io::Result<Option<Output>> {
     self.control.check()?;
     let home = if uzers::get_effective_uid() == 0 {
@@ -106,59 +107,11 @@ impl<'a> CollectorCommands<'a> {
       .env("LC_ALL", "C")
       .env("HOME", home)
       .current_dir("/")
-      .stdin(Stdio::null())
-      .stdout(Stdio::piped())
-      .stderr(Stdio::null())
-      .process_group(0);
-    let child = match command.spawn() {
-      Ok(child) => child,
-      Err(error) if matches!(error.kind(), io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied) => {
-        return Ok(None);
-      }
-      Err(error) => return Err(error),
-    };
-    let mut child = CollectionChild(child);
-    let mut stdout = child.0.stdout.take().expect("collector stdout was piped");
-    let flags = fcntl(&stdout, FcntlArg::F_GETFL).map_err(io::Error::from)?;
-    fcntl(
-      &stdout,
-      FcntlArg::F_SETFL(OFlag::from_bits_truncate(flags) | OFlag::O_NONBLOCK),
-    )
-    .map_err(io::Error::from)?;
-    let mut output = Vec::new();
-    let mut buffer = [0u8; 8192];
-    let mut eof = false;
-    let mut status = None;
-    loop {
-      self.control.check()?;
-      if !eof {
-        match stdout.read(&mut buffer) {
-          Ok(0) => eof = true,
-          Ok(length) => {
-            if output.len() + length > COMMAND_OUTPUT_LIMIT {
-              return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Device information collector output exceeds its limit",
-              ));
-            }
-            output.extend_from_slice(&buffer[..length]);
-            continue;
-          }
-          Err(error) if matches!(error.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted) => {}
-          Err(error) => return Err(error),
-        }
-      }
-      if status.is_none() {
-        status = child.0.try_wait()?;
-      }
-      if eof && let Some(status) = status {
-        return Ok(Some(Output {
-          status,
-          stdout: output,
-          stderr: Vec::new(),
-        }));
-      }
-      thread::sleep(Duration::from_millis(10));
+      .stderr(Stdio::null());
+    match run_controlled(command, self.control, COMMAND_OUTPUT_LIMIT) {
+      Ok(output) => Ok(Some(output)),
+      Err(error) if matches!(error.kind(), io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied) => Ok(None),
+      Err(error) => Err(error),
     }
   }
 }
@@ -193,16 +146,6 @@ fn root_owned_path(path: &Path) -> bool {
       metadata.uid() == 0 && metadata.permissions().mode() & 0o022 == 0 && !metadata.file_type().is_symlink()
     })
   })
-}
-
-struct CollectionChild(Child);
-
-impl Drop for CollectionChild {
-  fn drop(&mut self) {
-    // Also stop descendants retaining the pipe after the direct child exits.
-    let _ = killpg(Pid::from_raw(self.0.id() as i32), Signal::SIGKILL);
-    let _ = self.0.wait();
-  }
 }
 
 #[cfg(test)]
