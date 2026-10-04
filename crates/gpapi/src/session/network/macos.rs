@@ -1,6 +1,21 @@
 pub(super) use super::bsd_routes::routes;
 use super::*;
 
+pub(super) fn scope_resolver_socket(
+  socket: &tokio::net::UdpSocket,
+  interface: &Interface,
+  endpoint: SocketAddr,
+) -> anyhow::Result<()> {
+  let index = std::num::NonZeroU32::new(interface.index).context("Resolver interface index is missing")?;
+  let socket = socket2::SockRef::from(socket);
+  if endpoint.is_ipv4() {
+    socket.bind_device_by_index_v4(Some(index))?;
+  } else {
+    socket.bind_device_by_index_v6(Some(index))?;
+  }
+  Ok(())
+}
+
 pub(super) fn resolvers(control: &dyn CollectionControl) -> anyhow::Result<Vec<ResolverContext>> {
   parse_resolvers(&command("scutil", &["--dns"], control)?)
 }

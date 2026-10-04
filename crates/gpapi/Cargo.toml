@@ -38,6 +38,7 @@ uuid = { workspace = true, features = ["v4", "v5", "serde"] }
 chrono.workspace = true
 humantime.workspace = true
 netdev.workspace = true
+socket2 = { version = "0.6", features = ["all"] }
 os_info = { version = "3", default-features = false }
 snow.workspace = true
 zeroize = { workspace = true, features = ["serde"] }

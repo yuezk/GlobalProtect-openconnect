@@ -1,6 +1,16 @@
 use super::*;
 
 #[cfg(target_os = "linux")]
+pub(super) fn scope_resolver_socket(
+  socket: &tokio::net::UdpSocket,
+  interface: &Interface,
+  _endpoint: SocketAddr,
+) -> anyhow::Result<()> {
+  socket2::SockRef::from(socket).bind_device(Some(interface.name.as_bytes()))?;
+  Ok(())
+}
+
+#[cfg(target_os = "linux")]
 pub(super) fn routes(control: &dyn CollectionControl) -> anyhow::Result<Vec<RouteContext>> {
   let mut routes = Vec::new();
   for family in ["-4", "-6"] {

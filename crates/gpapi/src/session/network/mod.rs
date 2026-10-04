@@ -128,43 +128,8 @@ impl PhysicalNetwork {
     cancellation: &CancellationToken,
   ) -> anyhow::Result<()> {
     self.validate_binding(binding, cancellation).await?;
-    ensure!(
-      binding.interface() == self.physical_interface()?.name,
-      "Gateway uses a different physical uplink"
-    );
+    physical_interface_for_source(&self.interfaces, binding.source(), binding.endpoint())?;
     self.validate_internal(detection, cancellation).await
-  }
-
-  fn physical_interface(&self) -> anyhow::Result<&Interface> {
-    let defaults = self
-      .snapshot
-      .routes
-      .iter()
-      .filter(|route| matches!(route.destination.as_str(), "default" | "0.0.0.0/0" | "::/0"))
-      .map(|route| route.interface.as_str())
-      .collect::<BTreeSet<_>>();
-    ensure!(
-      defaults.len() == 1,
-      "Non-tunnel sessions require one unambiguous physical uplink"
-    );
-    let name = defaults.first().context("Physical default route is missing")?;
-    let interface = self
-      .interfaces
-      .iter()
-      .find(|interface| interface.name == *name)
-      .context("Physical interface is missing")?;
-    ensure!(
-      matches!(
-        interface.if_type,
-        netdev::prelude::InterfaceType::Ethernet
-          | netdev::prelude::InterfaceType::Wireless80211
-          | netdev::prelude::InterfaceType::FastEthernetT
-          | netdev::prelude::InterfaceType::FastEthernetFx
-          | netdev::prelude::InterfaceType::GigabitEthernet
-      ),
-      "Unsupported physical interface type"
-    );
-    Ok(interface)
   }
 
   pub async fn validate_internal(
@@ -173,34 +138,31 @@ impl PhysicalNetwork {
     cancellation: &CancellationToken,
   ) -> anyhow::Result<()> {
     self.ensure_current(cancellation).await?;
-    let interface = self.physical_interface()?;
     let mut resolver_count = 0;
     for resolver in &self.snapshot.resolvers {
       if resolver.servers.is_empty() {
         continue;
       }
-      ensure!(
-        resolver.interface.as_deref().is_none_or(|name| name == interface.name),
-        "Split physical resolver attribution is unsupported"
-      );
       for server in &resolver.servers {
-        let server = if server.contains(':') {
-          format!("[{server}]:53")
-        } else {
-          format!("{server}:53")
-        };
-        let endpoint: SocketAddr = server.parse().context("Scoped resolver attribution is unsupported")?;
+        let endpoint = resolver_endpoint(server, resolver.interface.as_deref(), &self.interfaces)?;
         ensure!(
           !endpoint.ip().is_loopback() && !endpoint.ip().is_unspecified(),
           "Unattributed local DNS stub is unsupported"
         );
         let socket = tokio::net::UdpSocket::bind(if endpoint.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" }).await?;
+        if let Some(name) = &resolver.interface {
+          let interface = self
+            .interfaces
+            .iter()
+            .find(|interface| interface.name == *name)
+            .context("Configured resolver interface is missing")?;
+          platform::scope_resolver_socket(&socket, interface, endpoint)?;
+        }
         socket.connect(endpoint).await?;
-        let source = socket.local_addr()?.ip();
+        let interface = physical_interface_for_source(&self.interfaces, socket.local_addr()?, endpoint)?;
         ensure!(
-          interface.ipv4.iter().any(|ip| IpAddr::V4(ip.addr()) == source)
-            || interface.ipv6.iter().any(|ip| IpAddr::V6(ip.addr()) == source),
-          "Resolver does not use the physical uplink"
+          resolver.interface.as_deref().is_none_or(|name| name == interface.name),
+          "Resolver route differs from its configured interface"
         );
         resolver_count += 1;
       }
@@ -347,7 +309,7 @@ async fn resolve_binding(
   };
   ensure!(
     endpoints.contains(&authenticated_endpoint),
-    "Authenticated peer is not a resolved gateway endpoint; proxied non-tunnel sessions are unsupported"
+    "Authenticated peer differs from the gateway's current DNS addresses; check for a proxy or changed DNS answer"
   );
   let endpoint = authenticated_endpoint;
   ensure!(
@@ -360,28 +322,7 @@ async fn resolve_binding(
   let mut source_address = socket.local_addr()?;
   source_address.set_port(0);
   let source = source_address.ip();
-  let scope = [source_address, endpoint]
-    .into_iter()
-    .find_map(|address| match address {
-      SocketAddr::V6(address) if address.scope_id() != 0 => Some(address.scope_id()),
-      _ => None,
-    });
-  let mut matches = interfaces.iter().filter(|interface| {
-    scope.is_none_or(|scope| scope == interface.index)
-      && (interface.ipv4.iter().any(|ip| IpAddr::V4(ip.addr()) == source)
-        || interface.ipv6.iter().any(|ip| IpAddr::V6(ip.addr()) == source))
-  });
-  let interface = matches
-    .next()
-    .context("Gateway route has no matching physical interface")?;
-  ensure!(
-    matches.next().is_none(),
-    "Gateway route has ambiguous physical interfaces"
-  );
-  ensure!(
-    !source.is_unspecified() && !source.is_loopback(),
-    "Gateway route has no source address"
-  );
+  let interface = physical_interface_for_source(interfaces, source_address, endpoint)?;
   let ipv4 = match source {
     IpAddr::V4(ip) => Some(ip),
     _ => interface
@@ -415,6 +356,87 @@ async fn resolve_binding(
     ClientAddresses { ipv4, ipv6 },
     fingerprint.clone(),
   )
+}
+
+// Default-route inventories include scoped, backup, and unrelated address-family
+// routes. Attribute each actual destination by its selected source instead.
+fn physical_interface_for_source(
+  interfaces: &[Interface],
+  source: SocketAddr,
+  endpoint: SocketAddr,
+) -> anyhow::Result<&Interface> {
+  let mut scope = None;
+  for address in [source, endpoint] {
+    if let SocketAddr::V6(address) = address {
+      if address.scope_id() != 0 {
+        ensure!(
+          scope.is_none_or(|scope| scope == address.scope_id()),
+          "Network source and destination have different interface scopes"
+        );
+        scope = Some(address.scope_id());
+      }
+    }
+  }
+  let source = source.ip();
+  ensure!(
+    !source.is_unspecified() && !source.is_loopback(),
+    "Network route has no physical source address"
+  );
+  let mut matches = interfaces.iter().filter(|interface| {
+    scope.is_none_or(|scope| scope == interface.index)
+      && (interface.ipv4.iter().any(|ip| IpAddr::V4(ip.addr()) == source)
+        || interface.ipv6.iter().any(|ip| IpAddr::V6(ip.addr()) == source))
+  });
+  let interface = matches
+    .next()
+    .context("Network route has no matching physical interface")?;
+  ensure!(
+    matches.next().is_none(),
+    "Network route has ambiguous physical interfaces"
+  );
+  ensure!(
+    matches!(
+      interface.if_type,
+      netdev::prelude::InterfaceType::Ethernet
+        | netdev::prelude::InterfaceType::Wireless80211
+        | netdev::prelude::InterfaceType::FastEthernetT
+        | netdev::prelude::InterfaceType::FastEthernetFx
+        | netdev::prelude::InterfaceType::GigabitEthernet
+    ),
+    "Network route uses an unsupported physical interface: {}",
+    interface.name
+  );
+  Ok(interface)
+}
+
+fn resolver_endpoint(server: &str, interface: Option<&str>, interfaces: &[Interface]) -> anyhow::Result<SocketAddr> {
+  let (address, zone) = server
+    .split_once('%')
+    .map_or((server, None), |(ip, zone)| (ip, Some(zone)));
+  let ip: IpAddr = address.parse().context("Invalid resolver address")?;
+  let mut endpoint = SocketAddr::new(ip, 53);
+  if let SocketAddr::V6(address) = &mut endpoint {
+    let zone = if zone.is_none() && address.ip().is_unicast_link_local() {
+      interface
+    } else {
+      zone
+    };
+    if let Some(zone) = zone {
+      let index = interfaces
+        .iter()
+        .find(|candidate| candidate.name == zone || candidate.index.to_string() == zone)
+        .context("Resolver IPv6 zone has no matching interface")?
+        .index;
+      address.set_scope_id(index);
+    }
+    ensure!(
+      !address.ip().is_unicast_link_local() || address.scope_id() != 0,
+      "Link-local resolver has no interface scope"
+    );
+  } else {
+    ensure!(zone.is_none(), "IPv4 resolver cannot have an interface scope");
+  }
+  Ok(endpoint)
 }
 
 async fn inspect(cancellation: CancellationToken) -> anyhow::Result<NetworkSnapshot> {
@@ -508,6 +530,101 @@ fn parse_resolv_conf(contents: &str) -> anyhow::Result<ResolverContext> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  fn ethernet(name: &str, index: u32, address: &str) -> Interface {
+    let mut interface = Interface::dummy();
+    interface.name = name.into();
+    interface.index = index;
+    interface.if_type = netdev::prelude::InterfaceType::Ethernet;
+    interface.ipv4 = vec![address.parse().unwrap()];
+    interface.ipv6 = vec!["fe80::1/64".parse().unwrap()];
+    interface
+  }
+
+  #[test]
+  fn attributes_each_destination_without_requiring_a_single_uplink() {
+    let ethernet = ethernet("en0", 7, "192.0.2.10/24");
+    let mut wifi = ethernet.clone();
+    wifi.name = "en1".into();
+    wifi.index = 8;
+    wifi.if_type = netdev::prelude::InterfaceType::Wireless80211;
+    wifi.ipv4 = vec!["198.51.100.10/24".parse().unwrap()];
+    let mut tunnel = Interface::dummy();
+    tunnel.name = "utun0".into();
+    tunnel.index = 9;
+    tunnel.ipv4 = vec!["10.0.0.1/24".parse().unwrap()];
+    let interfaces = [ethernet, wifi, tunnel];
+    for (source, endpoint, expected) in [
+      ("192.0.2.10:0", "203.0.113.1:443", "en0"),
+      ("198.51.100.10:0", "198.51.100.53:53", "en1"),
+      ("[fe80::1%8]:0", "[fe80::53%8]:53", "en1"),
+    ] {
+      assert_eq!(
+        physical_interface_for_source(&interfaces, source.parse().unwrap(), endpoint.parse().unwrap())
+          .unwrap()
+          .name,
+        expected
+      );
+    }
+    // Virtual interfaces may coexist, but must never supply the selected source.
+    assert!(
+      physical_interface_for_source(
+        &interfaces,
+        "10.0.0.1:0".parse().unwrap(),
+        "10.0.0.53:53".parse().unwrap()
+      )
+      .is_err()
+    );
+    // Identical link-local addresses without scope are ambiguous.
+    assert!(
+      physical_interface_for_source(
+        &interfaces,
+        "[fe80::1]:0".parse().unwrap(),
+        "[fe80::53]:53".parse().unwrap()
+      )
+      .is_err()
+    );
+    assert!(
+      physical_interface_for_source(
+        &interfaces,
+        "[fe80::1%7]:0".parse().unwrap(),
+        "[fe80::53%8]:53".parse().unwrap()
+      )
+      .is_err()
+    );
+  }
+
+  #[test]
+  fn rejects_ambiguous_or_unattributed_sources() {
+    let interfaces = [ethernet("en0", 7, "192.0.2.10/24"), ethernet("en1", 8, "192.0.2.10/24")];
+    for source in ["192.0.2.10:0", "192.0.2.11:0", "127.0.0.1:0", "0.0.0.0:0"] {
+      assert!(
+        physical_interface_for_source(&interfaces, source.parse().unwrap(), "192.0.2.53:53".parse().unwrap()).is_err()
+      );
+    }
+  }
+
+  #[test]
+  fn resolver_zones_support_native_names_and_numeric_indices() {
+    let interfaces = [ethernet("en0", 7, "192.0.2.10/24")];
+    let expected: SocketAddr = "[fe80::53%7]:53".parse().unwrap();
+    assert_eq!(resolver_endpoint("fe80::53%en0", None, &interfaces).unwrap(), expected);
+    assert_eq!(resolver_endpoint("fe80::53%7", None, &interfaces).unwrap(), expected);
+    assert_eq!(
+      resolver_endpoint("fe80::53", Some("en0"), &interfaces).unwrap(),
+      expected
+    );
+    assert_eq!(
+      resolver_endpoint("192.0.2.53", Some("en0"), &interfaces).unwrap(),
+      "192.0.2.53:53".parse().unwrap()
+    );
+    for server in ["fe80::53", "fe80::53%missing", "fe80::53%8", "192.0.2.53%en0"] {
+      assert!(
+        resolver_endpoint(server, None, &interfaces).is_err(),
+        "accepted {server}"
+      );
+    }
+  }
 
   #[test]
   fn bracketed_ipv6_gateway_is_a_literal_endpoint() {
