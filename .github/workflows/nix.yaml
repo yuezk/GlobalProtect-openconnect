@@ -43,7 +43,7 @@ jobs:
 
       - name: Build current source package
         run: |
-          nix build .#fromSource \
+          nix build "git+file://$PWD?submodules=1#fromSource" \
             --extra-experimental-features "nix-command flakes" \
             --print-build-logs
 

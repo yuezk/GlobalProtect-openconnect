@@ -310,10 +310,10 @@ The `prebuilt` package and NixOS module use the published release pinned in `fla
 
 ```bash
 git submodule update --init --recursive
-nix build .#fromSource
+nix build "git+file://$PWD?submodules=1#fromSource"
 ```
 
-Source builds require Nix 2.27 or later for automatic submodule fetching. For a remote source flake, use a Git URL with submodules enabled, such as `git+https://github.com/yuezk/GlobalProtect-openconnect?submodules=1#fromSource`. Build output (`target`, `.build`, and `node_modules`) is excluded from the source input. Updating release asset hashes changes the prebuilt package, independently of source builds.
+Local source builds require initialized Git submodules and a flake URL with `submodules=1`, as shown above. For a remote source flake, use a Git URL with submodules enabled, such as `git+https://github.com/yuezk/GlobalProtect-openconnect?submodules=1#fromSource`. The `prebuilt` package and NixOS module do not require Git submodules. Build output (`target`, `.build`, and `node_modules`) is excluded from the source input. Updating release asset hashes changes the prebuilt package, independently of source builds.
 
 ### Official Docker Image
 
