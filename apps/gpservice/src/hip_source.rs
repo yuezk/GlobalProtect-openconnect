@@ -1,6 +1,6 @@
 use std::{fs, io, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
 
-use anyhow::{Context, bail, ensure};
+use anyhow::{Context, ensure};
 use gpapi::{
   hip::HipSource,
   os_profile::{ClientOs, HostIdentity, OsProfile, OsProfileBuilder},
@@ -103,7 +103,7 @@ pub(crate) fn resolve(
       #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))]
       {
         let _ = (approval_id, desktop_uid);
-        bail!("Root HIP script approvals are unavailable on this platform")
+        anyhow::bail!("Root HIP script approvals are unavailable on this platform")
       }
     }
   };

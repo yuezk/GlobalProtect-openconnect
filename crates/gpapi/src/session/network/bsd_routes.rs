@@ -1,5 +1,6 @@
 use super::*;
 
+#[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "macos"))]
 pub(super) fn routes(control: &dyn CollectionControl) -> anyhow::Result<Vec<RouteContext>> {
   let mut routes = Vec::new();
   for family in ["inet", "inet6"] {
