@@ -1,6 +1,7 @@
 mod cli;
 #[cfg(all(unix, any(target_os = "macos", debug_assertions)))]
 mod credential_lease;
+mod desktop_client;
 #[cfg(debug_assertions)]
 mod dev_bootstrap;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", all(test, unix)))]

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
 use std::process::{Command, ExitStatus};
@@ -11,10 +11,7 @@ use clap::Args;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
 use common::binary_paths;
 use directories::ProjectDirs;
-use gpapi::{
-  process::service_launcher::ServiceLauncher,
-  utils::{endpoint::http_endpoint, env_utils, shutdown_signal},
-};
+use gpapi::{process::desktop_launcher::DesktopLauncher, utils::endpoint::http_endpoint};
 use log::info;
 
 #[derive(Args)]
@@ -69,27 +66,13 @@ impl<'a> LaunchGuiHandler<'a> {
       return Ok(());
     }
 
-    tokio::spawn(async move {
-      shutdown_signal().await;
-      info!("Shutting down...");
-    });
-
     let log_file = get_log_file()?;
     let log_file_path = log_file.to_string_lossy().to_string();
 
     info!("Log file: {}", log_file_path);
 
-    let mut extra_envs = HashMap::<String, String>::new();
-    extra_envs.insert("GP_LOG_FILE".into(), log_file_path.clone());
-
-    // Persist the environment variables to a file
-    let env_file = env_utils::persist_env_vars(Some(extra_envs))?;
-    let env_file = env_file.into_temp_path();
-    let env_file_path = env_file.to_string_lossy().to_string();
-
-    let exit_status = ServiceLauncher::new()
+    let exit_status = DesktopLauncher::new(env!("CARGO_PKG_VERSION"))
       .minimized(self.args.minimized)
-      .env_file(&env_file_path)
       .log_file(&log_file_path)
       .launch()
       .await?;

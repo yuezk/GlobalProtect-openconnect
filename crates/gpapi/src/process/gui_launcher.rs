@@ -12,8 +12,6 @@ use tokio::{io::AsyncWriteExt, process::Command};
 
 use crate::{process::gui_helper_launcher::GuiHelperLauncher, service::transport::SessionCredential};
 
-use super::command_traits::CommandExt;
-
 pub struct GuiLauncher<'a> {
   version: &'a str,
   programs: Vec<PathBuf>,
@@ -52,6 +50,10 @@ impl<'a> GuiLauncher<'a> {
   }
 
   pub async fn launch(&self) -> anyhow::Result<ExitStatus> {
+    anyhow::ensure!(
+      uzers::get_effective_uid() != 0,
+      "The desktop GUI must not be launched by root"
+    );
     if let Some(program) = self.find_compatible_program().await {
       return self.launch_program(&program).await;
     }
@@ -92,8 +94,7 @@ impl<'a> GuiLauncher<'a> {
     }
 
     info!("Launching gpgui");
-    let mut non_root_cmd = cmd.into_non_root()?;
-    let child = non_root_cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn();
+    let child = cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn();
     let mut child = match child {
       Ok(child) => child,
       Err(err) => bail!("Failed to spawn {}: {}", program.display(), err),
@@ -119,7 +120,7 @@ impl<'a> GuiLauncher<'a> {
       cmd.envs(envs);
     }
     cmd.arg("--version");
-    let output = cmd.into_non_root()?.output().await?;
+    let output = cmd.output().await?;
     if !output.status.success() {
       bail!("Version command exited with {}", output.status);
     }

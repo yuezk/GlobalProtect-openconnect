@@ -398,76 +398,10 @@
             #!${pkgs.runtimeShell}
             set -eu
 
-            gpclient_fhs='${prebuiltCommands.gpclient}/bin/gpclient'
-            gpservice_public='@gpservice_public@'
-            gpauth_public='@gpauth_public@'
-
-            if [ "''${1:-}" = "launch-gui" ]; then
-              shift
-
-              minimized=
-              callback=
-              for arg in "$@"; do
-                case "$arg" in
-                  --minimized)
-                    minimized=--minimized
-                    ;;
-                  globalprotectcallback:*)
-                    if [ -n "$callback" ]; then
-                      echo "Multiple authentication callback URLs were provided" >&2
-                      exit 2
-                    fi
-                    callback=$arg
-                    ;;
-                  *)
-                    echo "Unsupported launch-gui argument: $arg" >&2
-                    exit 2
-                    ;;
-                esac
-              done
-
-              if [ -n "$callback" ]; then
-                if [ -n "$minimized" ]; then
-                  echo "An authentication callback cannot be combined with --minimized" >&2
-                  exit 2
-                fi
-                exec "$gpauth_public" auth-callback "$callback"
-              fi
-
-              if [ -n "''${XDG_DATA_HOME:-}" ]; then
-                data_home=$XDG_DATA_HOME
-              elif [ -n "''${HOME:-}" ]; then
-                data_home=$HOME/.local/share
-              else
-                data_home=/tmp
-              fi
-
-              log_dir="$data_home/gpclient"
-              mkdir -p "$log_dir"
-              log_file="$log_dir/gpclient.log"
-              env_file=$(mktemp)
-
-              env > "$env_file"
-              printf 'GP_LOG_FILE=%s\n' "$log_file" >> "$env_file"
-
-              pkexec_bin=/run/wrappers/bin/pkexec
-              if [ ! -x "$pkexec_bin" ]; then
-                pkexec_bin=pkexec
-              fi
-
-              set +e
-              if [ -n "$minimized" ]; then
-                "$pkexec_bin" --user root "$gpservice_public" --minimized --env-file "$env_file" 2>"$log_file"
-              else
-                "$pkexec_bin" --user root "$gpservice_public" --env-file "$env_file" 2>"$log_file"
-              fi
-              status=$?
-              set -e
-              rm -f "$env_file"
-              exit "$status"
-            fi
-
-            exec "$gpclient_fhs" "$@"
+            export GP_SERVICE_BINARY='@gpservice_public@'
+            export GP_AUTH_BINARY='@gpauth_public@'
+            export GP_GUI_BINARY='${hostGuiLauncher}'
+            exec '${prebuiltCommands.gpclient}/bin/gpclient' "$@"
             EOF
             substituteInPlace $out/bin/gpclient \
               --replace-fail '@gpservice_public@' "$out/bin/gpservice" \

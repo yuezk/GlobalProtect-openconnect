@@ -5,7 +5,7 @@ use common::binary_paths;
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::{process::command_traits::CommandExt, service::transport::SessionCredential};
+use crate::service::transport::SessionCredential;
 
 pub struct GuiHelperLauncher<'a> {
   program: PathBuf,
@@ -49,8 +49,11 @@ impl<'a> GuiHelperLauncher<'a> {
     }
 
     info!("Launching gpgui-helper");
-    let mut non_root_cmd = cmd.into_non_root()?;
-    let child = non_root_cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn();
+    anyhow::ensure!(
+      uzers::get_effective_uid() != 0,
+      "The desktop GUI must not be launched by root"
+    );
+    let child = cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn();
     let mut child = match child {
       Ok(child) => child,
       Err(err) => bail!("Failed to spawn {}: {}", self.program.display(), err),

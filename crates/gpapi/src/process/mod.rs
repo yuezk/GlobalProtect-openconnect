@@ -6,8 +6,8 @@ pub(crate) mod gui_helper_launcher;
 pub use command_traits::CommandExt;
 
 pub mod auth_launcher;
+pub mod desktop_launcher;
 pub mod gui_launcher;
-pub mod service_launcher;
 pub mod users;
 
 pub mod collection;

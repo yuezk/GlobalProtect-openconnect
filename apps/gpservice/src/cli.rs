@@ -1,11 +1,8 @@
+use std::io::Write;
 use std::path::PathBuf;
-use std::sync::{
-  Arc,
-  atomic::{AtomicBool, Ordering},
-};
+use std::sync::{Arc, atomic::AtomicBool};
 #[cfg(target_os = "macos")]
 use std::time::Duration;
-use std::{collections::HashMap, io::Write};
 
 use anyhow::{Context, bail};
 use clap::Parser;
@@ -15,9 +12,8 @@ use gpapi::logger;
 #[cfg(debug_assertions)]
 use gpapi::utils::lock_file::dev_service_lock_file_path;
 use gpapi::{
-  process::gui_launcher::GuiLauncher,
   service::vpn_state::VpnState,
-  utils::{env_utils, lock_file::LockFile, redact::Redaction, shutdown_signal},
+  utils::{lock_file::LockFile, redact::Redaction, shutdown_signal},
 };
 #[cfg(target_os = "macos")]
 use log::{Log, Metadata, Record};
@@ -64,9 +60,9 @@ impl Log for RedactingMacosLogger {
 #[command(version = VERSION)]
 struct Cli {
   #[clap(long)]
-  minimized: bool,
-  #[clap(long)]
-  env_file: Option<String>,
+  #[cfg_attr(debug_assertions, clap(conflicts_with = "dev_standalone"))]
+  #[cfg_attr(target_os = "macos", clap(conflicts_with = "macos_brokered"))]
+  desktop_credentials: bool,
   #[cfg(debug_assertions)]
   #[clap(long, requires_all = ["dev_uid", "dev_bootstrap_socket"])]
   dev_standalone: bool,
@@ -100,7 +96,29 @@ impl Cli {
     let gui_restart_requested = Arc::new(AtomicBool::new(false));
     let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
     let externally_brokered = self.externally_brokered();
-    let desktop_uid = crate::runtime_user::desktop_uid();
+    let desktop_uid = if self.desktop_credentials {
+      anyhow::ensure!(
+        nix::unistd::Uid::effective().is_root(),
+        "Desktop credentials require a privileged service"
+      );
+      let uid: u32 = std::env::var("PKEXEC_UID")
+        .context("Desktop credentials require a pkexec-authenticated user")?
+        .parse()
+        .context("Invalid pkexec user")?;
+      anyhow::ensure!(uid != 0, "Desktop credentials require a non-root user");
+      anyhow::ensure!(
+        nix::unistd::User::from_uid(nix::unistd::Uid::from_raw(uid))?.is_some(),
+        "Desktop user is unavailable"
+      );
+      Some(uid)
+    } else {
+      crate::runtime_user::desktop_uid()
+    };
+    let desktop_channel = if self.desktop_credentials {
+      Some(crate::desktop_client::DesktopClient::from_stdio()?)
+    } else {
+      None
+    };
     let brokered_scripts_dir = if externally_brokered {
       let executable = std::env::current_exe().context("Failed to locate the gpservice executable")?;
       let contents_dir = executable
@@ -182,26 +200,28 @@ impl Cli {
       tokio::spawn(async move { signals::handle_signals(lifecycle, ws_ctx).await });
     }
 
+    let desktop_cancel = server_token.clone();
+    let shutdown_token = server_token.clone();
     let vpn_task_handle = tokio::spawn(async move { vpn_task.start(server_token).await });
     let (ws_ready_tx, ws_ready_rx) = tokio::sync::oneshot::channel();
     let ws_server_handle = tokio::spawn(async move { ws_server.start(shutdown_tx_clone, ws_ready_tx).await });
 
-    #[cfg(debug_assertions)]
-    let launch_managed_gui = !self.dev_standalone && !externally_brokered;
-    #[cfg(not(debug_assertions))]
-    let launch_managed_gui = !externally_brokered;
-
-    if launch_managed_gui {
+    let desktop_client_handle = if let Some(channel) = desktop_channel {
       ws_ready_rx.await.context("WebSocket server failed to start")?;
-      let envs = self.env_file.as_ref().map(env_utils::load_env_vars).transpose()?;
-      let minimized = self.minimized;
-      tokio::spawn(async move {
-        launch_gui(envs, registry, desktop_uid, minimized, gui_restart_requested).await;
+      let desktop_uid = desktop_uid.context("Desktop user is unavailable")?;
+      Some(tokio::spawn(async move {
+        if let Err(err) = channel
+          .serve(registry, desktop_uid, gui_restart_requested, desktop_cancel)
+          .await
+        {
+          warn!("Desktop credential channel ended: {err}");
+        }
         let _ = shutdown_tx.send(()).await;
-      });
+      }))
     } else {
-      info!("Running with a separately started debug GUI");
-    }
+      info!("Running with an externally launched GUI");
+      None
+    };
 
     tokio::select! {
       _ = shutdown_signal() => {
@@ -213,7 +233,11 @@ impl Cli {
     }
 
     vpn_task_cancel_token.cancel();
+    shutdown_token.cancel();
     let _ = tokio::join!(vpn_task_handle, ws_server_handle);
+    if let Some(handle) = desktop_client_handle {
+      let _ = handle.await;
+    }
 
     lock_file.unlock()?;
 
@@ -358,47 +382,6 @@ mod signals {
           info!("Received SIGUSR2 signal");
           ws_ctx.send_event(WsEvent::ResumeConnection).await;
         }
-      }
-    }
-  }
-}
-
-async fn launch_gui(
-  envs: Option<HashMap<String, String>>,
-  registry: Arc<SessionRegistry>,
-  desktop_uid: Option<u32>,
-  mut minimized: bool,
-  restart_requested: Arc<AtomicBool>,
-) {
-  loop {
-    let credential = match registry.issue(env!("CARGO_PKG_VERSION"), desktop_uid) {
-      Ok(credential) => credential,
-      Err(err) => {
-        warn!("Failed to issue GUI credential: {err}");
-        break;
-      }
-    };
-    let session_id = credential.session_id();
-    let gui_launcher = GuiLauncher::new(env!("CARGO_PKG_VERSION"), credential)
-      .envs(envs.clone())
-      .minimized(minimized);
-
-    match gui_launcher.launch().await {
-      Ok(exit_status) => {
-        registry.revoke(session_id);
-        let should_restart = restart_requested.swap(false, Ordering::SeqCst);
-        if !should_restart {
-          info!("GUI exited with code {:?}", exit_status.code());
-          break;
-        }
-
-        info!("GUI restart requested, restarting");
-        minimized = false;
-      }
-      Err(err) => {
-        registry.revoke(session_id);
-        warn!("Failed to launch GUI: {}", err);
-        break;
       }
     }
   }
