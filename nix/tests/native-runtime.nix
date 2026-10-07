@@ -1,4 +1,4 @@
-{ pkgs, package }:
+{ pkgs, package, module }:
 let
   guiProbe = pkgs.writeScript "gpgui-runtime-probe" ''
     #!${pkgs.python3}/bin/python3
@@ -32,9 +32,10 @@ in
 pkgs.testers.runNixOSTest {
   name = "gp-native-runtime-${package.pname}";
   nodes.machine = {
-    environment.systemPackages = [ package hostCollector ];
+    imports = [ module ];
+    programs.globalprotect-openconnect = { enable = true; inherit package; };
+    environment.systemPackages = [ hostCollector ];
     users.users.alice = { isNormalUser = true; uid = 1000; };
-    security.polkit.enable = true;
     security.polkit.extraConfig = ''
       polkit.addRule(function(action, subject) {
         if (subject.user == "alice" && (
@@ -50,6 +51,7 @@ pkgs.testers.runNixOSTest {
     import base64
     import json
     import shlex
+    from datetime import timedelta
 
     machine.start()
     machine.wait_for_unit("polkit.service")
@@ -62,11 +64,12 @@ pkgs.testers.runNixOSTest {
     command = "GP_GUI_BINARY=${guiProbe} " + package + "/bin/gpclient --lock-file /tmp/gp-client.lock launch-gui"
     as_alice(command + " > /tmp/gp-client-output 2>&1 & echo $! > /tmp/gp-client-pid")
     try:
-        machine.wait_until_succeeds("test -s /tmp/gp-gui-ready", timeout=30)
-    finally:
+        machine.wait_until_succeeds("test -s /tmp/gp-gui-ready", timeout=timedelta(seconds=30))
+    except Exception:
         print(machine.succeed("cat /tmp/gp-client-output"))
         print(machine.succeed("cat /home/alice/.local/share/gpclient/gpclient.log 2>/dev/null || true"))
         print(machine.succeed("journalctl -u polkit --no-pager"))
+        raise
     service_pid = machine.succeed("cut -d: -f1 /var/run/gpservice.lock").strip()
     machine.succeed("test $(stat -c %u /proc/" + service_pid + ") = 0")
     as_alice("kill -TERM $(cat /tmp/gp-client-pid)")

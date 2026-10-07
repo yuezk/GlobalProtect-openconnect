@@ -304,6 +304,7 @@
         {
           config,
           lib,
+          options,
           pkgs,
           ...
         }:
@@ -326,6 +327,11 @@
           config = lib.mkIf cfg.enable {
             environment.systemPackages = [ cfg.package ];
             services.ayatana-indicators.enable = lib.mkDefault true;
+            security.polkit = {
+              enable = true;
+            } // lib.optionalAttrs (options.security.polkit ? enablePkexecWrapper) {
+              enablePkexecWrapper = true;
+            };
           };
         };
     in

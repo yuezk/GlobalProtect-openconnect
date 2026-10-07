@@ -257,6 +257,7 @@ Add the flake input and NixOS module to your `flake.nix`:
 
 The module builds the package with your NixOS configuration's `pkgs`, so the
 GlobalProtect GUI and the system use the same Nixpkgs dependency versions.
+It also enables Polkit and its setuid `pkexec` wrapper for privileged operations.
 
 ```nix
 {

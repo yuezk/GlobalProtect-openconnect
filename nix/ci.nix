@@ -41,7 +41,18 @@ in {
   prebuilt = prebuiltPackage;
   module = assert builtins.elem modulePackage hostSystem.config.environment.systemPackages;
     assert hostSystem.config.services.ayatana-indicators.enable;
+    assert hostSystem.config.security.polkit.enable;
+    assert hostSystem.config.security.wrappers.pkexec.enable;
+    assert hostSystem.config.security.wrappers.pkexec.setuid;
     modulePackage;
-  runtime-source = import ./tests/native-runtime.nix { inherit pkgs; package = sourcePackage; };
-  runtime-prebuilt = import ./tests/native-runtime.nix { inherit pkgs; package = prebuiltPackage; };
+  runtime-source = import ./tests/native-runtime.nix {
+    inherit pkgs;
+    package = sourcePackage;
+    module = gp.nixosModules.default;
+  };
+  runtime-prebuilt = import ./tests/native-runtime.nix {
+    inherit pkgs;
+    package = prebuiltPackage;
+    module = gp.nixosModules.default;
+  };
 }
