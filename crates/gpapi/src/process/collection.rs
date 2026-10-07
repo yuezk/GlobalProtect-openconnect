@@ -126,9 +126,13 @@ impl<'a> CollectorCommands<'a> {
 }
 
 fn resolve_in_directories(name: &str, directories: &[PathBuf], require_root: bool) -> Option<PathBuf> {
-  directories
-    .iter()
-    .find_map(|directory| resolve_executable(&directory.join(name), require_root))
+  directories.iter().find_map(|directory| {
+    let directory = fs::canonicalize(directory).ok()?;
+    if require_root && !root_owned_path(&directory) {
+      return None;
+    }
+    resolve_executable(&directory.join(name), require_root)
+  })
 }
 
 fn resolve_executable(path: &Path, require_root: bool) -> Option<PathBuf> {
@@ -187,6 +191,12 @@ mod tests {
     assert_eq!(resolve_executable(&tool, true), Some(fs::canonicalize(&tool).unwrap()));
     // A PATH directory must itself reject unprivileged additions, even with the sticky bit.
     assert!(!root_owned_path(directory.path()));
+    assert!(resolve_in_directories("collector", &[directory.path().to_owned()], true).is_none());
+    let bin = directory.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::copy(&tool, bin.join("collector")).unwrap();
+    assert!(resolve_in_directories("collector", &[bin], true).is_some());
 
     fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o775)).unwrap();
     assert!(resolve_executable(&tool, true).is_none());
