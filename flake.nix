@@ -96,14 +96,14 @@
           gappsWrapperArgs+=(
             --prefix PATH : "/run/wrappers/bin:${lib.makeBinPath runtimeTools}"
             --set GP_COMMAND_PATH "${lib.makeBinPath runtimeTools}"
-            --set GP_VPNC_SCRIPT "$out/libexec/gpclient/vpnc-script"
-            --set GP_CLIENT_BINARY "$out/bin/gpclient"
-            --set GP_SERVICE_BINARY "$out/bin/gpservice"
-            --set GP_AUTH_BINARY "$out/bin/gpauth"
-            --set GP_GUI_BINARY "$out/bin/gpgui"
-            --set GP_GUI_HELPER_BINARY "$out/bin/gpgui-helper"
-            --set GP_VPNC_SCRIPT_INSTALLER_BINARY "$out/libexec/gpclient/gp-vpnc-script-installer"
-            --set GP_HIP_SCRIPT_INSTALLER_BINARY "$out/libexec/gpclient/gp-hip-script-installer"
+            --set-default GP_VPNC_SCRIPT "$out/libexec/gpclient/vpnc-script"
+            --set-default GP_CLIENT_BINARY "$out/bin/gpclient"
+            --set-default GP_SERVICE_BINARY "$out/bin/gpservice"
+            --set-default GP_AUTH_BINARY "$out/bin/gpauth"
+            --set-default GP_GUI_BINARY "$out/bin/gpgui"
+            --set-default GP_GUI_HELPER_BINARY "$out/bin/gpgui-helper"
+            --set-default GP_VPNC_SCRIPT_INSTALLER_BINARY "$out/libexec/gpclient/gp-vpnc-script-installer"
+            --set-default GP_HIP_SCRIPT_INSTALLER_BINARY "$out/libexec/gpclient/gp-hip-script-installer"
           )
         '';
 
@@ -170,7 +170,7 @@
           EOF
         '';
 
-        fromSource = naersk'.buildPackage {
+        fromSource = lib.makeOverridable ({ gui ? gpgui }: naersk'.buildPackage {
           inherit pname version;
           src = assert lib.assertMsg
             (builtins.pathExists (src + "/crates/openconnect/deps/openconnect/configure.ac")
@@ -243,7 +243,7 @@
             done
 
             # Copy the prebuilt gpgui binary to the output bin directory
-            cp ${gpgui}/gpgui $out/bin/gpgui
+            cp ${gui}/gpgui $out/bin/gpgui
             chmod +x $out/bin/gpgui
 
             cp -r packaging/files/usr/share $out/share
@@ -255,13 +255,13 @@
             ${rewriteVpncScriptToolPaths}
             ${rewriteSourceInstallPaths}
           '';
-        };
+        }) {};
 
-        prebuilt = pkgs.stdenv.mkDerivation {
+        prebuilt = lib.makeOverridable ({ binaries ? binaryPackage, gui ? gpgui }: pkgs.stdenv.mkDerivation {
           inherit pname;
           version = releaseVersion;
 
-          src = binaryPackage;
+          src = binaries;
           dontBuild = true;
 
           nativeBuildInputs = with pkgs; [
@@ -285,7 +285,7 @@
               cp -r artifacts/usr/lib $out/lib
             fi
 
-            install -Dm755 ${gpgui}/gpgui $out/bin/gpgui
+            install -Dm755 ${gui}/gpgui $out/bin/gpgui
 
             ${rewriteVpncScriptToolPaths}
             ${rewriteSourceInstallPaths}
@@ -293,7 +293,7 @@
 
             runHook postInstall
           '';
-        };
+        }) {};
 
       in
       {
@@ -350,11 +350,6 @@
         }
         // lib.optionalAttrs (!pkgs.stdenv.isLinux) {
           default = fromSource;
-        };
-
-        checks = lib.optionalAttrs (system == "x86_64-linux") {
-          native-runtime-prebuilt = import ./nix/tests/native-runtime.nix { inherit pkgs; package = prebuilt; };
-          native-runtime-source = import ./nix/tests/native-runtime.nix { inherit pkgs; package = fromSource; };
         };
 
         apps.default = {

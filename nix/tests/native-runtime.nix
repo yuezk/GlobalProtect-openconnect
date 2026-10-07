@@ -25,11 +25,6 @@ let
     pathlib.Path("/tmp/gp-gui-ready").write_text(str(os.getpid()))
     sys.stdin.buffer.read()
   '';
-  testPackage = package.overrideAttrs (old: {
-    postInstall = (old.postInstall or "") + ''
-      install -m755 ${guiProbe} $out/bin/gpgui
-    '';
-  });
   hostCollector = pkgs.writeShellScriptBin "clamscan" ''
     echo 'ClamAV 1.4.0/27123/Mon Oct 7 00:00:00 2026'
   '';
@@ -37,7 +32,7 @@ in
 pkgs.testers.runNixOSTest {
   name = "gp-native-runtime-${package.pname}";
   nodes.machine = {
-    environment.systemPackages = [ testPackage hostCollector ];
+    environment.systemPackages = [ package hostCollector ];
     users.users.alice = { isNormalUser = true; uid = 1000; };
     security.polkit.enable = true;
     security.polkit.extraConfig = ''
@@ -58,13 +53,13 @@ pkgs.testers.runNixOSTest {
 
     machine.start()
     machine.wait_for_unit("polkit.service")
-    package = "${testPackage}"
+    package = "${package}"
 
     def as_alice(command):
         return machine.succeed("su - alice -c " + shlex.quote(command))
 
     # Exercise real host pkexec, private credential pipes and launcher cancellation.
-    command = package + "/bin/gpclient --lock-file /tmp/gp-client.lock launch-gui"
+    command = "GP_GUI_BINARY=${guiProbe} " + package + "/bin/gpclient --lock-file /tmp/gp-client.lock launch-gui"
     as_alice(command + " > /tmp/gp-client-output 2>&1 & echo $! > /tmp/gp-client-pid")
     machine.wait_until_succeeds("test -s /tmp/gp-gui-ready")
     service_pid = machine.succeed("cut -d: -f1 /var/run/gpservice.lock").strip()

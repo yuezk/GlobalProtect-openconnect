@@ -363,6 +363,118 @@ jobs:
           gpgui-source/*.bin.tar.xz
           gpgui-source/*.bin.tar.xz.sha256
 
+  nix-source:
+    needs: [build-gpgui]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+            artifact_arch: amd64
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+            artifact_arch: ubuntu-24.04-arm
+    runs-on: ${{ matrix.platform.runner }}
+    name: nix-source (${{ matrix.platform.system }})
+    env:
+      NIX_SYSTEM: ${{ matrix.platform.system }}
+      NIXPKGS: locked
+    steps:
+      - name: Checkout source and dependencies
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+          submodules: recursive
+          path: gp
+      - name: Download current GUI artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact-gpgui-${{ matrix.platform.artifact_arch }}
+          path: nix-artifacts/gui
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Configure current source and GUI inputs
+        run: |
+          echo "GP_SOURCE=$PWD/gp" >> "$GITHUB_ENV"
+          gui_archive=$(find "$PWD/nix-artifacts/gui" -name '*.bin.tar.xz' -type f)
+          test -f "$gui_archive"
+          echo "GP_GUI_ARCHIVE=$gui_archive" >> "$GITHUB_ENV"
+      - name: Build source package
+        run: |
+          nix build --impure --file gp/nix/ci.nix source \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+          bash gp/scripts/tests/nix-desktop-authorization.sh result
+      - name: Test source runtime in NixOS
+        if: matrix.platform.system == 'x86_64-linux'
+        run: |
+          nix build --impure --file gp/nix/ci.nix runtime-source \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+
+  nix-prebuilt:
+    needs: [build-gp, build-gpgui]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+            artifact_arch: amd64
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+            artifact_arch: ubuntu-24.04-arm
+        nixpkgs: [locked, nixos-25.11, nixos-26.05, nixpkgs-unstable]
+    runs-on: ${{ matrix.platform.runner }}
+    name: nix-prebuilt (${{ matrix.platform.system }}, ${{ matrix.nixpkgs }})
+    env:
+      NIX_SYSTEM: ${{ matrix.platform.system }}
+      NIXPKGS: ${{ matrix.nixpkgs }}
+    steps:
+      - name: Checkout packaging and tests
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+          submodules: recursive
+          path: gp
+      - name: Download current Linux binary artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact-gp-binary-${{ matrix.platform.artifact_arch }}
+          path: nix-artifacts/binaries
+      - name: Download current GUI artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact-gpgui-${{ matrix.platform.artifact_arch }}
+          path: nix-artifacts/gui
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Configure current artifact inputs
+        run: |
+          echo "GP_SOURCE=$PWD/gp" >> "$GITHUB_ENV"
+          binary_archive=$(find "$PWD/nix-artifacts/binaries" -name '*.bin.tar.xz' -type f)
+          gui_archive=$(find "$PWD/nix-artifacts/gui" -name '*.bin.tar.xz' -type f)
+          test -f "$binary_archive"
+          test -f "$gui_archive"
+          echo "GP_BINARY_ARCHIVE=$binary_archive" >> "$GITHUB_ENV"
+          echo "GP_GUI_ARCHIVE=$gui_archive" >> "$GITHUB_ENV"
+      - name: Build package through host NixOS module
+        run: |
+          nix build --impure --file gp/nix/ci.nix module \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+          bash gp/scripts/tests/nix-desktop-authorization.sh result
+      - name: Build standalone prebuilt package
+        if: matrix.nixpkgs == 'locked'
+        run: |
+          nix build --impure --file gp/nix/ci.nix prebuilt \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+      - name: Test prebuilt runtime in NixOS
+        if: matrix.nixpkgs == 'locked' && matrix.platform.system == 'x86_64-linux'
+        run: |
+          nix build --impure --file gp/nix/ci.nix runtime-prebuilt \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+
   trigger-gpgui-macos:
     if: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.build_macos) }}
     permissions:
@@ -689,6 +801,8 @@ jobs:
       attestations: write
       artifact-metadata: write
     needs:
+      - nix-source
+      - nix-prebuilt
       - tarball
       - tarball-offline
       - build-gp
@@ -719,7 +833,7 @@ jobs:
             result = data["result"]
             if result in {"failure", "cancelled"}:
                 failed.append(f"{name}: {result}")
-            elif name in {"build-gp", "build-docker-image"} and result == "skipped" and is_tag:
+            elif name in {"build-gp", "build-docker-image", "nix-prebuilt"} and result == "skipped" and is_tag:
                 continue
             elif name in {"build-gpgui-frontend", "build-bsd"} and result == "skipped" and not bsd_matrix_enabled:
                 continue
