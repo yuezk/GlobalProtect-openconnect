@@ -1,11 +1,12 @@
 use std::{
   collections::HashMap,
+  fs::OpenOptions,
   path::{Path, PathBuf},
   process::{ExitStatus, Stdio},
   sync::Arc,
 };
 
-use anyhow::bail;
+use anyhow::{Context, bail};
 use common::binary_paths;
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
@@ -85,6 +86,18 @@ impl<'a> GuiLauncher<'a> {
     if let Some(envs) = &self.envs {
       cmd.env_clear();
       cmd.envs(envs);
+    }
+
+    let log_file = match &self.envs {
+      Some(envs) => envs.get("GP_LOG_FILE").map(PathBuf::from),
+      None => std::env::var_os("GP_LOG_FILE").map(PathBuf::from),
+    };
+    if let Some(path) = log_file {
+      let file = OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .with_context(|| format!("Failed to open GUI log file: {}", path.display()))?;
+      cmd.stderr(Stdio::from(file));
     }
 
     cmd.arg("--service-credential-on-stdin");
@@ -182,6 +195,27 @@ mod tests {
       minimized: false,
       envs: None,
     }
+  }
+
+  #[tokio::test]
+  async fn captures_gui_logs_in_the_desktop_log_file_across_restarts() {
+    let dir = TempDir::new().unwrap();
+    let log_file = dir.path().join("desktop.log");
+    fs::write(&log_file, "[gpservice] started\n").unwrap();
+    let program = dir.path().join("gui");
+    fs::write(&program, "#!/bin/sh\nprintf '[gpgui] initialized\\n' >&2\n").unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    let launcher = launcher(VERSION, vec![]).envs(HashMap::from([(
+      "GP_LOG_FILE".to_owned(),
+      log_file.to_str().unwrap().to_owned(),
+    )]));
+
+    assert!(launcher.launch_program(&program).await.unwrap().success());
+    assert!(launcher.launch_program(&program).await.unwrap().success());
+    assert_eq!(
+      fs::read_to_string(log_file).unwrap(),
+      "[gpservice] started\n[gpgui] initialized\n[gpgui] initialized\n"
+    );
   }
 
   #[tokio::test]

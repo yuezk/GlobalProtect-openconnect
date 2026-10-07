@@ -1,6 +1,7 @@
 use std::{
   collections::HashMap,
-  fs::File,
+  fs::{File, OpenOptions},
+  path::Path,
   process::{ExitStatus, Stdio},
   sync::Arc,
 };
@@ -53,7 +54,7 @@ impl<'a> DesktopLauncher<'a> {
       .stdin(Stdio::piped())
       .stdout(Stdio::piped());
     if let Some(path) = &self.log_file {
-      command.stderr(Stdio::from(File::create(path)?));
+      command.stderr(Stdio::from(create_log_file(Path::new(path))?));
     }
     let mut service = command.spawn().context("Failed to start the privileged service")?;
     let mut input = service.stdin.take().context("Service input pipe is unavailable")?;
@@ -111,6 +112,12 @@ impl<'a> DesktopLauncher<'a> {
   }
 }
 
+fn create_log_file(path: &Path) -> std::io::Result<File> {
+  // Start a fresh desktop session, then let both processes append without overwriting each other.
+  File::create(path)?;
+  OpenOptions::new().append(true).open(path)
+}
+
 async fn read_credential(reader: &mut (impl AsyncRead + Unpin)) -> anyhow::Result<Option<SessionCredential>> {
   let mut header = [0; 2];
   if reader.read(&mut header[..1]).await? == 0 {
@@ -130,7 +137,26 @@ async fn read_credential(reader: &mut (impl AsyncRead + Unpin)) -> anyhow::Resul
 
 #[cfg(test)]
 mod tests {
+  use std::io::Write;
+
   use super::*;
+
+  #[test]
+  fn desktop_log_starts_fresh_and_service_writes_preserve_gui_logs() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join("desktop.log");
+    std::fs::write(&path, "previous session\n").unwrap();
+    let mut service = create_log_file(&path).unwrap();
+    writeln!(service, "[gpservice] started").unwrap();
+    let mut gui = OpenOptions::new().append(true).open(&path).unwrap();
+    writeln!(gui, "[gpgui] initialized").unwrap();
+    writeln!(service, "[gpservice] connected").unwrap();
+
+    assert_eq!(
+      std::fs::read_to_string(&path).unwrap(),
+      "[gpservice] started\n[gpgui] initialized\n[gpservice] connected\n"
+    );
+  }
 
   #[tokio::test]
   async fn credential_channel_distinguishes_clean_close_from_truncated_or_oversized_frames() {
