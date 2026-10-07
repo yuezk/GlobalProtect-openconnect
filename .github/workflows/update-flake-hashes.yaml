@@ -112,9 +112,15 @@ jobs:
           gui_binary="$(sed -n "s/^export GP_GUI_BINARY='\(.*\)'$/\1/p" result/bin/gpclient)"
           test -x "$gui_binary"
           grep -q 'exec .*/bin/gpservice' result/bin/gpservice
-          ! grep -q '@gpservice_public@\|@gpauth_public@\|@gpservice_fhs@\|\$out/bin/gpservice' result/bin/gpclient result/bin/gpservice
+          if grep -Fq -e '@gpservice_public@' -e '@gpauth_public@' -e '@gpservice_fhs@' -e "\$out/bin/gpservice" result/bin/gpclient result/bin/gpservice; then
+            echo "Unresolved launch wrapper placeholders" >&2
+            exit 1
+          fi
 
-          ! grep -R '/usr/bin/gp' result/share
+          if grep -R '/usr/bin/gp' result/share; then
+            echo "Desktop assets contain paths outside the Nix package" >&2
+            exit 1
+          fi
 
   open-pull-request:
     needs:
