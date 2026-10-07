@@ -77,9 +77,6 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds("! kill -0 $(cat /tmp/gp-gui-ready)", timeout=timedelta(seconds=30))
 
     # The optional collector lives in the NixOS system profile, outside the package's tool closure.
-    print(machine.succeed("stat -c '%a:%u:%n' / /nix /nix/store /run/current-system/sw/bin"))
-    print(machine.succeed("stat -Lc '%a:%u:%n' /run/current-system/sw/bin/clamscan"))
-    print(machine.succeed("/run/current-system/sw/bin/clamscan --version"))
     report = machine.succeed(package + "/bin/gpclient hip --client-version 6.3.3-619 "
         "--client-os Linux --cookie fixture --md5 0123456789abcdef0123456789abcdef")
     assert "ClamAV" in report, report

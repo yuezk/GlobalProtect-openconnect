@@ -88,7 +88,7 @@ impl<'a> CollectorCommands<'a> {
   }
 
   /// Run an installed helper with the same trust checks as system collectors.
-  /// Root never executes a helper in a user-writable directory.
+  /// Root only executes helpers protected from unprivileged modification.
   pub fn run_executable(&self, path: &Path, args: &[&str]) -> io::Result<Option<Output>> {
     self.control.check()?;
     let Some(path) = resolve_executable(path, uzers::get_effective_uid() == 0) else {
@@ -159,7 +159,12 @@ pub fn command_path(require_root: bool) -> io::Result<std::ffi::OsString> {
 fn root_owned_path(path: &Path) -> bool {
   path.ancestors().all(|part| {
     fs::symlink_metadata(part).is_ok_and(|metadata| {
-      metadata.uid() == 0 && metadata.permissions().mode() & 0o022 == 0 && !metadata.file_type().is_symlink()
+      let mode = metadata.permissions().mode();
+      let writable = mode & 0o022 != 0;
+      // A root-owned sticky directory protects each root-owned descendant
+      // from replacement, including entries in the Nix store.
+      let protected_ancestor = part != path && metadata.is_dir() && mode & 0o1000 != 0;
+      metadata.uid() == 0 && (!writable || protected_ancestor) && !metadata.file_type().is_symlink()
     })
   })
 }
@@ -167,6 +172,37 @@ fn root_owned_path(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn root_owned_sticky_directories_protect_collectors_without_trusting_writable_files() {
+    // CI runs Rust tests as root; an unprivileged process cannot create these fixtures.
+    if uzers::get_effective_uid() != 0 {
+      return;
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let tool = directory.path().join("collector");
+    fs::write(&tool, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o1775)).unwrap();
+    assert_eq!(resolve_executable(&tool, true), Some(fs::canonicalize(&tool).unwrap()));
+    // A PATH directory must itself reject unprivileged additions, even with the sticky bit.
+    assert!(!root_owned_path(directory.path()));
+
+    fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o775)).unwrap();
+    assert!(resolve_executable(&tool, true).is_none());
+
+    fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o1777)).unwrap();
+    assert!(resolve_executable(&tool, true).is_some());
+    fs::set_permissions(&tool, fs::Permissions::from_mode(0o1775)).unwrap();
+    assert!(resolve_executable(&tool, true).is_none());
+
+    fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
+    std::os::unix::fs::chown(&tool, Some(1), None).unwrap();
+    assert!(resolve_executable(&tool, true).is_none());
+    std::os::unix::fs::chown(&tool, Some(0), None).unwrap();
+    std::os::unix::fs::chown(directory.path(), Some(1), None).unwrap();
+    assert!(resolve_executable(&tool, true).is_none());
+  }
 
   #[test]
   fn configured_directories_resolve_tools_without_using_the_process_path() {
