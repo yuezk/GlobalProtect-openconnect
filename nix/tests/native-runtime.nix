@@ -73,12 +73,12 @@ pkgs.testers.runNixOSTest {
     service_pid = machine.succeed("cut -d: -f1 /var/run/gpservice.lock").strip()
     machine.succeed("test $(stat -c %u /proc/" + service_pid + ") = 0")
     as_alice("kill -TERM $(cat /tmp/gp-client-pid)")
-    machine.wait_until_succeeds("test ! -e /proc/" + service_pid)
-    machine.wait_until_succeeds("! kill -0 $(cat /tmp/gp-gui-ready)")
+    machine.wait_until_succeeds("test ! -e /proc/" + service_pid, timeout=timedelta(seconds=30))
+    machine.wait_until_succeeds("! kill -0 $(cat /tmp/gp-gui-ready)", timeout=timedelta(seconds=30))
 
     # The optional collector lives in the NixOS system profile, outside the package's tool closure.
     report = machine.succeed(package + "/bin/gpclient hip --client-version 6.3.3-619 "
-        "--client-os linux --cookie fixture --md5 0123456789abcdef0123456789abcdef")
+        "--client-os Linux --cookie fixture --md5 0123456789abcdef0123456789abcdef")
     assert "ClamAV" in report, report
 
     script = base64.b64encode(b"#!/bin/sh\nexit 0\n").decode()
