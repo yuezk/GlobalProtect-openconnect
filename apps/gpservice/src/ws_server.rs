@@ -265,7 +265,7 @@ impl WsServer {
 fn build_snapshot(vpn_state: VpnState) -> VpnEnv {
   VpnEnv {
     vpn_state,
-    vpnc_script: find_vpnc_script().map(ToOwned::to_owned),
+    vpnc_script: find_vpnc_script(),
     auth_executable: binary_paths::gpauth().to_string_lossy().into_owned(),
     host_info: HostInfo {
       host_identity: HostIdentity::collect(),

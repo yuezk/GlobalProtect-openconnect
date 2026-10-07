@@ -7,6 +7,7 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
+      - "scripts/tests/nix-desktop-authorization.sh"
       - ".github/workflows/nix.yaml"
   push:
     branches:
@@ -15,6 +16,7 @@ on:
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
+      - "scripts/tests/nix-desktop-authorization.sh"
       - ".github/workflows/nix.yaml"
 
 permissions:
@@ -90,6 +92,23 @@ jobs:
 
       - name: Verify desktop authorization runs on the host
         run: bash scripts/tests/nix-desktop-authorization.sh result
+
+  native-runtime:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [prebuilt, source]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: cachix/install-nix-action@v31
+      - name: Test native runtime in NixOS
+        run: |
+          nix build "git+file://$PWD?submodules=1#checks.x86_64-linux.native-runtime-${{ matrix.package }}" \
+            --extra-experimental-features "nix-command flakes" \
+            --print-build-logs
 
   nixos-module:
     name: nixos-module (${{ matrix.platform.system }}, ${{ matrix.nixpkgs }})

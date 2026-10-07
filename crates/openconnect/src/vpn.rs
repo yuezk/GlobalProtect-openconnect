@@ -435,22 +435,22 @@ impl VpnBuilder {
     self
   }
 
-  fn determine_script(&self) -> Result<&str, VpnError> {
+  fn determine_script(&self) -> Result<String, VpnError> {
     match &self.script {
       Some(script) => {
         if self.script_is_path && !std::path::Path::new(script).exists() {
           return Err(VpnError::new(format!("VPN script does not exist: {script}")));
         }
         check_executable(script).map_err(|e| VpnError::new(e.to_string()))?;
-        Ok(script)
+        Ok(script.clone())
       }
       None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script"))),
     }
   }
 
   pub fn build(self) -> Result<Vpn, VpnError> {
-    let script = self.determine_script()?.to_owned();
-    let script = if self.script_is_path {
+    let script = self.determine_script()?;
+    let script = if self.script_is_path || self.script.is_none() {
       shell_quote_path(&script)
     } else {
       script

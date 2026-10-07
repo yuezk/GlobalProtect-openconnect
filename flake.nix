@@ -90,6 +90,23 @@
           xdg-utils
         ];
 
+        runtimeTools = with pkgs; [ coreutils iproute2 systemd procps util-linux nettools xdg-utils ];
+
+        nativeRuntimeWrapping = lib.optionalString pkgs.stdenv.isLinux ''
+          gappsWrapperArgs+=(
+            --prefix PATH : "/run/wrappers/bin:${lib.makeBinPath runtimeTools}"
+            --set GP_COMMAND_PATH "${lib.makeBinPath runtimeTools}"
+            --set GP_VPNC_SCRIPT "$out/libexec/gpclient/vpnc-script"
+            --set GP_CLIENT_BINARY "$out/bin/gpclient"
+            --set GP_SERVICE_BINARY "$out/bin/gpservice"
+            --set GP_AUTH_BINARY "$out/bin/gpauth"
+            --set GP_GUI_BINARY "$out/bin/gpgui"
+            --set GP_GUI_HELPER_BINARY "$out/bin/gpgui-helper"
+            --set GP_VPNC_SCRIPT_INSTALLER_BINARY "$out/libexec/gpclient/gp-vpnc-script-installer"
+            --set GP_HIP_SCRIPT_INSTALLER_BINARY "$out/libexec/gpclient/gp-hip-script-installer"
+          )
+        '';
+
         rewriteVpncScriptToolPaths = lib.optionalString pkgs.stdenv.isLinux ''
           substituteInPlace $out/libexec/gpclient/vpnc-script \
             --replace-fail /usr/bin/resolvectl ${pkgs.systemd}/bin/resolvectl \
@@ -124,32 +141,12 @@
 
           substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
             --replace-fail /usr/bin/gpservice $out/bin/gpservice \
-            --replace-fail /usr/libexec/gpclient/gp-vpnc-script-installer $out/bin/gp-vpnc-script-installer
+            --replace-fail /usr/libexec/gpclient/gp-vpnc-script-installer $out/libexec/gpclient/gp-vpnc-script-installer
 
           if [ -f $out/libexec/gpclient/gp-hip-script-installer ]; then
             substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
               --replace-fail /usr/libexec/gpclient/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
           fi
-
-          if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
-            substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
-              --replace-fail /usr/bin/gpclient $out/bin/gpclient
-          fi
-        '';
-
-        rewriteHostInstallPaths = ''
-          substituteInPlace $out/share/applications/gpgui.desktop \
-            --replace-fail /usr/bin/gpclient $out/bin/gpclient
-
-          substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
-            --replace-fail /usr/bin/gpservice $out/bin/gpservice
-
-          for installer in gp-vpnc-script-installer gp-hip-script-installer; do
-            if [ -x "${prebuiltFiles}/libexec/gpclient/$installer" ]; then
-              substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
-                --replace-fail "/usr/libexec/gpclient/$installer" "${prebuiltFiles}/libexec/gpclient/$installer"
-            fi
-          done
 
           if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
             substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
@@ -212,9 +209,7 @@
 
           runtimeDependencies = lib.optionals pkgs.stdenv.isLinux linuxRuntimeDependencies;
 
-          preFixup = lib.optionalString pkgs.stdenv.isLinux ''
-            gappsWrapperArgs+=(--prefix PATH : ${lib.makeBinPath [ pkgs.xdg-utils ]})
-          '';
+          preFixup = nativeRuntimeWrapping;
 
           overrideMain =
             { ... }:
@@ -243,9 +238,9 @@
             cp -r packaging/files/usr/libexec $out/libexec
           ''
           + lib.optionalString pkgs.stdenv.isLinux ''
-            if [ -f $out/bin/gp-hip-script-installer ]; then
-              install -Dm755 $out/bin/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
-            fi
+            for installer in gp-vpnc-script-installer gp-hip-script-installer; do
+              install -Dm755 "$out/bin/$installer" "$out/libexec/gpclient/$installer"
+            done
 
             # Copy the prebuilt gpgui binary to the output bin directory
             cp ${gpgui}/gpgui $out/bin/gpgui
@@ -262,7 +257,7 @@
           '';
         };
 
-        prebuiltFiles = pkgs.stdenv.mkDerivation {
+        prebuilt = pkgs.stdenv.mkDerivation {
           inherit pname;
           version = releaseVersion;
 
@@ -276,6 +271,7 @@
 
           buildInputs = linuxBuildInputs;
           runtimeDependencies = linuxRuntimeDependencies;
+          preFixup = nativeRuntimeWrapping;
 
           installPhase = ''
             runHook preInstall
@@ -292,153 +288,13 @@
             install -Dm755 ${gpgui}/gpgui $out/bin/gpgui
 
             ${rewriteVpncScriptToolPaths}
-
-            runHook postInstall
-          '';
-        };
-
-        hostGuiLauncher = pkgs.writeShellScript "gpgui-host-launcher" ''
-          set -eu
-
-          if [ "''${1:-}" = "--version" ]; then
-            exec ${prebuiltFiles}/bin/gpgui "$@"
-          fi
-
-          systemd_run_args=(
-            --user
-            --pipe
-            --wait
-            --quiet
-            --collect
-            --service-type=exec
-          )
-
-          while IFS= read -r -d "" env_entry; do
-            env_name="''${env_entry%%=*}"
-            case "$env_name" in
-              *[!A-Za-z0-9_]* | [0-9]* | PATH | GP_VPNC_SCRIPT_INSTALLER_BINARY | GP_HIP_SCRIPT_INSTALLER_BINARY | INVOCATION_ID | JOURNAL_STREAM | LISTEN_* | NOTIFY_SOCKET | SYSTEMD_EXEC_PID)
-                continue
-                ;;
-            esac
-            systemd_run_args+=("--setenv=$env_name")
-          done < <(${pkgs.coreutils}/bin/env --null)
-
-          gui_path="/run/wrappers/bin:''${PATH:-}"
-          systemd_run_args+=("--setenv=PATH=$gui_path")
-          for helper in \
-            GP_VPNC_SCRIPT_INSTALLER_BINARY=gp-vpnc-script-installer \
-            GP_HIP_SCRIPT_INSTALLER_BINARY=gp-hip-script-installer; do
-            helper_path="${prebuiltFiles}/libexec/gpclient/''${helper#*=}"
-            if [ -x "$helper_path" ]; then
-              systemd_run_args+=("--setenv=''${helper%%=*}=$helper_path")
-            fi
-          done
-
-          exec ${pkgs.systemd}/bin/systemd-run \
-            "''${systemd_run_args[@]}" \
-            ${prebuiltFiles}/bin/gpgui \
-            "$@"
-        '';
-
-        prebuiltCommand =
-          {
-            binaryName,
-            extraProfile ? "",
-          }:
-          pkgs.buildFHSEnv {
-            name = binaryName;
-            targetPkgs = pkgs: [ prebuiltFiles ] ++ linuxBuildInputs ++ linuxRuntimeDependencies;
-            runScript = "/usr/bin/${binaryName}";
-            profile = ''
-              export PATH=/run/wrappers/bin:$PATH
-              for helper in \
-                GP_VPNC_SCRIPT_INSTALLER_BINARY=gp-vpnc-script-installer \
-                GP_HIP_SCRIPT_INSTALLER_BINARY=gp-hip-script-installer; do
-                helper_path="${prebuiltFiles}/libexec/gpclient/''${helper#*=}"
-                if [ -x "$helper_path" ]; then
-                  export "''${helper%%=*}=$helper_path"
-                fi
-              done
-              ${extraProfile}
-            '';
-            extraBwrapArgs = [
-              "--bind-try"
-              "/run/wrappers"
-              "/run/wrappers"
-              "--ro-bind-try"
-              "/etc/gpgui"
-              "/etc/gpgui"
-            ];
-          };
-
-        prebuiltCommands = {
-          gpclient = prebuiltCommand { binaryName = "gpclient"; };
-          gpservice = prebuiltCommand {
-            binaryName = "gpservice";
-            extraProfile = ''
-              export GP_GUI_BINARY='${hostGuiLauncher}'
-            '';
-          };
-          gpauth = prebuiltCommand { binaryName = "gpauth"; };
-          gpgui = prebuiltCommand { binaryName = "gpgui"; };
-          gpgui-helper = prebuiltCommand { binaryName = "gpgui-helper"; };
-        };
-
-        prebuilt = pkgs.stdenv.mkDerivation {
-          inherit pname;
-          version = releaseVersion;
-
-          dontUnpack = true;
-
-          installPhase = ''
-            runHook preInstall
-
-            mkdir -p $out/bin
-            cat > $out/bin/gpclient <<'EOF'
-            #!${pkgs.runtimeShell}
-            set -eu
-
-            export GP_SERVICE_BINARY='@gpservice_public@'
-            export GP_AUTH_BINARY='@gpauth_public@'
-            export GP_GUI_BINARY='${hostGuiLauncher}'
-            if [ "''${1:-}" = "launch-gui" ]; then
-              # Authorization must run before entering Bubblewrap, which disables setuid elevation.
-              export PATH=/run/wrappers/bin:$PATH
-              exec '${prebuiltFiles}/bin/gpclient' "$@"
-            fi
-            exec '${prebuiltCommands.gpclient}/bin/gpclient' "$@"
-            EOF
-            substituteInPlace $out/bin/gpclient \
-              --replace-fail '@gpservice_public@' "$out/bin/gpservice" \
-              --replace-fail '@gpauth_public@' "$out/bin/gpauth"
-            chmod +x $out/bin/gpclient
-
-            cat > $out/bin/gpservice <<'EOF'
-            #!${pkgs.runtimeShell}
-            set -eu
-            exec '@gpservice_fhs@' "$@"
-            EOF
-            substituteInPlace $out/bin/gpservice \
-              --replace-fail '@gpservice_fhs@' '${prebuiltCommands.gpservice}/bin/gpservice'
-            chmod +x $out/bin/gpservice
-
-            ln -s ${prebuiltCommands.gpauth}/bin/gpauth $out/bin/gpauth
-            ln -s ${prebuiltCommands.gpgui}/bin/gpgui $out/bin/gpgui
-            ln -s ${prebuiltCommands."gpgui-helper"}/bin/gpgui-helper $out/bin/gpgui-helper
-
-            cp -r ${prebuiltFiles}/libexec $out/libexec
-            cp -r ${prebuiltFiles}/share $out/share
-
-            if [ -d ${prebuiltFiles}/lib ]; then
-              cp -r ${prebuiltFiles}/lib $out/lib
-            fi
-
-            ${rewriteHostInstallPaths}
+            ${rewriteSourceInstallPaths}
             ${installNixosPolkitRule}
 
             runHook postInstall
           '';
         };
+
       in
       {
         inherit fromSource prebuilt;
@@ -494,6 +350,11 @@
         }
         // lib.optionalAttrs (!pkgs.stdenv.isLinux) {
           default = fromSource;
+        };
+
+        checks = lib.optionalAttrs (system == "x86_64-linux") {
+          native-runtime-prebuilt = import ./nix/tests/native-runtime.nix { inherit pkgs; package = prebuilt; };
+          native-runtime-source = import ./nix/tests/native-runtime.nix { inherit pkgs; package = fromSource; };
         };
 
         apps.default = {

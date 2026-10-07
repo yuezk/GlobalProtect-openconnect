@@ -53,7 +53,18 @@ const TOOL_DIRECTORIES: &[&str] = &[
   "/sbin",
   "/usr/local/bin",
   "/usr/local/sbin",
+  #[cfg(target_os = "linux")]
+  "/run/current-system/sw/bin",
 ];
+
+fn tool_directories() -> Vec<PathBuf> {
+  let configured = std::env::var_os("GP_COMMAND_PATH").unwrap_or_default();
+  let mut directories: Vec<_> = std::env::split_paths(&configured)
+    .filter(|path| path.is_absolute())
+    .collect();
+  directories.extend(TOOL_DIRECTORIES.iter().map(PathBuf::from));
+  directories
+}
 
 pub struct CollectorCommands<'a> {
   control: &'a dyn CollectionControl,
@@ -65,9 +76,7 @@ impl<'a> CollectorCommands<'a> {
   }
 
   pub fn resolve(&self, name: &str) -> Option<PathBuf> {
-    TOOL_DIRECTORIES
-      .iter()
-      .find_map(|directory| resolve_executable(&Path::new(directory).join(name), uzers::get_effective_uid() == 0))
+    resolve_in_directories(name, &tool_directories(), uzers::get_effective_uid() == 0)
   }
 
   pub fn run(&self, name: &str, args: &[&str]) -> io::Result<Option<Output>> {
@@ -116,6 +125,12 @@ impl<'a> CollectorCommands<'a> {
   }
 }
 
+fn resolve_in_directories(name: &str, directories: &[PathBuf], require_root: bool) -> Option<PathBuf> {
+  directories
+    .iter()
+    .find_map(|directory| resolve_executable(&directory.join(name), require_root))
+}
+
 fn resolve_executable(path: &Path, require_root: bool) -> Option<PathBuf> {
   let resolved = fs::canonicalize(path).ok()?;
   let metadata = fs::metadata(&resolved).ok()?;
@@ -129,7 +144,8 @@ fn resolve_executable(path: &Path, require_root: bool) -> Option<PathBuf> {
 /// Known command directories, canonicalized and restricted to trusted root
 /// ownership when used for privileged execution.
 pub fn command_path(require_root: bool) -> io::Result<std::ffi::OsString> {
-  let directories = TOOL_DIRECTORIES.iter().filter_map(|directory| {
+  let configured = tool_directories();
+  let directories = configured.iter().filter_map(|directory| {
     let resolved = fs::canonicalize(directory).ok()?;
     if resolved.is_dir() && (!require_root || root_owned_path(&resolved)) {
       Some(resolved)
@@ -151,6 +167,20 @@ fn root_owned_path(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn configured_directories_resolve_tools_without_using_the_process_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let tool = dir.path().join("configured-tool");
+    fs::write(&tool, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+      resolve_in_directories("configured-tool", &[dir.path().to_owned()], false),
+      Some(fs::canonicalize(&tool).unwrap())
+    );
+    fs::set_permissions(&tool, fs::Permissions::from_mode(0o777)).unwrap();
+    assert!(resolve_in_directories("configured-tool", &[dir.path().to_owned()], true).is_none());
+  }
 
   #[test]
   fn root_command_path_contains_only_trusted_canonical_directories() {

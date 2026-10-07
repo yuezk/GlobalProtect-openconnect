@@ -30,8 +30,18 @@ fn find_executable(locations: &[&'static str]) -> Option<&'static str> {
   None
 }
 
-pub fn find_vpnc_script() -> Option<&'static str> {
-  find_executable(VPNC_SCRIPT_LOCATIONS)
+pub fn find_vpnc_script() -> Option<String> {
+  if let Some(path) = std::env::var_os("GP_VPNC_SCRIPT").filter(|path| !path.is_empty()) {
+    return configured_script(Path::new(&path));
+  }
+  find_executable(VPNC_SCRIPT_LOCATIONS).map(str::to_owned)
+}
+
+fn configured_script(path: &Path) -> Option<String> {
+  if path.is_absolute() && path.is_file() && path.is_executable() {
+    return path.to_str().map(str::to_owned);
+  }
+  None
 }
 
 /// If file exists, check if it is executable
@@ -46,4 +56,18 @@ pub fn check_executable(file: &str) -> Result<(), io::Error> {
   }
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn configured_script_requires_an_absolute_executable_path() {
+    assert_eq!(configured_script(Path::new("/bin/sh")), Some("/bin/sh".to_owned()));
+    assert!(configured_script(Path::new("bin/sh")).is_none());
+    assert!(configured_script(Path::new("/missing-openconnect-vpnc-script")).is_none());
+    assert!(configured_script(Path::new("/etc/passwd")).is_none());
+    assert!(configured_script(Path::new("/tmp")).is_none());
+  }
 }

@@ -29,13 +29,19 @@ exit 126
 EOF
 chmod +x "$test_workspace/bin/pkexec"
 
-if PATH="$test_workspace/bin:$PATH" \
-  XDG_DATA_HOME="$test_workspace/data" \
-  GP_TEST_SERVICE_BINARY="$package_path/bin/gpservice" \
-  "$package_path/bin/gpclient" launch-gui --minimized; then
-  echo "The desktop launcher ignored the authorization rejection" >&2
-  exit 1
-fi
+check_authorization() {
+  rm -f "$test_workspace/data/gpclient/gpclient.log"
+  if PATH="$test_workspace/bin:$PATH" \
+    XDG_DATA_HOME="$test_workspace/data" \
+    GP_TEST_SERVICE_BINARY="$package_path/bin/gpservice" \
+    "$@"; then
+    echo "The desktop launcher ignored the authorization rejection" >&2
+    exit 1
+  fi
+  grep -Fx 'Authorization reached the host without NoNewPrivs' \
+    "$test_workspace/data/gpclient/gpclient.log"
+}
 
-grep -Fx 'Authorization reached the host without NoNewPrivs' \
-  "$test_workspace/data/gpclient/gpclient.log"
+check_authorization "$package_path/bin/gpclient" launch-gui --minimized
+check_authorization "$package_path/bin/gpclient" --lock-file "$test_workspace/client.lock" launch-gui
+check_authorization "$package_path/bin/gpgui" --minimized

@@ -104,18 +104,11 @@ jobs:
           test -x result/bin/gpgui-helper
           test -x result/bin/gpgui
           test ! -L result/bin/gpservice
-          head -n1 result/bin/gpclient | grep '^#!'
-          head -n1 result/bin/gpservice | grep '^#!'
-          package_path="$(readlink -f result)"
-          grep -Fq "export GP_SERVICE_BINARY='$package_path/bin/gpservice'" result/bin/gpclient
-          grep -Fq "export GP_AUTH_BINARY='$package_path/bin/gpauth'" result/bin/gpclient
-          gui_binary="$(sed -n "s/^export GP_GUI_BINARY='\(.*\)'$/\1/p" result/bin/gpclient)"
-          test -x "$gui_binary"
-          grep -q 'exec .*/bin/gpservice' result/bin/gpservice
-          if grep -Fq -e '@gpservice_public@' -e '@gpauth_public@' -e '@gpservice_fhs@' -e "\$out/bin/gpservice" result/bin/gpclient result/bin/gpservice; then
-            echo "Unresolved launch wrapper placeholders" >&2
-            exit 1
-          fi
+          test -x result/libexec/gpclient/gp-vpnc-script-installer
+          test -x result/libexec/gpclient/gp-hip-script-installer
+          result/bin/gpclient --version
+          result/bin/gpservice --version
+          result/bin/gpauth --version
 
           if grep -R '/usr/bin/gp' result/share; then
             echo "Desktop assets contain paths outside the Nix package" >&2

@@ -306,7 +306,7 @@ NixOS does not run an imperative package-uninstall hook when a package is
 removed from the system configuration. Remove an installed replacement VPN
 script from the app settings before removing the package.
 
-The `prebuilt` package and NixOS module use the published release pinned in `flake.nix`. The `fromSource` package builds the current flake checkout, including its Git submodules:
+The `prebuilt` package and NixOS module use the published release pinned in `flake.nix`. Both `prebuilt` and `fromSource` run natively on the host with packaged dependencies and installer paths. The `fromSource` package builds the current flake checkout, including its Git submodules:
 
 ```bash
 git submodule update --init --recursive
