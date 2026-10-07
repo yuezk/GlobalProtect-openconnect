@@ -401,6 +401,11 @@
             export GP_SERVICE_BINARY='@gpservice_public@'
             export GP_AUTH_BINARY='@gpauth_public@'
             export GP_GUI_BINARY='${hostGuiLauncher}'
+            if [ "''${1:-}" = "launch-gui" ]; then
+              # Authorization must run before entering Bubblewrap, which disables setuid elevation.
+              export PATH=/run/wrappers/bin:$PATH
+              exec '${prebuiltFiles}/bin/gpclient' "$@"
+            fi
             exec '${prebuiltCommands.gpclient}/bin/gpclient' "$@"
             EOF
             substituteInPlace $out/bin/gpclient \

@@ -88,6 +88,9 @@ jobs:
           test -x result/bin/gpgui-helper
           test -x result/bin/gpgui
 
+      - name: Verify desktop authorization runs on the host
+        run: bash scripts/tests/nix-desktop-authorization.sh result
+
   nixos-module:
     name: nixos-module (${{ matrix.platform.system }}, ${{ matrix.nixpkgs }})
     strategy:

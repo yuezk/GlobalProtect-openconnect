@@ -122,6 +122,9 @@ jobs:
             exit 1
           fi
 
+      - name: Verify desktop authorization runs on the host
+        run: bash scripts/tests/nix-desktop-authorization.sh result
+
   open-pull-request:
     needs:
       - validate-nix-prebuilt
