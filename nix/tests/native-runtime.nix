@@ -61,7 +61,12 @@ pkgs.testers.runNixOSTest {
     # Exercise real host pkexec, private credential pipes and launcher cancellation.
     command = "GP_GUI_BINARY=${guiProbe} " + package + "/bin/gpclient --lock-file /tmp/gp-client.lock launch-gui"
     as_alice(command + " > /tmp/gp-client-output 2>&1 & echo $! > /tmp/gp-client-pid")
-    machine.wait_until_succeeds("test -s /tmp/gp-gui-ready")
+    try:
+        machine.wait_until_succeeds("test -s /tmp/gp-gui-ready", timeout=30)
+    finally:
+        print(machine.succeed("cat /tmp/gp-client-output"))
+        print(machine.succeed("cat /home/alice/.local/share/gpclient/gpclient.log 2>/dev/null || true"))
+        print(machine.succeed("journalctl -u polkit --no-pager"))
     service_pid = machine.succeed("cut -d: -f1 /var/run/gpservice.lock").strip()
     machine.succeed("test $(stat -c %u /proc/" + service_pid + ") = 0")
     as_alice("kill -TERM $(cat /tmp/gp-client-pid)")
