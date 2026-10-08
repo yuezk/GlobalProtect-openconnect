@@ -55,8 +55,8 @@
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
         gpguiHashes = {
-          x86_64 = "sha256-R9cl3c2yl5aQMkjgQDt1m8GcGCwjfRd6IWna4XygQdM=";
-          aarch64 = "sha256-pUicN4cbn0UHrW7s1z0qQ89M7NkQPho7h3LENDxAFfI=";
+          x86_64 = "sha256-8SUXA1GSmgocpjRuIsQsfjrJwjz/xdNbogElwUcQ9oI=";
+          aarch64 = "sha256-GEUZP8YCqPVs3daVbrgYxW1KF6oq3Tum4xO/RF/waKA=";
         };
 
         gpguiArchive = pkgs.fetchurl {
@@ -70,8 +70,8 @@
         };
 
         binaryHashes = {
-          x86_64 = "sha256-T+n4G10DhJnczWUvsFB5kDVw+LWQfRxjBYCyV56oACg=";
-          aarch64 = "sha256-LBmD/HFZO3EoNYKiB+8dmSA5kLLpRhLBSxOVbsFvMW8=";
+          x86_64 = "sha256-Oa89LHss3bGSaCZyK6pJvSzVBAJVA6+qWOlrVkijh6Q=";
+          aarch64 = "sha256-BaRPtWgK80xcgsOexDka96Po71tkaVJsHB81HyYO6UA=";
         };
 
         binaryArchive = pkgs.fetchurl {
