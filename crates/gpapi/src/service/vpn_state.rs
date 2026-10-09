@@ -1,7 +1,12 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{gateway::Gateway, session::SessionInfo};
+use crate::{
+  gateway::Gateway,
+  session::{GatewayFailureSummary, GatewaySessionSummary, SessionInfo},
+};
 
 #[derive(Debug, Deserialize, Serialize, Type, Clone)]
 pub struct ConnectInfo {
@@ -15,6 +20,9 @@ pub struct ConnectInfo {
 pub struct ConnectedInfo {
   info: Box<ConnectInfo>,
   session_info: Option<SessionInfo>,
+  connected_at: u32,
+  members: Vec<GatewaySessionSummary>,
+  failures: Vec<GatewayFailureSummary>,
 }
 
 impl ConnectedInfo {
@@ -22,7 +30,24 @@ impl ConnectedInfo {
     Self {
       info: Box::new(info),
       session_info,
+      connected_at: unix_timestamp(),
+      members: vec![],
+      failures: vec![],
     }
+  }
+
+  pub fn with_members(mut self, members: Vec<GatewaySessionSummary>, failures: Vec<GatewayFailureSummary>) -> Self {
+    self.members = members;
+    self.failures = failures;
+    self
+  }
+
+  pub fn members(&self) -> &[GatewaySessionSummary] {
+    &self.members
+  }
+
+  pub fn failures(&self) -> &[GatewayFailureSummary] {
+    &self.failures
   }
 
   pub fn info(&self) -> &ConnectInfo {
@@ -32,6 +57,17 @@ impl ConnectedInfo {
   pub fn session_info(&self) -> Option<&SessionInfo> {
     self.session_info.as_ref()
   }
+
+  pub fn connected_at(&self) -> u32 {
+    self.connected_at
+  }
+}
+
+fn unix_timestamp() -> u32 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_secs() as u32
 }
 
 impl ConnectInfo {
@@ -52,6 +88,7 @@ impl ConnectInfo {
 #[serde(rename_all = "camelCase")]
 pub enum VpnState {
   Disconnected,
+  Failed(String),
   Connecting(Box<ConnectInfo>),
   Connected(Box<ConnectedInfo>),
   Disconnecting,
@@ -79,5 +116,6 @@ mod tests {
 
     assert_eq!(value["connected"]["sessionInfo"]["lifetimeSecs"], 43_200);
     assert_eq!(value["connected"]["sessionInfo"]["allowExtendSession"], true);
+    assert!(value["connected"]["connectedAt"].as_u64().is_some());
   }
 }

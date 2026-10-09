@@ -2,11 +2,12 @@
 name = "openconnect"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "MIT"
 links = "openconnect"
 
 [dependencies]
 log.workspace = true
+libc = "0.2"
 is_executable.workspace = true
 
 [build-dependencies]

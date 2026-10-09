@@ -6,7 +6,7 @@ use gpapi::{
   os_profile::{ClientOs, OsProfile},
 };
 use log::warn;
-use std::path::PathBuf;
+use std::{net::IpAddr, path::PathBuf};
 
 #[derive(Args)]
 pub(crate) struct ConnectArgs {
@@ -54,13 +54,16 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use HIP (Host Integrity Protection) extension, optionally specify the HIP script path",
+    help = "Enable HIP (Host Information Profile), optionally specify a custom executable",
     default_missing_value = "",
     num_args=0..=1
   )]
   pub(super) hip: Option<String>,
 
-  #[arg(long, help = "The user used to run the HIP script")]
+  #[arg(
+    long,
+    help = "Run a custom HIP executable as this user; otherwise inherit the process user"
+  )]
   pub(super) hip_user: Option<String>,
 
   #[arg(
@@ -146,6 +149,17 @@ pub(crate) struct ConnectArgs {
     num_args=0..=1
   )]
   pub(super) browser: Option<String>,
+
+  #[arg(long, help = "Listen on this IP address when using '--browser remote'")]
+  pub(super) browser_listen: Option<IpAddr>,
+
+  #[arg(
+    long,
+    help = "Authenticate and print the gateway cookie to stdout, then exit without starting the \
+            VPN tunnel. Outputs two lines: COOKIE='<value>' and HOST='<gateway>'. Combine with \
+            --cookie-cache to avoid re-authenticating when the portal session is still valid."
+  )]
+  pub(super) cookie_only: bool,
 }
 
 pub(super) fn build_os_profile(args: &ConnectArgs) -> OsProfile {
@@ -261,6 +275,23 @@ mod tests {
       .expect("--browser default should parse");
 
     assert_eq!(cli.args.browser.as_deref(), Some("default"));
+  }
+
+  #[test]
+  fn browser_listen_accepts_ip_address() {
+    use clap::Parser;
+
+    let cli = ConnectArgsTestCli::try_parse_from([
+      "test",
+      "portal.example.com",
+      "--browser",
+      "remote",
+      "--browser-listen",
+      "192.168.107.15",
+    ])
+    .expect("connect args should parse");
+
+    assert_eq!(cli.args.browser_listen, Some("192.168.107.15".parse().unwrap()));
   }
 
   #[test]
@@ -397,5 +428,24 @@ mod tests {
       Err(err) => err,
     };
     assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+  }
+
+  #[test]
+  fn cookie_only_flag_parses() {
+    use clap::Parser;
+
+    let cli = ConnectArgsTestCli::try_parse_from(["test", "portal.example.com", "--cookie-only"])
+      .expect("--cookie-only should parse");
+
+    assert!(cli.args.cookie_only);
+  }
+
+  #[test]
+  fn cookie_only_is_disabled_by_default() {
+    use clap::Parser;
+
+    let cli = ConnectArgsTestCli::try_parse_from(["test", "portal.example.com"]).expect("connect args should parse");
+
+    assert!(!cli.args.cookie_only);
   }
 }

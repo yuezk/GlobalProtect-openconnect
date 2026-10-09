@@ -3,6 +3,7 @@ install:
 
 	install -Dm755 artifacts/usr/bin/gpclient $(DESTDIR)/usr/bin/gpclient
 	install -Dm755 artifacts/usr/bin/gpservice $(DESTDIR)/usr/bin/gpservice
+	install -Dm755 artifacts/usr/libexec/gpclient/gp-hip-script-installer $(DESTDIR)/usr/libexec/gpclient/gp-hip-script-installer
 	install -Dm755 artifacts/usr/bin/gpauth $(DESTDIR)/usr/bin/gpauth
 	install -Dm755 artifacts/usr/bin/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper
 
@@ -11,7 +12,7 @@ install:
 	fi
 
 	install -Dm755 artifacts/usr/libexec/gpclient/vpnc-script $(DESTDIR)/usr/libexec/gpclient/vpnc-script
-	install -Dm755 artifacts/usr/libexec/gpclient/hipreport.sh $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
+	install -Dm755 artifacts/usr/libexec/gpclient/gp-vpnc-script-installer $(DESTDIR)/usr/libexec/gpclient/gp-vpnc-script-installer
 
 	# Install the disconnect hooks
 	install -Dm755 artifacts/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
@@ -21,7 +22,14 @@ install:
 	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
 	install -Dm644 artifacts/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
 	install -Dm644 artifacts/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
+	install -Dm644 artifacts/usr/share/icons/hicolor/256x256/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	install -Dm644 artifacts/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
+	install -Dm644 artifacts/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
 	install -Dm644 artifacts/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
 
 uninstall:
@@ -29,12 +37,13 @@ uninstall:
 
 	rm -f $(DESTDIR)/usr/bin/gpclient
 	rm -f $(DESTDIR)/usr/bin/gpservice
+	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-hip-script-installer
 	rm -f $(DESTDIR)/usr/bin/gpauth
 	rm -f $(DESTDIR)/usr/bin/gpgui-helper
 	rm -f $(DESTDIR)/usr/bin/gpgui
 
 	rm -f $(DESTDIR)/usr/libexec/gpclient/vpnc-script
-	rm -f $(DESTDIR)/usr/libexec/gpclient/hipreport.sh
+	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-vpnc-script-installer
 
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
 	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
@@ -43,5 +52,19 @@ uninstall:
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
 	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
+	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
 	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
+
+	rm -f $(DESTDIR)/var/lib/gpclient/scripts/vpnc-script \
+		$(DESTDIR)/var/lib/gpclient/gpgui \
+		$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata || \
+		echo "Warning: failed to remove gpclient runtime files" >&2
+	rmdir $(DESTDIR)/var/lib/gpclient/scripts 2>/dev/null || true
+	rmdir $(DESTDIR)/var/lib/gpclient 2>/dev/null || true

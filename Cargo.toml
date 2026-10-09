@@ -10,8 +10,8 @@ members = [
 ]
 
 [workspace.package]
-rust-version = "1.89"
-version = "2.6.5"
+rust-version = "1.91"
+version = "3.0.0"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
 edition = "2024"
@@ -31,7 +31,7 @@ env_logger = "0.11"
 is_executable = "1.0"
 log = "0.4"
 regex = "1"
-reqwest = { version = "0.13", features = ["native-tls", "json", "form", "query"] }
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "system-proxy", "json", "form", "query"] }
 openssl = "0.10"
 pem = "3"
 xmltree = { version = "0.12", features = ["attribute-order"] }
@@ -59,11 +59,19 @@ which = "8"
 uuid = "1"
 netdev = "0.40"
 humantime = "2"
+snow = { version = "0.10", default-features = false, features = ["std", "use-getrandom", "use-curve25519", "use-chacha20poly1305", "use-sha2"] }
+zeroize = "1"
 
 # Tauri dependencies
 tauri = { version = "2" }
 specta = "=2.0.0-rc.20"
 proptest = "1"
+
+[patch.crates-io]
+# Restore BSD GTK resize hit testing until https://github.com/tauri-apps/tao/pull/1356 is released.
+tao = { git = "https://github.com/yuezk/tao", rev = "1452ae7a42c9f134296ba199f91f514fc9077f61" }
+# Use one macro source for Tao and Wry so Cargo can vendor the workspace.
+tao-macros = { git = "https://github.com/yuezk/tao", rev = "1452ae7a42c9f134296ba199f91f514fc9077f61" }
 
 [profile.release]
 opt-level = 'z'   # Optimize for size

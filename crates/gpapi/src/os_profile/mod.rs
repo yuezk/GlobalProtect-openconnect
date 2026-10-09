@@ -3,6 +3,9 @@ mod serial_number;
 
 pub use host_identity::HostIdentity;
 
+use crate::process::collection::{CollectionBudget, CollectionControl};
+use std::{io, time::Duration};
+
 use common::constants::{GP_CLIENT_VERSION_LINUX, GP_CLIENT_VERSION_MACOS, GP_CLIENT_VERSION_WINDOWS, GP_USER_AGENT};
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -366,6 +369,7 @@ impl OsProfile {
 pub struct OsProfileBuilder {
   client_os: ClientOs,
   client_version: Option<String>,
+  os_version_override: Option<String>,
   computer_name_override: Option<String>,
   host_id_override: Option<String>,
   host_identity: Option<HostIdentity>,
@@ -377,6 +381,7 @@ impl OsProfileBuilder {
     Self {
       client_os,
       client_version: None,
+      os_version_override: None,
       computer_name_override: None,
       host_id_override: None,
       host_identity: None,
@@ -391,6 +396,13 @@ impl OsProfileBuilder {
 
   pub fn client_version(mut self, version: impl Into<String>) -> Self {
     self.client_version = Some(version.into());
+    self
+  }
+
+  /// Preserve an explicitly negotiated operating system version.
+  pub fn os_version(mut self, version: impl Into<String>) -> Self {
+    let version = version.into();
+    self.os_version_override = if version.trim().is_empty() { None } else { Some(version) };
     self
   }
 
@@ -411,31 +423,67 @@ impl OsProfileBuilder {
     self
   }
 
+  /// Build a best-effort profile with a bounded native collection budget.
+  /// Use `build_with_control` when interruption or timeout must be reported.
   pub fn build(self) -> OsProfile {
+    match self
+      .clone()
+      .build_with_control(&CollectionBudget::new(Duration::from_secs(60)))
+    {
+      Ok(profile) => profile,
+      Err(error) => {
+        log::warn!("OS profile collection was unavailable: {error}");
+        let identity = self
+          .host_identity
+          .clone()
+          .unwrap_or_else(|| HostIdentity::default_with_host_id(self.host_id_override.as_deref()));
+        let (os_version, software_version) = match self.client_os {
+          ClientOs::Mac => (
+            format!("Apple Mac OS X {DEFAULT_MACOS_VERSION}"),
+            DEFAULT_MACOS_VERSION.into(),
+          ),
+          os => (target::os_version(os), target::software_version(os)),
+        };
+        self.finish(identity, os_version, software_version)
+      }
+    }
+  }
+
+  pub fn build_with_control(self, control: &dyn CollectionControl) -> io::Result<OsProfile> {
+    control.check()?;
+    let host_identity = match (&self.host_identity, &self.host_id_override) {
+      (Some(identity), _) => identity.clone(),
+      (None, host_id) => HostIdentity::collect_with_host_id_and_control(host_id.as_deref(), control)?,
+    };
+    let (os_version, software_version) = if self.client_os == ClientOs::Mac {
+      let version = macos_version_with_control(control)?;
+      (format!("Apple Mac OS X {version}"), version)
+    } else {
+      (
+        target::os_version(self.client_os),
+        target::software_version(self.client_os),
+      )
+    };
+    control.check()?;
+    Ok(self.finish(host_identity, os_version, software_version))
+  }
+
+  fn finish(self, host_identity: HostIdentity, default_os_version: String, software_version: String) -> OsProfile {
     let client_version = self
       .client_version
-      .filter(|v| !v.trim().is_empty())
-      .unwrap_or_else(|| self.client_os.default_client_version().to_string());
-
-    let host_identity = match (self.host_identity, self.host_id_override) {
-      (Some(identity), _) => identity,
-      (None, host_id) => HostIdentity::collect_with_host_id(host_id.as_deref()),
-    };
+      .filter(|version| !version.trim().is_empty())
+      .unwrap_or_else(|| self.client_os.default_client_version().into());
     let profile_identity =
       ProfileHostIdentity::for_client_os(self.client_os, &host_identity, self.computer_name_override);
-    let os_version = target::os_version(self.client_os);
-    let software_version = target::software_version(self.client_os);
-    let os_vendor = target::os_vendor(self.client_os);
-
+    let os_version = self.os_version_override.unwrap_or(default_os_version);
     let user_agent = self
       .user_agent
-      .unwrap_or_else(|| format!("{}/{} ({})", GP_USER_AGENT, client_version, os_version));
-
+      .unwrap_or_else(|| format!("{GP_USER_AGENT}/{client_version} ({os_version})"));
     OsProfile {
       client_os: self.client_os,
       os_version,
       software_version,
-      os_vendor,
+      os_vendor: target::os_vendor(self.client_os),
       client_version,
       host_identity,
       profile_identity,
@@ -500,14 +548,28 @@ fn runtime_distro_or(fallback: &str) -> String {
 }
 
 fn macos_version() -> String {
-  if runtime_client_os() == ClientOs::Mac {
-    match os_info::get().version() {
-      os_info::Version::Unknown => DEFAULT_MACOS_VERSION.to_string(),
-      v => v.to_string(),
-    }
-  } else {
-    DEFAULT_MACOS_VERSION.to_string()
+  macos_version_with_control(&CollectionBudget::new(Duration::from_secs(60))).unwrap_or_else(|error| {
+    log::warn!("Operating system version collection was unavailable: {error}");
+    DEFAULT_MACOS_VERSION.into()
+  })
+}
+
+fn macos_version_with_control(control: &dyn CollectionControl) -> io::Result<String> {
+  control.check()?;
+  #[cfg(target_os = "macos")]
+  {
+    let commands = crate::process::collection::CollectorCommands::new(control);
+    let version = commands
+      .run("sw_vers", &["-productVersion"])?
+      .filter(|output| output.status.success())
+      .and_then(|output| String::from_utf8(output.stdout).ok())
+      .map(|version| version.trim().to_string())
+      .filter(|version| !version.is_empty());
+    control.check()?;
+    Ok(version.unwrap_or_else(|| DEFAULT_MACOS_VERSION.into()))
   }
+  #[cfg(not(target_os = "macos"))]
+  Ok(DEFAULT_MACOS_VERSION.into())
 }
 
 fn macos_os_string() -> String {
@@ -690,6 +752,37 @@ mod target_identity {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn controlled_profile_collection_propagates_cancellation_and_deadline() {
+    let cancelled = || Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
+    let error = OsProfileBuilder::new(ClientOs::Mac)
+      .build_with_control(&cancelled)
+      .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+    let expired = CollectionBudget::new(Duration::ZERO);
+    let error = OsProfileBuilder::new(ClientOs::Linux)
+      .build_with_control(&expired)
+      .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+  }
+
+  #[test]
+  fn negotiated_os_version_is_used_in_profile_and_user_agent() {
+    let identity = HostIdentity::from_parts(
+      "device".into(),
+      "host".into(),
+      "serial".into(),
+      "00:11:22:33:44:55".into(),
+    );
+    let profile = OsProfileBuilder::new(ClientOs::Mac)
+      .host_identity(identity)
+      .client_version("6.3.3")
+      .os_version("negotiated-system-version")
+      .build();
+    assert_eq!(profile.os_version(), "negotiated-system-version");
+    assert!(profile.user_agent().contains("negotiated-system-version"));
+  }
 
   #[test]
   fn csc_support_defaults_match_official_profiles() {

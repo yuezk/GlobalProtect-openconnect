@@ -85,6 +85,8 @@ impl ConnectHandler<'_> {
           .sslkey(self.args.sslkey.as_deref())
           .key_password(key_password.as_deref())
           .browser(browser)
+          .browser_listen(self.args.browser_listen)
+          .log_format(self.shared_args.log_format)
           .verbose(verbose);
 
         #[cfg(feature = "webview-auth")]
@@ -114,7 +116,8 @@ impl ConnectHandler<'_> {
           .clean(clean_auth)
           .default_browser(use_default_browser);
 
-        let cred = auth_launcher.launch().await?;
+        let cred = auth_launcher.cancellation(&self.cancellation).launch().await?;
+        self.check_cancelled()?;
         Ok(cred)
       }
 

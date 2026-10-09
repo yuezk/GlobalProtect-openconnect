@@ -1,11 +1,12 @@
 use log::info;
-use reqwest::Client;
+use reqwest::{Client, ClientBuilder};
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use zeroize::Zeroize;
 
 use crate::{
   os_profile::{ClientOs, HostIdentity, OsProfile},
-  utils::request::create_identity,
+  utils::request::{ClientIdentity, create_identity},
 };
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Type, Default)]
@@ -43,6 +44,7 @@ pub struct GpParams {
   certificate: Option<String>,
   sslkey: Option<String>,
   key_password: Option<String>,
+  prepared_identity: Option<ClientIdentity>,
   // Feature
   csc_mode: CscMode,
   // Per-request state
@@ -135,9 +137,49 @@ impl GpParams {
   pub(crate) fn otp(&self) -> Option<&str> {
     self.otp.as_deref()
   }
+
+  pub fn prepare_client_identity(&mut self) -> anyhow::Result<()> {
+    if self.prepared_identity.is_none() {
+      if let Some(certificate) = self.certificate.as_deref() {
+        self.prepared_identity = Some(ClientIdentity::load(
+          certificate,
+          self.sslkey.as_deref(),
+          self.key_password.as_deref(),
+        )?);
+      }
+    }
+    self.certificate = None;
+    self.sslkey = None;
+    if let Some(mut passphrase) = self.key_password.take() {
+      passphrase.zeroize();
+    }
+    Ok(())
+  }
+
+  pub fn client_identity(&self) -> Option<&ClientIdentity> {
+    self.prepared_identity.as_ref()
+  }
+
+  pub(crate) fn client_builder(&self) -> anyhow::Result<ClientBuilder> {
+    let mut builder = Client::builder()
+      .danger_accept_invalid_certs(self.ignore_tls_errors)
+      .user_agent(self.user_agent());
+    if let Some(identity) = &self.prepared_identity {
+      builder = builder.identity(identity.request_identity());
+    } else if let Some(cert) = self.certificate.as_deref() {
+      info!("Using client certificate authentication...");
+      builder = builder.identity(create_identity(
+        cert,
+        self.sslkey.as_deref(),
+        self.key_password.as_deref(),
+      )?);
+    }
+    Ok(builder)
+  }
 }
 
 pub struct GpParamsBuilder {
+  prepared_identity: Option<ClientIdentity>,
   is_gateway: bool,
   os_profile: OsProfile,
   csc_mode: CscMode,
@@ -150,6 +192,7 @@ pub struct GpParamsBuilder {
 impl GpParamsBuilder {
   pub fn new(os_profile: OsProfile) -> Self {
     Self {
+      prepared_identity: None,
       is_gateway: false,
       os_profile,
       csc_mode: Default::default(),
@@ -176,22 +219,34 @@ impl GpParamsBuilder {
   }
 
   pub fn certificate<T: Into<Option<String>>>(&mut self, certificate: T) -> &mut Self {
+    self.prepared_identity = None;
     self.certificate = certificate.into();
     self
   }
 
   pub fn sslkey<T: Into<Option<String>>>(&mut self, sslkey: T) -> &mut Self {
+    self.prepared_identity = None;
     self.sslkey = sslkey.into();
     self
   }
 
   pub fn key_password<T: Into<Option<String>>>(&mut self, password: T) -> &mut Self {
+    self.prepared_identity = None;
     self.key_password = password.into();
+    self
+  }
+
+  pub fn client_identity(&mut self, identity: Option<ClientIdentity>) -> &mut Self {
+    self.prepared_identity = identity;
+    self.certificate = None;
+    self.sslkey = None;
+    self.key_password = None;
     self
   }
 
   pub fn build(&self) -> GpParams {
     GpParams {
+      prepared_identity: self.prepared_identity.clone(),
       os_profile: self.os_profile.clone(),
       ignore_tls_errors: self.ignore_tls_errors,
       certificate: self.certificate.clone(),
@@ -209,24 +264,64 @@ impl TryFrom<&GpParams> for Client {
   type Error = anyhow::Error;
 
   fn try_from(value: &GpParams) -> Result<Self, Self::Error> {
-    let mut builder = Client::builder()
-      .danger_accept_invalid_certs(value.ignore_tls_errors)
-      .user_agent(value.user_agent());
-
-    if let Some(cert) = value.certificate.as_deref() {
-      info!("Using client certificate authentication...");
-      let identity = create_identity(cert, value.sslkey.as_deref(), value.key_password.as_deref())?;
-      builder = builder.identity(identity);
-    }
-
-    let client = builder.build()?;
-    Ok(client)
+    Ok(value.client_builder()?.build()?)
   }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn path_identity_settings_replace_a_prepared_snapshot() {
+    let identity = ClientIdentity::load("tests/files/badssl.com-client.pem", None, Some("badssl.com")).unwrap();
+    let setters: [fn(&mut GpParamsBuilder); 3] = [
+      |builder| {
+        builder.certificate(Some("missing-replacement-certificate.pem".into()));
+      },
+      |builder| {
+        builder.sslkey(Some("replacement-key.pem".into()));
+      },
+      |builder| {
+        builder.key_password(Some("replacement-password".into()));
+      },
+    ];
+    for setter in setters {
+      let mut builder = GpParams::builder(profile(ClientOs::Linux));
+      builder.client_identity(Some(identity.clone()));
+      setter(&mut builder);
+      let params = builder.build();
+      assert!(
+        params.client_identity().is_none(),
+        "Path settings must not silently use the previous identity"
+      );
+      if params.certificate.is_some() {
+        assert!(
+          Client::try_from(&params).is_err(),
+          "The replacement certificate path must actually be loaded"
+        );
+      }
+    }
+  }
+
+  #[test]
+  fn prepared_identity_replaces_paths_and_can_be_explicitly_disabled() {
+    let identity = ClientIdentity::load("tests/files/badssl.com-client.pem", None, Some("badssl.com")).unwrap();
+    let mut builder = GpParams::builder(profile(ClientOs::Linux));
+    builder
+      .certificate(Some("missing-certificate.pem".into()))
+      .sslkey(Some("missing-key.pem".into()))
+      .key_password(Some("unused-password".into()))
+      .client_identity(Some(identity));
+    let params = builder.build();
+    assert!(params.client_identity().is_some());
+    assert!(params.certificate.is_none() && params.sslkey.is_none() && params.key_password.is_none());
+    assert!(Client::try_from(&params).is_ok());
+    builder.certificate(None);
+    let params = builder.build();
+    assert!(params.client_identity().is_none());
+    assert!(params.certificate.is_none());
+  }
   use crate::os_profile::runtime_client_os;
 
   fn profile(client_os: ClientOs) -> OsProfile {

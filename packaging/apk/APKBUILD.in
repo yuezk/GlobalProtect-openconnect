@@ -47,6 +47,7 @@ makedepends="
 	"
 source="$pkgname-$pkgver.tar.gz"
 builddir="$srcdir/$pkgname-$pkgver"
+install="$pkgname.post-deinstall"
 options="!check"
 
 build() {

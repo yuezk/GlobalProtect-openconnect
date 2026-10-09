@@ -19,7 +19,7 @@ Install build and runtime dependencies:
 ```sh
 sudo pkg install git rust libiconv gettext-tools autoconf automake libtool patch \
   gmake pkgconf libxml2 gnutls p11-kit nettle gmp gnome-keyring \
-  libayatana-appindicator polkit webkit2-gtk_41
+  libayatana-appindicator polkit webkit2-gtk_41 xdg-utils
 ```
 
 Build and install:
@@ -43,10 +43,15 @@ gpauth --version
 Install build and runtime dependencies:
 
 ```sh
-doas pkg_add git rust libiconv gettext-tools autoconf-2.72 automake-1.17 \
-  libtool patch gmake pkgconf libxml gnutls p11-kit nettle gmp \
-  gnome-keyring polkit webkitgtk41
+doas pkg_add -u -I
+doas pkg_add -I git rust libiconv gettext-tools autoconf%2.72 automake%1.17 \
+  libtool gmake libxml gnutls p11-kit gmp lz4 dbus \
+  gnome-keyring polkit webkitgtk41 xdg-utils
 ```
+
+OpenBSD provides `patch` and `pkg-config` in the base system. GnuTLS installs
+Nettle as a dependency. The separately built GUI uses a D-Bus StatusNotifier
+tray backend on OpenBSD and requires a desktop with StatusNotifier support.
 
 Use the installed Autoconf and Automake versions:
 

@@ -118,7 +118,7 @@ impl GatewayLoginContext {
     &self.name
   }
 
-  pub(crate) fn kind(&self) -> GatewayKind {
+  pub fn kind(&self) -> GatewayKind {
     self.kind
   }
 

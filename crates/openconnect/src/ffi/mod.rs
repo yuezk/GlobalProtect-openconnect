@@ -1,12 +1,19 @@
+mod hip;
 use crate::Vpn;
+use hip::HipGenerateFn;
+pub(crate) use hip::{
+  HipControlRaw, HipScriptRaw, collect_hip_script, collect_hip_source, generate_hip_report, script_environment,
+};
 use log::{debug, info, trace, warn};
 use std::ffi::{c_char, c_int, c_long, c_void};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 /// ConnectOptions struct for FFI, the field names and order must match the C definition.
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct ConnectOptions {
   pub user_data: *mut c_void,
+  pub on_hip_report_submitted: Option<extern "C" fn(*mut c_void, *const c_char, usize)>,
 
   pub server: *const c_char,
   pub cookie: *const c_char,
@@ -27,8 +34,8 @@ pub(crate) struct ConnectOptions {
   pub key_password: *const c_char,
   pub servercert: *const c_char,
 
-  pub csd_uid: u32,
-  pub csd_wrapper: *const c_char,
+  pub hip_script: HipScriptRaw,
+  pub generate_hip: Option<HipGenerateFn>,
 
   pub reconnect_timeout: u32,
   pub mtu: u32,
@@ -47,26 +54,56 @@ pub(crate) struct VpnSessionInfoRaw {
   pub user_expires: c_long,
   pub lifetime_warning_prior: c_int,
   pub lifetime_warning_message: *const c_char,
+  pub nlb_enabled: c_int,
+  pub nlb_connected_gw_ip: *const c_char,
 }
 
 #[link(name = "vpn")]
 unsafe extern "C" {
+  fn vpn_write_cancel(fd: c_int) -> c_int;
   #[link_name = "vpn_connect"]
   fn vpn_connect(
     options: *const ConnectOptions,
     callback: extern "C" fn(i32, *const VpnSessionInfoRaw, *mut c_void),
   ) -> c_int;
 
-  #[link_name = "vpn_disconnect"]
-  fn vpn_disconnect();
+}
+
+pub(crate) fn write_cancel(fd: i32) -> std::io::Result<()> {
+  let error = unsafe { vpn_write_cancel(fd) };
+  if error == 0 {
+    Ok(())
+  } else {
+    Err(std::io::Error::from_raw_os_error(error))
+  }
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn vpn_attach_command_pipe(vpn: *mut c_void, fd: c_int) -> c_int {
+  unsafe { &*(vpn as *const Vpn) }.attach_command_pipe(fd).into()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn vpn_detach_command_pipe(vpn: *mut c_void) {
+  unsafe { &*(vpn as *const Vpn) }.detach_command_pipe();
 }
 
 pub(crate) fn connect(options: &ConnectOptions) -> i32 {
   unsafe { vpn_connect(options, on_vpn_connected) }
 }
 
-pub(crate) fn disconnect() {
-  unsafe { vpn_disconnect() }
+#[unsafe(no_mangle)]
+pub(crate) extern "C" fn on_hip_report_submitted(vpn: *mut c_void, report: *const c_char, length: usize) {
+  let vpn = unsafe { &*(vpn as *const Vpn) };
+  if report.is_null() || length > 1024 * 1024 {
+    return;
+  }
+  let bytes = unsafe { std::slice::from_raw_parts(report.cast::<u8>(), length) };
+  if let Ok(report) = std::str::from_utf8(bytes) {
+    if catch_unwind(AssertUnwindSafe(|| vpn.on_hip_report_submitted(report))).is_err() {
+      warn!("HIP submission observer failed");
+    }
+  }
 }
 
 #[unsafe(no_mangle)]

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG ALPINE_VERSION=3.23
-ARG RUST_VERSION=1.89
+ARG RUST_VERSION=1.91
 
 FROM rust:${RUST_VERSION}-alpine AS builder
 
@@ -38,8 +38,7 @@ RUN RUSTFLAGS="-C target-feature=-crt-static" \
 
 RUN install -Dm755 target/release/gpclient /out/usr/bin/gpclient \
     && install -Dm755 target/release/gpauth /out/usr/bin/gpauth \
-    && install -Dm755 packaging/files/usr/libexec/gpclient/vpnc-script /out/usr/libexec/gpclient/vpnc-script \
-    && install -Dm755 packaging/files/usr/libexec/gpclient/hipreport.sh /out/usr/libexec/gpclient/hipreport.sh
+    && install -Dm755 packaging/files/usr/libexec/gpclient/vpnc-script /out/usr/libexec/gpclient/vpnc-script
 
 FROM alpine:${ALPINE_VERSION}
 

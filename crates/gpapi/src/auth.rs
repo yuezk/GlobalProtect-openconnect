@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, Cow};
+use std::{
+  borrow::{Borrow, Cow},
+  fmt,
+};
 
 use anyhow::bail;
 use log::{info, warn};
@@ -8,6 +11,25 @@ use serde::{Deserialize, Serialize};
 use crate::{error::AuthDataParseError, utils::base64::decode_to_string};
 
 pub type AuthDataParseResult = anyhow::Result<SamlAuthData, AuthDataParseError>;
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum AuthWindowTheme {
+  #[default]
+  System,
+  Light,
+  Dark,
+}
+
+impl AuthWindowTheme {
+  pub fn as_str(self) -> &'static str {
+    match self {
+      Self::System => "system",
+      Self::Light => "light",
+      Self::Dark => "dark",
+    }
+  }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -25,13 +47,26 @@ pub struct SamlAuthData {
 #[serde(rename_all = "camelCase")]
 pub enum SamlAuthResult {
   Success(SamlAuthData),
+  Cancelled,
   Failure(String),
 }
+
+#[derive(Debug)]
+pub struct AuthenticationCancelled;
+
+impl fmt::Display for AuthenticationCancelled {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str("Authentication cancelled")
+  }
+}
+
+impl std::error::Error for AuthenticationCancelled {}
 
 impl SamlAuthResult {
   pub fn is_success(&self) -> bool {
     match self {
       SamlAuthResult::Success(_) => true,
+      SamlAuthResult::Cancelled => false,
       SamlAuthResult::Failure(_) => false,
     }
   }
@@ -39,6 +74,7 @@ impl SamlAuthResult {
   pub fn host_id(&self) -> Option<&str> {
     match self {
       SamlAuthResult::Success(auth_data) => auth_data.host_id(),
+      SamlAuthResult::Cancelled => None,
       SamlAuthResult::Failure(_) => None,
     }
   }
@@ -118,7 +154,6 @@ impl SamlAuthData {
 
       let auth_data: SamlAuthData = serde_urlencoded::from_str(auth_data.borrow()).map_err(|e| {
         warn!("Failed to parse token auth data: {}", e);
-        warn!("Auth data: {}", auth_data);
         AuthDataParseError::Invalid(anyhow::anyhow!(e))
       })?;
 
@@ -127,7 +162,7 @@ impl SamlAuthData {
     }
 
     let auth_data = decode_to_string(auth_data).map_err(|e| {
-      warn!("Failed to decode SAML auth data: {}, data: {}", e, data);
+      warn!("Failed to decode SAML auth data: {}", e);
       AuthDataParseError::Invalid(anyhow::anyhow!(e))
     })?;
     let auth_data = Self::from_html(&auth_data)?;
@@ -245,5 +280,16 @@ mod tests {
 
     let value = serde_json::to_value(result).unwrap();
     assert!(value["success"].get("hostId").is_none());
+  }
+
+  #[test]
+  fn auth_result_cancelled_is_structured() {
+    let value = serde_json::to_value(SamlAuthResult::Cancelled).unwrap();
+
+    assert_eq!(value, "cancelled");
+
+    let result: SamlAuthResult = serde_json::from_value(value).unwrap();
+    assert!(!result.is_success());
+    assert_eq!(result.host_id(), None);
   }
 }

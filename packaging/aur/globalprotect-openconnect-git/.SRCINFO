@@ -28,6 +28,7 @@ pkgbase = globalprotect-openconnect-git
 	depends = libxml2
 	depends = shared-mime-info
 	depends = desktop-file-utils
+	depends = xdg-utils
 	optdepends = wmctrl: for window management
 	provides = globalprotect-openconnect
 	provides = gpclient

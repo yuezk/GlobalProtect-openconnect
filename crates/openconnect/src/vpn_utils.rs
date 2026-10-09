@@ -19,21 +19,6 @@ const VPNC_SCRIPT_LOCATIONS: &[&str] = &[
   "/usr/local/etc/vpnc/vpnc-script",
 ];
 
-const CSD_WRAPPER_LOCATIONS: &[&str] = &[
-  "/usr/local/libexec/gpclient/hipreport.sh",
-  "/usr/libexec/gpclient/hipreport.sh",
-  #[cfg(target_arch = "x86_64")]
-  "/usr/lib/x86_64-linux-gnu/openconnect/hipreport.sh",
-  #[cfg(target_arch = "aarch64")]
-  "/usr/lib/aarch64-linux-gnu/openconnect/hipreport.sh",
-  "/usr/lib/openconnect/hipreport.sh",
-  "/usr/libexec/openconnect/hipreport.sh",
-  #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-  "/opt/homebrew/opt/openconnect/libexec/openconnect/hipreport.sh",
-  #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-  "/usr/local/opt/openconnect/libexec/openconnect/hipreport.sh",
-];
-
 fn find_executable(locations: &[&'static str]) -> Option<&'static str> {
   for location in locations.iter() {
     let path = Path::new(location);
@@ -45,12 +30,18 @@ fn find_executable(locations: &[&'static str]) -> Option<&'static str> {
   None
 }
 
-pub fn find_vpnc_script() -> Option<&'static str> {
-  find_executable(VPNC_SCRIPT_LOCATIONS)
+pub fn find_vpnc_script() -> Option<String> {
+  if let Some(path) = std::env::var_os("GP_VPNC_SCRIPT").filter(|path| !path.is_empty()) {
+    return configured_script(Path::new(&path));
+  }
+  find_executable(VPNC_SCRIPT_LOCATIONS).map(str::to_owned)
 }
 
-pub fn find_csd_wrapper() -> Option<&'static str> {
-  find_executable(CSD_WRAPPER_LOCATIONS)
+fn configured_script(path: &Path) -> Option<String> {
+  if path.is_absolute() && path.is_file() && path.is_executable() {
+    return path.to_str().map(str::to_owned);
+  }
+  None
 }
 
 /// If file exists, check if it is executable
@@ -65,4 +56,18 @@ pub fn check_executable(file: &str) -> Result<(), io::Error> {
   }
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn configured_script_requires_an_absolute_executable_path() {
+    assert_eq!(configured_script(Path::new("/bin/sh")), Some("/bin/sh".to_owned()));
+    assert!(configured_script(Path::new("bin/sh")).is_none());
+    assert!(configured_script(Path::new("/missing-openconnect-vpnc-script")).is_none());
+    assert!(configured_script(Path::new("/etc/passwd")).is_none());
+    assert!(configured_script(Path::new("/tmp")).is_none());
+  }
 }

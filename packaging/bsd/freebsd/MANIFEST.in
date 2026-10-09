@@ -47,6 +47,10 @@ deps: {
     origin: "www/webkit2-gtk"
     version: "*"
   }
+  "xdg-utils": {
+    origin: "devel/xdg-utils"
+    version: "*"
+  }
 }
 desc: <<EOD
 A GlobalProtect VPN client based on OpenConnect.

@@ -24,7 +24,8 @@ permissions:
   contents: read
 
 jobs:
-  aur:
+  validate:
+    name: Validate AUR package
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     defaults:
@@ -32,7 +33,6 @@ jobs:
         shell: bash
     env:
       AUR_PACKAGE_DIR: packaging/aur/globalprotect-openconnect-git
-      AUR_REPO: ssh://aur@aur.archlinux.org/globalprotect-openconnect-git.git
     steps:
       - name: Install checkout tools
         run: pacman -Syu --noconfirm --needed git openssh
@@ -102,8 +102,42 @@ jobs:
           cd "$AUR_PACKAGE_DIR"
           runuser -u builder -- makepkg --noconfirm --clean --cleanbuild
 
-      - name: Configure SSH
+      - name: Upload AUR package metadata
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: aur-package-metadata
+          path: |
+            ${{ env.AUR_PACKAGE_DIR }}/PKGBUILD
+            ${{ env.AUR_PACKAGE_DIR }}/.SRCINFO
+            ${{ env.AUR_PACKAGE_DIR }}/gp.install
+          if-no-files-found: error
+          include-hidden-files: true
+          overwrite: true
+
+  publish:
+    name: Publish to AUR
+    needs: validate
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    defaults:
+      run:
+        shell: bash
+    env:
+      AUR_PACKAGE_DIR: /tmp/aur-package
+      AUR_REPO: ssh://aur@aur.archlinux.org/globalprotect-openconnect-git.git
+    steps:
+      - name: Install publish tools
+        run: pacman -Syu --noconfirm --needed git openssh
+
+      - name: Download AUR package metadata
+        uses: actions/download-artifact@v8
+        with:
+          name: aur-package-metadata
+          path: ${{ env.AUR_PACKAGE_DIR }}
+
+      - name: Configure SSH
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
@@ -118,7 +152,6 @@ jobs:
           ssh-keyscan -t rsa,ecdsa,ed25519 aur.archlinux.org > ~/.ssh/known_hosts
 
       - name: Publish to AUR
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
         env:
           GIT_SSH_COMMAND: ssh -i /github/home/.ssh/aur -o UserKnownHostsFile=/github/home/.ssh/known_hosts -o StrictHostKeyChecking=yes
         run: |

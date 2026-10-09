@@ -28,16 +28,17 @@ BuildRequires:  wget
 BuildRequires:  file
 BuildRequires:  perl
 
-%if 0%{?suse_version}
-BuildRequires:  webkit2gtk3-devel
-%else
-BuildRequires:  webkit2gtk4.1-devel
-%endif
+BuildRequires:  pkgconfig(webkit2gtk-4.1)
+BuildRequires:  (pkgconfig(appindicator3-0.1) or pkgconfig(ayatana-appindicator3-0.1))
 
-BuildRequires:  (libappindicator-gtk3-devel or libappindicator3-1)
 BuildRequires:  (librsvg2-devel or librsvg-devel)
 
-Requires:       (libappindicator-gtk3 or libayatana-appindicator)
+%if 0%{?suse_version}
+Requires:       (libappindicator3-1 or libayatana-appindicator3-1)
+%else
+Requires:       (libappindicator-gtk3 or libayatana-appindicator-gtk3)
+%endif
+Requires:       xdg-utils
 Conflicts:      globalprotect-openconnect-snapshot
 
 %global debug_package %{nil}
@@ -49,7 +50,15 @@ A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authenticati
 %setup
 
 %postun
-rm -f %{_bindir}/gpgui
+if [ "$1" -eq 0 ]; then
+    rm -f \
+        /var/lib/gpclient/gpgui \
+        /var/lib/gpclient/scripts/vpnc-script \
+        /var/lib/gpclient/scripts/vpnc-script.metadata ||
+        echo "Warning: failed to remove gpclient runtime files" >&2
+    rmdir /var/lib/gpclient/scripts 2>/dev/null || :
+    rmdir /var/lib/gpclient 2>/dev/null || :
+fi
 
 %build
 # The injected RUSTFLAGS could fail the build
@@ -63,12 +72,20 @@ make build
 %defattr(-,root,root)
 %{_bindir}/*
 %{_libexecdir}/gpclient/vpnc-script
-%{_libexecdir}/gpclient/hipreport.sh
+%{_libexecdir}/gpclient/gp-hip-script-installer
+%{_libexecdir}/gpclient/gp-vpnc-script-installer
 %{_datadir}/applications/gpgui.desktop
 %{_datadir}/icons/hicolor/32x32/apps/gpgui.png
 %{_datadir}/icons/hicolor/128x128/apps/gpgui.png
+%{_datadir}/icons/hicolor/256x256/apps/gpgui.png
 %{_datadir}/icons/hicolor/256x256@2/apps/gpgui.png
 %{_datadir}/icons/hicolor/scalable/apps/gpgui.svg
+%{_datadir}/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
+%{_datadir}/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
+%{_datadir}/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
+%{_datadir}/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
+%{_datadir}/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
+%{_datadir}/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
 %{_datadir}/polkit-1/actions/com.yuezk.gpgui.policy
 
 %dir /usr/lib/NetworkManager
@@ -85,10 +102,13 @@ make build
 %dir %{_datadir}/icons/hicolor/32x32/apps
 %dir %{_datadir}/icons/hicolor/128x128
 %dir %{_datadir}/icons/hicolor/128x128/apps
+%dir %{_datadir}/icons/hicolor/256x256
+%dir %{_datadir}/icons/hicolor/256x256/apps
 %dir %{_datadir}/icons/hicolor/256x256@2
 %dir %{_datadir}/icons/hicolor/256x256@2/apps
 %dir %{_datadir}/icons/hicolor/scalable
 %dir %{_datadir}/icons/hicolor/scalable/apps
+%dir %{_datadir}/icons/hicolor/scalable/status
 %dir %{_datadir}/polkit-1
 %dir %{_datadir}/polkit-1/actions
 

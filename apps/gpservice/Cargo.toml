@@ -7,6 +7,9 @@ license.workspace = true
 [dependencies]
 common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap", "logger"] }
+gphip = { path = "../../crates/gphip" }
+base64.workspace = true
+sha256.workspace = true
 openconnect = { path = "../../crates/openconnect" }
 clap.workspace = true
 anyhow.workspace = true
@@ -21,3 +24,16 @@ log.workspace = true
 compile-time.workspace = true
 xz2 = "0.1"
 tar = "0.4"
+thiserror.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+zeroize.workspace = true
+tempfile.workspace = true
+getrandom = "0.4"
+mac_address = "1"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["fs", "socket", "user"] }
+
+[dev-dependencies]
+openssl.workspace = true
+tokio-tungstenite = "0.29"

@@ -1,0 +1,80 @@
+name: Publish COPR
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish'
+        required: true
+      revision:
+        description: 'Package revision'
+        type: string
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  publish-copr:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+    - name: Install tools
+      run: dnf install -y copr-cli gh
+
+    - name: Check inputs
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ inputs.tag }}
+        REVISION: ${{ inputs.revision }}
+      run: |
+        if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
+          echo "Revision must be a positive integer" >&2
+          exit 1
+        fi
+
+        gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" >/dev/null
+
+    - name: Download published spec
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        mkdir -p publish-copr
+
+        gh release download "$TAG" \
+          --repo "${{ github.repository }}" \
+          --pattern globalprotect-openconnect.spec \
+          --dir publish-copr
+
+    - name: Set package revision
+      env:
+        REVISION: ${{ inputs.revision }}
+      run: |
+        spec=publish-copr/globalprotect-openconnect.spec
+
+        if [[ "$(grep -c '^Release:' "$spec")" -ne 1 ]]; then
+          echo "Expected exactly one Release field in $spec" >&2
+          exit 1
+        fi
+
+        sed -Ei \
+          "s/^Release:[[:space:]]+.*/Release:        ${REVISION}%{?dist}/" \
+          "$spec"
+
+        grep '^Release:' "$spec"
+
+    - name: Configure COPR authentication
+      env:
+        COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
+      run: |
+        install -d -m 700 "$HOME/.config"
+        printf '%s\n' "$COPR_CONFIG" > "$HOME/.config/copr"
+        chmod 600 "$HOME/.config/copr"
+
+    - name: Build and publish COPR package
+      run: |
+        copr-cli build \
+          yuezk/globalprotect-openconnect \
+          publish-copr/globalprotect-openconnect.spec
