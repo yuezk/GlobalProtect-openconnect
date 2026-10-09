@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.0.0
+
+### Added
+
+- GP Connect for Apple silicon Macs running macOS 13 or later.
+- Support for internal gateways that authenticate your device without creating a VPN tunnel.
+- More control over device compliance reports (HIP), including generated reports and custom scripts.
+- Desktop update notifications, with in-app updates on macOS and links to new releases on Linux and BSD.
+- JSON log output for CLI integrations and automation.
+
+### Changed
+
+- Refreshed the desktop connection view, gateway selection, and session details.
+- Improved browser sign-in, including opening your normal user's browser when the CLI runs with elevated privileges.
+- Improved session expiry warnings and session extension when allowed by your VPN administrator.
+- Updated license activation and recovery. Start the seven-day desktop trial by verifying your email address in the app.
+
+### Fixed
+
+- Improved cancellation, disconnect, and cached sign-in handling.
+- Improved desktop window and tray behavior across macOS, Linux, FreeBSD, and OpenBSD.
+- Improved package installation and desktop integration on Linux and BSD.
+
 ## 2.6.5
 
 ### Fixed

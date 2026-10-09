@@ -1,21 +1,24 @@
 use std::{
   ffi::{CStr, CString, c_char},
-  fmt,
-  sync::{Arc, RwLock},
+  fmt, io,
+  sync::{Arc, Mutex, RwLock},
 };
 
-use log::info;
+use log::{info, warn};
 
-use crate::ffi;
-use crate::vpn_utils::{check_executable, find_csd_wrapper, find_vpnc_script};
+use crate::vpn_utils::{check_executable, find_vpnc_script};
+use crate::{HipSource, ffi};
 
 type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce(VpnSessionInfo) + 'static + Send + Sync>>>>;
+type OnHipReportCallback = RwLock<Option<Arc<dyn Fn(&str) + Send + Sync>>>;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VpnSessionInfo {
   pub lifetime_secs: Option<u32>,
   pub user_expires: Option<u32>,
   pub lifetime_warning: Option<VpnSessionWarning>,
+  pub nlb_enabled: bool,
+  pub nlb_connected_gw_ip: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +44,8 @@ pub(crate) fn session_info_from_raw(raw: *const ffi::VpnSessionInfoRaw) -> VpnSe
       (Some(prior_secs), Some(message)) => Some(VpnSessionWarning { prior_secs, message }),
       _ => None,
     },
+    nlb_enabled: raw.nlb_enabled != 0,
+    nlb_connected_gw_ip: unsafe { optional_c_string(raw.nlb_connected_gw_ip) },
   }
 }
 
@@ -56,7 +61,45 @@ fn positive_i64_to_u32(value: i64) -> Option<u32> {
   u32::try_from(value).ok().filter(|value| *value > 0)
 }
 
+// The descriptor is borrowed only between attach and detach. Serialize writes
+// against teardown and retain cancellation before the pipe exists.
+#[derive(Default)]
+struct Cancellation {
+  state: Mutex<CancellationState>,
+}
+
+#[derive(Default)]
+struct CancellationState {
+  requested: bool,
+  command_fd: Option<i32>,
+}
+
+impl Cancellation {
+  fn attach(&self, fd: i32) -> bool {
+    let mut state = self.state.lock().unwrap();
+    state.command_fd = Some(fd);
+    state.requested
+  }
+
+  fn detach(&self) {
+    self.state.lock().unwrap().command_fd = None;
+  }
+
+  fn cancel(&self) -> io::Result<()> {
+    let mut state = self.state.lock().unwrap();
+    if state.requested {
+      return Ok(());
+    }
+    state.requested = true;
+    if let Some(fd) = state.command_fd {
+      ffi::write_cancel(fd)?;
+    }
+    Ok(())
+  }
+}
+
 pub struct Vpn {
+  cancellation: Cancellation,
   server: CString,
   cookie: CString,
 
@@ -76,8 +119,7 @@ pub struct Vpn {
   key_password: Option<CString>,
   servercert: Option<CString>,
 
-  csd_uid: u32,
-  csd_wrapper: Option<CString>,
+  pub(crate) hip_source: Arc<HipSource>,
 
   reconnect_timeout: u32,
   mtu: u32,
@@ -88,6 +130,7 @@ pub struct Vpn {
   no_xmlpost: bool,
 
   callback: OnConnectedCallback,
+  hip_report_callback: OnHipReportCallback,
 }
 
 impl Vpn {
@@ -96,10 +139,45 @@ impl Vpn {
   }
 
   pub fn connect(&self, on_connected: impl FnOnce(VpnSessionInfo) + 'static + Send + Sync) -> i32 {
+    match self.hip_source.as_ref() {
+      HipSource::Disabled => info!("HIP reporting: disabled"),
+      HipSource::Generator(_) => info!("HIP reporting: enabled, source=callback"),
+      HipSource::Script(script) => {
+        #[cfg(unix)]
+        {
+          let uid = script.user.unwrap_or_else(|| unsafe { libc::geteuid() });
+          info!("HIP reporting: enabled, source=script, uid={uid}");
+        }
+        #[cfg(not(unix))]
+        match script.user {
+          Some(uid) => info!("HIP reporting: enabled, source=script, uid={uid}"),
+          None => info!("HIP reporting: enabled, source=script, user=process-user"),
+        }
+      }
+    }
     self.callback.write().unwrap().replace(Box::new(on_connected));
-    let options = self.build_connect_options();
-
+    let mut options = self.build_connect_options();
+    let environment = match self.hip_source.as_ref() {
+      HipSource::Script(script) => ffi::script_environment(script),
+      _ => Vec::new(),
+    };
+    if !environment.is_empty() {
+      options.hip_script.environment = environment.as_ptr();
+    }
     ffi::connect(&options)
+  }
+
+  /// Receives a borrowed report after the gateway accepts its HIP submission.
+  /// The callback must copy the XML if it needs to retain it.
+  pub fn set_hip_report_callback(&self, callback: impl Fn(&str) + Send + Sync + 'static) {
+    *self.hip_report_callback.write().unwrap() = Some(Arc::new(callback));
+  }
+
+  pub(crate) fn on_hip_report_submitted(&self, report: &str) {
+    let callback = self.hip_report_callback.read().unwrap().clone();
+    if let Some(callback) = callback {
+      callback(report);
+    }
   }
 
   pub(crate) fn on_connected(&self, pipe_fd: i32, session_info: VpnSessionInfo) {
@@ -110,13 +188,24 @@ impl Vpn {
     }
   }
 
+  pub(crate) fn attach_command_pipe(&self, fd: i32) -> bool {
+    self.cancellation.attach(fd)
+  }
+
+  pub(crate) fn detach_command_pipe(&self) {
+    self.cancellation.detach();
+  }
+
   pub fn disconnect(&self) {
-    ffi::disconnect();
+    if let Err(error) = self.cancellation.cancel() {
+      warn!("Failed to signal VPN cancellation: {error}");
+    }
   }
 
   fn build_connect_options(&self) -> ffi::ConnectOptions {
     ffi::ConnectOptions {
       user_data: self as *const _ as *mut _,
+      on_hip_report_submitted: Some(ffi::on_hip_report_submitted),
 
       server: self.server.as_ptr(),
       cookie: self.cookie.as_ptr(),
@@ -137,8 +226,14 @@ impl Vpn {
       key_password: Self::option_to_ptr(&self.key_password),
       servercert: Self::option_to_ptr(&self.servercert),
 
-      csd_uid: self.csd_uid,
-      csd_wrapper: Self::option_to_ptr(&self.csd_wrapper),
+      hip_script: match self.hip_source.as_ref() {
+        HipSource::Script(script) => ffi::HipScriptRaw::from_script(script),
+        _ => Default::default(),
+      },
+      generate_hip: match self.hip_source.as_ref() {
+        HipSource::Generator(_) => Some(ffi::generate_hip_report),
+        _ => None,
+      },
 
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
@@ -180,6 +275,7 @@ pub struct VpnBuilder {
   server: String,
   cookie: String,
   script: Option<String>,
+  script_is_path: bool,
   interface: Option<String>,
   script_tun: bool,
 
@@ -194,9 +290,7 @@ pub struct VpnBuilder {
   sslkey: Option<String>,
   key_password: Option<String>,
 
-  hip: bool,
-  csd_uid: u32,
-  csd_wrapper: Option<String>,
+  hip_source: Arc<HipSource>,
 
   reconnect_timeout: u32,
   mtu: u32,
@@ -213,6 +307,7 @@ impl VpnBuilder {
       server: server.to_string(),
       cookie: cookie.to_string(),
       script: None,
+      script_is_path: false,
       interface: None,
       script_tun: false,
 
@@ -227,9 +322,7 @@ impl VpnBuilder {
       sslkey: None,
       key_password: None,
 
-      hip: false,
-      csd_uid: 0,
-      csd_wrapper: None,
+      hip_source: Arc::new(HipSource::Disabled),
 
       reconnect_timeout: 300,
       mtu: 0,
@@ -242,6 +335,13 @@ impl VpnBuilder {
 
   pub fn script<T: Into<Option<String>>>(mut self, script: T) -> Self {
     self.script = script.into();
+    self.script_is_path = false;
+    self
+  }
+
+  pub fn script_path<T: Into<Option<String>>>(mut self, script: T) -> Self {
+    self.script = script.into();
+    self.script_is_path = true;
     self
   }
 
@@ -300,18 +400,8 @@ impl VpnBuilder {
     self
   }
 
-  pub fn hip(mut self, hip: bool) -> Self {
-    self.hip = hip;
-    self
-  }
-
-  pub fn csd_uid(mut self, csd_uid: u32) -> Self {
-    self.csd_uid = csd_uid;
-    self
-  }
-
-  pub fn csd_wrapper<T: Into<Option<String>>>(mut self, csd_wrapper: T) -> Self {
-    self.csd_wrapper = csd_wrapper.into();
+  pub fn hip_source(mut self, hip_source: impl Into<Arc<HipSource>>) -> Self {
+    self.hip_source = hip_source.into();
     self
   }
 
@@ -345,41 +435,32 @@ impl VpnBuilder {
     self
   }
 
-  fn determine_script(&self) -> Result<&str, VpnError> {
+  fn determine_script(&self) -> Result<String, VpnError> {
     match &self.script {
       Some(script) => {
+        if self.script_is_path && !std::path::Path::new(script).exists() {
+          return Err(VpnError::new(format!("VPN script does not exist: {script}")));
+        }
         check_executable(script).map_err(|e| VpnError::new(e.to_string()))?;
-        Ok(script)
+        Ok(script.clone())
       }
       None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script"))),
     }
   }
 
-  fn determine_csd_wrapper(&self) -> Result<Option<&str>, VpnError> {
-    if !self.hip {
-      return Ok(None);
-    }
-
-    match &self.csd_wrapper {
-      Some(csd_wrapper) if !csd_wrapper.is_empty() => {
-        check_executable(csd_wrapper).map_err(|e| VpnError::new(e.to_string()))?;
-        Ok(Some(csd_wrapper))
-      }
-      _ => {
-        let s = find_csd_wrapper().ok_or_else(|| VpnError::new(String::from("Failed to find csd wrapper")))?;
-        Ok(Some(s))
-      }
-    }
-  }
-
   pub fn build(self) -> Result<Vpn, VpnError> {
-    let script = self.determine_script()?.to_owned();
-    let csd_wrapper = self.determine_csd_wrapper()?.map(|s| s.to_owned());
+    let script = self.determine_script()?;
+    let script = if self.script_is_path || self.script.is_none() {
+      shell_quote_path(&script)
+    } else {
+      script
+    };
 
     let user_agent = self.user_agent.unwrap_or_default();
     let os = self.os.unwrap_or("linux".to_string());
 
     Ok(Vpn {
+      cancellation: Cancellation::default(),
       server: Self::to_cstring(&self.server),
       cookie: Self::to_cstring(&self.cookie),
 
@@ -399,8 +480,7 @@ impl VpnBuilder {
       key_password: self.key_password.as_deref().map(Self::to_cstring),
       servercert: None,
 
-      csd_uid: self.csd_uid,
-      csd_wrapper: csd_wrapper.as_deref().map(Self::to_cstring),
+      hip_source: self.hip_source,
 
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
@@ -410,6 +490,7 @@ impl VpnBuilder {
       no_xmlpost: self.no_xmlpost,
 
       callback: Default::default(),
+      hip_report_callback: Default::default(),
     })
   }
 
@@ -418,20 +499,57 @@ impl VpnBuilder {
   }
 }
 
+fn shell_quote_path(path: &str) -> String {
+  format!("'{}'", path.replace('\'', "'\\''"))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
   use std::ffi::CString;
 
   #[test]
+  fn quotes_vpnc_script_path_for_the_shell() {
+    assert_eq!(
+      shell_quote_path("/Applications/GP Connect.app/Contents/Helpers/vpnc-script"),
+      "'/Applications/GP Connect.app/Contents/Helpers/vpnc-script'"
+    );
+    assert_eq!(shell_quote_path("/tmp/user's script"), "'/tmp/user'\\''s script'");
+  }
+
+  #[test]
+  fn preserves_vpnc_script_commands() {
+    let command = "\"/tmp/script with spaces\" --option";
+    let vpn = Vpn::builder("vpn.example.com", "cookie")
+      .script(command.to_string())
+      .build()
+      .unwrap();
+
+    assert_eq!(vpn.script.to_str().unwrap(), command);
+  }
+
+  #[test]
+  fn quotes_explicit_vpnc_script_paths() {
+    let vpn = Vpn::builder("vpn.example.com", "cookie")
+      .script_path("/bin/sh".to_string())
+      .build()
+      .unwrap();
+
+    assert_eq!(vpn.script.to_str().unwrap(), "'/bin/sh'");
+  }
+
+  #[test]
   fn maps_session_info_from_callback_payload() {
     let message = CString::new("Session expires soon").unwrap();
+    let connected_gw = CString::new("10.1.2.3").unwrap();
     let raw = ffi::VpnSessionInfoRaw {
       auth_expiration: 0,
       lifetime_secs: 43_200,
       user_expires: 1_776_828_409,
       lifetime_warning_prior: 1_800,
       lifetime_warning_message: message.as_ptr(),
+      nlb_enabled: 1,
+      nlb_connected_gw_ip: connected_gw.as_ptr(),
     };
 
     let info = session_info_from_raw(&raw);
@@ -445,6 +563,8 @@ mod tests {
         message: "Session expires soon".to_string(),
       })
     );
+    assert!(info.nlb_enabled);
+    assert_eq!(info.nlb_connected_gw_ip.as_deref(), Some("10.1.2.3"));
   }
 
   #[test]
@@ -455,6 +575,8 @@ mod tests {
       user_expires: 0,
       lifetime_warning_prior: 0,
       lifetime_warning_message: std::ptr::null(),
+      nlb_enabled: 0,
+      nlb_connected_gw_ip: std::ptr::null(),
     };
 
     let info = session_info_from_raw(&raw);
@@ -467,6 +589,7 @@ mod tests {
   #[test]
   fn connect_options_include_host_id() {
     let vpn = Vpn {
+      cancellation: Cancellation::default(),
       server: CString::new("gateway.example.com").unwrap(),
       cookie: CString::new("cookie").unwrap(),
       user_agent: CString::new("agent").unwrap(),
@@ -482,8 +605,7 @@ mod tests {
       sslkey: None,
       key_password: None,
       servercert: None,
-      csd_uid: 0,
-      csd_wrapper: None,
+      hip_source: Arc::new(HipSource::Disabled),
       reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,
@@ -491,11 +613,203 @@ mod tests {
       dpd_interval: 0,
       no_xmlpost: false,
       callback: Default::default(),
+      hip_report_callback: Default::default(),
     };
 
     let options = vpn.build_connect_options();
 
     let host_id = unsafe { CStr::from_ptr(options.host_id) }.to_str().unwrap();
     assert_eq!(host_id, "profile-host-id");
+  }
+
+  #[test]
+  fn hip_report_callback_copies_only_bounded_utf8() {
+    let vpn = Vpn::builder("vpn.example.com", "cookie")
+      .script_path("/bin/sh".to_string())
+      .build()
+      .unwrap();
+    let reports = Arc::new(Mutex::new(Vec::new()));
+    let received = Arc::clone(&reports);
+    vpn.set_hip_report_callback(move |report| received.lock().unwrap().push(report.to_owned()));
+
+    let options = vpn.build_connect_options();
+    let callback = options.on_hip_report_submitted.unwrap();
+    callback(options.user_data, b"<report/>".as_ptr().cast(), 9);
+    callback(options.user_data, b"\xff".as_ptr().cast(), 1);
+    callback(options.user_data, b"x".as_ptr().cast(), 1024 * 1024 + 1);
+
+    assert_eq!(*reports.lock().unwrap(), ["<report/>"]);
+  }
+
+  #[test]
+  fn disconnect_before_connect_is_retained_without_contacting_server() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let vpn = Vpn::builder(&format!("https://{}", listener.local_addr().unwrap()), "test-cookie")
+      .script_path("/bin/sh".to_string())
+      .build()
+      .unwrap();
+    vpn.disconnect();
+    vpn.disconnect();
+    assert_ne!(vpn.connect(|_| panic!("Canceled attempt connected")), 0);
+    assert_eq!(listener.accept().unwrap_err().kind(), io::ErrorKind::WouldBlock);
+  }
+
+  #[test]
+  fn command_pipe_failure_preserves_stdin() {
+    use std::{
+      ffi::{c_int, c_void},
+      fs::File,
+      os::fd::AsFd,
+      process::{Command, Stdio},
+    };
+
+    const CHILD: &str = "OPENCONNECT_TEST_PIPE_FAILURE";
+    if std::env::var_os(CHILD).is_none() {
+      // Limit descriptors only in a subprocess, leaving the test runner untouched.
+      let output = Command::new("sh")
+        .args([
+          "-c",
+          "ulimit -n 64 && exec \"$1\" --exact vpn::tests::command_pipe_failure_preserves_stdin --nocapture",
+          "sh",
+        ])
+        .arg(std::env::current_exe().unwrap())
+        .env(CHILD, "1")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+      assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+      );
+      return;
+    }
+
+    unsafe extern "C" {
+      fn openconnect_vpninfo_new(
+        agent: *const c_char,
+        validate: Option<unsafe extern "C" fn(*mut c_void, *const c_char) -> c_int>,
+        config: Option<unsafe extern "C" fn(*mut c_void, *const c_char, c_int) -> c_int>,
+        auth: Option<unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_int>,
+        progress: Option<unsafe extern "C" fn(*mut c_void, c_int, *const c_char, ...)>,
+        data: *mut c_void,
+      ) -> *mut c_void;
+      fn openconnect_setup_cmd_pipe(info: *mut c_void) -> c_int;
+      fn openconnect_vpninfo_free(info: *mut c_void);
+    }
+    // Construct first so resource exhaustion targets pipe creation specifically.
+    let info = unsafe { openconnect_vpninfo_new(c"test".as_ptr(), None, None, None, None, std::ptr::null_mut()) };
+    assert!(!info.is_null());
+    let mut descriptors = Vec::new();
+    loop {
+      match File::open("/dev/null") {
+        Ok(file) => descriptors.push(file),
+        Err(error) => {
+          assert_eq!(error.raw_os_error(), Some(24)); // EMFILE on supported Unix platforms.
+          break;
+        }
+      }
+    }
+    assert!(unsafe { openconnect_setup_cmd_pipe(info) } < 0);
+    unsafe { openconnect_vpninfo_free(info) };
+    // Constructor resource acquisition may also fail before selecting a protocol.
+    let info = unsafe { openconnect_vpninfo_new(c"test".as_ptr(), None, None, None, None, std::ptr::null_mut()) };
+    if !info.is_null() {
+      unsafe { openconnect_vpninfo_free(info) };
+    }
+    drop(descriptors);
+    std::io::stdin()
+      .as_fd()
+      .try_clone_to_owned()
+      .expect("Cleanup closed stdin");
+  }
+
+  #[test]
+  fn disconnect_interrupts_in_progress_tls_and_cannot_cancel_another_attempt() {
+    use std::{io::Read, sync::mpsc, thread, time::Duration};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let vpn = Arc::new(
+      Vpn::builder(&format!("https://{}", listener.local_addr().unwrap()), "test-cookie")
+        .script_path("/bin/sh".to_string())
+        .build()
+        .unwrap(),
+    );
+    let (tx, rx) = mpsc::channel();
+    let worker_vpn = vpn.clone();
+    let worker = thread::spawn(move || {
+      tx.send(worker_vpn.connect(|_| panic!("Test peer never completes TLS")))
+        .unwrap();
+    });
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let peer = loop {
+      match listener.accept() {
+        Ok((peer, _)) => break peer,
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock && std::time::Instant::now() < deadline => {
+          thread::sleep(Duration::from_millis(5));
+        }
+        other => {
+          vpn.disconnect();
+          worker.join().unwrap();
+          panic!("Connection did not reach test peer: {other:?}");
+        }
+      }
+    };
+    vpn.disconnect();
+    let result = rx.recv_timeout(Duration::from_secs(2));
+    drop(peer); // Release the peer even if cancellation regresses.
+    worker.join().unwrap();
+    assert_ne!(result.expect("Cancellation did not interrupt TLS"), 0);
+    use std::os::{fd::AsRawFd, unix::net::UnixStream};
+    let next = Cancellation::default();
+    let (mut reader, writer) = UnixStream::pair().unwrap();
+    reader.set_nonblocking(true).unwrap();
+    assert!(!next.attach(writer.as_raw_fd()));
+    vpn.disconnect(); // A late stop of the old attempt cannot affect the new one.
+    assert_eq!(reader.read(&mut [0]).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    next.detach();
+  }
+
+  #[test]
+  fn cancellation_racing_pipe_attachment_is_never_lost() {
+    use std::{
+      io::Read,
+      os::{fd::AsRawFd, unix::net::UnixStream},
+      thread,
+    };
+    for _ in 0..100 {
+      let cancellation = Cancellation::default();
+      let (mut reader, writer) = UnixStream::pair().unwrap();
+      reader.set_nonblocking(true).unwrap();
+      let pending = thread::scope(|scope| {
+        let cancel = scope.spawn(|| cancellation.cancel().unwrap());
+        let pending = cancellation.attach(writer.as_raw_fd());
+        cancel.join().unwrap();
+        pending
+      });
+      if !pending {
+        let mut command = [0];
+        assert_eq!(reader.read(&mut command).unwrap(), 1);
+        assert_eq!(command[0], b'x');
+      }
+      cancellation.detach();
+    }
+  }
+
+  #[test]
+  fn disconnect_after_detach_never_writes_to_the_old_descriptor() {
+    use std::{
+      io::Read,
+      os::{fd::AsRawFd, unix::net::UnixStream},
+    };
+    let cancellation = Cancellation::default();
+    let (mut reader, writer) = UnixStream::pair().unwrap();
+    reader.set_nonblocking(true).unwrap();
+    assert!(!cancellation.attach(writer.as_raw_fd()));
+    cancellation.detach();
+    cancellation.cancel().unwrap();
+    assert_eq!(reader.read(&mut [0]).unwrap_err().kind(), io::ErrorKind::WouldBlock);
   }
 }

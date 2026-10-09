@@ -1,4 +1,7 @@
-use std::{env::temp_dir, fs::File, str::FromStr};
+use std::{
+  path::{Path, PathBuf},
+  str::FromStr,
+};
 
 use anyhow::bail;
 use clap::{Parser, Subcommand};
@@ -32,6 +35,7 @@ const VERSION: &str = concat!(
 pub(crate) struct SharedArgs<'a> {
   pub(crate) fix_openssl: bool,
   pub(crate) ignore_tls_errors: bool,
+  pub(crate) lock_file: &'a Path,
   pub(crate) verbose: &'a InfoLevelVerbosity,
   pub(crate) log_format: LogFormat,
 }
@@ -46,6 +50,21 @@ enum CliCommand {
   LaunchGui(LaunchGuiArgs),
   #[command(about = "Generate HIP report")]
   Hip(HipArgs),
+  #[command(hide = true)]
+  DetectInternalHost {
+    #[arg(long)]
+    address: std::net::IpAddr,
+    #[arg(long)]
+    hostname: String,
+  },
+  #[command(hide = true)]
+  ResolveGateway {
+    host: String,
+    #[arg(long, default_value_t = 443)]
+    port: u16,
+    #[arg(long)]
+    disable_ipv6: bool,
+  },
 }
 
 #[derive(Parser)]
@@ -77,6 +96,13 @@ struct Cli {
   fix_openssl: bool,
   #[arg(long, help = "Ignore the TLS errors")]
   ignore_tls_errors: bool,
+  #[arg(
+    long,
+    global = true,
+    default_value = GP_CLIENT_LOCK_FILE,
+    help = "Path to the gpclient PID lock file"
+  )]
+  lock_file: PathBuf,
 
   #[arg(
     long,
@@ -105,8 +131,16 @@ impl Args for Cli {
 }
 
 impl Cli {
+  fn can_run_alongside_client(&self) -> bool {
+    match &self.command {
+      CliCommand::Connect(_) => false,
+      CliCommand::LaunchGui(args) => args.is_auth_callback(),
+      _ => true,
+    }
+  }
+
   async fn is_running(&self) -> bool {
-    let Ok(c) = fs::read_to_string(GP_CLIENT_LOCK_FILE).await else {
+    let Ok(c) = fs::read_to_string(&self.lock_file).await else {
       return false;
     };
 
@@ -135,10 +169,7 @@ impl Cli {
 
   async fn run(&self) -> anyhow::Result<()> {
     // check if an instance is running
-    if !matches!(
-      self.command,
-      CliCommand::Disconnect(_) | CliCommand::Hip(_)
-    ) && self.is_running().await {
+    if !self.can_run_alongside_client() && self.is_running().await {
       bail!("Another instance of the client is already running");
     }
 
@@ -148,6 +179,7 @@ impl Cli {
     let shared_args = SharedArgs {
       fix_openssl: self.fix_openssl,
       ignore_tls_errors: self.ignore_tls_errors,
+      lock_file: &self.lock_file,
       verbose: &self.verbose,
       log_format: self.log_format,
     };
@@ -158,9 +190,23 @@ impl Cli {
 
     match &self.command {
       CliCommand::Connect(args) => ConnectHandler::new(args, &shared_args).handle().await,
-      CliCommand::Disconnect(args) => DisconnectHandler::new(args).handle().await,
+      CliCommand::Disconnect(args) => DisconnectHandler::new(args, shared_args.lock_file).handle().await,
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
       CliCommand::Hip(args) => HipHandler::new(args).handle().await,
+      CliCommand::DetectInternalHost { address, hostname } => {
+        let internal = gpapi::session::network::native::detect_in_helper(*address, hostname)?;
+        println!("{}", serde_json::to_string(&internal)?);
+        Ok(())
+      }
+      CliCommand::ResolveGateway {
+        host,
+        port,
+        disable_ipv6,
+      } => {
+        let addresses = gpapi::session::network::native::lookup_in_helper(host, *port, *disable_ipv6)?;
+        println!("{}", serde_json::to_string(&addresses)?);
+        Ok(())
+      }
     }
   }
 }
@@ -173,17 +219,6 @@ fn build_logger(cli: &Cli) -> env_logger::Builder {
   // reimplementing it.
   if cli.log_format == LogFormat::Json {
     builder.format(write_json_record);
-  }
-
-  // Output the log messages to a file if the command is the auth callback
-  if let CliCommand::LaunchGui(args) = &cli.command {
-    let auth_data = args.auth_data.as_deref().unwrap_or_default();
-    if !auth_data.is_empty()
-      && let Ok(log_file) = File::create(temp_dir().join("gpcallback.log"))
-    {
-      let target = Box::new(log_file);
-      builder.target(env_logger::Target::Pipe(target));
-    }
   }
 
   builder
@@ -212,6 +247,92 @@ mod tests {
   use log::Log;
 
   use super::*;
+
+  #[test]
+  fn resolver_helper_runs_alongside_client_and_is_hidden_from_help() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "resolve-gateway",
+      "localhost",
+      "--port",
+      "444",
+      "--disable-ipv6",
+    ])
+    .unwrap();
+    assert!(cli.can_run_alongside_client());
+    use clap::CommandFactory;
+    let help = Cli::command().render_help().to_string();
+    assert!(!help.contains("resolve-gateway"));
+  }
+
+  #[test]
+  fn lock_file_defaults_to_standard_path() {
+    let cli = Cli::try_parse_from(["gpclient", "connect", "portal.example.com"]).expect("cli should parse");
+
+    assert_eq!(cli.lock_file, PathBuf::from(GP_CLIENT_LOCK_FILE));
+  }
+
+  #[test]
+  fn lock_file_can_be_overridden_after_subcommand() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "connect",
+      "portal.example.com",
+      "--lock-file",
+      "/tmp/gpclient-portal.lock",
+    ])
+    .expect("global lock file option should parse after subcommand");
+
+    assert_eq!(cli.lock_file, PathBuf::from("/tmp/gpclient-portal.lock"));
+  }
+
+  #[test]
+  fn hip_can_run_alongside_connected_client() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "hip",
+      "--client-version",
+      "6.2.4-49",
+      "--client-os",
+      "Mac",
+      "--cookie",
+      "user=alice",
+      "--md5",
+      "test",
+    ])
+    .expect("HIP arguments should parse");
+
+    assert!(cli.can_run_alongside_client());
+  }
+
+  #[test]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  fn launch_gui_accepts_auth_callback() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "launch-gui",
+      "globalprotectcallback:cas-as=1&un=alice@example.com&token=token",
+    ])
+    .expect("authentication callback should parse");
+
+    assert!(matches!(
+      &cli.command,
+      CliCommand::LaunchGui(args) if args.is_auth_callback()
+    ));
+    assert!(cli.can_run_alongside_client());
+  }
+
+  #[test]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  fn launch_gui_rejects_callback_with_minimized() {
+    assert!(Cli::try_parse_from(["gpclient", "launch-gui", "globalprotectcallback:token", "--minimized",]).is_err());
+  }
+
+  #[test]
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  fn launch_gui_rejects_non_callback_positional() {
+    assert!(Cli::try_parse_from(["gpclient", "launch-gui", "https://example.com/callback"]).is_err());
+  }
 
   fn parse_cli(args: &[&str]) -> Cli {
     Cli::try_parse_from(args).expect("arguments should parse")

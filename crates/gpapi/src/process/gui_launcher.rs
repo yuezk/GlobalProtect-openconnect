@@ -1,32 +1,40 @@
 use std::{
   collections::HashMap,
-  path::PathBuf,
+  fs::OpenOptions,
+  path::{Path, PathBuf},
   process::{ExitStatus, Stdio},
+  sync::Arc,
 };
 
-use anyhow::bail;
+use anyhow::{Context, bail};
 use common::binary_paths;
 use log::info;
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::{process::gui_helper_launcher::GuiHelperLauncher, utils::base64};
-
-use super::command_traits::CommandExt;
+use crate::{process::gui_helper_launcher::GuiHelperLauncher, service::transport::SessionCredential};
 
 pub struct GuiLauncher<'a> {
   version: &'a str,
-  program: PathBuf,
-  api_key: &'a [u8],
+  programs: Vec<PathBuf>,
+  credential: Arc<SessionCredential>,
   minimized: bool,
   envs: Option<HashMap<String, String>>,
 }
 
 impl<'a> GuiLauncher<'a> {
-  pub fn new(version: &'a str, api_key: &'a [u8]) -> Self {
+  pub fn new(version: &'a str, credential: Arc<SessionCredential>) -> Self {
+    let primary = binary_paths::gpgui();
+    let update_target = binary_paths::gpgui_update_target();
+    let programs = if primary == update_target {
+      vec![primary]
+    } else {
+      vec![primary, update_target]
+    };
+
     Self {
       version,
-      program: binary_paths::gpgui(),
-      api_key,
+      programs,
+      credential,
       minimized: false,
       envs: None,
     }
@@ -43,56 +51,93 @@ impl<'a> GuiLauncher<'a> {
   }
 
   pub async fn launch(&self) -> anyhow::Result<ExitStatus> {
-    // Check if the program's version
-    if let Err(err) = self.check_version().await {
-      info!("Check version failed: {}", err);
-      // Download the program and replace the current one
-      self.download_program().await?;
+    anyhow::ensure!(
+      uzers::get_effective_uid() != 0,
+      "The desktop GUI must not be launched by root"
+    );
+    if let Some(program) = self.find_compatible_program().await {
+      return self.launch_program(&program).await;
     }
 
-    self.launch_program().await
+    self.download_program().await?;
+
+    let program = binary_paths::gpgui_update_target();
+    self.check_version(&program).await?;
+    self.launch_program(&program).await
   }
 
-  async fn launch_program(&self) -> anyhow::Result<ExitStatus> {
-    let mut cmd = Command::new(&self.program);
+  async fn find_compatible_program(&self) -> Option<PathBuf> {
+    for program in &self.programs {
+      match self.check_version(program).await {
+        Ok(()) => return Some(program.clone()),
+        Err(err) => info!(
+          "GUI candidate {} is unavailable or incompatible: {err}",
+          program.display()
+        ),
+      }
+    }
+
+    None
+  }
+
+  async fn launch_program(&self, program: &Path) -> anyhow::Result<ExitStatus> {
+    let mut cmd = Command::new(program);
 
     if let Some(envs) = &self.envs {
       cmd.env_clear();
       cmd.envs(envs);
     }
 
-    cmd.arg("--api-key-on-stdin");
+    let log_file = match &self.envs {
+      Some(envs) => envs.get("GP_LOG_FILE").map(PathBuf::from),
+      None => std::env::var_os("GP_LOG_FILE").map(PathBuf::from),
+    };
+    if let Some(path) = log_file {
+      let file = OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .with_context(|| format!("Failed to open GUI log file: {}", path.display()))?;
+      cmd.stderr(Stdio::from(file));
+    }
+
+    cmd.arg("--service-credential-on-stdin");
 
     if self.minimized {
       cmd.arg("--minimized");
     }
 
     info!("Launching gpgui");
-    let mut non_root_cmd = cmd.into_non_root()?;
-    let child = non_root_cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn();
+    let child = cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn();
     let mut child = match child {
       Ok(child) => child,
-      Err(err) => bail!("Failed to spawn {}: {}", self.program.display(), err),
+      Err(err) => bail!("Failed to spawn {}: {}", program.display(), err),
     };
 
     let Some(mut stdin) = child.stdin.take() else {
       bail!("Failed to open stdin");
     };
 
-    let api_key = base64::encode(self.api_key);
-    tokio::spawn(async move {
-      stdin.write_all(api_key.as_bytes()).await.unwrap();
-      drop(stdin);
-    });
+    let frame = self.credential.encode_frame()?;
+    stdin.write_all(&frame).await?;
 
     let exit_status = child.wait().await?;
+    drop(stdin);
 
     Ok(exit_status)
   }
 
-  async fn check_version(&self) -> anyhow::Result<()> {
-    let cmd = Command::new(&self.program).arg("--version").output().await?;
-    let output = String::from_utf8_lossy(&cmd.stdout);
+  async fn check_version(&self, program: &Path) -> anyhow::Result<()> {
+    let mut cmd = Command::new(program);
+    if let Some(envs) = &self.envs {
+      cmd.env_clear();
+      cmd.envs(envs);
+    }
+    cmd.arg("--version");
+    let output = cmd.output().await?;
+    if !output.status.success() {
+      bail!("Version command exited with {}", output.status);
+    }
+    let output = String::from_utf8_lossy(&output.stdout);
 
     // Version string: "gpgui 2.0.0 (2024-02-05)"
     let Some(version) = output.split_whitespace().nth(1) else {
@@ -109,17 +154,96 @@ impl<'a> GuiLauncher<'a> {
   }
 
   async fn download_program(&self) -> anyhow::Result<()> {
-    let gui_helper = GuiHelperLauncher::new(self.api_key);
+    let gui_helper = GuiHelperLauncher::new(&self.credential);
 
     gui_helper
       .envs(self.envs.as_ref())
       .gui_version(Some(self.version))
       .launch()
-      .await?;
+      .await
+  }
+}
 
-    // Check the version again
-    self.check_version().await?;
+#[cfg(test)]
+mod tests {
+  use std::{fs, os::unix::fs::PermissionsExt};
 
-    Ok(())
+  use tempfile::TempDir;
+  use uuid::Uuid;
+
+  use super::*;
+
+  const VERSION: &str = "test-version";
+
+  fn executable(dir: &TempDir, name: &str, output: &str, exit_code: i32) -> PathBuf {
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o755)).unwrap();
+    let path = dir.path().join(name);
+    fs::write(
+      &path,
+      format!("#!/bin/sh\nprintf '%s\\n' '{output}'\nexit {exit_code}\n"),
+    )
+    .unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    path
+  }
+
+  fn launcher(version: &'static str, programs: Vec<PathBuf>) -> GuiLauncher<'static> {
+    GuiLauncher {
+      version,
+      programs,
+      credential: Arc::new(SessionCredential::generate(Uuid::new_v4(), version).unwrap()),
+      minimized: false,
+      envs: None,
+    }
+  }
+
+  #[tokio::test]
+  async fn captures_gui_logs_in_the_desktop_log_file_across_restarts() {
+    let dir = TempDir::new().unwrap();
+    let log_file = dir.path().join("desktop.log");
+    fs::write(&log_file, "[gpservice] started\n").unwrap();
+    let program = dir.path().join("gui");
+    fs::write(&program, "#!/bin/sh\nprintf '[gpgui] initialized\\n' >&2\n").unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    let launcher = launcher(VERSION, vec![]).envs(HashMap::from([(
+      "GP_LOG_FILE".to_owned(),
+      log_file.to_str().unwrap().to_owned(),
+    )]));
+
+    assert!(launcher.launch_program(&program).await.unwrap().success());
+    assert!(launcher.launch_program(&program).await.unwrap().success());
+    assert_eq!(
+      fs::read_to_string(log_file).unwrap(),
+      "[gpservice] started\n[gpgui] initialized\n[gpgui] initialized\n"
+    );
+  }
+
+  #[tokio::test]
+  async fn prefers_the_first_compatible_program() {
+    let dir = TempDir::new().unwrap();
+    let packaged = executable(&dir, "packaged", "gpgui test-version", 0);
+    let downloaded = executable(&dir, "downloaded", "gpgui test-version", 0);
+    let launcher = launcher(VERSION, vec![packaged.clone(), downloaded]);
+
+    assert_eq!(launcher.find_compatible_program().await, Some(packaged));
+  }
+
+  #[tokio::test]
+  async fn falls_back_when_the_first_program_is_incompatible() {
+    let dir = TempDir::new().unwrap();
+    let packaged = executable(&dir, "packaged", "gpgui other-version", 0);
+    let downloaded = executable(&dir, "downloaded", "gpgui test-version", 0);
+    let launcher = launcher(VERSION, vec![packaged, downloaded.clone()]);
+
+    assert_eq!(launcher.find_compatible_program().await, Some(downloaded));
+  }
+
+  #[tokio::test]
+  async fn rejects_an_unsuccessful_version_command() {
+    let dir = TempDir::new().unwrap();
+    let program = executable(&dir, "broken", "gpgui test-version", 1);
+    let launcher = launcher(VERSION, vec![program]);
+
+    assert_eq!(launcher.find_compatible_program().await, None);
   }
 }

@@ -1,0 +1,129 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <gpgui-repository>" >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GP_DIR="$(dirname "$SCRIPT_DIR")"
+GPGUI_DIR="$1"
+GPGUI_APP_DIR="$GPGUI_DIR/apps/desktop"
+
+verify_same_file() {
+  local source_file="$1"
+  local packaged_file="$2"
+
+  if ! cmp --silent "$source_file" "$packaged_file"; then
+    echo "Linux desktop asset is out of sync: $packaged_file" >&2
+    echo "Expected it to match: $source_file" >&2
+    exit 1
+  fi
+}
+
+verify_contains() {
+  local file="$1"
+  local expected="$2"
+
+  if ! grep -Fqx "$expected" "$file"; then
+    echo "Linux desktop asset is missing '$expected': $file" >&2
+    exit 1
+  fi
+}
+
+verify_absent() {
+  local file="$1"
+
+  if [[ -e "$file" ]]; then
+    echo "Obsolete Linux desktop asset is still present: $file" >&2
+    exit 1
+  fi
+}
+
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/32x32.png" \
+  "$GP_DIR/packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128.png" \
+  "$GP_DIR/packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128@2x.png" \
+  "$GP_DIR/packaging/files/usr/share/icons/hicolor/256x256/apps/gpgui.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.png" \
+  "$GP_DIR/packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.svg" \
+  "$GP_DIR/packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg"
+for icon in \
+  gpgui-connected-symbolic.svg \
+  gpgui-disconnected-symbolic.svg \
+  gpgui-connecting-1-symbolic.svg \
+  gpgui-connecting-2-symbolic.svg \
+  gpgui-connecting-3-symbolic.svg \
+  gpgui-connecting-4-symbolic.svg; do
+  verify_same_file \
+    "$GPGUI_APP_DIR/src-tauri/icons/tray/theme/$icon" \
+    "$GP_DIR/packaging/files/usr/share/icons/hicolor/scalable/status/$icon"
+done
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/32x32.png" \
+  "$GP_DIR/apps/gpauth/icons/32x32.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128.png" \
+  "$GP_DIR/apps/gpauth/icons/128x128.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128@2x.png" \
+  "$GP_DIR/apps/gpauth/icons/128x128@2x.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.png" \
+  "$GP_DIR/apps/gpauth/icons/icon.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/32x32.png" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/32x32.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128.png" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/128x128.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/128x128@2x.png" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/128x128@2x.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.png" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.png"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.svg" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.svg"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.icns" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.icns"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.ico" \
+  "$GP_DIR/apps/gpgui-helper/src-tauri/icons/icon.ico"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon-small.svg" \
+  "$GP_DIR/apps/gpgui-helper/src/assets/icon-small.svg"
+verify_contains \
+  "$GPGUI_APP_DIR/gpgui.desktop.in" \
+  "Exec=/usr/bin/gpclient launch-gui %u"
+verify_contains \
+  "$GPGUI_APP_DIR/gpgui.desktop.in" \
+  "MimeType=x-scheme-handler/globalprotectcallback;"
+verify_contains \
+  "$GP_DIR/packaging/files/usr/share/applications/gpgui.desktop" \
+  "Exec=/usr/bin/gpclient launch-gui %u"
+verify_contains \
+  "$GP_DIR/packaging/files/usr/share/applications/gpgui.desktop" \
+  "MimeType=x-scheme-handler/globalprotectcallback;"
+verify_contains \
+  "$GP_DIR/packaging/bsd/gpgui.desktop" \
+  "Exec=/usr/local/bin/gpclient launch-gui %u"
+verify_contains \
+  "$GP_DIR/packaging/bsd/gpgui.desktop" \
+  "MimeType=x-scheme-handler/globalprotectcallback;"
+verify_absent "$GPGUI_APP_DIR/gpauth.desktop"
+verify_absent "$GP_DIR/packaging/files/usr/share/applications/gpauth.desktop"
+verify_absent "$GP_DIR/packaging/bsd/gpauth.desktop"
+
+echo "Linux desktop and tray assets are synchronized"

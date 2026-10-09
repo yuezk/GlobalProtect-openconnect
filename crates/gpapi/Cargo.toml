@@ -6,6 +6,7 @@ edition.workspace = true
 license = "MIT"
 
 [dependencies]
+nix = { version = "0.31", features = ["fs", "signal", "process"] }
 common = { path = "../common" }
 anyhow.workspace = true
 base64.workspace = true
@@ -17,9 +18,10 @@ version-compare = "0.2"
 pem.workspace = true
 xmltree.workspace = true
 serde.workspace = true
-specta = { workspace = true, features = ["derive"] }
+specta = { workspace = true, features = ["derive", "uuid"] }
 urlencoding.workspace = true
 tokio = { workspace = true, features = ["process", "signal", "macros"] }
+tokio-util.workspace = true
 serde_json.workspace = true
 whoami.workspace = true
 tempfile.workspace = true
@@ -32,11 +34,15 @@ uzers.workspace = true
 serde_urlencoded.workspace = true
 md5.workspace = true
 sha256.workspace = true
-uuid = { workspace = true, features = ["v5"] }
+uuid = { workspace = true, features = ["v4", "v5", "serde"] }
 chrono.workspace = true
 humantime.workspace = true
 netdev.workspace = true
+socket2 = { version = "0.6", features = ["all"] }
 os_info = { version = "3", default-features = false }
+snow.workspace = true
+zeroize = { workspace = true, features = ["serde"] }
+getrandom = "0.4"
 
 # Optional dependencies for features
 tauri = { workspace = true, optional = true }
@@ -46,15 +52,19 @@ clap-verbosity-flag = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 log-reload = { version = "0.1", optional = true }
 
+[target.'cfg(target_os="macos")'.dependencies]
+oslog = { version = "0.2", default-features = false, optional = true }
+
 # Dependencies for Linux and other OSes only
 [target.'cfg(not(any(target_os="macos", target_os="windows")))'.dependencies]
 gtk = { version = "0.18", optional = true }
 
 [dev-dependencies]
 proptest.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 tauri = ["dep:tauri", "dep:gtk"]
 clap = ["dep:clap", "dep:clap-verbosity-flag"]
 webview-auth = []
-logger = ["dep:env_logger", "dep:log-reload"]
+logger = ["dep:env_logger", "dep:log-reload", "dep:oslog"]

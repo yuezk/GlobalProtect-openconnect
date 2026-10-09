@@ -17,4 +17,4 @@ mod platform_impl;
 )))]
 compile_error!("webview-auth is only supported on macOS and GTK/WebKitGTK Unix targets");
 
-pub use webview_auth::WebviewAuthenticator;
+pub use webview_auth::{WebviewAuthenticator, apply_auth_theme};

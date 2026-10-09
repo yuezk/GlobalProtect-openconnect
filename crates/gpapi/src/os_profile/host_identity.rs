@@ -1,3 +1,6 @@
+use std::{io, time::Duration};
+
+use crate::process::collection::{CollectionBudget, CollectionControl};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -20,8 +23,39 @@ impl HostIdentity {
     Self::collect_with_host_id(None)
   }
 
+  pub fn collect_with_control(control: &dyn CollectionControl) -> io::Result<Self> {
+    Self::collect_with_host_id_and_control(None, control)
+  }
+
   pub(crate) fn collect_with_host_id(host_id: Option<&str>) -> Self {
-    RuntimeNativeHostIdentity::collect(host_id).into_host_identity()
+    match Self::collect_with_host_id_and_control(host_id, &CollectionBudget::new(Duration::from_secs(60))) {
+      Ok(identity) => identity,
+      Err(error) => {
+        log::warn!("Host identity collection was unavailable: {error}");
+        Self::default_with_host_id(host_id)
+      }
+    }
+  }
+
+  /// Best-effort convenience callers retain the established derived identity
+  /// when native collection is unavailable. Controlled HIP callers get errors.
+  pub(crate) fn default_with_host_id(host_id: Option<&str>) -> Self {
+    Self::from_parts(
+      fallback_hostname(),
+      resolve_host_id(host_id, fallback_host_id),
+      String::new(),
+      primary_mac_colon().unwrap_or_default(),
+    )
+  }
+
+  pub(crate) fn collect_with_host_id_and_control(
+    host_id: Option<&str>,
+    control: &dyn CollectionControl,
+  ) -> io::Result<Self> {
+    control.check()?;
+    let identity = RuntimeNativeHostIdentity::collect_with_control(host_id, control)?.into_host_identity();
+    control.check()?;
+    Ok(identity)
   }
 
   #[cfg(test)]
@@ -29,7 +63,8 @@ impl HostIdentity {
     Self::from_parts(computer, host_id, serialno, mac_addr)
   }
 
-  pub(crate) fn from_parts(computer: String, host_id: String, serialno: String, mac_addr: String) -> Self {
+  /// Construct a host identity from an already collected or negotiated snapshot.
+  pub fn from_parts(computer: String, host_id: String, serialno: String, mac_addr: String) -> Self {
     let host_id = non_empty(host_id, fallback_host_id());
     let computer = non_empty(computer, fallback_hostname());
     let serial_number = non_empty(serialno, derive_serial_number(&host_id));
@@ -163,12 +198,12 @@ fn derive_uuid_from_seed(seed: &str, parts: &[&str]) -> String {
 
 #[cfg(target_os = "macos")]
 mod platform {
-  use std::process::Command;
-
   use super::{
     ClientOs, NativeHostIdentitySnapshot, derive_mac_address, fallback_hostname, normalize_mac_colon,
     primary_mac_colon, resolve_host_id,
   };
+  use crate::process::collection::{CollectionControl, CollectorCommands};
+  use std::io;
 
   pub(super) struct RuntimeNativeHostIdentity;
 
@@ -177,74 +212,80 @@ mod platform {
       ClientOs::Mac
     }
 
-    pub(super) fn collect(host_id_override: Option<&str>) -> NativeHostIdentitySnapshot {
-      let native_mac = macos_builtin_mac().or_else(primary_mac_colon);
+    pub(super) fn collect_with_control(
+      host_id_override: Option<&str>,
+      control: &dyn CollectionControl,
+    ) -> io::Result<NativeHostIdentitySnapshot> {
+      let commands = CollectorCommands::new(control);
+      let native_mac = macos_builtin_mac(&commands)?.or_else(primary_mac_colon);
+      control.check()?;
       let host_id = resolve_host_id(host_id_override, || {
         native_mac
           .clone()
           .unwrap_or_else(|| derive_mac_address(&fallback_hostname()))
       });
-      NativeHostIdentitySnapshot {
+      let computer = macos_computer_name(&commands)?.unwrap_or_else(fallback_hostname);
+      let serial_number = collect_macos_serial_number(&commands)?;
+      control.check()?;
+      Ok(NativeHostIdentitySnapshot {
         host_id,
-        computer: macos_computer_name().unwrap_or_else(fallback_hostname),
-        serial_number: collect_macos_serial_number(),
+        computer,
+        serial_number,
         mac_address: native_mac,
-      }
+      })
     }
   }
 
-  fn macos_computer_name() -> Option<String> {
-    ["ComputerName", "LocalHostName"].into_iter().find_map(|name| {
-      let output = Command::new("scutil").args(["--get", name]).output().ok()?;
-      if !output.status.success() {
-        return None;
-      }
+  fn output(commands: &CollectorCommands<'_>, program: &str, args: &[&str]) -> io::Result<Option<String>> {
+    Ok(
+      commands
+        .run(program, args)?
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok()),
+    )
+  }
 
-      String::from_utf8(output.stdout)
-        .ok()
+  fn macos_computer_name(commands: &CollectorCommands<'_>) -> io::Result<Option<String>> {
+    for name in ["ComputerName", "LocalHostName"] {
+      if let Some(value) = output(commands, "scutil", &["--get", name])?
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-    })
-  }
-
-  fn macos_builtin_mac() -> Option<String> {
-    macos_networksetup_mac("Wi-Fi")
-      .or_else(|| macos_networksetup_mac("AirPort"))
-      .or_else(macos_system_profiler_wifi_mac)
-  }
-
-  fn macos_networksetup_mac(port_name: &str) -> Option<String> {
-    let output = Command::new("networksetup")
-      .arg("-listallhardwareports")
-      .output()
-      .ok()?;
-    if !output.status.success() {
-      return None;
+      {
+        return Ok(Some(value));
+      }
     }
+    Ok(None)
+  }
 
-    let stdout = String::from_utf8(output.stdout).ok()?;
+  fn macos_builtin_mac(commands: &CollectorCommands<'_>) -> io::Result<Option<String>> {
+    if let Some(stdout) = output(commands, "networksetup", &["-listallhardwareports"])? {
+      for name in ["Wi-Fi", "AirPort"] {
+        if let Some(mac) = parse_hardware_port_mac(&stdout, name) {
+          return Ok(Some(mac));
+        }
+      }
+    }
+    macos_system_profiler_wifi_mac(commands)
+  }
+
+  fn parse_hardware_port_mac(stdout: &str, name: &str) -> Option<String> {
     let mut in_port = false;
     for line in stdout.lines() {
       if let Some(port) = line.strip_prefix("Hardware Port: ") {
-        in_port = port == port_name;
+        in_port = port == name;
         continue;
       }
-
       if in_port && let Some(mac) = line.strip_prefix("Ethernet Address: ") {
         return normalize_mac_colon(mac);
       }
     }
-
     None
   }
 
-  fn macos_system_profiler_wifi_mac() -> Option<String> {
-    let output = Command::new("system_profiler").arg("SPNetworkDataType").output().ok()?;
-    if !output.status.success() {
-      return None;
-    }
-
-    let stdout = String::from_utf8(output.stdout).ok()?;
+  fn macos_system_profiler_wifi_mac(commands: &CollectorCommands<'_>) -> io::Result<Option<String>> {
+    let Some(stdout) = output(commands, "system_profiler", &["SPNetworkDataType"])? else {
+      return Ok(None);
+    };
     let mut in_wifi = false;
     for line in stdout.lines() {
       let trimmed = line.trim();
@@ -252,29 +293,24 @@ mod platform {
         in_wifi = trimmed == "Wi-Fi:" || trimmed == "AirPort:";
         continue;
       }
-
       if in_wifi && let Some(mac) = trimmed.strip_prefix("MAC Address: ") {
-        return normalize_mac_colon(mac);
+        return Ok(normalize_mac_colon(mac));
       }
     }
-
-    None
+    Ok(None)
   }
 
-  fn collect_macos_serial_number() -> Option<String> {
-    let output = Command::new("ioreg")
-      .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-      .output()
-      .ok()?;
-    let stdout = String::from_utf8(output.stdout).ok()?;
-
-    stdout.lines().find_map(|line| {
+  fn collect_macos_serial_number(commands: &CollectorCommands<'_>) -> io::Result<Option<String>> {
+    let Some(stdout) = output(commands, "ioreg", &["-rd1", "-c", "IOPlatformExpertDevice"])? else {
+      return Ok(None);
+    };
+    Ok(stdout.lines().find_map(|line| {
       line
         .split_once("IOPlatformSerialNumber")
         .and_then(|(_, value)| value.split_once('='))
         .map(|(_, value)| value.trim().trim_matches('"').to_string())
         .filter(|value| !value.is_empty())
-    })
+    }))
   }
 }
 
@@ -291,7 +327,17 @@ mod platform {
       ClientOs::Windows
     }
 
-    pub(super) fn collect(host_id_override: Option<&str>) -> NativeHostIdentitySnapshot {
+    pub(super) fn collect_with_control(
+      host_id_override: Option<&str>,
+      control: &dyn super::CollectionControl,
+    ) -> super::io::Result<NativeHostIdentitySnapshot> {
+      control.check()?;
+      let identity = Self::collect(host_id_override);
+      control.check()?;
+      Ok(identity)
+    }
+
+    fn collect(host_id_override: Option<&str>) -> NativeHostIdentitySnapshot {
       let host_id = resolve_host_id(host_id_override, Self::host_id);
       NativeHostIdentitySnapshot {
         host_id,
@@ -362,6 +408,7 @@ mod platform {
 mod platform {
   use super::{
     ClientOs, NativeHostIdentitySnapshot, derive_uuid_from_seed, fallback_hostname, primary_mac_colon, resolve_host_id,
+    serial_number,
   };
   use log::debug;
 
@@ -372,7 +419,17 @@ mod platform {
       ClientOs::Linux
     }
 
-    pub(super) fn collect(host_id_override: Option<&str>) -> NativeHostIdentitySnapshot {
+    pub(super) fn collect_with_control(
+      host_id_override: Option<&str>,
+      control: &dyn super::CollectionControl,
+    ) -> super::io::Result<NativeHostIdentitySnapshot> {
+      control.check()?;
+      let identity = Self::collect(host_id_override);
+      control.check()?;
+      Ok(identity)
+    }
+
+    fn collect(host_id_override: Option<&str>) -> NativeHostIdentitySnapshot {
       if let Some(host_id) = host_id_override.filter(|value| !value.trim().is_empty()) {
         debug!("Runtime host-id source: explicit override ({})", host_id);
       }
@@ -429,9 +486,17 @@ mod platform {
   }
 
   fn collect_linux_serial_number() -> Option<String> {
-    ["/sys/class/dmi/id/product_serial", "/sys/class/dmi/id/product_uuid"]
-      .iter()
-      .find_map(|path| read_linux_identity_file(path))
+    resolve_linux_serial_number(
+      read_linux_identity_file("/sys/class/dmi/id/product_serial"),
+      collect_linux_product_uuid,
+    )
+  }
+
+  fn resolve_linux_serial_number(
+    product_serial: Option<String>,
+    product_uuid: impl FnOnce() -> Option<String>,
+  ) -> Option<String> {
+    product_serial.or_else(|| product_uuid().and_then(|uuid| serial_number::vmware_from_uuid(&uuid)))
   }
 
   #[cfg(test)]
@@ -446,12 +511,35 @@ mod platform {
       );
       assert_eq!(normalize_uuid("not-a-uuid"), None);
     }
+
+    #[test]
+    fn linux_serial_number_preserves_product_serial_and_formats_uuid_fallback() {
+      let uuid = Some("5a784d56-6461-19ac-9ea9-d36a3b9c6cef".to_string());
+
+      assert_eq!(
+        resolve_linux_serial_number(Some("product-serial".to_string()), || uuid.clone()),
+        Some("product-serial".to_string())
+      );
+      assert_eq!(
+        resolve_linux_serial_number(None, || uuid),
+        Some("VMware-56 4d 78 5a 61 64 ac 19-9e a9 d3 6a 3b 9c 6c ef".to_string())
+      );
+    }
   }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn controlled_identity_collection_propagates_cancellation() {
+    let control = || Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
+    let error = HostIdentity::collect_with_control(&control).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+    let error = HostIdentity::collect_with_host_id_and_control(Some("supplied"), &control).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+  }
 
   #[test]
   fn collect_produces_non_empty_identity() {
@@ -505,7 +593,8 @@ mod tests {
 
   #[test]
   fn native_snapshot_uses_host_id_as_derivation_seed() {
-    let native = RuntimeNativeHostIdentity::collect(None);
+    let native =
+      RuntimeNativeHostIdentity::collect_with_control(None, &CollectionBudget::new(Duration::from_secs(60))).unwrap();
 
     assert!(!native.host_id.is_empty());
   }

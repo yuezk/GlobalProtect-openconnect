@@ -1,17 +1,23 @@
 use std::{
+  net::IpAddr,
   path::{Path, PathBuf},
-  process::Stdio,
 };
 
 use anyhow::bail;
 use common::binary_paths;
 use tokio::process::Command;
+use tokio_util::sync::CancellationToken;
 
+#[cfg(feature = "webview-auth")]
+use crate::auth::AuthWindowTheme;
 use crate::{auth::SamlAuthResult, credential::Credential, log_format::LogFormat, os_profile::OsProfile};
 
-use super::command_traits::CommandExt;
+use super::{command_runner::run_controlled, command_traits::CommandExt};
+
+const MAX_AUTH_RESULT_BYTES: usize = 256 * 1024;
 
 pub struct SamlAuthLauncher<'a> {
+  cancellation: CancellationToken,
   server: &'a str,
   auth_executable: Option<&'a str>,
   gateway: bool,
@@ -30,7 +36,12 @@ pub struct SamlAuthLauncher<'a> {
   clean: bool,
   #[cfg(feature = "webview-auth")]
   default_browser: bool,
+  #[cfg(feature = "webview-auth")]
+  window_title: Option<&'a str>,
+  #[cfg(feature = "webview-auth")]
+  window_theme: Option<AuthWindowTheme>,
   browser: Option<&'a str>,
+  browser_listen: Option<IpAddr>,
   verbose: Option<&'a str>,
   log_format: LogFormat,
 }
@@ -38,6 +49,7 @@ pub struct SamlAuthLauncher<'a> {
 impl<'a> SamlAuthLauncher<'a> {
   pub fn new(server: &'a str) -> Self {
     Self {
+      cancellation: CancellationToken::new(),
       server,
       auth_executable: None,
       gateway: false,
@@ -56,7 +68,12 @@ impl<'a> SamlAuthLauncher<'a> {
       clean: false,
       #[cfg(feature = "webview-auth")]
       default_browser: false,
+      #[cfg(feature = "webview-auth")]
+      window_title: None,
+      #[cfg(feature = "webview-auth")]
+      window_theme: None,
       browser: None,
+      browser_listen: None,
       verbose: None,
       log_format: LogFormat::Text,
     }
@@ -127,8 +144,25 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  #[cfg(feature = "webview-auth")]
+  pub fn window_title(mut self, window_title: &'a str) -> Self {
+    self.window_title = Some(window_title);
+    self
+  }
+
+  #[cfg(feature = "webview-auth")]
+  pub fn window_theme(mut self, window_theme: AuthWindowTheme) -> Self {
+    self.window_theme = Some(window_theme);
+    self
+  }
+
   pub fn browser(mut self, browser: Option<&'a str>) -> Self {
     self.browser = browser;
+    self
+  }
+
+  pub fn browser_listen(mut self, browser_listen: Option<IpAddr>) -> Self {
+    self.browser_listen = browser_listen;
     self
   }
 
@@ -143,6 +177,11 @@ impl<'a> SamlAuthLauncher<'a> {
 
   pub fn verbose(mut self, verbose: Option<&'a str>) -> Self {
     self.verbose = verbose;
+    self
+  }
+
+  pub fn cancellation(mut self, cancellation: &CancellationToken) -> Self {
+    self.cancellation = cancellation.clone();
     self
   }
 
@@ -208,10 +247,22 @@ impl<'a> SamlAuthLauncher<'a> {
       if self.default_browser {
         auth_cmd.arg("--default-browser");
       }
+
+      if let Some(window_title) = self.window_title {
+        auth_cmd.arg("--window-title").arg(window_title);
+      }
+
+      if let Some(window_theme) = self.window_theme {
+        auth_cmd.arg("--window-theme").arg(window_theme.as_str());
+      }
     }
 
     if let Some(browser) = self.browser {
       auth_cmd.arg("--browser").arg(browser);
+    }
+
+    if let Some(browser_listen) = self.browser_listen {
+      auth_cmd.arg("--browser-listen").arg(browser_listen.to_string());
     }
 
     auth_cmd.arg("--log-format").arg(self.log_format.as_str());
@@ -231,17 +282,29 @@ impl<'a> SamlAuthLauncher<'a> {
       .unwrap_or_else(binary_paths::gpauth);
     let auth_cmd = self.build_command(&program);
 
-    let mut non_root_cmd = auth_cmd.into_non_root()?;
-    let child = non_root_cmd.kill_on_drop(true).stdout(Stdio::piped()).spawn();
-
-    let child = match child {
-      Ok(child) => child,
-      Err(err) => {
-        bail!("Failed to spawn {}: {}", program.display(), err);
+    let command = auth_cmd.into_non_root()?.into_std();
+    let cancellation = self.cancellation;
+    let output = tokio::task::spawn_blocking(move || {
+      let check = || {
+        if cancellation.is_cancelled() {
+          Err(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "Authentication cancelled",
+          ))
+        } else {
+          Ok(())
+        }
+      };
+      run_controlled(command, &check, MAX_AUTH_RESULT_BYTES)
+    })
+    .await?;
+    let output = match output {
+      Ok(output) => output,
+      Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+        return Err(crate::auth::AuthenticationCancelled.into());
       }
+      Err(error) => return Err(error.into()),
     };
-
-    let output = child.wait_with_output().await?;
 
     let Ok(auth_result) = serde_json::from_slice::<SamlAuthResult>(&output.stdout) else {
       bail!("Failed to parse auth data")
@@ -332,5 +395,13 @@ mod tests {
     assert_eq!(launcher.certificate, Some("/tmp/client.pem"));
     assert_eq!(launcher.sslkey, Some("/tmp/client.key"));
     assert_eq!(launcher.key_password, Some("secret"));
+  }
+
+  #[test]
+  fn browser_listen_address_is_stored() {
+    let listen_ip = "192.168.107.15".parse().unwrap();
+    let launcher = SamlAuthLauncher::new("portal.example.com").browser_listen(Some(listen_ip));
+
+    assert_eq!(launcher.browser_listen, Some(listen_ip));
   }
 }

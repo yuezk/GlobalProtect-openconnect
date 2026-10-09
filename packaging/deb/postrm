@@ -2,9 +2,14 @@
 set -e
 
 case "$1" in
-    purge|remove|upgrade)
-        # Remove the gpgui binary downloaded at runtime
-        rm -f /usr/bin/gpgui
+    purge|remove)
+        rm -f \
+            /var/lib/gpclient/gpgui \
+            /var/lib/gpclient/scripts/vpnc-script \
+            /var/lib/gpclient/scripts/vpnc-script.metadata ||
+            echo "Warning: failed to remove gpclient runtime files" >&2
+        rmdir /var/lib/gpclient/scripts 2>/dev/null || true
+        rmdir /var/lib/gpclient 2>/dev/null || true
     ;;
 
     *)

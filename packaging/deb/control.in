@@ -36,5 +36,6 @@ Depends:
   libsecret-1-0,
   libayatana-appindicator3-1,
   gnome-keyring,
+  xdg-utils,
 Description: A GUI client for GlobalProtect VPN
  A GUI client for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method.

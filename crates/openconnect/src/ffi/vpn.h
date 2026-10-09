@@ -9,14 +9,29 @@ typedef struct vpn_session_info {
 	long user_expires;
 	int lifetime_warning_prior;
 	const char *lifetime_warning_message;
+	int nlb_enabled;
+	const char *nlb_connected_gw_ip;
 } vpn_session_info;
 
 typedef void (*vpn_connected_callback)(int cmd_pipe_fd,
 				       const vpn_session_info *session_info,
 				       void *user_data);
+typedef void (*vpn_hip_report_callback)(void *user_data, const char *report,
+					 size_t length);
+
+typedef struct vpn_hip_script {
+	const char *path;
+	uid_t uid;
+	int uid_present;
+	void *validation_data;
+	openconnect_gp_hip_validate_fn validate;
+	const char *const *environment;
+	const char *cwd;
+} vpn_hip_script;
 
 typedef struct vpn_options {
 	void *user_data;
+	vpn_hip_report_callback on_hip_report_submitted;
 
 	const char *server;
 	const char *cookie;
@@ -37,8 +52,8 @@ typedef struct vpn_options {
 	const char *key_password;
 	const char *servercert;
 
-	const uid_t csd_uid;
-	const char *csd_wrapper;
+	vpn_hip_script hip_script;
+	openconnect_gp_hip_generate_fn generate_hip;
 
 	const int reconnect_timeout;
 	const int mtu;
@@ -50,7 +65,11 @@ typedef struct vpn_options {
 } vpn_options;
 
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback);
-void vpn_disconnect();
+int vpn_collect_hip_report(const vpn_hip_script *, const struct openconnect_gp_hip_request *,
+	const struct openconnect_gp_hip_control *, openconnect_gp_hip_generate_fn, void *, char *, size_t, size_t *);
+
+extern int vpn_attach_command_pipe(void *user_data, int fd);
+extern void vpn_detach_command_pipe(void *user_data);
 
 extern void vpn_log(int level, const char *msg);
 

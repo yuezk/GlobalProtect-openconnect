@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use anyhow::bail;
-use dns_lookup::lookup_addr;
 use log::{debug, info, warn};
 use reqwest::{Client, StatusCode};
 use serde::Serialize;
 use specta::Type;
+use tokio_util::sync::CancellationToken;
 use xmltree::Element;
 
 use crate::{
@@ -14,6 +14,7 @@ use crate::{
   gateway::{Gateway, parse_gateways},
   gp_params::GpParams,
   params,
+  session::{InternalSessionPolicy, network::InternalHostDetection},
   utils::{normalize_server, parse_gp_response, redact::redact_form_params, remove_url_scheme, xml::ElementExt},
 };
 
@@ -35,6 +36,7 @@ pub struct PortalConfig {
    * - Some(true): Internal host detection is supported and the user is connected to the internal network
    */
   internal_host_detection: Option<bool>,
+  internal_detection: Option<InternalHostDetection>,
   /**
    * The version returned by the portal config, if any
    */
@@ -47,6 +49,7 @@ pub struct PortalConfig {
    * Whether the portal policy enables default-browser authentication.
    */
   default_browser: Option<bool>,
+  internal_session_policy: Option<InternalSessionPolicy>,
 }
 
 impl PortalConfig {
@@ -70,6 +73,10 @@ impl PortalConfig {
     self.internal_host_detection
   }
 
+  pub fn internal_detection(&self) -> Option<&InternalHostDetection> {
+    self.internal_detection.as_ref()
+  }
+
   pub fn connect_method(&self) -> Option<&str> {
     self.connect_method.as_deref()
   }
@@ -84,6 +91,10 @@ impl PortalConfig {
 
   pub fn default_browser(&self) -> Option<bool> {
     self.default_browser
+  }
+
+  pub fn internal_session_policy(&self) -> Option<InternalSessionPolicy> {
+    self.internal_session_policy
   }
 
   /// In-place sort the gateways by region
@@ -129,7 +140,14 @@ impl PortalConfig {
   }
 }
 
-pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpParams) -> anyhow::Result<PortalConfig> {
+/// Cancellation is handled inside the request so a running native detection
+/// helper is always cancelled and joined. Do not drop this future on disconnect.
+pub async fn retrieve_config(
+  portal: &str,
+  cred: &Credential,
+  gp_params: &GpParams,
+  cancellation: &CancellationToken,
+) -> anyhow::Result<PortalConfig> {
   let portal = normalize_server(portal)?;
   let server = remove_url_scheme(&portal);
 
@@ -146,29 +164,35 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
   info!("Retrieve the portal config, user_agent: {}", gp_params.user_agent());
   info!("Portal config request params: {}", redact_form_params(&body_pairs));
 
-  let res = client.post(&url).form(&request_params.body).send().await.map_err(|e| {
-    warn!("Network error: {:?}", e);
-    anyhow::anyhow!(PortalError::NetworkError(e))
-  })?;
+  let res_xml = tokio::select! {
+    biased;
+    _ = cancellation.cancelled() => bail!("Portal configuration cancelled"),
+    result = async {
+      let res = client.post(&url).form(&request_params.body).send().await.map_err(|e| {
+        warn!("Network error: {:?}", e);
+        anyhow::anyhow!(PortalError::NetworkError(e))
+      })?;
 
-  let res_xml = parse_gp_response(res).await.or_else(|err| {
-    if err.status == StatusCode::NOT_FOUND {
-      bail!(PortalError::ConfigError("Config endpoint not found".to_string()));
-    }
+      parse_gp_response(res).await.or_else(|err| {
+        if err.status == StatusCode::NOT_FOUND {
+          bail!(PortalError::ConfigError("Config endpoint not found".to_string()));
+        }
 
-    if err.is_status_error() {
-      warn!("{err}");
-      bail!("Portal config error: {}", err.reason);
-    }
+        if err.is_status_error() {
+          warn!("{err}");
+          bail!("Portal config error: {}", err.reason);
+        }
 
-    Err(anyhow::anyhow!(PortalError::ConfigError(err.reason)))
-  })?;
+        Err(anyhow::anyhow!(PortalError::ConfigError(err.reason)))
+      })
+    } => result?,
+  };
 
   if res_xml.is_empty() {
     bail!(PortalError::ConfigError("Empty portal config response".to_string()))
   }
 
-  debug!("Portal config response: {}", res_xml);
+  debug!("Portal config response received: {} bytes", res_xml.len());
   let root = Element::parse(res_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
 
   if csc::is_config_criteria(&root) {
@@ -178,14 +202,18 @@ pub async fn retrieve_config(portal: &str, cred: &Credential, gp_params: &GpPara
         "Portal returned CSC criteria but CSC support is disabled".to_string()
       ));
     }
-    let csc_xml = retrieve_csc_config(&client, &portal, &root, cred.username(), gp_params).await?;
-    debug!("Portal CSC config response: {}", csc_xml);
+    let csc_xml = tokio::select! {
+      biased;
+      _ = cancellation.cancelled() => bail!("Portal configuration cancelled"),
+      result = retrieve_csc_config(&client, &portal, &root, cred.username(), gp_params) => result?,
+    };
+    debug!("Portal CSC config response received: {} bytes", csc_xml.len());
     let root = Element::parse(csc_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
-    return parse_portal_config(&server, cred, root);
+    return parse_portal_config(&server, cred, root, cancellation).await;
   }
 
   info!("Portal did not return CSC criteria");
-  parse_portal_config(&server, cred, root)
+  parse_portal_config(&server, cred, root, cancellation).await
 }
 
 async fn retrieve_csc_config(
@@ -245,12 +273,31 @@ fn present(value: Option<&str>) -> &'static str {
   }
 }
 
-fn parse_portal_config(server: &str, cred: &Credential, root: Element) -> anyhow::Result<PortalConfig> {
-  let mut ihd_enabled = false;
-  let mut prefer_internal = false;
-  if let Some(ihd_node) = root.descendant("internal-host-detection") {
-    ihd_enabled = true;
-    prefer_internal = internal_host_detect(ihd_node)
+async fn parse_portal_config(
+  server: &str,
+  cred: &Credential,
+  root: Element,
+  cancellation: &CancellationToken,
+) -> anyhow::Result<PortalConfig> {
+  let internal_detection = root
+    .descendant("internal-host-detection")
+    .map(parse_internal_detection)
+    .transpose()
+    .unwrap_or_else(|error| {
+      warn!("Internal host detection policy is unavailable: {error}");
+      None
+    })
+    .flatten();
+  let prefer_internal = match &internal_detection {
+    Some(detection) => detection.detect(cancellation).await.unwrap_or_else(|error| {
+      warn!("Internal host detection failed: {error}");
+      false
+    }),
+    None => false,
+  };
+
+  if cancellation.is_cancelled() {
+    bail!("Portal configuration cancelled");
   }
 
   let mut gateways = parse_gateways(&root, prefer_internal).unwrap_or_else(|| {
@@ -275,6 +322,7 @@ fn parse_portal_config(server: &str, cred: &Credential, root: Element) -> anyhow
   info!("Detected portal version: {:?}", version);
   let allow_extend_session = parse_allow_extend_session(&root);
   let default_browser = parse_default_browser(&root);
+  let internal_session_policy = parse_internal_session_policy(&root).ok();
 
   Ok(PortalConfig {
     portal: server.to_string(),
@@ -283,11 +331,40 @@ fn parse_portal_config(server: &str, cred: &Credential, root: Element) -> anyhow
     gateways,
     connect_method,
     config_digest: config_digest.map(|s| s.to_string()),
-    internal_host_detection: if ihd_enabled { Some(prefer_internal) } else { None },
+    internal_host_detection: internal_detection.as_ref().map(|_| prefer_internal),
+    internal_detection,
     version,
     allow_extend_session,
     default_browser,
+    internal_session_policy,
   })
+}
+
+fn parse_internal_session_policy(root: &Element) -> anyhow::Result<InternalSessionPolicy> {
+  let hip = root.descendant("hip-collection");
+  let interval = hip
+    .and_then(|hip| hip.child("hip-report-interval"))
+    .map(|element| element.get_text().unwrap_or_default().into_owned());
+  let collect = hip
+    .and_then(|hip| hip.child("collect-hip-data"))
+    .map(|element| element.get_text().unwrap_or_default().into_owned());
+  let interval = parse_policy_number(interval, 3600, "hip-report-interval")?;
+  let collect = match collect.as_deref().map(str::trim) {
+    None | Some("yes") => true,
+    Some("no") => false,
+    Some(_) => bail!("Invalid portal collect-hip-data policy"),
+  };
+  InternalSessionPolicy::new(interval, collect)
+}
+
+fn parse_policy_number(value: Option<String>, default: u32, field: &str) -> anyhow::Result<u32> {
+  match value {
+    Some(value) => value
+      .trim()
+      .parse()
+      .map_err(|_| anyhow::anyhow!("Invalid portal {field} policy")),
+    None => Ok(default),
+  }
 }
 
 fn parse_default_browser(root: &Element) -> Option<bool> {
@@ -313,47 +390,92 @@ fn parse_connect_method(root: &Element) -> Option<String> {
     .map(|s| s.to_string())
 }
 
-// Perform DNS lookup and compare the result with the expected hostname
-fn internal_host_detect(element: &Element) -> bool {
+fn parse_internal_detection(element: &Element) -> anyhow::Result<Option<InternalHostDetection>> {
   let ip_info = [
     (element.child_text("ip-address"), element.child_text("host")),
     (element.child_text("ipv6-address"), element.child_text("ipv6-host")),
   ];
 
-  info!("Found internal-host-detection, performing DNS lookup");
-
+  let mut targets = Vec::new();
   for (ip_address, host) in ip_info.iter() {
-    if let (Some(ip_address), Some(host)) = (ip_address.as_deref(), host.as_deref())
-      && !ip_address.is_empty()
-      && !host.is_empty()
-    {
-      match ip_address.parse::<std::net::IpAddr>() {
-        Ok(ip) => match lookup_addr(&ip) {
-          Ok(host_lookup) if host_lookup.to_lowercase() == host.to_lowercase() => {
-            return true;
-          }
-          Ok(host_lookup) => {
-            info!(
-              "rDNS lookup for {} returned {}, expected {}",
-              ip_address, host_lookup, host
-            );
-          }
-          Err(err) => warn!("rDNS lookup failed for {}: {}", ip_address, err),
-        },
-        Err(err) => warn!("Invalid IP address {}: {}", ip_address, err),
-      }
+    let address = ip_address.as_deref().filter(|value| !value.is_empty());
+    let host = host.as_deref().filter(|value| !value.is_empty());
+    match (address, host) {
+      (None, None) => {}
+      (Some(address), Some(host)) => targets.push((address.parse()?, host.to_owned())),
+      _ => bail!("Incomplete internal host detection policy"),
     }
   }
-
-  false
+  if targets.is_empty() {
+    Ok(None)
+  } else {
+    Ok(Some(InternalHostDetection::new(targets)?))
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
 
+  #[tokio::test]
+  async fn invalid_non_tunnel_policy_does_not_reject_tunnel_candidates() {
+    let root = parse_xml(
+      "<policy><hip-collection><hip-report-interval>invalid</hip-report-interval></hip-collection><internal-host-detection><ip-address>invalid</ip-address><host>internal.example</host></internal-host-detection><gateways><external><list><entry name='vpn.example'/></list></external></gateways></policy>",
+    );
+    let credential = crate::credential::PasswordCredential::new("alice", "password").into();
+    let config = parse_portal_config("portal.example", &credential, root, &CancellationToken::new())
+      .await
+      .unwrap();
+    assert!(config.internal_session_policy().is_none());
+    assert_eq!(config.gateways()[0].server(), "vpn.example");
+    assert_eq!(config.gateways()[0].kind(), crate::gateway::GatewayKind::External);
+  }
+
   fn parse_xml(xml: &str) -> Element {
     Element::parse(xml.as_bytes()).unwrap()
+  }
+
+  #[test]
+  fn parses_internal_maintenance_policy_with_explicit_units() {
+    let root = parse_xml(
+      "<policy><hip-collection><hip-report-interval>60</hip-report-interval><collect-hip-data>no</collect-hip-data></hip-collection><max-internal-gateway-connection-attempts>3</max-internal-gateway-connection-attempts></policy>",
+    );
+    let policy = parse_internal_session_policy(&root).unwrap();
+    assert_eq!(policy.hip_interval(), std::time::Duration::from_secs(60));
+    assert!(!policy.collect_hip_data());
+    assert_eq!(
+      parse_internal_session_policy(&parse_xml("<policy/>")).unwrap(),
+      InternalSessionPolicy::default()
+    );
+  }
+
+  #[test]
+  fn rejects_invalid_supplied_internal_policy() {
+    for interval in ["0", "-1", "", "4294967295", "not-a-number"] {
+      let root = parse_xml(&format!(
+        "<policy><hip-collection><hip-report-interval>{interval}</hip-report-interval></hip-collection></policy>"
+      ));
+      assert!(parse_internal_session_policy(&root).is_err());
+    }
+    let root = parse_xml("<policy><hip-collection><collect-hip-data>true</collect-hip-data></hip-collection></policy>");
+    assert!(parse_internal_session_policy(&root).is_err());
+  }
+
+  #[tokio::test]
+  async fn accepts_existing_full_portal_fixture() {
+    let root = parse_xml(include_str!("../../tests/files/portal_config.xml"));
+    let cred = Credential::from(crate::credential::PasswordCredential::new(
+      "fixture-user",
+      "fixture-password",
+    ));
+    let config = parse_portal_config("vpn.example.com", &cred, root, &CancellationToken::new())
+      .await
+      .unwrap();
+    assert_eq!(
+      config.internal_session_policy().unwrap().hip_interval(),
+      std::time::Duration::from_secs(3600)
+    );
+    assert!(!config.gateways().is_empty());
   }
 
   #[test]
@@ -412,8 +534,8 @@ mod tests {
     assert_eq!(parse_connect_method(&root).as_deref(), Some("on-demand"));
   }
 
-  #[test]
-  fn parses_csc_policy_response_as_portal_config() {
+  #[tokio::test]
+  async fn parses_csc_policy_response_as_portal_config() {
     let root = parse_xml(
       r#"<policy>
         <portal-userauthcookie>user-cookie</portal-userauthcookie>
@@ -431,7 +553,9 @@ mod tests {
     );
     let cred = Credential::from(crate::credential::PasswordCredential::new("alice", "secret"));
 
-    let config = parse_portal_config("vpn.example.com", &cred, root).unwrap();
+    let config = parse_portal_config("vpn.example.com", &cred, root, &CancellationToken::new())
+      .await
+      .unwrap();
 
     assert_eq!(config.auth_cookie().user_auth_cookie(), "user-cookie");
     assert_eq!(config.auth_cookie().prelogon_user_auth_cookie(), "prelogon-cookie");

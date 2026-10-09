@@ -1,64 +1,36 @@
-use std::{env::temp_dir, fs, os::unix::fs::PermissionsExt};
+use std::net::{IpAddr, SocketAddr};
 
-use common::constants::GP_CALLBACK_PORT_FILENAME;
+use browser_launcher::Browser as LaunchBrowser;
 use gpapi::auth::SamlAuthData;
 use log::info;
-use tokio::{
-  io::AsyncReadExt,
-  net::{TcpListener, UdpSocket},
-};
+use tokio::net::UdpSocket;
 
-use crate::browser::auth_server::AuthServer;
-
-pub enum Browser<'a> {
-  Auto,
-  Default,
-  Chrome,
-  Firefox,
-  Remote,
-  Other(&'a str),
-}
-
-impl<'a> Browser<'a> {
-  pub fn from_str(browser: &'a str) -> Self {
-    match browser.to_lowercase().as_str() {
-      "auto" => Browser::Auto,
-      "default" => Browser::Default,
-      "chrome" => Browser::Chrome,
-      "firefox" => Browser::Firefox,
-      "remote" => Browser::Remote,
-      _ => Browser::Other(browser),
-    }
-  }
-
-  fn as_str(&self) -> &str {
-    match self {
-      Browser::Auto => "auto",
-      Browser::Default => "default",
-      Browser::Chrome => "chrome",
-      Browser::Firefox => "firefox",
-      Browser::Remote => "remote",
-      Browser::Other(browser) => browser,
-    }
-  }
-}
+use crate::{AuthCallbackReceiver, browser::auth_server::AuthServer, ensure_auth_callback_handler};
 
 pub struct BrowserAuthenticator<'a> {
   auth_request: &'a str,
-  browser: Browser<'a>,
+  browser: &'a str,
+  browser_listen: Option<IpAddr>,
 }
 
 impl<'a> BrowserAuthenticator<'a> {
-  pub fn new(auth_request: &'a str, browser: &'a str) -> Self {
+  pub fn new(auth_request: &'a str, browser: &'a str, browser_listen: Option<IpAddr>) -> Self {
     Self {
       auth_request,
-      browser: Browser::from_str(browser),
+      browser,
+      browser_listen,
     }
   }
 
   pub async fn authenticate(&self) -> anyhow::Result<SamlAuthData> {
+    let callback_receiver = if is_remote_browser(self.browser) {
+      None
+    } else {
+      ensure_auth_callback_handler()?;
+      Some(AuthCallbackReceiver::bind()?)
+    };
     let addr = self.determine_addr().await?;
-    let auth_server = AuthServer::new(&addr)?;
+    let auth_server = AuthServer::new(addr)?;
     let auth_url = auth_server.auth_url();
 
     let auth_request = self.auth_request.to_string();
@@ -66,10 +38,9 @@ impl<'a> BrowserAuthenticator<'a> {
       auth_server.serve_request(&auth_request);
     });
 
-    match self.browser {
-      Browser::Remote => {
-        info!(
-          r#"
+    if is_remote_browser(self.browser) {
+      info!(
+        r#"
 
 ==== Manual Authentication Required ====
 
@@ -82,109 +53,45 @@ After completing the authentication, please paste the authentication data back t
 
 Note that the URL is only valid for a single use.
 "#,
-          auth_url
-        );
-        return read_auth_data_from_stdin();
-      }
-      Browser::Default => {
-        info!("Launching the default browser...");
-        webbrowser::open(&auth_url)?;
-      }
-      Browser::Auto => {
-        if let Some(app) = find_auto_browser_path() {
-          info!("Launching browser: {}", app);
-          open::with_detached(&auth_url, app)?;
-        } else {
-          info!("No preferred browser found; launching the default browser...");
-          webbrowser::open(&auth_url)?;
-        }
-      }
-      _ => {
-        let app = find_browser_path(&self.browser);
-
-        info!("Launching browser: {}", app);
-        open::with_detached(auth_url, app)?;
-      }
+        auth_url
+      );
+      return read_auth_data_from_stdin();
     }
 
+    browser_launcher::open_url(&auth_url, LaunchBrowser::from_name(self.browser))?;
+
     info!("Please continue the authentication process in the default browser");
-    wait_auth_data().await
+    callback_receiver.unwrap().receive().await
   }
 
-  async fn determine_addr(&self) -> anyhow::Result<String> {
-    if matches!(self.browser, Browser::Remote) {
-      let local_ip = detect_local_ip().await?;
-      Ok(format!("{}:0", local_ip))
+  async fn determine_addr(&self) -> anyhow::Result<SocketAddr> {
+    if is_remote_browser(self.browser) {
+      let local_ip = match self.browser_listen {
+        Some(ip) => ip,
+        None => detect_local_ip().await?,
+      };
+      Ok(SocketAddr::new(local_ip, 0))
     } else {
-      Ok("127.0.0.1:0".to_string())
+      Ok(SocketAddr::from(([127, 0, 0, 1], 0)))
     }
   }
 }
 
+fn is_remote_browser(browser: &str) -> bool {
+  browser.eq_ignore_ascii_case("remote")
+}
+
 /// Detect the local IP address by creating a UDP socket and connecting to an external address
-async fn detect_local_ip() -> anyhow::Result<String> {
+async fn detect_local_ip() -> anyhow::Result<IpAddr> {
   let socket = UdpSocket::bind("0.0.0.0:0").await?;
   if let Err(err) = socket.connect("1.1.1.1:80").await {
     anyhow::bail!("Failed to connect to external address to determine local IP: {}", err);
   }
   let local_addr = socket.local_addr()?;
-  let ip = local_addr.ip().to_string();
+  let ip = local_addr.ip();
   info!("Determined local IP address: {}", ip);
 
-  Ok(ip.to_string())
-}
-
-fn find_browser_path(browser: &Browser) -> String {
-  match browser {
-    Browser::Chrome => find_chrome_path().unwrap_or_else(|| browser.as_str().to_string()),
-    _ => browser.as_str().to_string(),
-  }
-}
-
-fn find_auto_browser_path() -> Option<String> {
-  find_chrome_path().or_else(|| find_program_path("firefox"))
-}
-
-fn find_chrome_path() -> Option<String> {
-  ["google-chrome-stable", "google-chrome", "chromium"]
-    .iter()
-    .find_map(|browser_name| find_program_path(browser_name))
-}
-
-fn find_program_path(name: &str) -> Option<String> {
-  which::which(name).ok().map(|path| path.to_string_lossy().to_string())
-}
-
-async fn wait_auth_data() -> anyhow::Result<SamlAuthData> {
-  // Start a local server to receive the browser authentication data
-  let listener = TcpListener::bind("127.0.0.1:0").await?;
-  let port = listener.local_addr()?.port();
-  let port_file = temp_dir().join(GP_CALLBACK_PORT_FILENAME);
-
-  // Write the port to a file
-  fs::write(&port_file, port.to_string())?;
-  fs::set_permissions(&port_file, fs::Permissions::from_mode(0o600))?;
-
-  // Remove the previous log file
-  let callback_log = temp_dir().join("gpcallback.log");
-  let _ = fs::remove_file(&callback_log);
-
-  info!("Listening authentication data on port {}", port);
-  info!(
-    "If it hangs, please check the logs at `{}` for more information",
-    callback_log.display()
-  );
-  let (mut socket, _) = listener.accept().await?;
-
-  info!("Received the browser authentication data from the socket");
-  let mut data = String::new();
-  socket.read_to_string(&mut data).await?;
-
-  // Remove the port file
-  fs::remove_file(&port_file)?;
-
-  let auth_data = SamlAuthData::from_gpcallback(&data)?;
-  Ok(auth_data)
+  Ok(ip)
 }
 
 fn read_auth_data_from_stdin() -> anyhow::Result<SamlAuthData> {
@@ -200,8 +107,26 @@ mod tests {
   use super::*;
 
   #[test]
-  fn browser_auto_is_distinct_from_system_default() {
-    assert!(matches!(Browser::from_str("auto"), Browser::Auto));
-    assert!(matches!(Browser::from_str("default"), Browser::Default));
+  fn shared_launcher_keeps_auto_distinct_from_system_default() {
+    assert_eq!(LaunchBrowser::from_name("auto"), LaunchBrowser::Auto);
+    assert_eq!(LaunchBrowser::from_name("default"), LaunchBrowser::Default);
+  }
+
+  #[test]
+  fn browser_remote_remains_auth_specific() {
+    assert!(is_remote_browser("remote"));
+    assert!(is_remote_browser("REMOTE"));
+    assert_ne!(LaunchBrowser::from_name("remote"), LaunchBrowser::Default);
+  }
+
+  #[tokio::test]
+  async fn remote_browser_uses_explicit_listen_address() {
+    let listen_ip = "192.168.107.15".parse().unwrap();
+    let authenticator = BrowserAuthenticator::new("request", "remote", Some(listen_ip));
+
+    assert_eq!(
+      authenticator.determine_addr().await.unwrap(),
+      SocketAddr::new(listen_ip, 0)
+    );
   }
 }

@@ -1,10 +1,173 @@
 html,
 body,
 #root {
+  box-sizing: border-box;
   height: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
+}
+
+body {
+  background: #f6f5f4;
+  color: #2e3436;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+button {
+  font: inherit;
+}
+
+.update-window {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 16px 18px;
+  gap: 15px;
+  background: #f6f5f4;
+}
+
+.update-logo {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+}
+
+.update-content,
+.update-status {
+  min-width: 0;
+  width: 100%;
+}
+
+.update-title {
+  margin: 0;
+  color: #2e3436;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.update-description {
+  margin: 3px 0 0;
+  color: #5e5c64;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.progress-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 3px;
+}
+
+.progress-summary .update-description {
+  margin: 0;
+}
+
+.progress-bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 3px;
+  background-color: #d5d3d1;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #3584e4;
+  transition: width 180ms ease-out;
+}
+
+.progress-bar-indeterminate .progress-fill {
+  width: 35%;
+  animation: progress-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill {
+    transition: none;
+  }
+
+  .progress-bar-indeterminate .progress-fill {
+    animation: none;
+    transform: translateX(90%);
+  }
+}
+
+.progress-label {
+  flex: 0 0 auto;
+  color: #3d3846;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.error-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.error-status .update-title {
+  color: #9c2f2f;
+}
+
+.error-copy {
+  min-width: 0;
+}
+
+.retry-button {
+  min-width: 68px;
+  padding: 4px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #1c71d8;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.retry-button:hover {
+  background: #1a5fb4;
+}
+
+.retry-button:active {
+  background: #174a8b;
+}
+
+.retry-button:focus-visible {
+  outline: 2px solid #1a5fb4;
+  outline-offset: 2px;
 }

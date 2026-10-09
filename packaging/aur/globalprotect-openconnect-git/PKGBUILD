@@ -10,7 +10,7 @@ url="https://github.com/yuezk/GlobalProtect-openconnect"
 license=('GPL3')
 
 makedepends=(git pkg-config 'openconnect>=8.20' webkit2gtk-4.1 curl wget file openssl appmenu-gtk-module libappindicator-gtk3 librsvg libsecret cargo)
-depends=(vpnc openssl webkit2gtk-4.1 libappindicator-gtk3 libsecret libxml2 shared-mime-info desktop-file-utils)
+depends=(vpnc openssl webkit2gtk-4.1 libappindicator-gtk3 libsecret libxml2 shared-mime-info desktop-file-utils xdg-utils)
 optdepends=('wmctrl: for window management')
 
 conflicts=('globalprotect-openconnect')

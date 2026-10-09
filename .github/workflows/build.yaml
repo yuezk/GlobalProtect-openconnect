@@ -2,6 +2,11 @@ name: Build
 on:
   workflow_dispatch:
     inputs:
+      build_only:
+        description: 'Build and test artifacts without publishing releases, images, or update feeds'
+        required: true
+        default: false
+        type: boolean
       gp_branch:
         description: 'GlobalProtect-openconnect branch to use for the snapshot release'
         required: true
@@ -10,6 +15,11 @@ on:
         description: 'gpgui branch to use for the snapshot release'
         required: true
         default: dev
+      build_macos:
+        description: 'Build Apple Silicon artifacts for the snapshot release'
+        required: true
+        default: false
+        type: boolean
       build_bsd:
         description: 'Build FreeBSD/OpenBSD packages for the snapshot release'
         required: true
@@ -35,10 +45,32 @@ on:
       - v*.*.*
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && (inputs.build_only && github.run_id || 'release') || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
+  test-gp:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout GlobalProtect-openconnect
+      uses: actions/checkout@v6
+      with:
+        token: ${{ secrets.GH_PAT }}
+        repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        submodules: recursive
+    - name: Run Rust tests in Docker
+      run: |
+        docker run --rm \
+          --user root \
+          -e COREPACK_INTEGRITY_KEYS=0 \
+          -e LIBXML2_STATIC=1 \
+          -e PKEXEC_UID=1000 \
+          -v "$(pwd):/workspace" \
+          -w /workspace \
+          yuezk/gpdev:binary-builder-tauri2 \
+          cargo test --workspace
+
   tarball:
     runs-on: ubuntu-latest
     steps:
@@ -206,11 +238,13 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v4
     - name: Login to Docker Hub
+      if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build_only }}
       uses: docker/login-action@v4
       with:
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_TOKEN }}
     - name: Build and push by digest
+      if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build_only }}
       id: build
       uses: docker/build-push-action@v7
       with:
@@ -218,20 +252,37 @@ jobs:
         file: packaging/docker/alpine/Dockerfile
         platforms: ${{ matrix.platform }}
         outputs: type=image,name=yuezk/globalprotect-openconnect,push-by-digest=true,name-canonical=true,push=true
+    - name: Build local image for verification
+      if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only }}
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: packaging/docker/alpine/Dockerfile
+        platforms: ${{ matrix.platform }}
+        tags: yuezk/globalprotect-openconnect:build-test
+        load: true
+        push: false
     - name: Verify CLI tools
       env:
         IMAGE: yuezk/globalprotect-openconnect
         DIGEST: ${{ steps.build.outputs.digest }}
+        BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only }}
       run: |
-        docker run --rm "$IMAGE@$DIGEST" --help
-        docker run --rm --entrypoint gpauth "$IMAGE@$DIGEST" --help
-        docker run --rm --entrypoint sh "$IMAGE@$DIGEST" -lc 'test "$(id -u gp)" = "1000" && test "$SUDO_UID" = "1000"'
+        image_ref="$IMAGE@$DIGEST"
+        if [[ "$BUILD_ONLY" == "true" ]]; then
+          image_ref="$IMAGE:build-test"
+        fi
+        docker run --rm "$image_ref" --help
+        docker run --rm --entrypoint gpauth "$image_ref" --help
+        docker run --rm --entrypoint sh "$image_ref" -lc 'test "$(id -u gp)" = "1000" && test "$SUDO_UID" = "1000"'
     - name: Export digest
+      if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build_only }}
       run: |
         mkdir -p /tmp/digests
         digest="${{ steps.build.outputs.digest }}"
         touch "/tmp/digests/${digest#sha256:}"
     - name: Upload digest
+      if: ${{ github.event_name != 'workflow_dispatch' || !inputs.build_only }}
       uses: actions/upload-artifact@v7
       with:
         name: digests-${{ env.PLATFORM_PAIR }}
@@ -278,14 +329,22 @@ jobs:
         repository: yuezk/gpgui
         ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
         path: gpgui-source/gpgui
+    - name: Verify Linux desktop assets
+      if: matrix.os.arch == 'amd64' && matrix.libc.name == 'glibc'
+      run: gpgui-source/gp/scripts/verify-linux-desktop-assets.sh gpgui-source/gpgui
     - name: Tarball
       run: |
         cd gpgui-source
         tar -czf gpgui.tar.gz gpgui gp
     - name: Build gpgui in Docker
+      env:
+        GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
       run: |
         docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
+          -e GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }} \
+          -e GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }} \
+          -e GPGUI_LICENSE_SIGNING_KEYS \
           -v $(pwd)/gpgui-source:/workspace yuezk/gpdev:${{ matrix.libc.builder }}
     - name: Install gpgui in Docker
       run: |
@@ -303,6 +362,209 @@ jobs:
         path: |
           gpgui-source/*.bin.tar.xz
           gpgui-source/*.bin.tar.xz.sha256
+
+  nix-source:
+    needs: [build-gpgui]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+            artifact_arch: amd64
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+            artifact_arch: ubuntu-24.04-arm
+    runs-on: ${{ matrix.platform.runner }}
+    name: nix-source (${{ matrix.platform.system }})
+    env:
+      NIX_SYSTEM: ${{ matrix.platform.system }}
+      NIXPKGS: locked
+    steps:
+      - name: Checkout source and dependencies
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+          submodules: recursive
+          path: gp
+      - name: Download current GUI artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact-gpgui-${{ matrix.platform.artifact_arch }}
+          path: nix-artifacts/gui
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Configure current source and GUI inputs
+        run: |
+          echo "GP_SOURCE=$PWD/gp" >> "$GITHUB_ENV"
+          gui_archive=$(find "$PWD/nix-artifacts/gui" -name '*.bin.tar.xz' -type f)
+          test -f "$gui_archive"
+          echo "GP_GUI_ARCHIVE=$gui_archive" >> "$GITHUB_ENV"
+      - name: Build source package
+        run: |
+          nix build --impure --file gp/nix/ci.nix source \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+          bash gp/scripts/tests/nix-desktop-authorization.sh result
+      - name: Test source runtime in NixOS
+        if: matrix.platform.system == 'x86_64-linux'
+        run: |
+          nix build --impure --file gp/nix/ci.nix runtime-source \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+
+  nix-prebuilt:
+    needs: [build-gp, build-gpgui]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+            artifact_arch: amd64
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+            artifact_arch: ubuntu-24.04-arm
+        nixpkgs: [locked, nixos-25.11, nixos-26.05, nixpkgs-unstable]
+    runs-on: ${{ matrix.platform.runner }}
+    name: nix-prebuilt (${{ matrix.platform.system }}, ${{ matrix.nixpkgs }})
+    env:
+      NIX_SYSTEM: ${{ matrix.platform.system }}
+      NIXPKGS: ${{ matrix.nixpkgs }}
+    steps:
+      - name: Checkout packaging and tests
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+          submodules: recursive
+          path: gp
+      - name: Download current Linux binary artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact-gp-binary-${{ matrix.platform.artifact_arch }}
+          path: nix-artifacts/binaries
+      - name: Download current GUI artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact-gpgui-${{ matrix.platform.artifact_arch }}
+          path: nix-artifacts/gui
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Configure current artifact inputs
+        run: |
+          echo "GP_SOURCE=$PWD/gp" >> "$GITHUB_ENV"
+          binary_archive=$(find "$PWD/nix-artifacts/binaries" -name '*.bin.tar.xz' -type f)
+          gui_archive=$(find "$PWD/nix-artifacts/gui" -name '*.bin.tar.xz' -type f)
+          test -f "$binary_archive"
+          test -f "$gui_archive"
+          echo "GP_BINARY_ARCHIVE=$binary_archive" >> "$GITHUB_ENV"
+          echo "GP_GUI_ARCHIVE=$gui_archive" >> "$GITHUB_ENV"
+      - name: Build package through host NixOS module
+        run: |
+          nix build --impure --file gp/nix/ci.nix module \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+          bash gp/scripts/tests/nix-desktop-authorization.sh result
+      - name: Build standalone prebuilt package
+        if: matrix.nixpkgs == 'locked'
+        run: |
+          nix build --impure --file gp/nix/ci.nix prebuilt \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+      - name: Test prebuilt runtime in NixOS
+        if: matrix.nixpkgs == 'locked' && matrix.platform.system == 'x86_64-linux'
+        run: |
+          nix build --impure --file gp/nix/ci.nix runtime-prebuilt \
+            --extra-experimental-features "nix-command flakes" --print-build-logs
+
+  trigger-gpgui-macos:
+    needs: test-gp
+    if: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.build_macos) }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    name: trigger private macOS release
+    outputs:
+      run_id: ${{ steps.dispatch.outputs.run_id }}
+      run_url: ${{ steps.dispatch.outputs.run_url }}
+    steps:
+      - name: Dispatch private macOS release
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ secrets.GPGUI_ACTIONS_TOKEN }}
+          PUBLIC_GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && 'snapshot' || github.ref_name }}
+          GP_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref_name }}
+          GPGUI_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+          BUILD_VERSION: ${{ github.run_number }}.${{ github.run_attempt }}
+          REQUEST_ID: ${{ github.run_id }}.${{ github.run_attempt }}.macos
+          BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "GPGUI_ACTIONS_TOKEN is not configured" >&2
+            exit 1
+          fi
+
+          gp_ref_path="$(jq -rn --arg ref "$GP_REF" '$ref | @uri')"
+          gpgui_ref_path="$(jq -rn --arg ref "$GPGUI_REF" '$ref | @uri')"
+          gp_sha="$(GH_TOKEN="$PUBLIC_GH_TOKEN" gh api \
+            "repos/yuezk/GlobalProtect-openconnect/commits/$gp_ref_path" --jq .sha)"
+          gpgui_sha="$(gh api "repos/yuezk/gpgui/commits/$gpgui_ref_path" --jq .sha)"
+          if [[ -z "$gp_sha" || -z "$gpgui_sha" ]]; then
+            echo "Could not resolve release source refs" >&2
+            exit 1
+          fi
+
+          expected_title="macOS $CHANNEL $RELEASE_TAG ($REQUEST_ID)"
+          jq -n \
+            --arg workflow_ref "$GPGUI_REF" \
+            --arg request_id "$REQUEST_ID" \
+            --arg build_version "$BUILD_VERSION" \
+            --arg channel "$CHANNEL" \
+            --arg release_tag "$RELEASE_TAG" \
+            --arg gp_ref "$gp_sha" \
+            --arg gpgui_ref "$gpgui_sha" \
+            --argjson build_only "$BUILD_ONLY" \
+            '{
+              ref: $workflow_ref,
+              inputs: {
+                request_id: $request_id,
+                build_version: $build_version,
+                channel: $channel,
+                release_tag: $release_tag,
+                gp_ref: $gp_ref,
+                gpgui_ref: $gpgui_ref,
+                build_only: $build_only
+              }
+            }' | gh api --method POST \
+              repos/yuezk/gpgui/actions/workflows/release-macos.yaml/dispatches \
+              --input -
+
+          run_id=""
+          run_url=""
+          for _ in {1..40}; do
+            runs="$(gh api \
+              'repos/yuezk/gpgui/actions/workflows/release-macos.yaml/runs?event=workflow_dispatch&per_page=50')"
+            run_id="$(jq -r --arg title "$expected_title" \
+              '[.workflow_runs[] | select(.display_title == $title)] | first | .id // empty' \
+              <<<"$runs")"
+            run_url="$(jq -r --arg title "$expected_title" \
+              '[.workflow_runs[] | select(.display_title == $title)] | first | .html_url // empty' \
+              <<<"$runs")"
+            if [[ -n "$run_id" ]]; then
+              {
+                echo "run_id=$run_id"
+                echo "run_url=$run_url"
+              } >> "$GITHUB_OUTPUT"
+              echo "Triggered private workflow: $run_url"
+              exit 0
+            fi
+            sleep 3
+          done
+
+          echo "Could not locate the dispatched private workflow run" >&2
+          exit 1
 
   setup-bsd-matrix:
     runs-on: ubuntu-latest
@@ -374,7 +636,7 @@ jobs:
         path: gpgui-frontend/gpgui
     - name: Build gpgui frontend
       run: |
-        cd gpgui-frontend/gpgui/app
+        cd gpgui-frontend/gpgui/apps/desktop
         pnpm install --frozen-lockfile
         pnpm build
     - name: Upload gpgui frontend
@@ -382,7 +644,7 @@ jobs:
       with:
         name: bsd-gpgui-frontend
         if-no-files-found: error
-        path: gpgui-frontend/gpgui/app/dist/**
+        path: gpgui-frontend/gpgui/apps/desktop/dist/**
 
   build-bsd:
     needs:
@@ -416,7 +678,7 @@ jobs:
       uses: actions/download-artifact@v8
       with:
         name: bsd-gpgui-frontend
-        path: ${{ matrix.workspace }}/gpgui/app/dist
+        path: ${{ matrix.workspace }}/gpgui/apps/desktop/dist
     - name: Build on FreeBSD
       if: ${{ matrix.os == 'freebsd' }}
       uses: vmactions/freebsd-vm@v1
@@ -447,14 +709,17 @@ jobs:
             webkit2-gtk_41
         run: |
           set -eu
+          export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
+          export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }}
+          export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
           cd "${{ matrix.workspace }}/gp"
           cargo build --release --workspace
 
-          cd ../gpgui/app/src-tauri
+          cd ../gpgui/apps/desktop/src-tauri
           cargo build --release --workspace
 
-          cd ../../../gp
+          cd ../../../../gp
           gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
           pkg install -y ".build/${{ matrix.artifact_dir }}"/artifacts/*.pkg
           gpclient --version
@@ -470,25 +735,27 @@ jobs:
         arch: ${{ matrix.arch }}
         usesh: true
         prepare: |
-          pkg_add -z \
+          set -eu
+          pkg_add -u -I
+          pkg_add -I \
             git \
             rust \
             libiconv \
             gettext-tools \
-            autoconf-2.72 \
-            automake-1.17 \
+            autoconf%2.72 \
+            automake%1.17 \
             libtool \
-            patch \
             gmake \
-            pkgconf \
             libxml \
             gnutls \
             p11-kit \
-            nettle \
             gmp \
+            lz4 \
+            dbus \
             gnome-keyring \
             polkit \
-            webkitgtk41
+            webkitgtk41 \
+            xdg-utils
           ln -sf /usr/local/bin/autoreconf-2.72 /usr/local/bin/autoreconf
           ln -sf /usr/local/bin/autoconf-2.72 /usr/local/bin/autoconf
           ln -sf /usr/local/bin/autoheader-2.72 /usr/local/bin/autoheader
@@ -499,14 +766,17 @@ jobs:
           set -eu
           export AUTOCONF_VERSION=2.72
           export AUTOMAKE_VERSION=1.17
+          export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
+          export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && 'snapshot' || 'stable' }}
+          export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
           cd "${{ matrix.workspace }}/gp"
           cargo build --release --workspace
 
-          cd ../gpgui/app/src-tauri
+          cd ../gpgui/apps/desktop/src-tauri
           cargo build --release --workspace
 
-          cd ../../../gp
+          cd ../../../../gp
           gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
           pkg_add -D unsigned ".build/${{ matrix.artifact_dir }}"/artifacts/*.tgz
           gpclient --version
@@ -523,7 +793,7 @@ jobs:
           ${{ matrix.workspace }}/gp/.build/${{ matrix.artifact_dir }}/artifacts/*
 
   gh-release:
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) }}
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && !inputs.build_only) || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -532,6 +802,9 @@ jobs:
       attestations: write
       artifact-metadata: write
     needs:
+      - test-gp
+      - nix-source
+      - nix-prebuilt
       - tarball
       - tarball-offline
       - build-gp
@@ -562,7 +835,7 @@ jobs:
             result = data["result"]
             if result in {"failure", "cancelled"}:
                 failed.append(f"{name}: {result}")
-            elif name in {"build-gp", "build-docker-image"} and result == "skipped" and is_tag:
+            elif name in {"build-gp", "build-docker-image", "nix-prebuilt"} and result == "skipped" and is_tag:
                 continue
             elif name in {"build-gpgui-frontend", "build-bsd"} and result == "skipped" and not bsd_matrix_enabled:
                 continue
@@ -632,10 +905,60 @@ jobs:
       run: |
         cd gh-release/gp/scripts && ./gh-release.sh "$RELEASE_TAG"
 
+  wait-gpgui-macos:
+    if: ${{ always() && needs.trigger-gpgui-macos.result != 'skipped' }}
+    needs:
+      - gh-release
+      - trigger-gpgui-macos
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
+    steps:
+      - name: Wait for private macOS release
+        env:
+          GH_TOKEN: ${{ secrets.GPGUI_ACTIONS_TOKEN }}
+          PUBLIC_RELEASE_RESULT: ${{ needs.gh-release.result }}
+          BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only }}
+          PRIVATE_RUN_ID: ${{ needs.trigger-gpgui-macos.outputs.run_id }}
+          PRIVATE_RUN_URL: ${{ needs.trigger-gpgui-macos.outputs.run_url }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$PRIVATE_RUN_ID" ]]; then
+            echo "The private macOS workflow was not started" >&2
+            exit 1
+          fi
+          if [[ "$BUILD_ONLY" != "true" && "$PUBLIC_RELEASE_RESULT" != "success" ]]; then
+            gh api --method POST \
+              "repos/yuezk/gpgui/actions/runs/$PRIVATE_RUN_ID/cancel" >/dev/null || true
+            echo "The public release failed; cancelled $PRIVATE_RUN_URL" >&2
+            exit 1
+          fi
+
+          for _ in $(seq 1 480); do
+            run="$(gh api "repos/yuezk/gpgui/actions/runs/$PRIVATE_RUN_ID")"
+            status="$(jq -r '.status' <<<"$run")"
+            conclusion="$(jq -r '.conclusion // ""' <<<"$run")"
+            if [[ "$status" == "completed" ]]; then
+              echo "Private macOS workflow completed: $PRIVATE_RUN_URL"
+              if [[ "$conclusion" != "success" ]]; then
+                echo "Private macOS workflow concluded with: $conclusion" >&2
+                exit 1
+              fi
+              exit 0
+            fi
+            sleep 15
+          done
+
+          gh api --method POST \
+            "repos/yuezk/gpgui/actions/runs/$PRIVATE_RUN_ID/cancel" >/dev/null || true
+          echo "Private macOS workflow timed out: $PRIVATE_RUN_URL" >&2
+          exit 1
+
   publish-docker-image:
     needs:
+      - test-gp
       - build-docker-image
-    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && !inputs.build_only) || startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     steps:
     - name: Download digests

@@ -3,6 +3,15 @@ use std::{
   path::{Path, PathBuf},
 };
 
+#[cfg(all(
+  not(debug_assertions),
+  any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")
+))]
+use crate::constants::GP_DOWNLOADED_GUI_BINARY;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use crate::constants::GP_HIP_SCRIPT_INSTALLER_BINARY;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use crate::constants::GP_VPNC_SCRIPT_INSTALLER_BINARY;
 use crate::constants::{GP_AUTH_BINARY, GP_CLIENT_BINARY, GP_GUI_BINARY, GP_GUI_HELPER_BINARY, GP_SERVICE_BINARY};
 
 pub fn gpclient() -> PathBuf {
@@ -13,12 +22,48 @@ pub fn gpservice() -> PathBuf {
   resolve("GP_SERVICE_BINARY", "gpservice", GP_SERVICE_BINARY)
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+pub fn gp_vpnc_script_installer() -> PathBuf {
+  resolve(
+    "GP_VPNC_SCRIPT_INSTALLER_BINARY",
+    "gp-vpnc-script-installer",
+    GP_VPNC_SCRIPT_INSTALLER_BINARY,
+  )
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+pub fn gp_hip_script_installer() -> PathBuf {
+  resolve(
+    "GP_HIP_SCRIPT_INSTALLER_BINARY",
+    "gp-hip-script-installer",
+    GP_HIP_SCRIPT_INSTALLER_BINARY,
+  )
+}
+
 pub fn gpauth() -> PathBuf {
   resolve("GP_AUTH_BINARY", "gpauth", GP_AUTH_BINARY)
 }
 
 pub fn gpgui() -> PathBuf {
   resolve("GP_GUI_BINARY", "gpgui", GP_GUI_BINARY)
+}
+
+pub fn gpgui_update_target() -> PathBuf {
+  #[cfg(all(
+    not(debug_assertions),
+    any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")
+  ))]
+  {
+    PathBuf::from(GP_DOWNLOADED_GUI_BINARY)
+  }
+
+  #[cfg(any(
+    debug_assertions,
+    not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))
+  ))]
+  {
+    gpgui()
+  }
 }
 
 pub fn gpgui_helper() -> PathBuf {
@@ -37,8 +82,27 @@ fn sibling_binary(binary_name: &str) -> Option<PathBuf> {
   let current_exe = env::current_exe().ok()?;
   let bin_dir = current_exe.parent()?;
   let binary = bin_dir.join(binary_name);
+  if is_file(&binary) {
+    return Some(binary);
+  }
+  #[cfg(target_os = "macos")]
+  if let Some(binary) = bundled_helper_path(&current_exe, binary_name)
+    && is_file(&binary)
+  {
+    return Some(binary);
+  }
+  None
+}
 
-  is_file(&binary).then_some(binary)
+#[cfg(target_os = "macos")]
+fn bundled_helper_path(executable: &Path, binary_name: &str) -> Option<PathBuf> {
+  let bin_dir = executable.parent()?;
+  let contents = bin_dir.parent()?;
+  let bundle = contents.parent()?;
+  if bin_dir.file_name()? != "MacOS" || contents.file_name()? != "Contents" || bundle.extension()? != "app" {
+    return None;
+  }
+  Some(contents.join("Helpers").join(binary_name))
 }
 
 fn is_file(path: &Path) -> bool {
@@ -48,6 +112,20 @@ fn is_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  #[cfg(target_os = "macos")]
+  fn desktop_resolves_helpers_in_the_actual_app_bundle_layout() {
+    assert_eq!(
+      bundled_helper_path(
+        Path::new("/Applications/GP Connect.app/Contents/MacOS/gpgui"),
+        "gpclient"
+      ),
+      Some(PathBuf::from("/Applications/GP Connect.app/Contents/Helpers/gpclient"))
+    );
+    assert!(bundled_helper_path(Path::new("/usr/local/bin/gpgui"), "gpclient").is_none());
+    assert!(bundled_helper_path(Path::new("/tmp/Contents/MacOS/gpgui"), "gpclient").is_none());
+  }
 
   #[test]
   fn default_path_is_used_when_no_sibling_exists() {

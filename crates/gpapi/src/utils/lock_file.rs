@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use common::constants::GP_SERVICE_LOCK_FILE;
 use thiserror::Error;
@@ -7,6 +7,10 @@ use tokio::fs;
 pub struct LockFile {
   path: PathBuf,
   pid: u32,
+}
+
+pub fn dev_service_lock_file_path(bootstrap_socket: impl AsRef<Path>) -> PathBuf {
+  bootstrap_socket.as_ref().with_file_name("gpservice.lock")
 }
 
 impl LockFile {
@@ -25,8 +29,15 @@ impl LockFile {
   }
 
   pub fn unlock(&self) -> anyhow::Result<()> {
-    std::fs::remove_file(&self.path)?;
-    Ok(())
+    match std::fs::read_to_string(&self.path) {
+      Ok(content) if LockInfo::parse(&content).is_ok_and(|info| info.pid == self.pid) => {
+        std::fs::remove_file(&self.path)?;
+        Ok(())
+      }
+      Ok(_) => Ok(()),
+      Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+      Err(err) => Err(err.into()),
+    }
   }
 
   pub async fn check_health(&self) -> bool {
@@ -95,7 +106,11 @@ impl LockInfo {
 }
 
 pub async fn gpservice_lock_info() -> Result<LockInfo, LockFileError> {
-  LockInfo::from_file(GP_SERVICE_LOCK_FILE).await
+  gpservice_lock_info_at(GP_SERVICE_LOCK_FILE).await
+}
+
+pub async fn gpservice_lock_info_at(path: impl AsRef<Path>) -> Result<LockInfo, LockFileError> {
+  LockInfo::from_file(path).await
 }
 
 #[cfg(test)]
@@ -125,5 +140,51 @@ mod tests {
       LockInfo::parse("1234:abc"),
       Err(LockFileError::InvalidPort(_))
     ));
+  }
+
+  #[test]
+  fn dev_service_lock_file_is_next_to_the_bootstrap_socket() {
+    assert_eq!(
+      dev_service_lock_file_path("/var/run/gpservice-dev-123/dev-bootstrap.sock"),
+      PathBuf::from("/var/run/gpservice-dev-123/gpservice.lock")
+    );
+  }
+
+  #[test]
+  fn unlock_removes_lock_owned_by_process() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("gpservice.lock");
+    let lock = LockFile::new(&path, 1234);
+    lock.lock("8080").unwrap();
+
+    lock.unlock().unwrap();
+
+    assert!(!path.exists());
+  }
+
+  #[test]
+  fn unlock_preserves_lock_owned_by_another_process() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("gpservice.lock");
+    let owner = LockFile::new(&path, 1234);
+    let other = LockFile::new(&path, 5678);
+    owner.lock("8080").unwrap();
+
+    other.unlock().unwrap();
+
+    assert_eq!(std::fs::read_to_string(path).unwrap(), "1234:8080");
+  }
+
+  #[test]
+  fn unlock_ignores_missing_or_malformed_lock() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("gpservice.lock");
+    let lock = LockFile::new(&path, 1234);
+
+    lock.unlock().unwrap();
+    std::fs::write(&path, "not-a-lock").unwrap();
+    lock.unlock().unwrap();
+
+    assert_eq!(std::fs::read_to_string(path).unwrap(), "not-a-lock");
   }
 }
