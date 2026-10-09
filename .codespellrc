@@ -1,0 +1,7 @@
+[codespell]
+# Ref: https://github.com/codespell-project/codespell#using-a-config-file
+skip = .git*,*.svg,*-lock.yaml,*.lock,*.css,.codespellrc,*/dist/*,*.min.js
+check-hidden = true
+# Ignore URLs (typos in URLs must not be "fixed" — would break links)
+ignore-regex = https?://\S+
+# ignore-words-list =
