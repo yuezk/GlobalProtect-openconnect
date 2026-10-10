@@ -143,7 +143,8 @@ release_snapshot() {
   snapshot_commit="$(git -C "$SCRIPT_DIR/.." rev-parse HEAD)"
   if ! gh -R "$REPO" release view "$TAG" >/dev/null 2>&1; then
     gh -R "$REPO" release create "$TAG" \
-      --prerelease \
+      --prerelease=false \
+      --latest=false \
       --target "$snapshot_commit" \
       --title "Snapshot" \
       --notes "Rolling snapshot release from trusted CI builds."
@@ -186,7 +187,7 @@ release_snapshot() {
 
   gh api --method PATCH "repos/$REPO/git/refs/tags/$TAG" \
     -f sha="$snapshot_commit" -F force=true >/dev/null
-  gh -R "$REPO" release edit "$TAG" --prerelease --title "Snapshot"
+  gh -R "$REPO" release edit "$TAG" --prerelease=false --latest=false --title "Snapshot"
 }
 
 release_tag() {
@@ -199,12 +200,14 @@ release_tag() {
     # Upload source tarballs, GUI components, and BSD packages. Other Linux
     # packages are built in `release.yml` from the standalone source tarball.
     gh -R "$REPO" release create "$TAG" \
+      --prerelease=false \
       --title "$TAG" \
       --notes-file "$release_notes_file"
   fi
 
   mapfile -t files < <(release_assets)
   GITHUB_REPOSITORY="$REPO" "$SCRIPT_DIR/upload-release-assets.sh" "$TAG" "${files[@]}"
+  gh -R "$REPO" release edit "$TAG" --prerelease=false
 }
 
 if [[ $TAG == *"snapshot" ]]; then
