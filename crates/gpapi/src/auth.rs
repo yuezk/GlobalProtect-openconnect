@@ -130,10 +130,7 @@ impl SamlAuthData {
 
         Ok(auth_data)
       }
-      Some(status) => Err(AuthDataParseError::Invalid(anyhow::anyhow!(
-        "SAML auth status: {}",
-        status
-      ))),
+      Some(status) => Err(AuthDataParseError::AuthenticationFailed(status)),
       None => Err(AuthDataParseError::NotFound),
     }
   }

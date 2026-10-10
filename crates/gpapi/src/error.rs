@@ -29,12 +29,17 @@ impl PortalError {
 pub enum AuthDataParseError {
   #[error("No auth data found")]
   NotFound,
+  #[error("Authentication failed (SAML status: {0})")]
+  AuthenticationFailed(String),
   #[error(transparent)]
   Invalid(#[from] anyhow::Error),
 }
 
 impl AuthDataParseError {
   pub fn is_invalid(&self) -> bool {
-    matches!(self, AuthDataParseError::Invalid(_))
+    matches!(
+      self,
+      AuthDataParseError::Invalid(_) | AuthDataParseError::AuthenticationFailed(_)
+    )
   }
 }

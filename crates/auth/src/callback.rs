@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{Context, bail};
-use gpapi::auth::SamlAuthData;
+use gpapi::{auth::SamlAuthData, error::AuthDataParseError};
 use tokio::{
   io::{AsyncReadExt, AsyncWriteExt},
   net::{UnixListener, UnixStream},
@@ -27,6 +27,7 @@ const PROTOCOL_VERSION: u8 = 1;
 const MAX_CALLBACK_SIZE: usize = 1024 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
 
+// Acceptance acknowledges delivery, including an authentication failure.
 const STATUS_ACCEPTED: u8 = 0;
 const STATUS_INVALID_CALLBACK: u8 = 1;
 const STATUS_UNSUPPORTED_VERSION: u8 = 2;
@@ -69,6 +70,10 @@ impl AuthCallbackReceiver {
           Ok(auth_data) => {
             let _ = write_response(&mut stream, STATUS_ACCEPTED).await;
             return Ok(auth_data);
+          }
+          Err(error @ AuthDataParseError::AuthenticationFailed(_)) => {
+            let _ = write_response(&mut stream, STATUS_ACCEPTED).await;
+            return Err(error.into());
           }
           Err(_) => {
             let _ = write_response(&mut stream, STATUS_INVALID_CALLBACK).await;
@@ -420,6 +425,24 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn reports_authentication_failure_to_waiting_receiver() {
+    let directory = tempdir().unwrap();
+    let socket_path = directory.path().join("callback.sock");
+    let receiver = AuthCallbackReceiver::bind_at(socket_path.clone()).unwrap();
+    let failure = gpapi::utils::base64::encode(b"<html><saml-auth-status>0</saml-auth-status></html>");
+    let callback = format!("globalprotectcallback:{failure}");
+    let sender = tokio::spawn(async move { forward_auth_callback_to(&callback, &socket_path).await });
+
+    let error = timeout(Duration::from_millis(500), receiver.receive())
+      .await
+      .expect("Failure callback must finish the waiting authentication")
+      .unwrap_err();
+
+    assert!(error.to_string().contains("Authentication failed"));
+    sender.await.unwrap().expect("Failure callback was delivered");
+  }
+
+  #[tokio::test]
   async fn rejects_bad_requests_and_keeps_waiting() {
     let directory = tempdir().unwrap();
     let socket_path = directory.path().join("callback.sock");
@@ -428,6 +451,10 @@ mod tests {
     let sender = tokio::spawn(async move {
       assert_eq!(
         send_raw_callback(&socket_path, PROTOCOL_VERSION, "https://example.com").await,
+        STATUS_INVALID_CALLBACK
+      );
+      assert_eq!(
+        send_raw_callback(&socket_path, PROTOCOL_VERSION, "globalprotectcallback:not-base64").await,
         STATUS_INVALID_CALLBACK
       );
       assert_eq!(

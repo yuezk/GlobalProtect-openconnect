@@ -150,8 +150,8 @@ impl AuthMessenger {
 
     match auth_result {
       Ok(data) => self.send_auth_data(data, AuthDataLocation::Body),
-      Err(AuthDataParseError::Invalid(err)) => self.send_auth_error(AuthError::invalid_from_body(err)),
       Err(AuthDataParseError::NotFound) => self.send_auth_error(AuthError::not_found_in_body()),
+      Err(err) => self.send_auth_error(AuthError::invalid_from_body(err.into())),
     }
   }
 

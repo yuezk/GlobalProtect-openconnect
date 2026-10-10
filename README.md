@@ -1,6 +1,6 @@
 # GlobalProtect-openconnect
 
-A GlobalProtect VPN client built on OpenConnect with support for SSO authentication. It provides command-line tools for Linux, FreeBSD, and OpenBSD, and the GP Connect desktop application for macOS, Linux, FreeBSD, and OpenBSD.
+A GlobalProtect VPN client built on OpenConnect with support for SSO authentication. It provides command-line tools and the GP Connect desktop application for macOS, Linux, FreeBSD, and OpenBSD.
 
 <p align="center">
   <img width="300" src="https://github.com/user-attachments/assets/2fb6116c-dc57-43f2-af75-9c3d97ab7122">
@@ -134,7 +134,23 @@ gpclient launch-gui
 
 ### macOS
 
-Download the GP Connect `.dmg` from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page, open it, and drag GP Connect into Applications. The macOS build requires Apple silicon and macOS 13 or later.
+GP Connect requires Apple silicon and macOS 13 or later. The macOS app includes both the desktop application and the free `gpclient` CLI. The CLI does not require a GUI license.
+
+#### Option 1: Install with Homebrew
+
+```bash
+brew install --cask yuezk/gp-connect/gp-connect
+```
+
+Open GP Connect from Applications, or connect from the terminal:
+
+```bash
+sudo gpclient connect <portal> --browser
+```
+
+#### Option 2: Install from DMG
+
+Download the GP Connect `.dmg` from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page, open it, and drag GP Connect into Applications.
 
 ### Debian / Ubuntu
 
