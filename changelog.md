@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.1
+
+### Fixed
+
+- Fixed the bundled macOS CLI when launched through Homebrew.
+- Fixed browser sign-in failures leaving the CLI waiting without an error.
+- Fixed first-time startup on Linux and BSD when no system keyring is available.
+- Improved tray menu behavior on Linux and BSD.
+- Added clearer results when manually checking for updates.
+- Improved desktop dialogs, settings, keyboard focus, and Linux window controls.
+
 ## 3.0.0
 
 ### Added

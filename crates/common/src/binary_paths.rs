@@ -3,6 +3,9 @@ use std::{
   path::{Path, PathBuf},
 };
 
+#[cfg(target_os = "macos")]
+mod macos;
+
 #[cfg(all(
   not(debug_assertions),
   any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")
@@ -80,13 +83,18 @@ fn resolve(env_key: &str, binary_name: &str, default_path: &str) -> PathBuf {
 
 fn sibling_binary(binary_name: &str) -> Option<PathBuf> {
   let current_exe = env::current_exe().ok()?;
-  let bin_dir = current_exe.parent()?;
+  sibling_binary_for_executable(&current_exe, binary_name)
+}
+
+fn sibling_binary_for_executable(executable: &Path, binary_name: &str) -> Option<PathBuf> {
+  let executable = executable.canonicalize().ok()?;
+  let bin_dir = executable.parent()?;
   let binary = bin_dir.join(binary_name);
   if is_file(&binary) {
     return Some(binary);
   }
   #[cfg(target_os = "macos")]
-  if let Some(binary) = bundled_helper_path(&current_exe, binary_name)
+  if let Some(binary) = macos::helper_path(&executable, binary_name)
     && is_file(&binary)
   {
     return Some(binary);
@@ -95,14 +103,14 @@ fn sibling_binary(binary_name: &str) -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "macos")]
-fn bundled_helper_path(executable: &Path, binary_name: &str) -> Option<PathBuf> {
-  let bin_dir = executable.parent()?;
-  let contents = bin_dir.parent()?;
-  let bundle = contents.parent()?;
-  if bin_dir.file_name()? != "MacOS" || contents.file_name()? != "Contents" || bundle.extension()? != "app" {
-    return None;
-  }
-  Some(contents.join("Helpers").join(binary_name))
+pub fn bundled_vpnc_script() -> Option<PathBuf> {
+  bundled_vpnc_script_for_executable(&env::current_exe().ok()?)
+}
+
+#[cfg(target_os = "macos")]
+fn bundled_vpnc_script_for_executable(executable: &Path) -> Option<PathBuf> {
+  let executable = executable.canonicalize().ok()?;
+  macos::vpnc_script_path(&executable)
 }
 
 fn is_file(path: &Path) -> bool {
@@ -117,14 +125,44 @@ mod tests {
   #[cfg(target_os = "macos")]
   fn desktop_resolves_helpers_in_the_actual_app_bundle_layout() {
     assert_eq!(
-      bundled_helper_path(
+      macos::helper_path(
         Path::new("/Applications/GP Connect.app/Contents/MacOS/gpgui"),
         "gpclient"
       ),
       Some(PathBuf::from("/Applications/GP Connect.app/Contents/Helpers/gpclient"))
     );
-    assert!(bundled_helper_path(Path::new("/usr/local/bin/gpgui"), "gpclient").is_none());
-    assert!(bundled_helper_path(Path::new("/tmp/Contents/MacOS/gpgui"), "gpclient").is_none());
+    assert!(macos::helper_path(Path::new("/usr/local/bin/gpgui"), "gpclient").is_none());
+    assert!(macos::helper_path(Path::new("/tmp/Contents/MacOS/gpgui"), "gpclient").is_none());
+  }
+
+  #[test]
+  #[cfg(unix)]
+  fn symlinked_executable_resolves_its_bundle_paths() {
+    let directory = tempfile::tempdir().unwrap();
+    let helpers = directory.path().join("GP Connect.app/Contents/Helpers");
+    let bin = directory.path().join("bin");
+    std::fs::create_dir_all(&helpers).unwrap();
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::write(helpers.join("gpclient"), "").unwrap();
+    std::fs::write(helpers.join("gpauth"), "").unwrap();
+    std::os::unix::fs::symlink(helpers.join("gpclient"), bin.join("gpclient")).unwrap();
+
+    assert_eq!(
+      sibling_binary_for_executable(&bin.join("gpclient"), "gpauth"),
+      Some(helpers.canonicalize().unwrap().join("gpauth"))
+    );
+    #[cfg(target_os = "macos")]
+    assert_eq!(
+      bundled_vpnc_script_for_executable(&bin.join("gpclient")),
+      Some(
+        helpers
+          .canonicalize()
+          .unwrap()
+          .parent()
+          .unwrap()
+          .join("Resources/Scripts/vpnc-script")
+      )
+    );
   }
 
   #[test]

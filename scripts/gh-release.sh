@@ -131,6 +131,7 @@ upload_file() {
 }
 
 # Update the existing snapshot release in place to avoid notification spam.
+# Keep its tag fixed; only release assets advance with subsequent builds.
 # Preserve its macOS update assets when the current run does not replace them.
 release_snapshot() {
   mapfile -t files < <(release_assets)
@@ -138,13 +139,11 @@ release_snapshot() {
   local is_current
   local asset
   local file
-  local snapshot_commit
-
-  snapshot_commit="$(git -C "$SCRIPT_DIR/.." rev-parse HEAD)"
   if ! gh -R "$REPO" release view "$TAG" >/dev/null 2>&1; then
     gh -R "$REPO" release create "$TAG" \
-      --prerelease \
-      --target "$snapshot_commit" \
+      --prerelease=false \
+      --latest=false \
+      --target "$(git -C "$SCRIPT_DIR/.." rev-parse HEAD)" \
       --title "Snapshot" \
       --notes "Rolling snapshot release from trusted CI builds."
   fi
@@ -184,9 +183,7 @@ release_snapshot() {
     fi
   done <<<"$existing_assets"
 
-  gh api --method PATCH "repos/$REPO/git/refs/tags/$TAG" \
-    -f sha="$snapshot_commit" -F force=true >/dev/null
-  gh -R "$REPO" release edit "$TAG" --prerelease --title "Snapshot"
+  gh -R "$REPO" release edit "$TAG" --prerelease=false --latest=false --title "Snapshot"
 }
 
 release_tag() {
@@ -199,12 +196,14 @@ release_tag() {
     # Upload source tarballs, GUI components, and BSD packages. Other Linux
     # packages are built in `release.yml` from the standalone source tarball.
     gh -R "$REPO" release create "$TAG" \
+      --prerelease=false \
       --title "$TAG" \
       --notes-file "$release_notes_file"
   fi
 
   mapfile -t files < <(release_assets)
   GITHUB_REPOSITORY="$REPO" "$SCRIPT_DIR/upload-release-assets.sh" "$TAG" "${files[@]}"
+  gh -R "$REPO" release edit "$TAG" --prerelease=false
 }
 
 if [[ $TAG == *"snapshot" ]]; then

@@ -203,12 +203,20 @@ mod tests {
     let log_file = dir.path().join("desktop.log");
     fs::write(&log_file, "[gpservice] started\n").unwrap();
     let program = dir.path().join("gui");
-    fs::write(&program, "#!/bin/sh\nprintf '[gpgui] initialized\\n' >&2\n").unwrap();
-    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
     let launcher = launcher(VERSION, vec![]).envs(HashMap::from([(
       "GP_LOG_FILE".to_owned(),
       log_file.to_str().unwrap().to_owned(),
     )]));
+    let frame_len = launcher.credential.encode_frame().unwrap().len();
+    // Consume the credential frame like the real GUI before exiting.
+    fs::write(
+      &program,
+      format!(
+        "#!/bin/sh\ndd bs=1 count={frame_len} of=/dev/null 2>/dev/null || exit 1\nprintf '[gpgui] initialized\\n' >&2\n"
+      ),
+    )
+    .unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
 
     assert!(launcher.launch_program(&program).await.unwrap().success());
     assert!(launcher.launch_program(&program).await.unwrap().success());

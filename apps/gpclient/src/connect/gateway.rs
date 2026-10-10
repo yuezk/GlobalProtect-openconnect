@@ -451,6 +451,15 @@ impl ConnectHandler<'_> {
       .local_hostname(self.args.local_hostname.clone())
       .dpd_interval(self.args.dpd_interval.unwrap_or(0))
       .no_xmlpost(self.args.no_xmlpost);
+    #[cfg(target_os = "macos")]
+    let vpn_builder = if self.args.script.is_none()
+      && std::env::var_os("GP_VPNC_SCRIPT").is_none_or(|value| value.is_empty())
+      && let Some(script) = common::binary_paths::bundled_vpnc_script()
+    {
+      vpn_builder.script_path(script.to_string_lossy().into_owned())
+    } else {
+      vpn_builder
+    };
     let vpn = apply_os_profile(vpn_builder, &os_profile)
       .build()
       .map_err(|err| GatewayConnectError::before_establishment(err.into()))?;
