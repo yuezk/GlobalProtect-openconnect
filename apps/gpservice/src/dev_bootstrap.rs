@@ -186,7 +186,7 @@ mod tests {
 
   #[tokio::test]
   async fn anchor_eof_revokes_issued_credential() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let (service, mut client) = UnixStream::pair().unwrap();
     let task = tokio::spawn(credential_lease::serve(service, Arc::clone(&registry), Some(1234)));
 

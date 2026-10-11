@@ -1,0 +1,38 @@
+name: Release infrastructure checks
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/wait-for-publication.py'
+      - 'scripts/select-publication-targets.py'
+      - 'scripts/verify-docker-publication.sh'
+      - 'scripts/tests/test_*publication.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/wait-for-publication.py'
+      - 'scripts/select-publication-targets.py'
+      - 'scripts/verify-docker-publication.sh'
+      - 'scripts/tests/test_*publication.py'
+
+permissions:
+  contents: read
+
+jobs:
+  release-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate workflow expressions and schema
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -shellcheck='' -pyflakes=''
+      - name: Check Docker publication script
+        run: |
+          bash -n scripts/verify-docker-publication.sh
+          shellcheck scripts/verify-docker-publication.sh
+      - name: Test publication verification
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*publication.py'

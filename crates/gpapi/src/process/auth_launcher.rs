@@ -12,7 +12,9 @@ use tokio_util::sync::CancellationToken;
 use crate::auth::AuthWindowTheme;
 use crate::{auth::SamlAuthResult, credential::Credential, log_format::LogFormat, os_profile::OsProfile};
 
-use super::{command_runner::run_controlled, command_traits::CommandExt};
+use super::{command_runner::run_observed, command_traits::CommandExt};
+
+use super::rendering_recovery::{RenderingCrash, StderrDiagnostic, eligible, is_crash_exit};
 
 const MAX_AUTH_RESULT_BYTES: usize = 256 * 1024;
 
@@ -44,6 +46,7 @@ pub struct SamlAuthLauncher<'a> {
   browser_listen: Option<IpAddr>,
   verbose: Option<&'a str>,
   log_format: LogFormat,
+  dmabuf_disabled: bool,
 }
 
 impl<'a> SamlAuthLauncher<'a> {
@@ -76,7 +79,13 @@ impl<'a> SamlAuthLauncher<'a> {
       browser_listen: None,
       verbose: None,
       log_format: LogFormat::Text,
+      dmabuf_disabled: false,
     }
+  }
+
+  pub fn dmabuf_disabled(mut self, disabled: bool) -> Self {
+    self.dmabuf_disabled = disabled;
+    self
   }
 
   pub fn auth_executable(mut self, auth_executable: Option<&'a str>) -> Self {
@@ -282,8 +291,16 @@ impl<'a> SamlAuthLauncher<'a> {
       .unwrap_or_else(binary_paths::gpauth);
     let auth_cmd = self.build_command(&program);
 
-    let command = auth_cmd.into_non_root()?.into_std();
-    let cancellation = self.cancellation;
+    let mut command = auth_cmd.into_non_root()?.into_std();
+    let embedded = cfg!(feature = "webview-auth") && self.browser.is_none();
+    #[cfg(feature = "webview-auth")]
+    let embedded = embedded && !self.default_browser;
+    let bundled = is_bundled_authenticator(&program, &binary_paths::gpauth());
+    let can_recover = embedded && bundled && eligible(&command);
+    if embedded && bundled && self.dmabuf_disabled {
+      command.env("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+    let cancellation = self.cancellation.clone();
     let output = tokio::task::spawn_blocking(move || {
       let check = || {
         if cancellation.is_cancelled() {
@@ -295,10 +312,19 @@ impl<'a> SamlAuthLauncher<'a> {
           Ok(())
         }
       };
-      run_controlled(command, &check, MAX_AUTH_RESULT_BYTES)
+      let mut diagnostic = StderrDiagnostic::default();
+      let output = run_observed(
+        command,
+        &check,
+        Some(MAX_AUTH_RESULT_BYTES),
+        &mut |bytes| diagnostic.push(bytes),
+        &mut std::io::stderr(),
+        None,
+      )?;
+      Ok::<_, std::io::Error>((output.output, diagnostic.matched()))
     })
     .await?;
-    let output = match output {
+    let (output, rendering_diagnostic) = match output {
       Ok(output) => output,
       Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
         return Err(crate::auth::AuthenticationCancelled.into());
@@ -306,12 +332,31 @@ impl<'a> SamlAuthLauncher<'a> {
       Err(error) => return Err(error.into()),
     };
 
-    let Ok(auth_result) = serde_json::from_slice::<SamlAuthResult>(&output.stdout) else {
-      bail!("Failed to parse auth data")
-    };
-
-    Credential::try_from(auth_result)
+    if self.cancellation.is_cancelled() {
+      return Err(crate::auth::AuthenticationCancelled.into());
+    }
+    decode_auth_output(output, can_recover && rendering_diagnostic)
   }
+}
+
+fn is_bundled_authenticator(program: &Path, bundled: &Path) -> bool {
+  match (program.canonicalize(), bundled.canonicalize()) {
+    (Ok(program), Ok(bundled)) => program == bundled,
+    _ => false,
+  }
+}
+
+fn decode_auth_output(output: std::process::Output, rendering_failure: bool) -> anyhow::Result<Credential> {
+  if !output.status.success() {
+    if rendering_failure && is_crash_exit(output.status) {
+      return Err(RenderingCrash { status: output.status }.into());
+    }
+    bail!("Authenticator exited unsuccessfully: {}", output.status);
+  }
+  let Ok(auth_result) = serde_json::from_slice::<SamlAuthResult>(&output.stdout) else {
+    bail!("Failed to parse auth data")
+  };
+  Credential::try_from(auth_result)
 }
 
 #[cfg(test)]
@@ -403,5 +448,77 @@ mod tests {
     let launcher = SamlAuthLauncher::new("portal.example.com").browser_listen(Some(listen_ip));
 
     assert_eq!(launcher.browser_listen, Some(listen_ip));
+  }
+  #[test]
+  fn failed_authenticator_discards_partial_or_valid_stdout_before_decoding() {
+    use std::os::unix::process::ExitStatusExt;
+    for stdout in [b"{partial".to_vec(), br#"{"cancelled":null}"#.to_vec()] {
+      let error = decode_auth_output(
+        std::process::Output {
+          status: std::process::ExitStatus::from_raw(71 << 8),
+          stdout,
+          stderr: Vec::new(),
+        },
+        true,
+      )
+      .unwrap_err();
+      assert!(error.downcast_ref::<RenderingCrash>().is_some());
+    }
+  }
+
+  #[test]
+  fn successful_malformed_auth_output_is_not_a_rendering_crash() {
+    use std::os::unix::process::ExitStatusExt;
+    let error = decode_auth_output(
+      std::process::Output {
+        status: std::process::ExitStatus::from_raw(0),
+        stdout: b"partial".to_vec(),
+        stderr: Vec::new(),
+      },
+      true,
+    )
+    .unwrap_err();
+    assert!(error.downcast_ref::<RenderingCrash>().is_none());
+    assert_eq!(error.to_string(), "Failed to parse auth data");
+  }
+
+  #[tokio::test]
+  async fn custom_authenticator_crash_does_not_request_recovery() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("auth-fixture");
+    std::fs::write(
+      &executable,
+      "#!/bin/sh\nprintf 'Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display\\n' >&2\nexit 71\n",
+    )
+    .unwrap();
+    // The launcher drops root privileges in CI; its child must be able to
+    // traverse the fixture directory and execute this non-sensitive script.
+    std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let error = SamlAuthLauncher::new("fixture.invalid")
+      .auth_executable(executable.to_str())
+      .dmabuf_disabled(true)
+      .launch()
+      .await
+      .unwrap_err();
+    assert!(error.downcast_ref::<RenderingCrash>().is_none());
+    assert!(
+      error.to_string().starts_with("Authenticator exited unsuccessfully:"),
+      "unexpected launch error: {error:#}"
+    );
+  }
+  #[test]
+  fn service_provided_bundled_path_is_not_a_custom_authenticator() {
+    let directory = tempfile::tempdir().unwrap();
+    let bundled = directory.path().join("gpauth");
+    let custom = directory.path().join("custom");
+    std::fs::write(&bundled, "bundled").unwrap();
+    std::fs::write(&custom, "custom").unwrap();
+    assert!(is_bundled_authenticator(&bundled, &bundled));
+    assert!(!is_bundled_authenticator(&custom, &bundled));
+    let alias = directory.path().join("auth-alias");
+    std::os::unix::fs::symlink(&bundled, &alias).unwrap();
+    assert!(is_bundled_authenticator(&alias, &bundled));
   }
 }

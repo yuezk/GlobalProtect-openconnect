@@ -589,7 +589,7 @@ mod tests {
 
   #[tokio::test]
   async fn authenticates_attaches_and_replies_to_a_request() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue(env!("CARGO_PKG_VERSION"), None).unwrap();
     let dispatcher = Arc::new(RequestDispatcher::new(
       crate::vpn_task::LifecycleHandle::for_tests(),

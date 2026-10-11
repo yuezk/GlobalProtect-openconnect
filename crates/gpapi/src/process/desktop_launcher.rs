@@ -6,12 +6,16 @@ use std::{
   sync::Arc,
 };
 
+use super::rendering_recovery::RecoveryState;
+use crate::service::transport::{DESKTOP_GUI_EXITED, DESKTOP_RENDERING_RETRY};
 use anyhow::{Context, ensure};
 use common::binary_paths;
+use log::warn;
 use tokio::{
   io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
   process::Command,
 };
+use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use super::{CommandExt, gui_launcher::GuiLauncher};
@@ -64,34 +68,96 @@ impl<'a> DesktopLauncher<'a> {
       .context("Service credential pipe is unavailable")?;
     let mut received_credential = false;
     let mut cancelled = false;
-    let result = tokio::select! {
-      _ = crate::utils::shutdown_signal() => { cancelled = true; Ok(()) },
-      result = async {
-      let mut minimized = self.minimized;
-      loop {
-        let credential = read_credential(&mut output).await?;
-        let Some(credential) = credential else { return Ok(()); };
-        received_credential = true;
-        ensure!(credential.product_version() == self.version, "Service product version mismatch");
-        let mut envs: HashMap<String, String> = std::env::vars().collect();
-        if let Some(path) = &self.log_file {
-          envs.insert("GP_LOG_FILE".into(), path.clone());
-        }
-        let launcher = GuiLauncher::new(self.version, Arc::new(credential)).envs(envs).minimized(minimized);
-        let mut unexpected = [0];
-        tokio::select! {
-          result = launcher.launch() => { result?; }
-          status = service.wait() => { anyhow::bail!("The privileged service exited while the GUI was running: {}", status?); }
-          result = output.read(&mut unexpected) => {
-            ensure!(result? == 0, "Unexpected service credential data while the GUI is running");
-            anyhow::bail!("The privileged service closed its credential channel");
+    let cancellation = CancellationToken::new();
+    let mut recovery = RecoveryState::default();
+    let result = {
+      let operation = async {
+        let mut minimized = self.minimized;
+        let mut expecting_renewal = false;
+        let mut program = None;
+        loop {
+          let credential = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => return Ok(()),
+            result = read_credential(&mut output) => result?,
+          };
+          let Some(credential) = credential else {
+            ensure!(
+              !expecting_renewal,
+              "Service closed before issuing the recovery credential"
+            );
+            return Ok(());
+          };
+          expecting_renewal = false;
+          received_credential = true;
+          ensure!(
+            credential.product_version() == self.version,
+            "Service product version mismatch"
+          );
+          let mut envs: HashMap<String, String> = std::env::vars().collect();
+          if recovery.dmabuf_disabled() {
+            envs.insert("WEBKIT_DISABLE_DMABUF_RENDERER".into(), "1".into());
+          }
+          if let Some(path) = &self.log_file {
+            envs.insert("GP_LOG_FILE".into(), path.clone());
+          }
+          let launcher = GuiLauncher::new(self.version, Arc::new(credential))
+            .envs(envs)
+            .minimized(minimized);
+          let mut unexpected = [0];
+          // Program resolution may launch the WebKit download helper. Keep it under
+          // the same cancellation, service ownership and recovery budget as gpgui.
+          let attempt = async {
+            if program.is_none() {
+              program = Some(launcher.resolve_program(&cancellation).await?);
+            }
+            launcher.launch_program(program.as_ref().unwrap(), &cancellation).await
+          };
+          tokio::pin!(attempt);
+          let outcome = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => { let _ = attempt.await; return Ok(()); }
+            result = &mut attempt => result,
+            status = service.wait() => {
+              cancellation.cancel(); let _ = attempt.await;
+              anyhow::bail!("The privileged service exited while the GUI was running: {}", status?);
+            }
+            result = output.read(&mut unexpected) => {
+              cancellation.cancel(); let _ = attempt.await;
+              ensure!(result? == 0, "Unexpected service credential data while the GUI is running");
+              anyhow::bail!("The privileged service closed its credential channel");
+            }
+          };
+          if cancellation.is_cancelled() {
+            return Ok(());
+          }
+          match outcome {
+            Err(error) if recovery.recover(&error) => {
+              warn!("{error}; restarting the desktop launch with DMABUF disabled and opaque windows");
+              expecting_renewal = true;
+              input.write_all(&[DESKTOP_RENDERING_RETRY]).await?;
+            }
+            Err(error) => return Err(recovery.terminal(error)),
+            Ok(_) => {
+              input.write_all(&[DESKTOP_GUI_EXITED]).await?;
+              minimized = false;
+            }
           }
         }
-        input.write_all(&[0]).await?;
-        minimized = false;
-      }
-      } => result,
+      };
+      tokio::pin!(operation);
+      let result = tokio::select! {
+        biased;
+        _ = crate::utils::shutdown_signal() => {
+          cancelled = true;
+          cancellation.cancel();
+          operation.await
+        },
+        result = &mut operation => result,
+      };
+      result
     };
+    let result = recovery.finish(result);
     // EOF lets the service revoke the credential and disconnect the VPN gracefully.
     drop(input);
     if cancelled && !received_credential {

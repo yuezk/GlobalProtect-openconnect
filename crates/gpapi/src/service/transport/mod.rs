@@ -17,3 +17,7 @@ pub const HIP_PROTOCOL_VERSION: u16 = 1;
 pub const MAX_PLAINTEXT: usize = 60 * 1024;
 pub const MAX_WS_MESSAGE: usize = u16::MAX as usize;
 pub const MAX_SERVICE_MESSAGE: usize = 256;
+
+/// Private desktop control messages; never carry credentials.
+pub const DESKTOP_GUI_EXITED: u8 = 0;
+pub const DESKTOP_RENDERING_RETRY: u8 = 1;

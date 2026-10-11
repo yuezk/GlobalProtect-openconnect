@@ -18,6 +18,7 @@ use tokio::fs;
 use crate::{
   GP_CLIENT_LOCK_FILE,
   connect::{ConnectArgs, ConnectHandler},
+  diagnostics::DiagnosticsArgs,
   disconnect::{DisconnectArgs, DisconnectHandler},
   hip::{HipArgs, HipHandler},
   launch_gui::{LaunchGuiArgs, LaunchGuiHandler},
@@ -50,6 +51,8 @@ enum CliCommand {
   LaunchGui(LaunchGuiArgs),
   #[command(about = "Generate HIP report")]
   Hip(HipArgs),
+  #[command(about = "Collect system diagnostics for a bug report without connecting to a VPN")]
+  Diagnostics(DiagnosticsArgs),
   #[command(hide = true)]
   DetectInternalHost {
     #[arg(long)]
@@ -168,6 +171,10 @@ impl Cli {
   }
 
   async fn run(&self) -> anyhow::Result<()> {
+    if let CliCommand::Diagnostics(args) = &self.command {
+      return args.run(VERSION).await;
+    }
+
     // check if an instance is running
     if !self.can_run_alongside_client() && self.is_running().await {
       bail!("Another instance of the client is already running");
@@ -193,6 +200,7 @@ impl Cli {
       CliCommand::Disconnect(args) => DisconnectHandler::new(args, shared_args.lock_file).handle().await,
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
       CliCommand::Hip(args) => HipHandler::new(args).handle().await,
+      CliCommand::Diagnostics(_) => unreachable!("diagnostics is dispatched before VPN setup"),
       CliCommand::DetectInternalHost { address, hostname } => {
         let internal = gpapi::session::network::native::detect_in_helper(*address, hostname)?;
         println!("{}", serde_json::to_string(&internal)?);
@@ -247,6 +255,21 @@ mod tests {
   use log::Log;
 
   use super::*;
+
+  #[test]
+  fn diagnostics_accepts_output_options_and_runs_alongside_the_client() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "--fix-openssl",
+      "diagnostics",
+      "--json",
+      "--output",
+      "report.json",
+    ])
+    .unwrap();
+    assert!(matches!(cli.command, CliCommand::Diagnostics(_)));
+    assert!(cli.can_run_alongside_client());
+  }
 
   #[test]
   fn resolver_helper_runs_alongside_client_and_is_hidden_from_help() {

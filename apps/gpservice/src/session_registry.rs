@@ -84,6 +84,8 @@ struct AttachmentAttempt {
 pub struct SessionRegistry {
   service_instance_id: Uuid,
   sessions: Mutex<HashMap<Uuid, SessionRecord>>,
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  resolve_device_anchor: fn() -> anyhow::Result<gpapi::device_anchor::DeviceAnchor>,
 }
 
 fn unavailable_connection() -> ServiceResult {
@@ -192,6 +194,25 @@ impl SessionRegistry {
     Self {
       service_instance_id,
       sessions: Mutex::new(HashMap::new()),
+      #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+      resolve_device_anchor: crate::device_anchor::resolve,
+    }
+  }
+
+  /// Session tests use an explicit anchor fixture; persistence and permissions
+  /// are exercised separately by the device_anchor tests.
+  #[cfg(test)]
+  pub(crate) fn for_tests(service_instance_id: Uuid) -> Self {
+    Self {
+      service_instance_id,
+      sessions: Mutex::new(HashMap::new()),
+      #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+      resolve_device_anchor: || {
+        Ok(gpapi::device_anchor::DeviceAnchor::derive(
+          gpapi::device_anchor::AnchorSource::UnixRandom,
+          b"session-registry-test-anchor",
+        ))
+      },
     }
   }
 
@@ -218,7 +239,7 @@ impl SessionRegistry {
       SessionCredential::generate(self.service_instance_id, product_version).map_err(|_| SessionError::Unavailable)?;
     #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
     let credential = {
-      let anchor = crate::device_anchor::resolve().map_err(|error| {
+      let anchor = (self.resolve_device_anchor)().map_err(|error| {
         log::warn!("GUI device anchor unavailable: {error:#}");
         SessionError::Unavailable
       })?;
@@ -596,9 +617,30 @@ mod tests {
     ConnectionControl::new(Uuid::new_v4(), tx).0
   }
 
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  #[test]
+  fn unavailable_device_anchor_does_not_issue_a_session() {
+    let mut registry = SessionRegistry::for_tests(Uuid::new_v4());
+    registry.resolve_device_anchor = || anyhow::bail!("fixture anchor unavailable");
+    assert!(matches!(
+      registry.issue("fixture", None),
+      Err(SessionError::Unavailable)
+    ));
+    assert!(registry.sessions.lock().unwrap().is_empty());
+  }
+
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  #[test]
+  fn issued_credential_carries_the_resolved_device_anchor() {
+    let registry = SessionRegistry::for_tests(Uuid::new_v4());
+    let expected = (registry.resolve_device_anchor)().unwrap();
+    let credential = registry.issue("fixture", Some(1000)).unwrap();
+    assert_eq!(credential.device_anchor(), Some(&expected));
+  }
+
   #[tokio::test]
   async fn attachment_replacement_cancels_preparation_and_retains_drain_until_release() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue("fixture", None).unwrap();
     let session = credential.session_id();
     let first = registry
@@ -655,7 +697,7 @@ mod tests {
 
   #[tokio::test]
   async fn scoped_stop_closes_attachment_to_delayed_starts_without_receipt_history() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue("fixture", None).unwrap();
     let session = credential.session_id();
     let permit = registry
@@ -693,7 +735,7 @@ mod tests {
 
   #[tokio::test]
   async fn tunnel_reservation_survives_attachment_loss_but_non_tunnel_revocation_cancels() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue("fixture", None).unwrap();
     let session = credential.session_id();
     let permit = registry
@@ -732,7 +774,7 @@ mod tests {
 
   #[test]
   fn credential_retains_verified_desktop_user_across_reconnect() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue("2.6.4", Some(1000)).unwrap();
     let first = registry
       .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
@@ -769,7 +811,7 @@ mod tests {
       panic!("upload did not complete")
     }
 
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let first_credential = registry.issue("2.6.4", Some(1000)).unwrap();
     let second_credential = registry.issue("2.6.4", Some(1001)).unwrap();
     for credential in [&first_credential, &second_credential] {
@@ -813,7 +855,7 @@ mod tests {
 
   #[test]
   fn submitted_report_changes_only_after_success_callback_and_is_session_bound() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue("2.6.4", Some(1000)).unwrap();
     let permit = registry
       .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
@@ -866,7 +908,7 @@ mod tests {
 
   #[test]
   fn reconnect_uses_generation_compare_and_swap() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue("2.6.4", None).unwrap();
     let first = registry
       .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
@@ -887,7 +929,7 @@ mod tests {
 
   #[test]
   fn failed_initial_handshake_only_revokes_its_own_reservation() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue("2.6.4", None).unwrap();
     let first = registry
       .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")
@@ -901,7 +943,7 @@ mod tests {
 
   #[test]
   fn failed_reconnect_keeps_active_connection_authoritative() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue("2.6.4", None).unwrap();
     let first = registry
       .begin_handshake(credential.service_instance_id(), credential.session_id(), "2.6.4")

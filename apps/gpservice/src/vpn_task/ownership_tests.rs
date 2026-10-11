@@ -56,7 +56,7 @@ async fn cancelled_pending_owner_logs_out_and_releases_admission_after_response(
   let mut gateway = serde_json::to_value(Gateway::new("fixture".into(), server_name.clone())).unwrap();
   gateway["kind"] = serde_json::json!("internal");
   let gateway: Gateway = serde_json::from_value(gateway).unwrap();
-  let registry = Arc::new(crate::session_registry::SessionRegistry::new(uuid::Uuid::new_v4()));
+  let registry = Arc::new(crate::session_registry::SessionRegistry::for_tests(uuid::Uuid::new_v4()));
   let credential = registry.issue("fixture", None).unwrap();
   let session_id = credential.session_id();
   let permit = registry
