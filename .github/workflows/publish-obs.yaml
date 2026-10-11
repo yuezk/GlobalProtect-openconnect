@@ -11,6 +11,18 @@ on:
         type: string
         required: true
         default: "1"
+      verify_only:
+        description: 'Verify the existing source and publication without uploading again'
+        type: boolean
+        default: false
+      repositories:
+        description: 'Space-separated distro repositories, e.g. 16.0 openSUSE_Tumbleweed; empty keeps enabled targets'
+        type: string
+        required: false
+
+concurrency:
+  group: publish-obs
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -18,15 +30,19 @@ permissions:
 jobs:
   publish-obs:
     runs-on: ubuntu-latest
+    timeout-minutes: 210
     steps:
+    - uses: actions/checkout@v6
+    - name: Install metadata decompressor
+      run: sudo apt-get update && sudo apt-get install -y zstd
     - name: Check inputs
       env:
         GH_TOKEN: ${{ github.token }}
         TAG: ${{ inputs.tag }}
         REVISION: ${{ inputs.revision }}
       run: |
-        if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
-          echo "Revision must be a positive integer" >&2
+        if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
+          echo "Expected a stable vX.Y.Z tag and positive package revision" >&2
           exit 1
         fi
 
@@ -61,7 +77,22 @@ jobs:
           "$source_dir/.build/rpm/globalprotect-openconnect.changes" \
           publish-obs/files/
 
+    - name: Select OBS publication targets
+      env:
+        REPOSITORIES: ${{ inputs.repositories }}
+        VERIFY_ONLY: ${{ inputs.verify_only }}
+        OBS_USERNAME: yuezk
+        OBS_PASSWORD: ${{ secrets.OBS_PASSWORD }}
+      run: |
+        verify_args=()
+        if [[ "$VERIFY_ONLY" == 'true' ]]; then
+          verify_args+=(--verify-only)
+        fi
+        python3 scripts/select-publication-targets.py obs \
+          --repositories "$REPOSITORIES" "${verify_args[@]}" --output publish-obs/targets.json
+
     - name: Publish OBS package
+      if: ${{ !inputs.verify_only }}
       uses: yuezk/publish-obs-package@main
       with:
         project: home:yuezk
@@ -70,3 +101,12 @@ jobs:
         password: ${{ secrets.OBS_PASSWORD }}
         files: ./publish-obs/files/*
         commit_message: 'Release ${{ inputs.tag }}-${{ inputs.revision }}'
+
+    - name: Wait for OBS builds and public repositories
+      env:
+        TAG: ${{ inputs.tag }}
+        REVISION: ${{ inputs.revision }}
+      run: |
+        python3 scripts/wait-for-publication.py obs \
+          --targets-file publish-obs/targets.json \
+          --version "${TAG#v}" --revision "$REVISION" --files publish-obs/files

@@ -41,6 +41,9 @@ pub(crate) struct ConnectHandler<'a> {
   password_from_stdin: RefCell<Option<String>>,
   cookie_from_stdin: RefCell<Option<String>>,
   clean_auth_state: RefCell<CleanAuthState>,
+  #[cfg(test)]
+  auth_attempt_fixture: RefCell<credential::AuthAttemptFixture>,
+  auth_recovery: RefCell<gpapi::process::rendering_recovery::RecoveryState>,
   sessions: RefCell<GatewaySessions>,
   pid_written: Arc<AtomicBool>,
 }
@@ -63,6 +66,9 @@ impl<'a> ConnectHandler<'a> {
       password_from_stdin: Default::default(),
       cookie_from_stdin: Default::default(),
       clean_auth_state: RefCell::new(CleanAuthState::new(clean_auth)),
+      #[cfg(test)]
+      auth_attempt_fixture: Default::default(),
+      auth_recovery: RefCell::default(),
       sessions: RefCell::default(),
       pid_written: Arc::default(),
     }
@@ -112,6 +118,7 @@ impl<'a> ConnectHandler<'a> {
       gpapi::utils::shutdown_signal().await;
       cancellation.cancel();
     });
+    self.auth_recovery.replace(Default::default());
     let result = self.handle_attempt().await;
     let sessions = self.sessions.take();
     if self.args.cookie_only && result.is_ok() {
@@ -153,10 +160,17 @@ impl<'a> ConnectHandler<'a> {
 
     loop {
       self.check_cancelled()?;
-      let Err(err) = self.handle_impl().await else {
+      let result = self.handle_impl().await;
+      let Err(err) = self.auth_recovery.borrow().finish(result) else {
         return Ok(());
       };
 
+      if err
+        .downcast_ref::<gpapi::process::rendering_recovery::RecoveryFailed>()
+        .is_some()
+      {
+        return Err(err);
+      }
       let Some(root_cause) = err.root_cause().downcast_ref::<RequestIdentityError>() else {
         return Err(err);
       };
@@ -212,6 +226,13 @@ impl<'a> ConnectHandler<'a> {
       return Ok(());
     };
 
+    let err = self.auth_recovery.borrow().terminal(err);
+    if err
+      .downcast_ref::<gpapi::process::rendering_recovery::RecoveryFailed>()
+      .is_some()
+    {
+      return Err(err);
+    }
     warn!("Failed to connect portal with prelogin: {}", err);
     if err.root_cause().downcast_ref::<PortalError>().is_some() {
       info!("Trying the gateway authentication workflow...");
@@ -238,7 +259,7 @@ impl<'a> ConnectHandler<'a> {
   async fn connect_portal_with_prelogin(&self, portal: &str) -> anyhow::Result<()> {
     let gp_params = self.build_gp_params();
 
-    let prelogin = tokio::select! {
+    let mut prelogin = tokio::select! {
       biased;
       _ = self.cancellation.cancelled() => return Err(gpapi::auth::AuthenticationCancelled.into()),
       result = prelogin(portal, &gp_params, self.prelogin_options(false)) => result?,
@@ -260,7 +281,10 @@ impl<'a> ConnectHandler<'a> {
     let (cred, mut portal_config) = match cached_config {
       Some(result) => result,
       None => {
-        let cred = self.obtain_credential(&prelogin, portal, false).await?;
+        let (replacement, cred) = self
+          .obtain_credential_with_recovery(prelogin.clone(), portal, false)
+          .await?;
+        prelogin = replacement;
         self.check_cancelled()?;
         let config = retrieve_config(portal, &cred, &gp_params, &self.cancellation).await?;
         (cred, config)
@@ -305,8 +329,8 @@ impl<'a> ConnectHandler<'a> {
           Ok(()) => return Ok(()),
           Err(err) => {
             self.logout_gateway(gateway.server()).await;
-            if !err.is_before_establishment() {
-              return Err(err.into_error());
+            if self.auth_recovery.borrow().dmabuf_disabled() || !err.is_before_establishment() {
+              return Err(self.auth_recovery.borrow().terminal(err.into_error()));
             }
             warn!(
               "Auto-gateway: gateway {} failed before session establishment: {}",

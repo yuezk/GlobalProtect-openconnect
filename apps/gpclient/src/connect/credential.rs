@@ -11,6 +11,14 @@ use log::info;
 
 use super::ConnectHandler;
 
+/// Replaces only the child launch boundary in workflow tests.
+#[cfg(test)]
+#[derive(Default)]
+pub(super) struct AuthAttemptFixture {
+  pub(super) outcomes: std::collections::VecDeque<anyhow::Result<Credential>>,
+  pub(super) observed: Vec<(String, bool, bool)>,
+}
+
 #[derive(Default)]
 pub(super) struct CleanAuthState {
   requested: bool,
@@ -42,6 +50,47 @@ impl ConnectHandler<'_> {
     self.apply_stdin_host_id(auth_result.host_id());
 
     Ok(())
+  }
+
+  pub(super) async fn obtain_credential_with_recovery(
+    &self,
+    mut response: Prelogin,
+    server: &str,
+    browser_allowed: bool,
+  ) -> anyhow::Result<(Prelogin, Credential)> {
+    loop {
+      self.check_cancelled()?;
+      let result = self.obtain_credential(&response, server, browser_allowed).await;
+      self.check_cancelled()?;
+      match result {
+        Ok(credential) => return Ok((response, credential)),
+        Err(error) => {
+          if !self.auth_recovery.borrow_mut().recover(&error) {
+            return Err(self.auth_recovery.borrow().terminal(error));
+          }
+          log::warn!("Authenticator exited with a Wayland rendering error; retrying with DMABUF disabled");
+          let refreshed = self
+            .refresh_auth_prelogin(server, response.is_gateway(), browser_allowed)
+            .await;
+          response = refreshed.map_err(|error| self.auth_recovery.borrow().terminal(error))?;
+        }
+      }
+    }
+  }
+
+  pub(super) async fn refresh_auth_prelogin(
+    &self,
+    server: &str,
+    is_gateway: bool,
+    browser_allowed: bool,
+  ) -> anyhow::Result<Prelogin> {
+    let mut params = self.build_gp_params();
+    params.set_is_gateway(is_gateway);
+    tokio::select! {
+      biased;
+      _ = self.cancellation.cancelled() => Err(gpapi::auth::AuthenticationCancelled.into()),
+      result = gpapi::portal::prelogin(server, &params, self.prelogin_options(browser_allowed)) => result,
+    }
   }
 
   pub(super) async fn obtain_credential(
@@ -76,6 +125,7 @@ impl ConnectHandler<'_> {
         let os_profile = self.os_profile.borrow().clone();
         let key_password = self.latest_key_password.borrow().clone();
         let auth_launcher = SamlAuthLauncher::new(server)
+          .dmabuf_disabled(self.auth_recovery.borrow().dmabuf_disabled())
           .gateway(is_gateway)
           .saml_request(prelogin.saml_request())
           .os_profile(&os_profile)
@@ -115,6 +165,19 @@ impl ConnectHandler<'_> {
           .hidpi(self.args.hidpi)
           .clean(clean_auth)
           .default_browser(use_default_browser);
+
+        #[cfg(test)]
+        {
+          let mut fixture = self.auth_attempt_fixture.borrow_mut();
+          if let Some(outcome) = fixture.outcomes.pop_front() {
+            fixture.observed.push((
+              prelogin.saml_request().to_owned(),
+              self.auth_recovery.borrow().dmabuf_disabled(),
+              clean_auth,
+            ));
+            return outcome;
+          }
+        }
 
         let cred = auth_launcher.cancellation(&self.cancellation).launch().await?;
         self.check_cancelled()?;

@@ -171,3 +171,204 @@ async fn internal_tunnel_keeps_gateway_authentication_after_portal_cookie_reject
   assert!(requests[1].contains("rejected-cookie"));
   assert!(requests[2].contains("gateway-password"));
 }
+
+#[tokio::test]
+async fn rendering_recovery_fetches_new_prelogin_metadata_and_preserves_gateway_mode() {
+  let (origin, worker) = gateway(vec![
+    (
+      "200 OK",
+      "<prelogin-response><status>Success</status><region>old</region></prelogin-response>".into(),
+    ),
+    (
+      "200 OK",
+      "<prelogin-response><status>Success</status><region>replacement</region></prelogin-response>".into(),
+    ),
+  ])
+  .await;
+  let args = TestArgs::parse_from(["test", &origin]).connect;
+  let directory = tempfile::tempdir().unwrap();
+  let lock = directory.path().join("client.pid");
+  let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
+  let shared = SharedArgs {
+    fix_openssl: false,
+    ignore_tls_errors: true,
+    lock_file: &lock,
+    verbose: &verbose,
+    log_format: LogFormat::Text,
+  };
+  let handler = ConnectHandler::new(&args, &shared);
+  let original = handler.refresh_auth_prelogin(&origin, true, true).await.unwrap();
+  let replacement = handler
+    .refresh_auth_prelogin(&origin, original.is_gateway(), true)
+    .await
+    .unwrap();
+  assert_eq!(original.region(), "old");
+  assert_eq!(replacement.region(), "replacement");
+  assert!(replacement.is_gateway());
+  let requests = worker.await.unwrap();
+  assert_eq!(requests.len(), 2);
+  assert!(
+    requests
+      .iter()
+      .all(|request| request.starts_with("POST /ssl-vpn/prelogin.esp"))
+  );
+}
+
+#[cfg(feature = "webview-auth")]
+#[tokio::test]
+async fn cancellation_during_recovery_prelogin_stops_request() {
+  let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let origin = format!("http://{}", listener.local_addr().unwrap());
+  let args = TestArgs::parse_from(["test", &origin]).connect;
+  let directory = tempfile::tempdir().unwrap();
+  let lock = directory.path().join("client.pid");
+  let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
+  let shared = SharedArgs {
+    fix_openssl: false,
+    ignore_tls_errors: true,
+    lock_file: &lock,
+    verbose: &verbose,
+    log_format: LogFormat::Text,
+  };
+  let handler = ConnectHandler::new(&args, &shared);
+  handler
+    .auth_attempt_fixture
+    .borrow_mut()
+    .outcomes
+    .push_back(Err(rendering_crash()));
+  let (result, ()) = tokio::time::timeout(Duration::from_secs(3), async {
+    tokio::join!(
+      async {
+        let original = handler.refresh_auth_prelogin(&origin, false, false).await?;
+        handler.obtain_credential_with_recovery(original, &origin, false).await
+      },
+      async {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut byte = [0];
+        socket.read_exact(&mut byte).await.unwrap();
+        handler.cancellation.cancel();
+      }
+    )
+  })
+  .await
+  .unwrap();
+  assert!(
+    result
+      .unwrap_err()
+      .downcast_ref::<gpapi::auth::AuthenticationCancelled>()
+      .is_some()
+  );
+}
+
+#[cfg(feature = "webview-auth")]
+fn rendering_crash() -> anyhow::Error {
+  use std::os::unix::process::ExitStatusExt;
+  gpapi::process::rendering_recovery::RenderingCrash {
+    status: std::process::ExitStatus::from_raw(71 << 8),
+  }
+  .into()
+}
+
+#[cfg(feature = "webview-auth")]
+fn saml_prelogin_response(region: &str, encoded_request: &str) -> String {
+  format!(
+    "<prelogin-response><status>Success</status><region>{region}</region><saml-auth-method>POST</saml-auth-method><saml-request>{encoded_request}</saml-request></prelogin-response>"
+  )
+}
+
+#[cfg(feature = "webview-auth")]
+#[tokio::test]
+async fn auth_crash_uses_fresh_saml_and_clean_once_with_shared_budget() {
+  use gpapi::credential::{Credential, PreloginCredential};
+  let (origin, worker) = gateway(vec![
+    ("200 OK", saml_prelogin_response("old-region", "b2xk")),
+    ("200 OK", saml_prelogin_response("new-region", "bmV3")),
+    ("200 OK", saml_prelogin_response("gateway-region", "Z2F0ZXdheQ==")),
+  ])
+  .await;
+  let args = TestArgs::parse_from(["test", &origin, "--clean"]).connect;
+  let directory = tempfile::tempdir().unwrap();
+  let lock = directory.path().join("client.pid");
+  let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
+  let shared = SharedArgs {
+    fix_openssl: false,
+    ignore_tls_errors: true,
+    lock_file: &lock,
+    verbose: &verbose,
+    log_format: LogFormat::Text,
+  };
+  let handler = ConnectHandler::new(&args, &shared);
+  handler.auth_attempt_fixture.borrow_mut().outcomes.extend([
+    Err(rendering_crash()),
+    Ok(Credential::Prelogin(PreloginCredential::new(
+      "alice",
+      Some("new-cookie"),
+      None,
+      None,
+    ))),
+    Err(rendering_crash()),
+  ]);
+  let original = handler.refresh_auth_prelogin(&origin, false, false).await.unwrap();
+  let (replacement, credential) = handler
+    .obtain_credential_with_recovery(original, &origin, false)
+    .await
+    .unwrap();
+  assert_eq!(replacement.region(), "new-region");
+  assert_eq!(credential.username(), "alice");
+  assert!(matches!(credential, Credential::Prelogin(ref value) if value.prelogin_cookie() == Some("new-cookie")));
+  let gateway_prelogin = handler.refresh_auth_prelogin(&origin, true, false).await.unwrap();
+  let error = handler
+    .obtain_credential_with_recovery(gateway_prelogin, &origin, false)
+    .await
+    .unwrap_err();
+  assert!(
+    error
+      .downcast_ref::<gpapi::process::rendering_recovery::RecoveryFailed>()
+      .is_some()
+  );
+  assert_eq!(
+    handler.auth_attempt_fixture.borrow().observed,
+    [
+      ("old".into(), false, true),
+      ("new".into(), true, false),
+      ("gateway".into(), true, false),
+    ]
+  );
+  assert_eq!(worker.await.unwrap().len(), 3);
+}
+
+#[cfg(feature = "webview-auth")]
+#[tokio::test]
+async fn exhausted_auth_recovery_is_terminal_before_portal_gateway_fallback() {
+  let (origin, worker) = gateway(vec![
+    ("200 OK", saml_prelogin_response("old-region", "b2xk")),
+    ("200 OK", saml_prelogin_response("new-region", "bmV3")),
+  ])
+  .await;
+  let args = TestArgs::parse_from(["test", &origin, "--clean"]).connect;
+  let directory = tempfile::tempdir().unwrap();
+  let lock = directory.path().join("client.pid");
+  let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
+  let shared = SharedArgs {
+    fix_openssl: false,
+    ignore_tls_errors: true,
+    lock_file: &lock,
+    verbose: &verbose,
+    log_format: LogFormat::Text,
+  };
+  let handler = ConnectHandler::new(&args, &shared);
+  handler.auth_attempt_fixture.borrow_mut().outcomes.extend([
+    Err(rendering_crash()),
+    Err(anyhow::anyhow!(gpapi::error::PortalError::PreloginError(
+      "second failure".into()
+    ))),
+  ]);
+  let error = handler.handle_impl().await.unwrap_err();
+  assert!(
+    error
+      .downcast_ref::<gpapi::process::rendering_recovery::RecoveryFailed>()
+      .is_some()
+  );
+  assert_eq!(handler.auth_attempt_fixture.borrow().observed.len(), 2);
+  assert_eq!(worker.await.unwrap().len(), 2);
+}

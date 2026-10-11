@@ -1,0 +1,115 @@
+name: Bug report
+description: Report a problem with GP Connect or gpclient.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. You can report against your installed version; you do not need to upgrade first.
+
+        Review everything before posting. Remove passwords, cookies, tokens, SAML payloads, and private VPN addresses. Do not attach a complete environment dump.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - CLI connection
+        - GP Connect GUI
+        - Login window or browser authentication
+        - Installation or update
+        - Credential storage
+        - Other or unsure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Application version
+      description: Run gpclient --version, or use the version shown in the GUI's About dialog. Include helper versions if relevant.
+      placeholder: "For example: gpclient 3.0.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - APT
+        - AUR
+        - RPM package or repository
+        - Nix
+        - Homebrew
+        - Downloaded release package
+        - FreeBSD or OpenBSD package
+        - Source build
+        - Other or unknown
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      description: Include the Linux distribution, macOS version, or FreeBSD/OpenBSD version, and architecture if known.
+      placeholder: "For example: Fedora 43 x86_64, macOS 26 arm64, or FreeBSD 14.4 amd64"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact command and options, or the GUI steps. Replace private portal names with a placeholder and omit credentials.
+      placeholder: |
+        1. Run sudo gpclient connect <portal> --browser
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Describe the failure and any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: regression
+    attributes:
+      label: Last working version and recent changes
+      description: If this worked before, give the last working app version and any recent OS, desktop, graphics driver, or package updates. It is okay if you do not know.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Run gpclient diagnostics as your normal desktop user, without sudo. If the command is unavailable, use the standalone script linked below or provide the relevant information manually. Reports include raw desktop identifiers and are not guaranteed anonymous; review before posting.
+      render: text
+  - type: markdown
+    attributes:
+      value: |
+        **Older versions:** download and inspect the [standalone diagnostic script](https://github.com/yuezk/GlobalProtect-openconnect/blob/dev/scripts/collect-diagnostics.sh), then run it with `sh collect-diagnostics.sh`. See [collection instructions](https://github.com/yuezk/GlobalProtect-openconnect/blob/dev/docs/diagnostics.md). Do not pipe a download directly into a shell.
+
+        If you cannot run either collector, provide the relevant details below. You do not need graphics details for unrelated connection problems.
+  - type: textarea
+    id: rendering
+    attributes:
+      label: Window or rendering failures only
+      description: Desktop/compositor and version; Wayland or X11; GPU and driver version; GTK/WebKitGTK version when available; VM or remote session; any rendering environment overrides. Skip for unrelated problems. The diagnostics report may already contain this information.
+  - type: textarea
+    id: authentication
+    attributes:
+      label: Authentication or credential storage failures only
+      description: Embedded login window or external browser (name/version)? At what stage does it stop? For credential storage errors, include the keyring implementation or macOS Keychain error. Omit cookies, tokens, passwords, and SAML data.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: For the CLI, paste relevant terminal output. For the GUI, use its built-in option to open or export logs, if available. Review and remove sensitive authentication data before posting; avoid full verbose logs unless requested.
+      render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots and additional context
+      description: Attach screenshots if helpful. Hide private portal names, account details, and other sensitive content.

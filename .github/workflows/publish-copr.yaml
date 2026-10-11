@@ -11,6 +11,18 @@ on:
         type: string
         required: true
         default: "1"
+      build_id:
+        description: 'Existing Copr build ID to verify; leave empty to submit a new build'
+        type: string
+        required: false
+      distros:
+        description: 'Space-separated distro releases, e.g. fedora-44 fedora-45; all configured architectures are included'
+        type: string
+        required: false
+
+concurrency:
+  group: publish-copr
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -19,9 +31,14 @@ jobs:
   publish-copr:
     runs-on: ubuntu-latest
     container: fedora:latest
+    timeout-minutes: 210
+    defaults:
+      run:
+        shell: bash
     steps:
     - name: Install tools
-      run: dnf install -y copr-cli gh
+      run: dnf install -y copr-cli gh python3 zstd
+    - uses: actions/checkout@v6
 
     - name: Check inputs
       env:
@@ -29,14 +46,28 @@ jobs:
         TAG: ${{ inputs.tag }}
         REVISION: ${{ inputs.revision }}
       run: |
-        if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
-          echo "Revision must be a positive integer" >&2
+        if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
+          echo "Expected a stable vX.Y.Z tag and positive package revision" >&2
           exit 1
         fi
 
         gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" >/dev/null
 
+    - name: Resolve publication distros
+      id: targets
+      env:
+        DISTROS: ${{ inputs.distros }}
+        BUILD_ID: ${{ inputs.build_id }}
+      run: |
+        build_args=()
+        if [[ -n "$BUILD_ID" ]]; then
+          build_args+=(--build-id "$BUILD_ID")
+        fi
+        python3 scripts/select-publication-targets.py copr \
+          --distros "$DISTROS" "${build_args[@]}"
+
     - name: Download published spec
+      if: ${{ inputs.build_id == '' }}
       env:
         GH_TOKEN: ${{ github.token }}
         TAG: ${{ inputs.tag }}
@@ -49,6 +80,7 @@ jobs:
           --dir publish-copr
 
     - name: Set package revision
+      if: ${{ inputs.build_id == '' }}
       env:
         REVISION: ${{ inputs.revision }}
       run: |
@@ -66,6 +98,7 @@ jobs:
         grep '^Release:' "$spec"
 
     - name: Configure COPR authentication
+      if: ${{ inputs.build_id == '' }}
       env:
         COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
       run: |
@@ -73,8 +106,38 @@ jobs:
         printf '%s\n' "$COPR_CONFIG" > "$HOME/.config/copr"
         chmod 600 "$HOME/.config/copr"
 
-    - name: Build and publish COPR package
+    - name: Submit or select Copr build
+      id: build
+      env:
+        EXISTING_BUILD_ID: ${{ inputs.build_id }}
+        CHROOTS: ${{ steps.targets.outputs.targets }}
       run: |
-        copr-cli build \
-          yuezk/globalprotect-openconnect \
-          publish-copr/globalprotect-openconnect.spec
+        set -euo pipefail
+        build_id="$EXISTING_BUILD_ID"
+        if [[ -z "$build_id" ]]; then
+          read -r -a chroots <<< "$CHROOTS"
+          chroot_args=()
+          for chroot in "${chroots[@]}"; do
+            chroot_args+=(--chroot "$chroot")
+          done
+          copr-cli build --nowait yuezk/globalprotect-openconnect \
+            "${chroot_args[@]}" \
+            publish-copr/globalprotect-openconnect.spec | tee copr-submission.log
+          build_id="$(sed -n 's/^Created builds: \([0-9][0-9]*\)$/\1/p' copr-submission.log)"
+        fi
+        [[ "$build_id" =~ ^[0-9]+$ ]]
+        echo "id=$build_id" >> "$GITHUB_OUTPUT"
+        echo "Copr build: https://copr.fedorainfracloud.org/coprs/yuezk/globalprotect-openconnect/build/$build_id/" \
+          >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Wait for Copr builds and public repositories
+      env:
+        TAG: ${{ inputs.tag }}
+        REVISION: ${{ inputs.revision }}
+        BUILD_ID: ${{ steps.build.outputs.id }}
+        CHROOTS: ${{ steps.targets.outputs.targets }}
+      run: |
+        read -r -a chroots <<< "$CHROOTS"
+        python3 scripts/wait-for-publication.py copr \
+          --chroots "${chroots[@]}" \
+          --build-id "$BUILD_ID" --version "${TAG#v}" --revision "$REVISION"

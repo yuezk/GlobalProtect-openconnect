@@ -287,7 +287,7 @@ mod tests {
 
   #[tokio::test]
   async fn resync_snapshot_is_ordered_with_state_events() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue(env!("CARGO_PKG_VERSION"), None).unwrap();
     let permit = registry
       .begin_handshake(
@@ -344,7 +344,7 @@ mod tests {
 
   #[tokio::test]
   async fn removed_prepared_candidate_cannot_commit_takeover() {
-    let registry = Arc::new(SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(Uuid::new_v4()));
     let credential = registry.issue(env!("CARGO_PKG_VERSION"), None).unwrap();
     let dispatcher = Arc::new(RequestDispatcher::new(
       crate::vpn_task::LifecycleHandle::for_tests(),

@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.0.2
+
+### Added
+
+- Added `gpclient diagnostics` to collect system and client information for troubleshooting.
+
+### Fixed
+
+- Recognized WebKit Wayland rendering crashes now trigger one retry with DMABUF disabled when opening the GUI, first-time setup, or embedded browser sign-in.
+- Improved desktop rendering with opaque windows to reduce transparency-related flickering on Linux and BSD.
+- Browser sign-in retries refresh authentication data, and repeated failures report both attempts instead of leaving the client waiting.
+- Cancelling startup or sign-in now stops pending desktop child processes and version checks.
+
 ## 3.0.1
 
 ### Fixed

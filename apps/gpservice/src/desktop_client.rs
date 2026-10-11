@@ -17,6 +17,7 @@ use tokio::io::unix::AsyncFd;
 use tokio_util::sync::CancellationToken;
 
 use crate::session_registry::SessionRegistry;
+use gpapi::service::transport::{DESKTOP_GUI_EXITED, DESKTOP_RENDERING_RETRY};
 
 /// Private parent/service pipes; credentials never pass through argv, environment or files.
 pub(crate) struct DesktopClient {
@@ -58,19 +59,28 @@ impl DesktopClient {
     restart: Arc<AtomicBool>,
     cancel: CancellationToken,
   ) -> anyhow::Result<()> {
+    let mut rendering_renewed = false;
     loop {
       let credential = registry.issue(env!("CARGO_PKG_VERSION"), Some(uid))?;
       let session_id = credential.session_id();
       let result = tokio::select! {
-        _ = cancel.cancelled() => Ok(false),
+        _ = cancel.cancelled() => Ok(None),
         result = async {
           self.write_frame(&credential.encode_frame()?).await?;
           self.gui_exited().await
         } => result,
       };
       registry.revoke(session_id);
-      if !result? || !restart.swap(false, Ordering::SeqCst) {
-        return Ok(());
+      let requested = restart.swap(false, Ordering::SeqCst);
+      match result? {
+        None => return Ok(()),
+        Some(DESKTOP_GUI_EXITED) if requested => {}
+        Some(DESKTOP_GUI_EXITED) => return Ok(()),
+        Some(DESKTOP_RENDERING_RETRY) => {
+          ensure!(!rendering_renewed, "Rendering recovery already requested");
+          rendering_renewed = true;
+        }
+        Some(_) => anyhow::bail!("Invalid desktop control message"),
       }
     }
   }
@@ -90,17 +100,16 @@ impl DesktopClient {
     Ok(())
   }
 
-  async fn gui_exited(&self) -> anyhow::Result<bool> {
+  async fn gui_exited(&self) -> anyhow::Result<Option<u8>> {
     loop {
       let mut ready = self.input.readable().await?;
       let mut byte = [0];
       match ready.try_io(|fd| read(fd.get_ref(), &mut byte).map_err(io::Error::from)) {
         Ok(result) => {
           if result.context("Desktop control pipe failed")? == 0 {
-            return Ok(false);
+            return Ok(None);
           }
-          ensure!(byte[0] == 0, "Invalid desktop control message");
-          return Ok(true);
+          return Ok(Some(byte[0]));
         }
         Err(_) => continue,
       }
@@ -165,7 +174,7 @@ mod tests {
   #[tokio::test]
   async fn desktop_channel_revokes_and_reissues_on_restart_then_closes_on_parent_exit() {
     let (channel, control, reader) = pipes();
-    let registry = Arc::new(SessionRegistry::new(uuid::Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(uuid::Uuid::new_v4()));
     let restart = Arc::new(AtomicBool::new(false));
     let task = tokio::spawn(channel.serve(registry.clone(), 1000, restart.clone(), CancellationToken::new()));
     let (reader, first) = credential(reader).await;
@@ -184,9 +193,54 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn rendering_renewal_revokes_credentials_and_consumes_old_restart_intent() {
+    let (channel, control, reader) = pipes();
+    let registry = Arc::new(SessionRegistry::for_tests(uuid::Uuid::new_v4()));
+    let restart = Arc::new(AtomicBool::new(true));
+    let task = tokio::spawn(channel.serve(registry.clone(), 1000, restart.clone(), CancellationToken::new()));
+    let (reader, first) = credential(reader).await;
+    write(&control, &[DESKTOP_RENDERING_RETRY]).unwrap();
+    let (_, second) = credential(reader).await;
+    assert_ne!(first.session_id(), second.session_id());
+    assert!(registry.last_successful_hip_report(first.session_id()).is_err());
+    assert!(!restart.load(Ordering::SeqCst));
+    write(&control, &[DESKTOP_GUI_EXITED]).unwrap();
+    tokio::time::timeout(Duration::from_secs(1), task)
+      .await
+      .unwrap()
+      .unwrap()
+      .unwrap();
+    assert!(registry.last_successful_hip_report(second.session_id()).is_err());
+  }
+
+  #[tokio::test]
+  async fn repeated_rendering_renewal_fails_closed() {
+    let (channel, control, reader) = pipes();
+    let registry = Arc::new(SessionRegistry::for_tests(uuid::Uuid::new_v4()));
+    let task = tokio::spawn(channel.serve(
+      registry.clone(),
+      1000,
+      Arc::new(AtomicBool::new(false)),
+      CancellationToken::new(),
+    ));
+    let (reader, _) = credential(reader).await;
+    write(&control, &[DESKTOP_RENDERING_RETRY]).unwrap();
+    let (_, second) = credential(reader).await;
+    write(&control, &[DESKTOP_RENDERING_RETRY]).unwrap();
+    assert!(
+      tokio::time::timeout(Duration::from_secs(1), task)
+        .await
+        .unwrap()
+        .unwrap()
+        .is_err()
+    );
+    assert!(registry.last_successful_hip_report(second.session_id()).is_err());
+  }
+
+  #[tokio::test]
   async fn desktop_channel_shutdown_cancels_pipe_wait_and_revokes_credential() {
     let (channel, _control, reader) = pipes();
-    let registry = Arc::new(SessionRegistry::new(uuid::Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(uuid::Uuid::new_v4()));
     let cancel = CancellationToken::new();
     let task = tokio::spawn(channel.serve(registry.clone(), 1000, Arc::new(AtomicBool::new(false)), cancel.clone()));
     let (_, issued) = credential(reader).await;
@@ -202,7 +256,7 @@ mod tests {
   #[tokio::test]
   async fn desktop_channel_rejects_invalid_control_messages_and_revokes() {
     let (channel, control, reader) = pipes();
-    let registry = Arc::new(SessionRegistry::new(uuid::Uuid::new_v4()));
+    let registry = Arc::new(SessionRegistry::for_tests(uuid::Uuid::new_v4()));
     let task = tokio::spawn(channel.serve(
       registry.clone(),
       1000,
@@ -210,7 +264,7 @@ mod tests {
       CancellationToken::new(),
     ));
     let (_, issued) = credential(reader).await;
-    write(&control, &[1]).unwrap();
+    write(&control, &[255]).unwrap();
     assert!(
       tokio::time::timeout(Duration::from_secs(1), task)
         .await

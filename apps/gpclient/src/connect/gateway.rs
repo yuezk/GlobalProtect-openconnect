@@ -170,8 +170,8 @@ impl ConnectHandler<'_> {
       _ = self.cancellation.cancelled() => return Err(gpapi::auth::AuthenticationCancelled.into()),
       result = prelogin(gateway, &gp_params, self.direct_gateway_prelogin_options()) => result?,
     };
-    let cred = self
-      .obtain_credential(&prelogin, gateway, gateway_browser_auth_allowed)
+    let (_, cred) = self
+      .obtain_credential_with_recovery(prelogin, gateway, gateway_browser_auth_allowed)
       .await?;
 
     let login_session = self
@@ -262,6 +262,13 @@ impl ConnectHandler<'_> {
         }
         Err(error) => {
           self.check_cancelled()?;
+          let error = self.auth_recovery.borrow().terminal(error);
+          if error
+            .downcast_ref::<gpapi::process::rendering_recovery::RecoveryFailed>()
+            .is_some()
+          {
+            return Err(error);
+          }
           if error
             .downcast_ref::<gpapi::gateway::GatewayLoginProtocolError>()
             .is_some()
@@ -273,8 +280,8 @@ impl ConnectHandler<'_> {
       }
     }
 
-    let credential = self
-      .obtain_credential(&gateway_prelogin, gateway, browser_allowed)
+    let (_, credential) = self
+      .obtain_credential_with_recovery(gateway_prelogin, gateway, browser_allowed)
       .await
       .inspect_err(|_| self.print_direct_gateway_recommendation(gateway))?;
     self.check_cancelled()?;

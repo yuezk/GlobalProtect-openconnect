@@ -1,15 +1,15 @@
 use std::{
   collections::HashMap,
-  fs::OpenOptions,
   path::{Path, PathBuf},
-  process::{ExitStatus, Stdio},
+  process::ExitStatus,
   sync::Arc,
 };
 
-use anyhow::{Context, bail};
+use anyhow::bail;
 use common::binary_paths;
 use log::info;
-use tokio::{io::AsyncWriteExt, process::Command};
+use tokio::process::Command;
+use tokio_util::sync::CancellationToken;
 
 use crate::{process::gui_helper_launcher::GuiHelperLauncher, service::transport::SessionCredential};
 
@@ -50,20 +50,26 @@ impl<'a> GuiLauncher<'a> {
     self
   }
 
-  pub async fn launch(&self) -> anyhow::Result<ExitStatus> {
+  pub(crate) async fn resolve_program(&self, cancellation: &CancellationToken) -> anyhow::Result<PathBuf> {
     anyhow::ensure!(
       uzers::get_effective_uid() != 0,
       "The desktop GUI must not be launched by root"
     );
-    if let Some(program) = self.find_compatible_program().await {
-      return self.launch_program(&program).await;
+    if let Some(program) = tokio::select! {
+      biased;
+      _ = cancellation.cancelled() => anyhow::bail!("GUI resolution cancelled"),
+      result = self.find_compatible_program() => result,
+    } {
+      return Ok(program);
     }
-
-    self.download_program().await?;
-
+    self.download_program(cancellation).await?;
     let program = binary_paths::gpgui_update_target();
-    self.check_version(&program).await?;
-    self.launch_program(&program).await
+    tokio::select! {
+      biased;
+      _ = cancellation.cancelled() => anyhow::bail!("GUI resolution cancelled"),
+      result = self.check_version(&program) => result?,
+    }
+    Ok(program)
   }
 
   async fn find_compatible_program(&self) -> Option<PathBuf> {
@@ -80,50 +86,28 @@ impl<'a> GuiLauncher<'a> {
     None
   }
 
-  async fn launch_program(&self, program: &Path) -> anyhow::Result<ExitStatus> {
+  pub(crate) async fn launch_program(
+    &self,
+    program: &Path,
+    cancellation: &CancellationToken,
+  ) -> anyhow::Result<ExitStatus> {
     let mut cmd = Command::new(program);
-
     if let Some(envs) = &self.envs {
-      cmd.env_clear();
-      cmd.envs(envs);
+      cmd.env_clear().envs(envs);
     }
-
-    let log_file = match &self.envs {
-      Some(envs) => envs.get("GP_LOG_FILE").map(PathBuf::from),
-      None => std::env::var_os("GP_LOG_FILE").map(PathBuf::from),
-    };
-    if let Some(path) = log_file {
-      let file = OpenOptions::new()
-        .append(true)
-        .open(&path)
-        .with_context(|| format!("Failed to open GUI log file: {}", path.display()))?;
-      cmd.stderr(Stdio::from(file));
-    }
-
     cmd.arg("--service-credential-on-stdin");
-
     if self.minimized {
       cmd.arg("--minimized");
     }
-
     info!("Launching gpgui");
-    let child = cmd.kill_on_drop(true).stdin(Stdio::piped()).spawn();
-    let mut child = match child {
-      Ok(child) => child,
-      Err(err) => bail!("Failed to spawn {}: {}", program.display(), err),
-    };
-
-    let Some(mut stdin) = child.stdin.take() else {
-      bail!("Failed to open stdin");
-    };
-
-    let frame = self.credential.encode_frame()?;
-    stdin.write_all(&frame).await?;
-
-    let exit_status = child.wait().await?;
-    drop(stdin);
-
-    Ok(exit_status)
+    super::desktop_child::launch_desktop_child(
+      "gpgui",
+      cmd.into_std(),
+      self.envs.as_ref(),
+      &self.credential,
+      cancellation,
+    )
+    .await
   }
 
   async fn check_version(&self, program: &Path) -> anyhow::Result<()> {
@@ -132,7 +116,7 @@ impl<'a> GuiLauncher<'a> {
       cmd.env_clear();
       cmd.envs(envs);
     }
-    cmd.arg("--version");
+    cmd.kill_on_drop(true).arg("--version");
     let output = cmd.output().await?;
     if !output.status.success() {
       bail!("Version command exited with {}", output.status);
@@ -153,13 +137,13 @@ impl<'a> GuiLauncher<'a> {
     Ok(())
   }
 
-  async fn download_program(&self) -> anyhow::Result<()> {
+  async fn download_program(&self, cancellation: &CancellationToken) -> anyhow::Result<()> {
     let gui_helper = GuiHelperLauncher::new(&self.credential);
 
     gui_helper
       .envs(self.envs.as_ref())
       .gui_version(Some(self.version))
-      .launch()
+      .launch(cancellation)
       .await
   }
 }
@@ -218,12 +202,72 @@ mod tests {
     .unwrap();
     fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
 
-    assert!(launcher.launch_program(&program).await.unwrap().success());
-    assert!(launcher.launch_program(&program).await.unwrap().success());
+    assert!(
+      launcher
+        .launch_program(&program, &CancellationToken::new())
+        .await
+        .unwrap()
+        .success()
+    );
+    assert!(
+      launcher
+        .launch_program(&program, &CancellationToken::new())
+        .await
+        .unwrap()
+        .success()
+    );
     assert_eq!(
       fs::read_to_string(log_file).unwrap(),
       "[gpservice] started\n[gpgui] initialized\n[gpgui] initialized\n"
     );
+  }
+
+  #[tokio::test]
+  async fn cancellation_stops_a_hung_version_probe_before_other_candidates() {
+    let dir = TempDir::new().unwrap();
+    let pid_file = dir.path().join("version.pid");
+    let next_marker = dir.path().join("next-probe");
+    let first = dir.path().join("hung");
+    let second = dir.path().join("next");
+    fs::write(
+      &first,
+      format!("#!/bin/sh\necho $$ > '{}'; exec sleep 30\n", pid_file.display()),
+    )
+    .unwrap();
+    fs::write(
+      &second,
+      format!(
+        "#!/bin/sh\ntouch '{}'; echo 'gpgui test-version'\n",
+        next_marker.display()
+      ),
+    )
+    .unwrap();
+    for path in [&first, &second] {
+      fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let launcher = launcher(VERSION, vec![first, second]);
+    let cancellation = CancellationToken::new();
+    let attempt = launcher.resolve_program(&cancellation);
+    tokio::pin!(attempt);
+    tokio::select! {
+      result = &mut attempt => panic!("version probe exited early: {result:?}"),
+      ready = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !pid_file.exists() {
+          tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+      }) => ready.unwrap(),
+    }
+    cancellation.cancel();
+    assert!(attempt.await.unwrap_err().to_string().contains("cancelled"));
+    assert!(!next_marker.exists());
+    let pid: i32 = fs::read_to_string(pid_file).unwrap().trim().parse().unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+      while nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None).is_ok() {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+      }
+    })
+    .await
+    .unwrap();
   }
 
   #[tokio::test]

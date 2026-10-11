@@ -20,6 +20,18 @@ on:
         type: "string"
         required: true
         default: "1.91"
+      verify_only:
+        description: 'Verify an existing upload without building or uploading source again'
+        type: boolean
+        default: false
+concurrency:
+  group: publish-ppa
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -28,7 +40,12 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         TAG: ${{ inputs.tag }}
+        REVISION: ${{ inputs.revision }}
       run: |
+        if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
+          echo "Expected a stable vX.Y.Z tag and positive package revision" >&2
+          exit 1
+        fi
         if ! gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" >/dev/null 2>&1; then
           echo "Tag $TAG does not exist"
           exit 1
@@ -67,8 +84,14 @@ jobs:
           exit 1
         fi
 
+        declare -A seen=()
         for item in "${series[@]}"; do
           ubuntu-distro-info --series "$item" >/dev/null
+          if [[ -n "${seen[$item]+present}" ]]; then
+            echo "Duplicate Ubuntu series: $item" >&2
+            exit 1
+          fi
+          seen[$item]=1
         done
 
         matrix="$(printf '%s\n' "${series[@]}" | jq -R . | jq -s -c '{series: .}')"
@@ -79,6 +102,7 @@ jobs:
     needs: [check, resolve-series]
     name: publish-ppa (${{ matrix.series }})
     runs-on: ubuntu-latest
+    timeout-minutes: 210
     container:
       image: ubuntu:${{ matrix.series }}
     strategy:
@@ -88,7 +112,7 @@ jobs:
     - name: Install container tools
       run: |
         apt-get update
-        apt-get install -y ca-certificates curl gpg sudo
+        apt-get install -y ca-certificates curl gpg sudo python3 distro-info distro-info-data
         mkdir -p /etc/apt/keyrings
         curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
           | gpg --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
@@ -97,9 +121,12 @@ jobs:
           > /etc/apt/sources.list.d/github-cli.list
         apt-get update
         apt-get install -y gh
+    - uses: actions/checkout@v6
     - name: Prepare workspace
+      if: ${{ !inputs.verify_only }}
       run: rm -rf publish-ppa && mkdir publish-ppa
     - name: Download ${{ inputs.tag }} offline source code
+      if: ${{ !inputs.verify_only }}
       env:
         GH_TOKEN: ${{ secrets.GH_PAT }}
       run: |
@@ -108,17 +135,23 @@ jobs:
           --pattern '*.offline.tar.gz' \
           --dir publish-ppa
     - name: Patch the source code
+      if: ${{ !inputs.verify_only }}
       run: |
         cd publish-ppa
 
         # Rename the source tarball without the offline suffix
-        mv -v *.tar.gz $(basename *.tar.gz .offline.tar.gz).tar.gz
+        archives=(./*.offline.tar.gz)
+        [[ "${#archives[@]}" -eq 1 && -f "${archives[0]}" ]]
+        archive="${archives[0]%.offline.tar.gz}.tar.gz"
+        mv -v -- "${archives[0]}" "$archive"
 
         # Extract the source tarball
-        tar -xzf *.tar.gz
+        tar -xzf "$archive"
 
         # Prepare the debian directory with custom files
-        cd globalprotect-openconnect-*/
+        source_dirs=(./globalprotect-openconnect-*/)
+        [[ "${#source_dirs[@]}" -eq 1 && -d "${source_dirs[0]}" ]]
+        cd "${source_dirs[0]}"
 
         # Prepare the debian directory with custom files
         mkdir -p .build/debian
@@ -137,6 +170,7 @@ jobs:
         sed -i "s/DISABLE_RUST_TOOLCHAIN = 0/DISABLE_RUST_TOOLCHAIN = 1/g" .build/debian/rules
 
     - name: Publish to PPA
+      if: ${{ !inputs.verify_only }}
       uses: yuezk/publish-ppa-package@main
       with:
         repository: "yuezk/globalprotect-openconnect"
@@ -149,3 +183,13 @@ jobs:
         extra_ppa: "yuezk/globalprotect-openconnect"
         series: ${{ matrix.series }}
         revision: ${{ inputs.revision }}
+
+    - name: Wait for Launchpad builds and public package indexes
+      env:
+        TAG: ${{ inputs.tag }}
+        REVISION: ${{ inputs.revision }}
+        SERIES: ${{ matrix.series }}
+      run: |
+        ubuntu_version="$(ubuntu-distro-info --series "$SERIES" --release | cut -d' ' -f1)"
+        python3 scripts/wait-for-publication.py ppa --series "$SERIES" \
+          --version "${TAG#v}-ppa${REVISION}~ubuntu${ubuntu_version}"

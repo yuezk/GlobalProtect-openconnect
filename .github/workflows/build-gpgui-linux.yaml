@@ -1,0 +1,98 @@
+name: Build Linux GUI
+
+on:
+  workflow_call:
+    inputs:
+      gp_ref:
+        required: true
+        type: string
+      gpgui_ref:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+      builder:
+        required: true
+        type: string
+      artifact_suffix:
+        default: ""
+        type: string
+      verify_desktop_assets:
+        default: false
+        type: boolean
+    secrets:
+      GH_PAT:
+        required: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os.runner }}
+    name: build (${{ matrix.os.arch }})
+    steps:
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9
+      - name: Prepare workspace
+        run: rm -rf gpgui-source && mkdir gpgui-source
+      - name: Checkout GlobalProtect-openconnect
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GH_PAT }}
+          repository: yuezk/GlobalProtect-openconnect
+          ref: ${{ inputs.gp_ref }}
+          path: gpgui-source/gp
+          submodules: recursive
+      - name: Checkout gpgui
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GH_PAT }}
+          repository: yuezk/gpgui
+          ref: ${{ inputs.gpgui_ref }}
+          path: gpgui-source/gpgui
+      - name: Verify Linux desktop assets
+        if: matrix.os.arch == 'amd64' && inputs.verify_desktop_assets
+        run: gpgui-source/gp/scripts/verify-linux-desktop-assets.sh gpgui-source/gpgui
+      - name: Tarball
+        run: |
+          cd gpgui-source
+          tar -czf gpgui.tar.gz gpgui gp
+      - name: Build gpgui in Docker
+        env:
+          GPGUI_BUILDER: ${{ inputs.builder }}
+          GPGUI_BUILD_VERSION: ${{ github.run_number }}.${{ github.run_attempt }}
+          GPGUI_UPDATE_CHANNEL: ${{ inputs.channel }}
+          GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
+        run: |
+          docker run --rm \
+            -e COREPACK_INTEGRITY_KEYS=0 \
+            -e GPGUI_BUILD_VERSION \
+            -e GPGUI_UPDATE_CHANNEL \
+            -e GPGUI_LICENSE_SIGNING_KEYS \
+            -v "$(pwd)/gpgui-source:/workspace" "yuezk/gpdev:$GPGUI_BUILDER"
+      - name: Install gpgui in Docker
+        env:
+          GPGUI_BUILDER: ${{ inputs.builder }}
+        run: |
+          cd gpgui-source
+          tar -xJf ./*.bin.tar.xz
+          docker run --rm \
+            -e COREPACK_INTEGRITY_KEYS=0 \
+            -v "$(pwd):/workspace" "yuezk/gpdev:$GPGUI_BUILDER" \
+            bash -c "cd /workspace/gpgui_*/ && ./gpgui --version"
+      - name: Upload gpgui
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifact-gpgui${{ inputs.artifact_suffix }}-${{ matrix.os.arch }}
+          if-no-files-found: error
+          path: |
+            gpgui-source/*.bin.tar.xz
+            gpgui-source/*.bin.tar.xz.sha256

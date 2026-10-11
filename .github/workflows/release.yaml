@@ -215,6 +215,7 @@ jobs:
     if: ${{ inputs.release-docker }}
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v6
     - name: Download digests
       uses: actions/download-artifact@v8
       with:
@@ -244,7 +245,12 @@ jobs:
         docker buildx imagetools create "${tags[@]}" \
           $(printf "$IMAGE@sha256:%s " *)
 
-        docker buildx imagetools inspect "$IMAGE:$TAG"
+        "$GITHUB_WORKSPACE/scripts/verify-docker-publication.sh" "$IMAGE:$TAG" /tmp/digests "${{ inputs.arch }}"
+        if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          for alias in "$VERSION" latest; do
+            "$GITHUB_WORKSPACE/scripts/verify-docker-publication.sh" "$IMAGE:$alias" /tmp/digests "${{ inputs.arch }}"
+          done
+        fi
 
   gh-release:
     needs:

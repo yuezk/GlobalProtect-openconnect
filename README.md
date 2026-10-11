@@ -519,6 +519,8 @@ Verify the CLI client is working correctly:
 
 ## Frequently Asked Questions
 
+When reporting a problem, follow the [diagnostics collection instructions](docs/diagnostics.md). A standalone script is available for versions without the diagnostics command; you do not need to upgrade first.
+
 ### Q: How do I resolve the "Secure Storage not ready" error?
 
 Unlock your desktop keyring and ensure the application can access it. On Linux and BSD, check that a keyring service such as GNOME Keyring is installed and running in your desktop session. On macOS, check Keychain access.

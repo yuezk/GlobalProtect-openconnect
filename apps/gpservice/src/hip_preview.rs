@@ -233,7 +233,7 @@ mod tests {
         "serial".into(),
         "00:11:22:33:44:55".into(),
       ),
-      registry: Arc::new(SessionRegistry::new(Uuid::new_v4())),
+      registry: Arc::new(SessionRegistry::for_tests(Uuid::new_v4())),
       connection,
     }
   }

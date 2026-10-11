@@ -179,7 +179,7 @@ mod tests {
 
   #[test]
   fn root_owned_sticky_directories_protect_collectors_without_trusting_writable_files() {
-    // CI runs Rust tests as root; an unprivileged process cannot create these fixtures.
+    // A focused privileged CI check runs this test; the ordinary suite cannot create root-owned fixtures.
     if uzers::get_effective_uid() != 0 {
       return;
     }

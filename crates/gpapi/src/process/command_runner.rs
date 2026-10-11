@@ -1,9 +1,9 @@
 use std::{
-  io::{self, Read},
+  io::{self, Read, Write},
   os::unix::process::CommandExt,
   process::{Child, Command, Output, Stdio},
   thread,
-  time::Duration,
+  time::{Duration, Instant},
 };
 
 use nix::{
@@ -14,71 +14,280 @@ use nix::{
 
 use super::collection::CollectionControl;
 
-/// Execute an already configured command. Environment, identity and executable
-/// trust belong to its caller. This worker owns the process group until reaped;
-/// its asynchronous caller must cancel and await it instead of dropping it.
+/// Owns and reaps the command's process group. Its async caller must cancel and await this worker.
 pub(crate) fn run_controlled(
-  mut command: Command,
+  command: Command,
   control: &dyn CollectionControl,
   output_limit: usize,
 ) -> io::Result<Output> {
-  control.check()?;
-  let child = command
-    .stdin(Stdio::null())
-    .stdout(Stdio::piped())
-    .process_group(0)
-    .spawn()?;
-  let mut child = ControlledChild(child);
-  let mut stdout = child.0.stdout.take().expect("controlled stdout was piped");
-  let flags = fcntl(&stdout, FcntlArg::F_GETFL).map_err(io::Error::from)?;
+  run(command, control, Some(output_limit), None, None).map(|observed| observed.output)
+}
+
+#[derive(Debug)]
+pub(crate) struct ObservedOutput {
+  pub output: Output,
+  pub input_error: Option<io::Error>,
+}
+
+pub(crate) fn run_observed(
+  command: Command,
+  control: &dyn CollectionControl,
+  output_limit: Option<usize>,
+  observer: &mut dyn FnMut(&[u8]),
+  stderr_sink: &mut dyn Write,
+  stdin_frame: Option<&[u8]>,
+) -> io::Result<ObservedOutput> {
+  run(
+    command,
+    control,
+    output_limit,
+    Some((observer, stderr_sink)),
+    stdin_frame,
+  )
+}
+
+fn nonblocking(fd: &impl std::os::fd::AsFd) -> io::Result<()> {
+  let flags = fcntl(fd, FcntlArg::F_GETFL).map_err(io::Error::from)?;
   fcntl(
-    &stdout,
+    fd,
     FcntlArg::F_SETFL(OFlag::from_bits_truncate(flags) | OFlag::O_NONBLOCK),
   )
   .map_err(io::Error::from)?;
+  Ok(())
+}
+
+fn run(
+  mut command: Command,
+  control: &dyn CollectionControl,
+  output_limit: Option<usize>,
+  mut observation: Option<(&mut dyn FnMut(&[u8]), &mut dyn Write)>,
+  stdin_frame: Option<&[u8]>,
+) -> io::Result<ObservedOutput> {
+  control.check()?;
+  command
+    .stdout(if output_limit.is_some() {
+      Stdio::piped()
+    } else {
+      Stdio::inherit()
+    })
+    .process_group(0);
+  command.stdin(if stdin_frame.is_some() {
+    Stdio::piped()
+  } else {
+    Stdio::null()
+  });
+  if observation.is_some() {
+    command.stderr(Stdio::piped());
+  }
+  let mut child = ControlledChild {
+    process: command.spawn()?,
+    stopped: false,
+  };
+  let mut stdout = child.process.stdout.take();
+  if let Some(pipe) = &stdout {
+    nonblocking(pipe)?;
+  }
+  let mut stderr = if observation.is_some() {
+    child.process.stderr.take()
+  } else {
+    None
+  };
+  if let Some(pipe) = &stderr {
+    nonblocking(pipe)?;
+  }
+  let mut input = child.process.stdin.take();
+  if let Some(pipe) = &input {
+    nonblocking(pipe)?;
+  }
+  let mut input_offset = 0;
+  let mut input_error = None;
   let mut output = Vec::new();
   let mut buffer = [0u8; 8192];
-  let mut eof = false;
+  let mut stdout_eof = stdout.is_none();
+  let mut stderr_eof = stderr.is_none();
   let mut status = None;
+  let mut exited_at = None;
   loop {
     control.check()?;
-    if !eof {
-      match stdout.read(&mut buffer) {
-        Ok(0) => eof = true,
+    let mut progressed = false;
+    if let (Some(frame), Some(pipe)) = (stdin_frame, &mut input) {
+      if input_offset < frame.len() && input_error.is_none() {
+        match pipe.write(&frame[input_offset..]) {
+          Ok(0) => input_error = Some(io::Error::new(io::ErrorKind::WriteZero, "Credential input pipe closed")),
+          Ok(length) => {
+            input_offset += length;
+            progressed = true;
+          }
+          Err(error) if matches!(error.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted) => {}
+          Err(error) => input_error = Some(error),
+        }
+      }
+    }
+
+    if !stdout_eof {
+      match stdout.as_mut().unwrap().read(&mut buffer) {
+        Ok(0) => stdout_eof = true,
         Ok(length) => {
-          if length > output_limit.saturating_sub(output.len()) {
+          if length > output_limit.unwrap().saturating_sub(output.len()) {
             return Err(io::Error::new(
               io::ErrorKind::InvalidData,
               "Command output exceeds its limit",
             ));
           }
           output.extend_from_slice(&buffer[..length]);
-          continue;
+          progressed = true;
         }
         Err(error) if matches!(error.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted) => {}
         Err(error) => return Err(error),
       }
     }
-    if status.is_none() {
-      status = child.0.try_wait()?;
+    if !stderr_eof {
+      match stderr.as_mut().unwrap().read(&mut buffer) {
+        Ok(0) => stderr_eof = true,
+        Ok(length) => {
+          let (observer, sink) = observation.as_mut().unwrap();
+          observer(&buffer[..length]);
+          sink.write_all(&buffer[..length])?;
+          progressed = true;
+        }
+        Err(error) if matches!(error.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted) => {}
+        Err(error) => return Err(error),
+      }
     }
-    if eof && let Some(status) = status {
-      return Ok(Output {
-        status,
-        stdout: output,
-        stderr: Vec::new(),
-      });
+    if status.is_none()
+      && let Some(exit_status) = child.process.try_wait()?
+    {
+      status = Some(exit_status);
+      exited_at = Some(Instant::now());
+      child.stop_helpers();
     }
-    thread::sleep(Duration::from_millis(10));
+    if let Some(status) = status {
+      if (stdout_eof && stderr_eof) || exited_at.unwrap().elapsed() >= Duration::from_millis(250) {
+        if stdin_frame.is_some_and(|frame| input_offset < frame.len()) && input_error.is_none() {
+          input_error = Some(io::Error::new(
+            io::ErrorKind::BrokenPipe,
+            "Child exited before receiving its credential",
+          ));
+        }
+        return Ok(ObservedOutput {
+          output: Output {
+            status,
+            stdout: output,
+            stderr: Vec::new(),
+          },
+          input_error,
+        });
+      }
+    }
+    if !progressed {
+      thread::sleep(Duration::from_millis(10));
+    }
   }
 }
 
-struct ControlledChild(Child);
+struct ControlledChild {
+  process: Child,
+  stopped: bool,
+}
+
+impl ControlledChild {
+  fn stop_helpers(&mut self) {
+    if !self.stopped {
+      let _ = killpg(Pid::from_raw(self.process.id() as i32), Signal::SIGKILL);
+      self.stopped = true;
+    }
+  }
+}
 
 impl Drop for ControlledChild {
   fn drop(&mut self) {
-    // Reap the direct child and stop helpers retaining stdout after it exits.
-    let _ = killpg(Pid::from_raw(self.0.id() as i32), Signal::SIGKILL);
-    let _ = self.0.wait();
+    self.stop_helpers();
+    let _ = self.process.wait();
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn drains_both_pipes_and_reaps_helpers_that_hold_them_open() {
+    let mut command = Command::new("sh");
+    command.args(["-c", "printf auth; printf diagnostic >&2; sleep 30 & exit 1"]);
+    let mut seen = Vec::new();
+    let mut sink = Vec::new();
+    let start = Instant::now();
+    let output = run_observed(
+      command,
+      &|| Ok(()),
+      Some(1024),
+      &mut |bytes| seen.extend_from_slice(bytes),
+      &mut sink,
+      None,
+    )
+    .unwrap();
+    assert!(!output.output.status.success());
+    assert_eq!(output.output.stdout, b"auth");
+    assert_eq!(seen, b"diagnostic");
+    assert_eq!(sink, seen);
+    assert!(start.elapsed() < Duration::from_secs(2));
+  }
+  #[test]
+  fn continuous_stderr_does_not_starve_cancellation_or_stdout() {
+    let mut command = Command::new("sh");
+    command.args(["-c", "printf auth; while :; do printf 'diagnostic\\n' >&2; done"]);
+    let start = Instant::now();
+    let control = || {
+      if start.elapsed() > Duration::from_millis(100) {
+        Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"))
+      } else {
+        Ok(())
+      }
+    };
+    let error = run_observed(command, &control, Some(1024), &mut |_| {}, &mut io::sink(), None).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+    assert!(start.elapsed() < Duration::from_secs(2));
+  }
+
+  #[test]
+  fn retains_broken_input_pipe_for_failed_child_without_a_diagnostic() {
+    let mut command = Command::new("sh");
+    command.args(["-c", "exec 0<&-; exit 2"]);
+    let observed = run_observed(
+      command,
+      &|| Ok(()),
+      None,
+      &mut |_| {},
+      &mut io::sink(),
+      Some(&vec![0; 128 * 1024]),
+    )
+    .unwrap();
+    assert_eq!(observed.output.status.code(), Some(2));
+    assert!(observed.input_error.is_some());
+  }
+
+  #[test]
+  fn cancellation_interrupts_a_blocked_credential_write() {
+    let mut command = Command::new("sh");
+    command.args(["-c", "sleep 30"]);
+    let start = Instant::now();
+    let control = || {
+      if start.elapsed() > Duration::from_millis(100) {
+        Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"))
+      } else {
+        Ok(())
+      }
+    };
+    let error = run_observed(
+      command,
+      &control,
+      None,
+      &mut |_| {},
+      &mut io::sink(),
+      Some(&vec![0; 128 * 1024]),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+    assert!(start.elapsed() < Duration::from_secs(2));
   }
 }

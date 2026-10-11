@@ -212,7 +212,7 @@ impl LifecycleHandle {
   #[cfg(test)]
   pub(crate) fn for_tests() -> Self {
     let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
-    let registry = Arc::new(crate::session_registry::SessionRegistry::new(Uuid::new_v4()));
+    let registry = Arc::new(crate::session_registry::SessionRegistry::for_tests(Uuid::new_v4()));
     let (_task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry);
     lifecycle
   }
@@ -782,7 +782,7 @@ mod tests {
   use crate::session_registry::SessionRegistry;
 
   fn registry() -> Arc<SessionRegistry> {
-    Arc::new(SessionRegistry::new(Uuid::new_v4()))
+    Arc::new(SessionRegistry::for_tests(Uuid::new_v4()))
   }
 
   fn identity_request() -> ConnectRequest {

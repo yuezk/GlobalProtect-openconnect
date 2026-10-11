@@ -57,6 +57,9 @@ impl ConnectHandler<'_> {
         Err(error) => {
           self.logout_gateway(gateway.server()).await;
           self.check_cancelled()?;
+          if self.auth_recovery.borrow().dmabuf_disabled() {
+            return Err(self.auth_recovery.borrow().terminal(error));
+          }
           warn!("Internal gateway {gateway} authentication failed: {error}");
         }
       }
