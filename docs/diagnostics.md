@@ -31,7 +31,7 @@ gpclient diagnostics --json --output diagnostics.json
 The collector refuses to overwrite an existing file. Choose another filename or
 remove the previous report yourself before collecting again.
 
-This command is being added after 3.0.1. If your installed version says the
+This command is available in 3.0.2 and later. If your installed version says the
 command is unknown, use the standalone script below. You do not need to upgrade
 before reporting a problem.
 

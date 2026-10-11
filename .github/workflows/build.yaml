@@ -786,7 +786,7 @@ jobs:
           ${{ matrix.workspace }}/gp/.build/${{ matrix.artifact_dir }}/artifacts/*
 
   gh-release:
-    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && !inputs.build_only) || startsWith(github.ref, 'refs/tags/')) }}
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && !inputs.build_only) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))) }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -942,7 +942,7 @@ jobs:
     needs:
       - test-gp
       - build-docker-image
-    if: ${{ (github.event_name == 'workflow_dispatch' && !inputs.build_only) || startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && !inputs.build_only) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
