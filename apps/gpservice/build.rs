@@ -4,6 +4,11 @@ const UNKNOWN_COMMIT: &str = "unknown";
 const DISPLAY_COMMIT_LEN: usize = 9;
 
 fn main() {
+  // Installed OpenConnect lives in ../lib relative to the executable.
+  // Cargo supplies the build-time library path for cargo run and cargo test.
+  #[cfg(target_os = "macos")]
+  println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/../lib");
+
   println!("cargo:rerun-if-env-changed=GPSERVICE_GIT_COMMIT");
   println!("cargo:rerun-if-env-changed=SOURCE_GIT_COMMIT");
   println!("cargo:rerun-if-env-changed=GITHUB_SHA");

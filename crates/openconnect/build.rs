@@ -137,6 +137,20 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
   let lib_dir = dst.join("lib");
   let include_dir = dst.join("include");
 
+  #[cfg(target_os = "macos")]
+  {
+    // Do not embed Cargo's temporary build directory in consumers of this library.
+    let library = std::fs::canonicalize(lib_dir.join("libopenconnect.dylib")).unwrap();
+    let library_name = library.file_name().unwrap().to_str().unwrap();
+    let status = std::process::Command::new("install_name_tool")
+      .arg("-id")
+      .arg(format!("@rpath/{library_name}"))
+      .arg(&library)
+      .status()
+      .expect("Failed to update the OpenConnect dylib install name");
+    assert!(status.success(), "Failed to update the OpenConnect dylib install name");
+  }
+
   println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
   #[cfg(target_os = "macos")]
