@@ -182,6 +182,9 @@
           # Must be set to true to avoid issues with the Tauri build process
           singleStep = true;
 
+          # The Makefile installs executables together with their supporting files.
+          copyBins = false;
+
           cargoBuildOptions =
             old:
             old
@@ -235,20 +238,9 @@
             };
 
           postInstall = ''
-            cp -r packaging/files/usr/libexec $out/libexec
+            make install PREFIX="$out" ${lib.optionalString pkgs.stdenv.isLinux ''GPGUI_BINARY="${gui}/gpgui"''}
           ''
           + lib.optionalString pkgs.stdenv.isLinux ''
-            for installer in gp-vpnc-script-installer gp-hip-script-installer; do
-              install -Dm755 "$out/bin/$installer" "$out/libexec/gpclient/$installer"
-            done
-
-            # Copy the prebuilt gpgui binary to the output bin directory
-            cp ${gui}/gpgui $out/bin/gpgui
-            chmod +x $out/bin/gpgui
-
-            cp -r packaging/files/usr/share $out/share
-            cp -r packaging/files/usr/lib $out/lib
-
             ${installNixosPolkitRule}
           ''
           + ''
