@@ -185,6 +185,7 @@ jobs:
         revision: ${{ inputs.revision }}
 
     - name: Wait for Launchpad builds and public package indexes
+      if: ${{ inputs.verify_only }}
       env:
         TAG: ${{ inputs.tag }}
         REVISION: ${{ inputs.revision }}

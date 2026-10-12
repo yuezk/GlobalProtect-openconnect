@@ -1,4 +1,7 @@
-use std::net::{IpAddr, SocketAddr};
+use std::{
+  io::Write,
+  net::{IpAddr, SocketAddr},
+};
 
 use browser_launcher::Browser as LaunchBrowser;
 use gpapi::auth::SamlAuthData;
@@ -34,7 +37,7 @@ impl<'a> BrowserAuthenticator<'a> {
     let auth_url = auth_server.auth_url();
 
     let auth_request = self.auth_request.to_string();
-    tokio::spawn(async move {
+    let auth_server_task = tokio::task::spawn_blocking(move || {
       auth_server.serve_request(&auth_request);
     });
 
@@ -55,6 +58,7 @@ Note that the URL is only valid for a single use.
 "#,
         auth_url
       );
+      auth_server_task.await?;
       return read_auth_data_from_stdin();
     }
 
@@ -95,6 +99,9 @@ async fn detect_local_ip() -> anyhow::Result<IpAddr> {
 }
 
 fn read_auth_data_from_stdin() -> anyhow::Result<SamlAuthData> {
+  eprint!("\nAuthentication callback (paste and press Enter): ");
+  std::io::stderr().flush()?;
+
   let mut data = String::new();
   std::io::stdin().read_line(&mut data)?;
 

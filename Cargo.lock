@@ -1861,6 +1861,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "sha2",
  "sha256",
  "snow",
  "socket2",

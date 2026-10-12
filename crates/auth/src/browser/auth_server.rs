@@ -14,7 +14,9 @@ impl AuthServer {
     let server = Server::http(addr).map_err(|err| anyhow::anyhow!(err))?;
     let auth_id = Uuid::new_v4().to_string();
 
-    Ok(Self { server, auth_id })
+    let auth_server = Self { server, auth_id };
+    info!("auth server started at: {}", auth_server.auth_url());
+    Ok(auth_server)
   }
 
   pub fn auth_url(&self) -> String {
@@ -22,8 +24,6 @@ impl AuthServer {
   }
 
   pub fn serve_request(&self, auth_request: &str) {
-    info!("auth server started at: {}", self.auth_url());
-
     for req in self.server.incoming_requests() {
       info!("received request, method: {}, url: {}", req.method(), req.url());
 

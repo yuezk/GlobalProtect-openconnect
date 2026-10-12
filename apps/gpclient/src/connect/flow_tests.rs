@@ -372,3 +372,149 @@ async fn exhausted_auth_recovery_is_terminal_before_portal_gateway_fallback() {
   assert_eq!(handler.auth_attempt_fixture.borrow().observed.len(), 2);
   assert_eq!(worker.await.unwrap().len(), 2);
 }
+
+#[cfg(all(
+  feature = "webview-auth",
+  any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")
+))]
+mod gtk_retry {
+  use super::*;
+
+  #[tokio::test]
+  async fn real_gtk_crash_retries_bundled_authenticator() {
+    // Environment overrides belong to a separate test process, never the parallel test runner.
+    if let Some(directory) = std::env::var_os("GP_TEST_GTK_AUTH_DIR") {
+      verify_real_authenticator_retry(std::path::Path::new(&directory)).await;
+    } else {
+      run_real_authenticator_retry(false);
+    }
+  }
+
+  #[cfg(target_os = "linux")]
+  #[test]
+  #[ignore = "requires non-interactive sudo authorization and a running Wayland desktop session"]
+  fn sudo_gtk_crash_retries_after_restoring_desktop_environment() {
+    run_real_authenticator_retry(true);
+  }
+
+  fn run_real_authenticator_retry(sudo: bool) {
+    use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("gpauth");
+    // Fixtures contain only dummy data and must remain accessible after a root test drops privileges.
+    fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o755)).unwrap();
+    let attempts_path = directory.path().join("attempts");
+    fs::write(&attempts_path, "").unwrap();
+    fs::set_permissions(&attempts_path, fs::Permissions::from_mode(0o666)).unwrap();
+    fs::write(&executable, r#"#!/bin/sh
+set -eu
+request=
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = '--saml-request' ]; then
+    shift
+    request=$1
+  fi
+  shift
+done
+printf '%s|%s|%s|%s\n' "$(id -u)" "${WAYLAND_DISPLAY:-}" "${WEBKIT_DISABLE_DMABUF_RENDERER-unset}" "$request" >> "$GP_TEST_GTK_AUTH_DIR/attempts"
+if [ "$request" = 'old' ]; then
+  printf 'Gdk-Message: 10:49:22.617: Error 71 (Protocol error) dispatching to Wayland display.\n' >&2
+  exit 1
+fi
+[ "$request" = 'new' ] && [ "${WEBKIT_DISABLE_DMABUF_RENDERER:-}" = '1' ] || exit 2
+printf '%s\n' '{"success":{"username":"alice","preloginCookie":"new-cookie"}}'
+"#).unwrap();
+    fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let mut command = if sudo {
+      assert_ne!(
+        uzers::get_effective_uid(),
+        0,
+        "run this test as the Wayland desktop user"
+      );
+      let mut command = Command::new("sudo");
+      command.args([
+        "-n",
+        "env",
+        "-u",
+        "WAYLAND_DISPLAY",
+        "-u",
+        "DISPLAY",
+        "-u",
+        "XDG_SESSION_TYPE",
+        "-u",
+        "WEBKIT_DISABLE_DMABUF_RENDERER",
+      ]);
+      command.arg("GP_TEST_EXPECT_ROOT=1");
+      command
+    } else {
+      let mut command = Command::new("env");
+      command.arg("-u").arg("WEBKIT_DISABLE_DMABUF_RENDERER");
+      command.arg("WAYLAND_DISPLAY=wayland-test");
+      command
+    };
+    command.arg(format!("GP_AUTH_BINARY={}", executable.display()));
+    command.arg(format!("GP_TEST_GTK_AUTH_DIR={}", directory.path().display()));
+    command.arg(std::env::current_exe().unwrap()).args([
+      "--exact",
+      "connect::flow_tests::gtk_retry::real_gtk_crash_retries_bundled_authenticator",
+      "--nocapture",
+    ]);
+    let output = command.output().unwrap();
+    assert!(
+      output.status.success(),
+      "retry subprocess failed: {}\n{}",
+      String::from_utf8_lossy(&output.stdout),
+      String::from_utf8_lossy(&output.stderr)
+    );
+    let expected_uid = gpapi::process::users::get_non_root_user().unwrap().uid().to_string();
+    let attempts = fs::read_to_string(attempts_path).unwrap();
+    let attempts: Vec<Vec<&str>> = attempts.lines().map(|line| line.split('|').collect()).collect();
+    assert_eq!(attempts.len(), 2, "expected exactly one retry");
+    for attempt in &attempts {
+      assert_eq!(attempt[0], expected_uid, "authenticator must run as the desktop user");
+      assert!(!attempt[1].is_empty(), "authenticator must receive WAYLAND_DISPLAY");
+    }
+    assert_eq!(&attempts[0][2..], ["unset", "old"]);
+    assert_eq!(&attempts[1][2..], ["1", "new"]);
+  }
+
+  async fn verify_real_authenticator_retry(directory: &std::path::Path) {
+    use gpapi::credential::Credential;
+
+    if std::env::var_os("GP_TEST_EXPECT_ROOT").is_some() {
+      assert_eq!(uzers::get_effective_uid(), 0);
+      assert!(std::env::var_os("SUDO_UID").is_some());
+      assert!(std::env::var_os("WAYLAND_DISPLAY").is_none());
+    }
+    let (origin, worker) = gateway(vec![
+      ("200 OK", saml_prelogin_response("old-region", "b2xk")),
+      ("200 OK", saml_prelogin_response("new-region", "bmV3")),
+    ])
+    .await;
+    let args = TestArgs::parse_from(["test", &origin]).connect;
+    let lock = directory.join("client.pid");
+    let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
+    let shared = SharedArgs {
+      fix_openssl: false,
+      ignore_tls_errors: true,
+      lock_file: &lock,
+      verbose: &verbose,
+      log_format: LogFormat::Text,
+    };
+    let handler = ConnectHandler::new(&args, &shared);
+    let original = handler.refresh_auth_prelogin(&origin, false, false).await.unwrap();
+    let (replacement, credential) = handler
+      .obtain_credential_with_recovery(original, &origin, false)
+      .await
+      .unwrap();
+    assert_eq!(replacement.region(), "new-region");
+    assert!(matches!(credential, Credential::Prelogin(ref value) if value.prelogin_cookie() == Some("new-cookie")));
+    assert_eq!(
+      worker.await.unwrap().len(),
+      2,
+      "recovery must fetch fresh prelogin data"
+    );
+  }
+}

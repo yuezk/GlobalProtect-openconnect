@@ -1,6 +1,7 @@
 //! Neutral device-anchor transport model and deterministic derivation.
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,7 +69,7 @@ impl DeviceAnchor {
     let mut input = domain.to_vec();
     input.extend_from_slice(seed.as_ref());
     Self {
-      hardware_id: URL_SAFE_NO_PAD.encode(openssl::sha::sha256(&input)),
+      hardware_id: URL_SAFE_NO_PAD.encode(Sha256::digest(&input)),
       source,
     }
   }
@@ -79,10 +80,35 @@ mod tests {
   use super::*;
 
   #[test]
+  fn preserves_existing_hardware_ids_for_all_sources() {
+    let cases: [(AnchorSource, &[u8], &str); 3] = [
+      (
+        AnchorSource::UnixMac,
+        &[0, 17, 34, 51, 68, 85],
+        "UWDOx4AVJEuCAYfJBaPioyGtRfAkJBhMYSi8LuFsE1A",
+      ),
+      (
+        AnchorSource::UnixRandom,
+        &[0, 17, 34, 51, 68, 85],
+        "fYXFpivIFuD9Z4I6qSNxUIMTljeLvw4xuqXgg0VJAu0",
+      ),
+      (
+        AnchorSource::MacosIokit,
+        b"12345678-1234-5678-9abc-def012345678",
+        "K1KMtAwiOiXKQvQuRmTDKPA6-ZPF5QKUWZzmvRzeP34",
+      ),
+    ];
+    for (source, seed, expected) in cases {
+      let anchor = DeviceAnchor::derive(source, seed);
+      assert_eq!(anchor.hardware_id, expected, "{source:?}");
+      assert!(anchor.validate());
+    }
+  }
+
+  #[test]
   fn hashes_original_seed_order_with_stable_domain_separation() {
     let mac = DeviceAnchor::derive(AnchorSource::UnixMac, [0, 17, 34, 51, 68, 85]);
     assert!(mac.validate());
-    assert_eq!(mac.hardware_id, "UWDOx4AVJEuCAYfJBaPioyGtRfAkJBhMYSi8LuFsE1A");
     assert_ne!(
       mac.hardware_id,
       DeviceAnchor::derive(AnchorSource::UnixMac, [85, 68, 51, 34, 17, 0]).hardware_id

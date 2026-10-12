@@ -34,6 +34,7 @@ uzers.workspace = true
 serde_urlencoded.workspace = true
 md5.workspace = true
 sha256.workspace = true
+sha2 = "0.10"
 uuid = { workspace = true, features = ["v4", "v5", "serde"] }
 chrono.workspace = true
 humantime.workspace = true

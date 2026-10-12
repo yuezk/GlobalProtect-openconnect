@@ -510,7 +510,7 @@ mod tests {
     let executable = directory.path().join("auth-fixture");
     std::fs::write(
       &executable,
-      "#!/bin/sh\nprintf 'Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display\\n' >&2\nexit 71\n",
+      "#!/bin/sh\nprintf 'Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display.\\n' >&2\nexit 1\n",
     )
     .unwrap();
     // The launcher drops root privileges in CI; its child must be able to

@@ -110,7 +110,7 @@ mod tests {
     let path = fixture(
       &dir,
       &credential,
-      "printf '(gpgui-helper:42): Gdk-Message: 12:00:00: Error 71 (Protocol error) dispatching to Wayland display\\n' >&2; exit 71",
+      "printf '(gpgui-helper:42): Gdk-Message: 12:00:00: Error 71 (Protocol error) dispatching to Wayland display.\\n' >&2; exit 1",
     );
     let mut envs = HashMap::from([("WAYLAND_DISPLAY".into(), "wayland-0".into())]);
     for override_value in [None, Some(""), Some("0"), Some("1")] {

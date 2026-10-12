@@ -9,7 +9,7 @@ fn executable(dir: &std::path::Path, name: &str, body: &str) {
 }
 
 #[tokio::test]
-async fn embedded_collector_finishes_without_recursing_or_exposing_private_environment() {
+async fn embedded_collector_reports_missing_helpers_without_recursing_or_exposing_private_environment() {
   let dir = tempfile::tempdir().unwrap();
   let bin = dir.path().join("bin");
   std::fs::create_dir(&bin).unwrap();
@@ -33,6 +33,8 @@ async fn embedded_collector_finishes_without_recursing_or_exposing_private_envir
       .args(["--fix-openssl", "diagnostics", "--json", "--output"])
       .arg(&report_file)
       .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+      .env("GP_AUTH_BINARY", dir.path().join("missing-gpauth"))
+      .env("GP_GUI_BINARY", dir.path().join("missing-gpgui"))
       .env("GP_DIAGNOSTICS_PRIVATE_TOKEN", "secret-value-must-not-appear")
       .env("XDG_CURRENT_DESKTOP", "TestDesktop\nInjected: secret")
       .stdin(Stdio::null())
@@ -50,6 +52,11 @@ async fn embedded_collector_finishes_without_recursing_or_exposing_private_envir
   let report: serde_json::Value = serde_json::from_str(&text).unwrap();
   assert_eq!(report["schema_version"], 1);
   assert_eq!(report["fields"]["os"]["value"], "Linux");
+  assert_eq!(report["fields"]["gpclient_path"]["status"], "ok");
+  for field in ["gpauth_path", "gpauth_version", "gpgui_path", "gpgui_version"] {
+    assert_eq!(report["fields"][field]["status"], "unavailable");
+    assert!(report["fields"][field]["value"].is_null());
+  }
   assert!(
     report["fields"]["gpclient_version"]["value"]
       .as_str()

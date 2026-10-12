@@ -257,6 +257,8 @@ jobs:
     - build
     runs-on: ubuntu-latest
     if: ${{ inputs.gh-release }}
+    outputs:
+      stable_version: ${{ steps.stable-release.outputs.version }}
     permissions:
       actions: read
       contents: read
@@ -318,3 +320,23 @@ jobs:
         else
           gh-release/gp/scripts/upload-release-assets.sh "${{ inputs.tag }}" "${files[@]}"
         fi
+
+    - name: Resolve stable release version
+      id: stable-release
+      env:
+        TAG: ${{ inputs.tag }}
+      run: |
+        if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+        fi
+
+  update-flake-hashes:
+    needs: gh-release
+    if: ${{ inputs.release-binary && inputs.arch == 'all' && needs.gh-release.outputs.stable_version != '' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/update-flake-hashes.yaml
+    with:
+      version: ${{ needs.gh-release.outputs.stable_version }}
+      release_tag: ${{ inputs.tag }}

@@ -1,6 +1,14 @@
 name: Update flake hashes
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:

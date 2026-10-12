@@ -130,13 +130,17 @@ if [ "$os" = Darwin ]; then
     [ -n "$auth_path" ] || { [ ! -x "$bundle/Helpers/gpauth" ] || auth_path=$bundle/Helpers/gpauth; }
     [ -n "$gui_path" ] || { [ ! -d "$bundle" ] || { gui_path=$bundle/MacOS/gpgui; gui_bundle=$bundle; }; }
 fi
+is_executable_file() { [ -f "$1" ] && [ -x "$1" ]; }
+is_executable_file "$client_path" || client_path=
+is_executable_file "$auth_path" || auth_path=
+is_executable_file "$gui_path" || gui_path=
 for component in gpclient gpauth gpgui; do
     case "$component" in gpclient) location=$client_path ;; gpauth) location=$auth_path ;; gpgui) location=$gui_path ;; esac
     if [ -n "$location" ]; then emit "${component}_path" ok "$location"; else emit "${component}_path" unavailable ''; fi
 done
 if [ -n "$client_version" ]; then emit gpclient_version ok "$client_version"; elif [ -n "$client_path" ]; then field_probe gpclient_version "$client_path" --version; else emit gpclient_version unavailable ''; fi
 if [ -n "$auth_path" ]; then field_probe gpauth_version "$auth_path" --version; else emit gpauth_version unavailable ''; fi
-if [ "$os" = Darwin ] && [ -n "$gui_bundle" ]; then
+if [ "$os" = Darwin ] && [ -n "$gui_path" ] && [ -n "$gui_bundle" ]; then
     field_probe gpgui_version /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$gui_bundle/Info.plist"
 else
     emit gpgui_version unavailable ''

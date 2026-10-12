@@ -95,6 +95,8 @@ cat > "$fixtures/bin/pkg_info" <<'MOCK'
 printf '%s\n' 'webkitgtk41-2.52.6 WebKitGTK browser engine' 'gtk+3-3.24.52 GTK3 toolkit' 'sway-1.11 Wayland compositor' 'private-package-1.0 Do not collect'
 MOCK
 chmod +x "$fixtures/bin/"*
+mkdir "$fixtures/home[regex]"
+ln -s "$fixtures/bin/gpclient" "$fixtures/home[regex]/gpclient"
 run() {
     env PATH="$fixtures/bin" HOME="$fixtures/home[regex]" TMPDIR="$fixtures" \
         TEST_OS="$1" TEST_PROBE="${2:-}" TEST_CHILD_PID="$fixtures/child.pid" \
@@ -132,6 +134,23 @@ assert_contains "gpgui_path: ok: $fixtures/bin/gpgui"
 assert_contains 'gpgui_version: unavailable:'
 [ ! -e "$fixtures/gui-launched" ]
 printf '%s\n' 'PASS: nonbundle GUI path never borrows another installed app version'
+mkdir "$fixtures/not-a-file"
+printf '#!/bin/sh\nexit 0\n' > "$fixtures/not-executable"
+chmod 644 "$fixtures/not-executable"
+ln -s "$fixtures/missing" "$fixtures/broken-link"
+for os in Linux FreeBSD OpenBSD Darwin; do
+    for invalid in missing not-a-file not-executable broken-link; do
+        env PATH="$fixtures/bin" TEST_OS="$os" TEST_GUI_MARKER="$fixtures/gui-launched" \
+            sh "$collector" --client-path "$fixtures/$invalid" \
+            --auth-path "$fixtures/$invalid" --gui-path "$fixtures/$invalid" > "$fixtures/report"
+        for component in gpclient gpauth gpgui; do
+            assert_contains "${component}_path: unavailable:"
+            assert_contains "${component}_version: unavailable:"
+        done
+    done
+done
+[ ! -e "$fixtures/gui-launched" ]
+printf '%s\n' 'PASS: missing files, directories, nonexecutables and broken links are unavailable on all platforms'
 # Successful probes must cancel their watchdog before doing any process-tree
 # traversal. A slow snapshot used to let a finished probe become timed_out.
 mv "$fixtures/bin/ps" "$fixtures/real-ps"

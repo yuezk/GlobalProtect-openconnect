@@ -97,14 +97,15 @@ impl StderrDiagnostic {
   }
 
   fn check_line(&mut self) {
-    let line = self.line.as_slice();
+    let line = self.line.trim_ascii_end();
+    let message = line.strip_suffix(b".").unwrap_or(line);
     if !self.overflow
       && (line.starts_with(b"Gdk-Message:")
         || line.starts_with(b"(gpgui:")
         || line.starts_with(b"(gpauth:")
         || line.starts_with(b"(gpgui-helper:"))
       && line.windows(b"Gdk-Message:".len()).any(|part| part == b"Gdk-Message:")
-      && line.strip_suffix(b"\r").unwrap_or(line).ends_with(DIAGNOSTIC)
+      && message.ends_with(DIAGNOSTIC)
     {
       self.matched = true;
     }
@@ -123,11 +124,47 @@ mod tests {
   #[test]
   fn recognizes_split_diagnostic_without_matching_quoted_warning() {
     let mut observer = StderrDiagnostic::default();
-    observer.push(b"warning: Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display\n");
+    observer.push(b"warning: Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display.\n");
     assert!(!observer.matched());
     observer.push(b"Gdk-Message: 12:00:00: Error 71 (Protocol error) dispat");
-    observer.push(b"ching to Wayland display\n");
+    observer.push(b"ching to Wayland display.\n");
     assert!(observer.matched());
+  }
+
+  #[test]
+  fn recognizes_real_gtk_diagnostic_with_prefix_and_line_endings() {
+    for prefix in [
+      "Gdk-Message:",
+      "(gpauth:42): Gdk-Message:",
+      "(gpgui:42): Gdk-Message:",
+      "(gpgui-helper:42): Gdk-Message:",
+    ] {
+      for punctuation in ["", "."] {
+        for ending in ["\n", "\r\n", "", " \t\n"] {
+          let line = format!(
+            "{prefix} 10:49:22.617: Error 71 (Protocol error) dispatching to Wayland display{punctuation}{ending}"
+          );
+          let mut observer = StderrDiagnostic::default();
+          for chunk in line.as_bytes().chunks(7) {
+            observer.push(chunk);
+          }
+          assert!(observer.matched(), "unrecognized GTK diagnostic: {line:?}");
+        }
+      }
+    }
+  }
+
+  #[test]
+  fn rejects_quoted_or_extended_gtk_diagnostic() {
+    for line in [
+      "warning: Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display.\n",
+      "Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display. Retry suggested\n",
+      "Gdk-Message: Error 70 (Communication error) dispatching to Wayland display.\n",
+    ] {
+      let mut observer = StderrDiagnostic::default();
+      observer.push(line.as_bytes());
+      assert!(!observer.matched(), "incorrectly recognized: {line:?}");
+    }
   }
 
   #[test]
