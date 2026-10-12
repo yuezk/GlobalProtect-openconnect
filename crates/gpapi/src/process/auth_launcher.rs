@@ -12,7 +12,10 @@ use tokio_util::sync::CancellationToken;
 use crate::auth::AuthWindowTheme;
 use crate::{auth::SamlAuthResult, credential::Credential, log_format::LogFormat, os_profile::OsProfile};
 
-use super::{command_runner::run_observed, command_traits::CommandExt};
+use super::{
+  command_runner::{ChildInput, run_observed},
+  command_traits::CommandExt,
+};
 
 use super::rendering_recovery::{RenderingCrash, StderrDiagnostic, eligible, is_crash_exit};
 
@@ -300,6 +303,7 @@ impl<'a> SamlAuthLauncher<'a> {
     if embedded && bundled && self.dmabuf_disabled {
       command.env("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
+    let stdin = auth_stdin(self.browser);
     let cancellation = self.cancellation.clone();
     let output = tokio::task::spawn_blocking(move || {
       let check = || {
@@ -319,7 +323,7 @@ impl<'a> SamlAuthLauncher<'a> {
         Some(MAX_AUTH_RESULT_BYTES),
         &mut |bytes| diagnostic.push(bytes),
         &mut std::io::stderr(),
-        None,
+        stdin,
       )?;
       Ok::<_, std::io::Error>((output.output, diagnostic.matched()))
     })
@@ -336,6 +340,14 @@ impl<'a> SamlAuthLauncher<'a> {
       return Err(crate::auth::AuthenticationCancelled.into());
     }
     decode_auth_output(output, can_recover && rendering_diagnostic)
+  }
+}
+
+/// `gpauth --browser remote` reads the pasted `globalprotectcallback:` data from the user's terminal.
+fn auth_stdin(browser: Option<&str>) -> ChildInput<'static> {
+  match browser {
+    Some(browser) if browser.eq_ignore_ascii_case("remote") => ChildInput::Terminal,
+    _ => ChildInput::Null,
   }
 }
 
@@ -449,6 +461,15 @@ mod tests {
 
     assert_eq!(launcher.browser_listen, Some(listen_ip));
   }
+
+  #[test]
+  fn only_a_remote_browser_reads_the_terminal() {
+    assert!(matches!(auth_stdin(Some("remote")), ChildInput::Terminal));
+    assert!(matches!(auth_stdin(Some("REMOTE")), ChildInput::Terminal));
+    assert!(matches!(auth_stdin(Some("firefox")), ChildInput::Null));
+    assert!(matches!(auth_stdin(None), ChildInput::Null));
+  }
+
   #[test]
   fn failed_authenticator_discards_partial_or_valid_stdout_before_decoding() {
     use std::os::unix::process::ExitStatusExt;

@@ -14,13 +14,21 @@ use nix::{
 
 use super::collection::CollectionControl;
 
+/// What the child reads on stdin.
+pub(crate) enum ChildInput<'a> {
+  Null,
+  Frame(&'a [u8]),
+  /// The caller's own stdin, for a child that prompts the user.
+  Terminal,
+}
+
 /// Owns and reaps the command's process group. Its async caller must cancel and await this worker.
 pub(crate) fn run_controlled(
   command: Command,
   control: &dyn CollectionControl,
   output_limit: usize,
 ) -> io::Result<Output> {
-  run(command, control, Some(output_limit), None, None).map(|observed| observed.output)
+  run(command, control, Some(output_limit), None, ChildInput::Null).map(|observed| observed.output)
 }
 
 #[derive(Debug)]
@@ -35,15 +43,9 @@ pub(crate) fn run_observed(
   output_limit: Option<usize>,
   observer: &mut dyn FnMut(&[u8]),
   stderr_sink: &mut dyn Write,
-  stdin_frame: Option<&[u8]>,
+  stdin: ChildInput<'_>,
 ) -> io::Result<ObservedOutput> {
-  run(
-    command,
-    control,
-    output_limit,
-    Some((observer, stderr_sink)),
-    stdin_frame,
-  )
+  run(command, control, output_limit, Some((observer, stderr_sink)), stdin)
 }
 
 fn nonblocking(fd: &impl std::os::fd::AsFd) -> io::Result<()> {
@@ -61,26 +63,31 @@ fn run(
   control: &dyn CollectionControl,
   output_limit: Option<usize>,
   mut observation: Option<(&mut dyn FnMut(&[u8]), &mut dyn Write)>,
-  stdin_frame: Option<&[u8]>,
+  stdin: ChildInput<'_>,
 ) -> io::Result<ObservedOutput> {
   control.check()?;
-  command
-    .stdout(if output_limit.is_some() {
-      Stdio::piped()
-    } else {
-      Stdio::inherit()
-    })
-    .process_group(0);
-  command.stdin(if stdin_frame.is_some() {
+  command.stdout(if output_limit.is_some() {
     Stdio::piped()
   } else {
-    Stdio::null()
+    Stdio::inherit()
   });
+  // A child in a process group of its own is a background job, so reading the terminal would stop it with SIGTTIN.
+  let own_group = !matches!(stdin, ChildInput::Terminal);
+  if own_group {
+    command.process_group(0);
+  }
+  let (stdio, stdin_frame) = match stdin {
+    ChildInput::Null => (Stdio::null(), None),
+    ChildInput::Frame(frame) => (Stdio::piped(), Some(frame)),
+    ChildInput::Terminal => (Stdio::inherit(), None),
+  };
+  command.stdin(stdio);
   if observation.is_some() {
     command.stderr(Stdio::piped());
   }
   let mut child = ControlledChild {
     process: command.spawn()?,
+    own_group,
     stopped: false,
   };
   let mut stdout = child.process.stdout.take();
@@ -187,13 +194,18 @@ fn run(
 
 struct ControlledChild {
   process: Child,
+  own_group: bool,
   stopped: bool,
 }
 
 impl ControlledChild {
   fn stop_helpers(&mut self) {
     if !self.stopped {
-      let _ = killpg(Pid::from_raw(self.process.id() as i32), Signal::SIGKILL);
+      if self.own_group {
+        let _ = killpg(Pid::from_raw(self.process.id() as i32), Signal::SIGKILL);
+      } else {
+        let _ = self.process.kill();
+      }
       self.stopped = true;
     }
   }
@@ -223,7 +235,7 @@ mod tests {
       Some(1024),
       &mut |bytes| seen.extend_from_slice(bytes),
       &mut sink,
-      None,
+      ChildInput::Null,
     )
     .unwrap();
     assert!(!output.output.status.success());
@@ -244,7 +256,15 @@ mod tests {
         Ok(())
       }
     };
-    let error = run_observed(command, &control, Some(1024), &mut |_| {}, &mut io::sink(), None).unwrap_err();
+    let error = run_observed(
+      command,
+      &control,
+      Some(1024),
+      &mut |_| {},
+      &mut io::sink(),
+      ChildInput::Null,
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::Interrupted);
     assert!(start.elapsed() < Duration::from_secs(2));
   }
@@ -259,7 +279,7 @@ mod tests {
       None,
       &mut |_| {},
       &mut io::sink(),
-      Some(&vec![0; 128 * 1024]),
+      ChildInput::Frame(&vec![0; 128 * 1024]),
     )
     .unwrap();
     assert_eq!(observed.output.status.code(), Some(2));
@@ -284,7 +304,51 @@ mod tests {
       None,
       &mut |_| {},
       &mut io::sink(),
-      Some(&vec![0; 128 * 1024]),
+      ChildInput::Frame(&vec![0; 128 * 1024]),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+    assert!(start.elapsed() < Duration::from_secs(2));
+  }
+
+  #[cfg(target_os = "linux")]
+  #[test]
+  fn terminal_input_shares_the_callers_stdin_and_process_group() {
+    let mut command = Command::new("sh");
+    command.args(["-c", "readlink /proc/$$/fd/0; cut -d' ' -f5 /proc/$$/stat"]);
+    let observed = run_observed(
+      command,
+      &|| Ok(()),
+      Some(1024),
+      &mut |_| {},
+      &mut io::sink(),
+      ChildInput::Terminal,
+    )
+    .unwrap();
+    let stdout = String::from_utf8(observed.output.stdout).unwrap();
+    let stdin = std::fs::read_link("/proc/self/fd/0").unwrap();
+    assert_eq!(stdout, format!("{}\n{}\n", stdin.display(), nix::unistd::getpgrp()));
+  }
+
+  #[test]
+  fn cancellation_kills_a_terminal_child() {
+    let mut command = Command::new("sleep");
+    command.arg("30");
+    let start = Instant::now();
+    let control = || {
+      if start.elapsed() > Duration::from_millis(100) {
+        Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"))
+      } else {
+        Ok(())
+      }
+    };
+    let error = run_observed(
+      command,
+      &control,
+      None,
+      &mut |_| {},
+      &mut io::sink(),
+      ChildInput::Terminal,
     )
     .unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::Interrupted);
