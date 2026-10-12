@@ -9,6 +9,14 @@ for binary in gpclient gpauth gpservice gpgui gpgui-helper gp-vpnc-script-instal
     printf '#!/bin/sh\nexit 0\n' > "$temp/release/$binary"
     chmod 755 "$temp/release/$binary"
 done
+mkdir -p "$temp/client-release"
+cp "$temp/release/gpclient" "$temp/client-release/"
+make install-gpclient-unix PREFIX='/custom/gp install' DESTDIR="$temp/client-stage" \
+    CARGO_RELEASE_DIR="$temp/client-release" > "$temp/client.log"
+installed="$temp/client-stage/custom/gp install"
+test -x "$installed/bin/gpclient"
+test -x "$installed/libexec/gpclient/vpnc-script"
+test "$(find "$installed" -type f | wc -l | tr -d ' ')" = 2
 for platform in linux bsd; do
     stage="$temp/$platform-stage"
     make "install-$platform" PREFIX=/custom/gp DESTDIR="$stage" \
@@ -121,6 +129,14 @@ if [ "$(uname -s)" = Darwin ]; then
         -Wl,-rpath,"$temp/build-library" -o "$temp/release/gpclient"
     printf 'stale library must never be selected\n' > "$temp/unreferenced-library/libopenconnect.5.dylib"
     test "$(sh scripts/macos-openconnect-library.sh "$temp/release/gpclient")" = "$library"
+    cp "$temp/release/gpclient" "$temp/client-release/"
+    make install-gpclient PREFIX='/custom/gp install' DESTDIR="$temp/macos-client-stage" \
+        CARGO_RELEASE_DIR="$temp/client-release" > "$temp/macos-client.log"
+    installed="$temp/macos-client-stage/custom/gp install"
+    test -x "$installed/bin/gpclient"
+    test -x "$installed/libexec/gpclient/vpnc-script"
+    test -f "$installed/lib/gpclient/libopenconnect.5.dylib"
+    test "$(find "$installed" -type f | wc -l | tr -d ' ')" = 3
     installed="$temp/macos-stage/custom/gp"
     mkdir -p "$installed/lib" "$temp/homebrew-cellar"
     printf 'Homebrew-owned library\n' > "$temp/homebrew-cellar/libopenconnect.5.dylib"
@@ -140,6 +156,7 @@ if [ "$(uname -s)" = Darwin ]; then
     codesign --force --sign - "$temp/App/Contents/Helpers/gpclient"
     mv "$temp/build-library" "$temp/removed-build-library"
     "$temp/macos-stage/custom/gp/bin/gpclient"
+    "$temp/macos-client-stage/custom/gp install/bin/gpclient"
     "$temp/App/Contents/Helpers/gpclient"
     touch "$installed/lib/gpclient/unrelated" "$installed/libexec/gpclient/unrelated"
     for attempt in 1 2; do
