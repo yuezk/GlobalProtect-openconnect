@@ -118,6 +118,7 @@
           [
             libxml2
             zlib
+            openssl
             lz4
             gnutls
             p11-kit
@@ -130,29 +131,9 @@
             libsoup_3
             webkitgtk_4_1
             glib-networking
-            openssl
             libsecret
             libayatana-appindicator
           ];
-
-        rewriteSourceInstallPaths = lib.optionalString pkgs.stdenv.isLinux ''
-          substituteInPlace $out/share/applications/gpgui.desktop \
-            --replace-fail /usr/bin/gpclient $out/bin/gpclient
-
-          substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
-            --replace-fail /usr/bin/gpservice $out/bin/gpservice \
-            --replace-fail /usr/libexec/gpclient/gp-vpnc-script-installer $out/libexec/gpclient/gp-vpnc-script-installer
-
-          if [ -f $out/libexec/gpclient/gp-hip-script-installer ]; then
-            substituteInPlace $out/share/polkit-1/actions/com.yuezk.gpgui.policy \
-              --replace-fail /usr/libexec/gpclient/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
-          fi
-
-          if [ -f $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down ]; then
-            substituteInPlace $out/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
-              --replace-fail /usr/bin/gpclient $out/bin/gpclient
-          fi
-        '';
 
         installNixosPolkitRule = ''
           chmod u+w $out/share $out/share/polkit-1 2>/dev/null || true
@@ -182,6 +163,9 @@
           # Must be set to true to avoid issues with the Tauri build process
           singleStep = true;
 
+          # The Makefile installs executables together with their supporting files.
+          copyBins = false;
+
           cargoBuildOptions =
             old:
             old
@@ -202,6 +186,9 @@
               libtool
               pkg-config
             ]
+            ++ lib.optionals stdenv.isDarwin [
+              darwin.sigtool
+            ]
             ++ lib.optionals stdenv.isLinux [
               autoPatchelfHook
               wrapGAppsHook4
@@ -211,49 +198,14 @@
 
           preFixup = nativeRuntimeWrapping;
 
-          overrideMain =
-            { ... }:
-            {
-              postPatch = ''
-                substituteInPlace crates/openconnect/src/vpn_utils.rs \
-                  --replace-fail /usr/libexec/gpclient/vpnc-script $out/libexec/gpclient/vpnc-script
-
-                substituteInPlace crates/common/src/constants.rs \
-                  --replace-fail /usr/bin/gpclient $out/bin/gpclient \
-                  --replace-fail /usr/bin/gpauth $out/bin/gpauth \
-                  --replace-fail /opt/homebrew/ $out/
-              ''
-              + lib.optionalString pkgs.stdenv.isLinux ''
-                substituteInPlace crates/common/src/constants.rs \
-                  --replace-fail /usr/bin/gpservice $out/bin/gpservice \
-                  --replace-fail /usr/bin/gpgui-helper $out/bin/gpgui-helper \
-                  --replace-fail /usr/bin/gpgui $out/bin/gpgui
-
-                substituteInPlace crates/common/src/constants.rs \
-                  --replace-fail /usr/libexec/gpclient/gp-hip-script-installer $out/libexec/gpclient/gp-hip-script-installer
-              '';
-            };
-
           postInstall = ''
-            cp -r packaging/files/usr/libexec $out/libexec
+            make install PREFIX="$out" ${lib.optionalString pkgs.stdenv.isLinux ''GPGUI_BINARY="${gui}/gpgui"''}
           ''
           + lib.optionalString pkgs.stdenv.isLinux ''
-            for installer in gp-vpnc-script-installer gp-hip-script-installer; do
-              install -Dm755 "$out/bin/$installer" "$out/libexec/gpclient/$installer"
-            done
-
-            # Copy the prebuilt gpgui binary to the output bin directory
-            cp ${gui}/gpgui $out/bin/gpgui
-            chmod +x $out/bin/gpgui
-
-            cp -r packaging/files/usr/share $out/share
-            cp -r packaging/files/usr/lib $out/lib
-
             ${installNixosPolkitRule}
           ''
           + ''
             ${rewriteVpncScriptToolPaths}
-            ${rewriteSourceInstallPaths}
           '';
         }) {};
 
@@ -288,7 +240,7 @@
             install -Dm755 ${gui}/gpgui $out/bin/gpgui
 
             ${rewriteVpncScriptToolPaths}
-            ${rewriteSourceInstallPaths}
+            sh ${./scripts/relocate-install-paths.sh} "$out" /usr "$out"
             ${installNixosPolkitRule}
 
             runHook postInstall

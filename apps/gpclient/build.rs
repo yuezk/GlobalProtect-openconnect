@@ -4,6 +4,15 @@ const UNKNOWN_COMMIT: &str = "unknown";
 const DISPLAY_COMMIT_LEN: usize = 9;
 
 fn main() {
+  // Installed OpenConnect lives in the private ../lib/gpclient directory.
+  // Build executables also locate their exact Cargo library; installers remove that rpath.
+  #[cfg(target_os = "macos")]
+  {
+    println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/../lib/gpclient");
+    let library_dir = env::var("DEP_OPENCONNECT_LIB_DIR").expect("OpenConnect exports its build library directory");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{library_dir}");
+  }
+
   println!("cargo:rerun-if-env-changed=SOURCE_GIT_COMMIT");
   println!("cargo:rerun-if-env-changed=GPCLIENT_GIT_COMMIT");
   println!("cargo:rerun-if-env-changed=GITHUB_SHA");

@@ -3,6 +3,8 @@ SHELL := /bin/sh
 
 INCLUDE_GUI ?= 0
 CARGO ?= cargo
+CARGO_TARGET_DIR ?= target
+CARGO_RELEASE_DIR ?= $(CARGO_TARGET_DIR)/$(if $(CARGO_BUILD_TARGET),$(CARGO_BUILD_TARGET)/)release
 DISABLE_RUST_TOOLCHAIN ?= 0
 RUST_VERSION ?= 1.91
 IGNORE_RUST_VERSION ?= 0
@@ -33,7 +35,14 @@ BUILD_GUI_HELPER ?= 1
 
 # Indicates whether to build embedded webview auth support into gpauth
 BUILD_WEBVIEW_AUTH ?= 1
+ifeq ($(shell uname -s),Linux)
+PREFIX ?= /usr
+GPGUI_BINARY ?= $(wildcard .build/gpgui/gpgui_*/gpgui)
+else ifeq ($(shell uname -s)-$(shell uname -m),Darwin-arm64)
+PREFIX ?= /opt/homebrew
+else
 PREFIX ?= /usr/local
+endif
 BSD_FLAVOR ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
 GPGUI_BINARY ?= ../gpgui/target/release/gpgui
 
@@ -139,86 +148,66 @@ clean:
 	rm -rf .vendor
 	rm -rf apps/gpgui-helper/node_modules
 
-install:
-	@echo "Installing $(PKG_NAME)..."
+ifeq ($(shell uname -s),Darwin)
+install: install-macos
+else ifneq ($(filter FreeBSD OpenBSD,$(shell uname -s)),)
+install: install-bsd
+else
+install: install-linux
+endif
 
-	install -Dm755 target/release/gpclient $(DESTDIR)/usr/bin/gpclient
-	install -Dm755 target/release/gpauth $(DESTDIR)/usr/bin/gpauth
-	install -Dm755 target/release/gpservice $(DESTDIR)/usr/bin/gpservice
-	install -Dm755 target/release/gp-hip-script-installer $(DESTDIR)/usr/libexec/gpclient/gp-hip-script-installer
-	install -Dm755 target/release/gp-vpnc-script-installer $(DESTDIR)/usr/libexec/gpclient/gp-vpnc-script-installer
+install-macos:
+	@echo "Installing $(PKG_NAME) for macOS under $(PREFIX)..."
+	install -d "$(DESTDIR)$(PREFIX)/bin" "$(DESTDIR)$(PREFIX)/lib/gpclient" "$(DESTDIR)$(PREFIX)/libexec/gpclient"
+	install -m 755 "$(CARGO_RELEASE_DIR)/gpclient" "$(CARGO_RELEASE_DIR)/gpauth" "$(DESTDIR)$(PREFIX)/bin/"
+	set -e; library=$$(sh scripts/macos-openconnect-library.sh "$(CARGO_RELEASE_DIR)/gpclient"); \
+		install -m 755 "$$library" "$(DESTDIR)$(PREFIX)/lib/gpclient/"; \
+		install_name_tool -delete_rpath "$$(dirname "$$library")" "$(DESTDIR)$(PREFIX)/bin/gpclient"; \
+		codesign --force --sign - "$(DESTDIR)$(PREFIX)/bin/gpclient"
+	install -m 755 packaging/files/usr/libexec/gpclient/vpnc-script "$(DESTDIR)$(PREFIX)/libexec/gpclient/"
 
-	# Install the GUI components if BUILD_GUI_HELPER is set to 1
-	if [ $(BUILD_GUI_HELPER) -eq 1 ]; then \
-		install -Dm755 target/release/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper; \
+# Common executable and icon installation uses portable install options on Linux/BSD.
+install-unix:
+	install -d "$(DESTDIR)$(PREFIX)/bin" "$(DESTDIR)$(PREFIX)/libexec/gpclient"
+	set -e; for binary in gpclient gpauth gpservice; do \
+		install -m 755 "$(CARGO_RELEASE_DIR)/$$binary" "$(DESTDIR)$(PREFIX)/bin/"; \
+	done
+	set -e; for binary in gp-hip-script-installer gp-vpnc-script-installer; do \
+		install -m 755 "$(CARGO_RELEASE_DIR)/$$binary" "$(DESTDIR)$(PREFIX)/libexec/gpclient/"; \
+	done
+	set -e; if [ "$(BUILD_GUI_HELPER)" = "1" ]; then \
+		install -m 755 "$(CARGO_RELEASE_DIR)/gpgui-helper" "$(DESTDIR)$(PREFIX)/bin/"; \
 	fi
-
-	if [ -f .build/gpgui/gpgui_*/gpgui ]; then \
-		install -Dm755 .build/gpgui/gpgui_*/gpgui $(DESTDIR)/usr/bin/gpgui; \
+	set -e; if [ -f "$(GPGUI_BINARY)" ]; then \
+		install -m 755 "$(GPGUI_BINARY)" "$(DESTDIR)$(PREFIX)/bin/gpgui"; \
 	fi
+	install -m 755 packaging/files/usr/libexec/gpclient/vpnc-script "$(DESTDIR)$(PREFIX)/libexec/gpclient/"
+	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.* \
+		packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-*.svg; do \
+		destination="$(DESTDIR)$(PREFIX)/$${file#packaging/files/usr/}"; \
+		install -d "$$(dirname "$$destination")"; \
+		install -m 644 "$$file" "$$destination"; \
+	done
 
-	install -Dm755 packaging/files/usr/libexec/gpclient/vpnc-script $(DESTDIR)/usr/libexec/gpclient/vpnc-script
+install-linux: install-unix
+	@echo "Installing Linux integration under $(PREFIX)..."
+	set -e; for file in share/applications/gpgui.desktop \
+		share/polkit-1/actions/com.yuezk.gpgui.policy \
+		lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
+		lib/NetworkManager/dispatcher.d/gpclient-nm-hook; do \
+		mode=644; case "$$file" in lib/*) mode=755 ;; esac; \
+		destination="$(DESTDIR)$(PREFIX)/$$file"; \
+		install -d "$$(dirname "$$destination")"; \
+		install -m "$$mode" "packaging/files/usr/$$file" "$$destination"; \
+	done
+	sh scripts/relocate-install-paths.sh "$(PREFIX)" /usr "$(DESTDIR)$(PREFIX)"
 
-	# Install the disconnect hooks
-	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
-	install -Dm755 packaging/files/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
-
-	install -Dm644 packaging/files/usr/share/applications/gpgui.desktop $(DESTDIR)/usr/share/applications/gpgui.desktop
-	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
-	install -Dm644 packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
-	install -Dm644 packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
-	install -Dm644 packaging/files/usr/share/icons/hicolor/256x256/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
-	install -Dm644 packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
-	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
-	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
-	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
-	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
-	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
-	install -Dm644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
-	install -Dm644 packaging/files/usr/share/polkit-1/actions/com.yuezk.gpgui.policy $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
-
-install-bsd:
-	@echo "Installing $(PKG_NAME) for BSD under $(PREFIX)..."
-
-	install -d $(DESTDIR)$(PREFIX)/bin
-	install -m 755 target/release/gpclient $(DESTDIR)$(PREFIX)/bin/gpclient
-	install -m 755 target/release/gpauth $(DESTDIR)$(PREFIX)/bin/gpauth
-	install -m 755 target/release/gpservice $(DESTDIR)$(PREFIX)/bin/gpservice
-
-	if [ "$(BUILD_GUI_HELPER)" = "1" ]; then \
-		install -m 755 target/release/gpgui-helper $(DESTDIR)$(PREFIX)/bin/gpgui-helper; \
-	fi
-
-	if [ -x "$(GPGUI_BINARY)" ]; then \
-		install -m 755 "$(GPGUI_BINARY)" $(DESTDIR)$(PREFIX)/bin/gpgui; \
-	fi
-
-	install -d $(DESTDIR)$(PREFIX)/libexec/gpclient
-	install -m 755 target/release/gp-hip-script-installer $(DESTDIR)$(PREFIX)/libexec/gpclient/gp-hip-script-installer
-	install -m 755 target/release/gp-vpnc-script-installer $(DESTDIR)$(PREFIX)/libexec/gpclient/gp-vpnc-script-installer
-	install -m 755 packaging/files/usr/libexec/gpclient/vpnc-script $(DESTDIR)$(PREFIX)/libexec/gpclient/vpnc-script
-
-	install -d $(DESTDIR)$(PREFIX)/share/applications
-	install -m 644 packaging/bsd/gpgui.desktop $(DESTDIR)$(PREFIX)/share/applications/gpgui.desktop
-	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
-	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/32x32/apps
-	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps
-	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256/apps
-	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256@2/apps
-	install -d $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status
-	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/gpgui.svg
-	install -m 644 packaging/files/usr/share/icons/hicolor/32x32/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/32x32/apps/gpgui.png
-	install -m 644 packaging/files/usr/share/icons/hicolor/128x128/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/128x128/apps/gpgui.png
-	install -m 644 packaging/files/usr/share/icons/hicolor/256x256/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256/apps/gpgui.png
-	install -m 644 packaging/files/usr/share/icons/hicolor/256x256@2/apps/gpgui.png $(DESTDIR)$(PREFIX)/share/icons/hicolor/256x256@2/apps/gpgui.png
-	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
-	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
-	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
-	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
-	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
-	install -m 644 packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
-	install -d $(DESTDIR)$(PREFIX)/share/polkit-1/actions
-	install -m 644 packaging/bsd/com.yuezk.gpgui.policy $(DESTDIR)$(PREFIX)/share/polkit-1/actions/com.yuezk.gpgui.policy
+install-bsd: install-unix
+	@echo "Installing BSD integration under $(PREFIX)..."
+	install -d "$(DESTDIR)$(PREFIX)/share/applications" "$(DESTDIR)$(PREFIX)/share/polkit-1/actions"
+	install -m 644 packaging/bsd/gpgui.desktop "$(DESTDIR)$(PREFIX)/share/applications/"
+	install -m 644 packaging/bsd/com.yuezk.gpgui.policy "$(DESTDIR)$(PREFIX)/share/polkit-1/actions/"
+	sh scripts/relocate-install-paths.sh "$(PREFIX)" /usr/local "$(DESTDIR)$(PREFIX)"
 
 clean-bsd-package:
 	rm -rf .build/$(BSD_FLAVOR)
@@ -290,42 +279,53 @@ package-openbsd: clean-bsd-package
 			.build/openbsd/artifacts/$(PKG_NAME)-$(VERSION)-openbsd-$$openbsd_arch.tgz
 	$(MAKE) bsd-gpgui-tarball BSD_FLAVOR=openbsd GPGUI_BINARY="$(GPGUI_BINARY)"
 
-uninstall:
-	@echo "Uninstalling $(PKG_NAME)..."
+ifeq ($(shell uname -s),Darwin)
+uninstall: uninstall-macos
+else ifneq ($(filter FreeBSD OpenBSD,$(shell uname -s)),)
+uninstall: uninstall-bsd
+else
+uninstall: uninstall-linux
+endif
 
-	rm -f $(DESTDIR)/usr/bin/gpclient
-	rm -f $(DESTDIR)/usr/bin/gpauth
-	rm -f $(DESTDIR)/usr/bin/gpservice
-	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-hip-script-installer
-	rm -f $(DESTDIR)/usr/bin/gpgui-helper
-	rm -f $(DESTDIR)/usr/bin/gpgui
+.PHONY: install install-macos install-unix install-linux install-bsd \
+	uninstall uninstall-macos uninstall-unix uninstall-linux uninstall-bsd
 
-	rm -f $(DESTDIR)/usr/libexec/gpclient/vpnc-script
-	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-vpnc-script-installer
+uninstall-macos:
+	@echo "Uninstalling $(PKG_NAME) for macOS under $(PREFIX)..."
+	rm -f "$(DESTDIR)$(PREFIX)/bin/gpclient" "$(DESTDIR)$(PREFIX)/bin/gpauth" \
+		"$(DESTDIR)$(PREFIX)/libexec/gpclient/vpnc-script" \
+		"$(DESTDIR)$(PREFIX)/lib/gpclient/"libopenconnect.*.dylib
+	rmdir "$(DESTDIR)$(PREFIX)/lib/gpclient" "$(DESTDIR)$(PREFIX)/libexec/gpclient" 2>/dev/null || true
 
-	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down
-	rm -f $(DESTDIR)/usr/lib/NetworkManager/dispatcher.d/gpclient-nm-hook
+uninstall-unix:
+	@echo "Uninstalling $(PKG_NAME) under $(PREFIX)..."
+	set -e; for binary in gpclient gpauth gpservice gpgui-helper gpgui; do \
+		rm -f "$(DESTDIR)$(PREFIX)/bin/$$binary"; \
+	done
+	set -e; for file in gp-hip-script-installer gp-vpnc-script-installer vpnc-script; do \
+		rm -f "$(DESTDIR)$(PREFIX)/libexec/gpclient/$$file"; \
+	done
+	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.* \
+		packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-*.svg; do \
+		rm -f "$(DESTDIR)$(PREFIX)/$${file#packaging/files/usr/}"; \
+	done
+	rm -f "$(DESTDIR)$(PREFIX)/share/applications/gpgui.desktop" \
+		"$(DESTDIR)$(PREFIX)/share/polkit-1/actions/com.yuezk.gpgui.policy"
+	rmdir "$(DESTDIR)$(PREFIX)/libexec/gpclient" 2>/dev/null || true
 
-	rm -f $(DESTDIR)/usr/share/applications/gpgui.desktop
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/gpgui.svg
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/32x32/apps/gpgui.png
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/128x128/apps/gpgui.png
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256/apps/gpgui.png
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/256x256@2/apps/gpgui.png
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connected-symbolic.svg
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-disconnected-symbolic.svg
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-1-symbolic.svg
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-2-symbolic.svg
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-3-symbolic.svg
-	rm -f $(DESTDIR)/usr/share/icons/hicolor/scalable/status/gpgui-connecting-4-symbolic.svg
-	rm -f $(DESTDIR)/usr/share/polkit-1/actions/com.yuezk.gpgui.policy
+uninstall-linux: uninstall-unix
+	rm -f "$(DESTDIR)$(PREFIX)/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down" \
+		"$(DESTDIR)$(PREFIX)/lib/NetworkManager/dispatcher.d/gpclient-nm-hook"
+	rm -f "$(DESTDIR)/var/lib/gpclient/gpgui" \
+		"$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script" \
+		"$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata"
+	rmdir "$(DESTDIR)/var/lib/gpclient/scripts" "$(DESTDIR)/var/lib/gpclient" 2>/dev/null || true
 
-	rm -f $(DESTDIR)/var/lib/gpclient/gpgui \
-		$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script \
-		$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata || \
-		echo "Warning: failed to remove gpclient runtime files" >&2
-	rmdir $(DESTDIR)/var/lib/gpclient/scripts 2>/dev/null || true
-	rmdir $(DESTDIR)/var/lib/gpclient 2>/dev/null || true
+uninstall-bsd: uninstall-unix
+	rm -f "$(DESTDIR)/usr/local/libexec/gpclient/gpgui" \
+		"$(DESTDIR)/var/db/gpclient/scripts/vpnc-script" \
+		"$(DESTDIR)/var/db/gpclient/scripts/vpnc-script.metadata"
+	rmdir "$(DESTDIR)/var/db/gpclient/scripts" "$(DESTDIR)/var/db/gpclient" 2>/dev/null || true
 
 clean-debian:
 	rm -rf .build/deb
