@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.3
+
+### Fixed
+
+- Improved Wayland crash recovery on Linux and BSD.
+- Fixed pasted callbacks and prompts for remote browser sign-in.
+- Fixed legacy TLS configuration while preserving device identities.
+- Fixed diagnostics when optional tools are unavailable.
+- Fixed bundled macOS library paths and polished release notes in About.
+
 ## 3.0.2
 
 ### Added
