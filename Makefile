@@ -150,26 +150,35 @@ clean:
 
 ifeq ($(shell uname -s),Darwin)
 install: install-macos
+install-gpclient: install-gpclient-macos
 else ifneq ($(filter FreeBSD OpenBSD,$(shell uname -s)),)
 install: install-bsd
+install-gpclient: install-gpclient-unix
 else
 install: install-linux
+install-gpclient: install-gpclient-unix
 endif
 
-install-macos:
-	@echo "Installing $(PKG_NAME) for macOS under $(PREFIX)..."
+install-gpclient-unix:
+	install -d "$(DESTDIR)$(PREFIX)/bin" "$(DESTDIR)$(PREFIX)/libexec/gpclient"
+	install -m 755 "$(CARGO_RELEASE_DIR)/gpclient" "$(DESTDIR)$(PREFIX)/bin/"
+	install -m 755 packaging/files/usr/libexec/gpclient/vpnc-script "$(DESTDIR)$(PREFIX)/libexec/gpclient/"
+
+install-gpclient-macos:
 	install -d "$(DESTDIR)$(PREFIX)/bin" "$(DESTDIR)$(PREFIX)/lib/gpclient" "$(DESTDIR)$(PREFIX)/libexec/gpclient"
-	install -m 755 "$(CARGO_RELEASE_DIR)/gpclient" "$(CARGO_RELEASE_DIR)/gpauth" "$(DESTDIR)$(PREFIX)/bin/"
+	install -m 755 "$(CARGO_RELEASE_DIR)/gpclient" "$(DESTDIR)$(PREFIX)/bin/"
 	set -e; library=$$(sh scripts/macos-openconnect-library.sh "$(CARGO_RELEASE_DIR)/gpclient"); \
 		install -m 755 "$$library" "$(DESTDIR)$(PREFIX)/lib/gpclient/"; \
 		install_name_tool -delete_rpath "$$(dirname "$$library")" "$(DESTDIR)$(PREFIX)/bin/gpclient"; \
 		codesign --force --sign - "$(DESTDIR)$(PREFIX)/bin/gpclient"
 	install -m 755 packaging/files/usr/libexec/gpclient/vpnc-script "$(DESTDIR)$(PREFIX)/libexec/gpclient/"
 
+install-macos: install-gpclient-macos
+	install -m 755 "$(CARGO_RELEASE_DIR)/gpauth" "$(DESTDIR)$(PREFIX)/bin/"
+
 # Common executable and icon installation uses portable install options on Linux/BSD.
-install-unix:
-	install -d "$(DESTDIR)$(PREFIX)/bin" "$(DESTDIR)$(PREFIX)/libexec/gpclient"
-	set -e; for binary in gpclient gpauth gpservice; do \
+install-unix: install-gpclient-unix
+	set -e; for binary in gpauth gpservice; do \
 		install -m 755 "$(CARGO_RELEASE_DIR)/$$binary" "$(DESTDIR)$(PREFIX)/bin/"; \
 	done
 	set -e; for binary in gp-hip-script-installer gp-vpnc-script-installer; do \
@@ -181,7 +190,6 @@ install-unix:
 	set -e; if [ -f "$(GPGUI_BINARY)" ]; then \
 		install -m 755 "$(GPGUI_BINARY)" "$(DESTDIR)$(PREFIX)/bin/gpgui"; \
 	fi
-	install -m 755 packaging/files/usr/libexec/gpclient/vpnc-script "$(DESTDIR)$(PREFIX)/libexec/gpclient/"
 	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.* \
 		packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-*.svg; do \
 		destination="$(DESTDIR)$(PREFIX)/$${file#packaging/files/usr/}"; \
@@ -287,7 +295,8 @@ else
 uninstall: uninstall-linux
 endif
 
-.PHONY: install install-macos install-unix install-linux install-bsd \
+.PHONY: install install-gpclient install-macos install-unix install-linux install-bsd \
+	install-gpclient-macos install-gpclient-unix \
 	uninstall uninstall-macos uninstall-unix uninstall-linux uninstall-bsd
 
 uninstall-macos:
