@@ -149,6 +149,13 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
       .status()
       .expect("Failed to update the OpenConnect dylib install name");
     assert!(status.success(), "Failed to update the OpenConnect dylib install name");
+    let status = std::process::Command::new("codesign")
+      .args(["--force", "--sign", "-"])
+      .arg(&library)
+      .status()
+      .expect("Failed to sign the OpenConnect dylib");
+    assert!(status.success(), "Failed to sign the OpenConnect dylib");
+    println!("cargo:lib_dir={}", lib_dir.display());
   }
 
   println!("cargo:rustc-link-search=native={}", lib_dir.display());

@@ -3395,6 +3395,7 @@ dependencies = [
  "libc",
  "log",
  "pkg-config",
+ "tempfile",
 ]
 
 [[package]]

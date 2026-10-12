@@ -93,6 +93,12 @@ fn sibling_binary_for_executable(executable: &Path, binary_name: &str) -> Option
   if is_file(&binary) {
     return Some(binary);
   }
+  if matches!(binary_name, "gp-vpnc-script-installer" | "gp-hip-script-installer") {
+    let binary = bin_dir.parent()?.join("libexec/gpclient").join(binary_name);
+    if is_file(&binary) {
+      return Some(binary);
+    }
+  }
   #[cfg(target_os = "macos")]
   if let Some(binary) = macos::helper_path(&executable, binary_name)
     && is_file(&binary)
@@ -120,6 +126,23 @@ fn is_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn script_installers_follow_the_installed_prefix() {
+    let directory = tempfile::tempdir().unwrap();
+    let bin = directory.path().join("bin");
+    let libexec = directory.path().join("libexec/gpclient");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::create_dir_all(&libexec).unwrap();
+    std::fs::write(bin.join("gpclient"), "").unwrap();
+    for name in ["gp-vpnc-script-installer", "gp-hip-script-installer"] {
+      std::fs::write(libexec.join(name), "").unwrap();
+      assert_eq!(
+        sibling_binary_for_executable(&bin.join("gpclient"), name),
+        Some(libexec.canonicalize().unwrap().join(name))
+      );
+    }
+  }
 
   #[test]
   #[cfg(target_os = "macos")]

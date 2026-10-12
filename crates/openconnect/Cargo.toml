@@ -15,3 +15,6 @@ cc = "1"
 autotools = "0.2"
 pkg-config = "0.3"
 fs_extra = "1"
+
+[dev-dependencies]
+tempfile = "3"
