@@ -1,5 +1,5 @@
 use super::{
-  command_runner::run_observed,
+  command_runner::{ChildInput, run_observed},
   rendering_recovery::{RenderingCrash, StderrDiagnostic, eligible_with_inheritance, is_crash_exit},
 };
 use crate::service::transport::SessionCredential;
@@ -55,7 +55,7 @@ pub(super) async fn launch_desktop_child(
       None,
       &mut |bytes| diagnostic.push(bytes),
       &mut sink,
-      Some(&frame),
+      ChildInput::Frame(&frame),
     )?;
     let output = observed.output;
     if is_crash_exit(output.status) && retry_eligible && diagnostic.matched() {
