@@ -900,7 +900,7 @@ jobs:
         cd gh-release/gp/scripts && ./gh-release.sh "$RELEASE_TAG"
 
   wait-gpgui-macos:
-    if: ${{ always() && needs.trigger-gpgui-macos.result != 'skipped' }}
+    if: ${{ !cancelled() && needs.trigger-gpgui-macos.result == 'success' }}
     needs:
       - trigger-gpgui-macos
     runs-on: ubuntu-latest
