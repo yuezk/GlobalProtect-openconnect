@@ -13,6 +13,20 @@ pub(crate) struct ConnectArgs {
   #[arg(help = "The portal server to connect to")]
   pub(super) server: String,
 
+  #[arg(
+    long,
+    conflicts_with = "cookie_only",
+    help = "Complete sign-in, then keep the VPN running after this command exits"
+  )]
+  pub(crate) background: bool,
+
+  #[arg(
+    long,
+    requires = "background",
+    help = "Background log file (default: /var/log/gpclient.log)"
+  )]
+  pub(crate) log_file: Option<PathBuf>,
+
   #[arg(short, long, help = "The gateway to connect to, it will prompt if not specified")]
   pub(super) gateway: Option<String>,
 

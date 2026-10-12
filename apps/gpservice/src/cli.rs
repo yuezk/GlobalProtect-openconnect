@@ -153,12 +153,15 @@ impl Cli {
     let server_token = ws_server.cancel_token();
 
     #[cfg(target_os = "macos")]
+    let (credential_ready_tx, credential_ready_rx) = tokio::sync::oneshot::channel();
+
+    #[cfg(target_os = "macos")]
     if externally_brokered {
       let credential_server = crate::macos_broker::CredentialServer::new(Arc::clone(&registry));
       let credential_token = server_token.clone();
       let credential_shutdown = shutdown_tx.clone();
       tokio::spawn(async move {
-        if let Err(err) = credential_server.start(credential_token).await {
+        if let Err(err) = credential_server.start(credential_token, credential_ready_tx).await {
           warn!("Broker credential server stopped: {err}");
           let _ = credential_shutdown.send(()).await;
         }
@@ -206,8 +209,22 @@ impl Cli {
     let (ws_ready_tx, ws_ready_rx) = tokio::sync::oneshot::channel();
     let ws_server_handle = tokio::spawn(async move { ws_server.start(shutdown_tx_clone, ws_ready_tx).await });
 
+    #[cfg(target_os = "macos")]
+    let ws_ready_rx = if externally_brokered {
+      await_broker_readiness(ws_ready_rx, credential_ready_rx).await?;
+      report_broker_readiness(&mut std::io::stdout().lock())?;
+      None
+    } else {
+      Some(ws_ready_rx)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let ws_ready_rx = Some(ws_ready_rx);
+
     let desktop_client_handle = if let Some(channel) = desktop_channel {
-      ws_ready_rx.await.context("WebSocket server failed to start")?;
+      ws_ready_rx
+        .context("WebSocket readiness receiver is unavailable")?
+        .await
+        .context("WebSocket server failed to start")?;
       let desktop_uid = desktop_uid.context("Desktop user is unavailable")?;
       Some(tokio::spawn(async move {
         if let Err(err) = channel
@@ -394,4 +411,72 @@ pub async fn run() {
     eprintln!("Error: {}", e);
     std::process::exit(1);
   }
+}
+
+#[cfg(target_os = "macos")]
+fn report_broker_readiness(output: &mut impl std::io::Write) -> std::io::Result<()> {
+  output.write_all(b"GP_CONNECT_SERVICE_READY\n")?;
+  output.flush()
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod readiness_tests {
+  use super::*;
+
+  #[tokio::test]
+  async fn readiness_waits_for_both_endpoints() {
+    let (ws_tx, ws_rx) = tokio::sync::oneshot::channel();
+    let (credential_tx, credential_rx) = tokio::sync::oneshot::channel();
+    let mut ready = tokio::spawn(await_broker_readiness(ws_rx, credential_rx));
+    ws_tx.send(()).unwrap();
+    assert!(
+      tokio::time::timeout(Duration::from_millis(20), &mut ready)
+        .await
+        .is_err()
+    );
+    credential_tx.send(()).unwrap();
+    ready.await.unwrap().unwrap();
+  }
+
+  #[tokio::test]
+  async fn failed_endpoint_aborts_readiness_even_if_other_endpoint_is_pending() {
+    let (ws_tx, ws_rx) = tokio::sync::oneshot::channel();
+    let (_credential_tx, credential_rx) = tokio::sync::oneshot::channel();
+    drop(ws_tx);
+    let result = tokio::time::timeout(Duration::from_secs(1), await_broker_readiness(ws_rx, credential_rx)).await;
+    assert!(result.unwrap().is_err());
+  }
+
+  #[test]
+  fn readiness_signal_is_exact_and_flushed() {
+    #[derive(Default)]
+    struct Output {
+      data: Vec<u8>,
+      flushed: bool,
+    }
+    impl std::io::Write for Output {
+      fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        self.data.extend_from_slice(data);
+        Ok(data.len())
+      }
+      fn flush(&mut self) -> std::io::Result<()> {
+        self.flushed = true;
+        Ok(())
+      }
+    }
+    let mut output = Output::default();
+    report_broker_readiness(&mut output).unwrap();
+    assert_eq!(output.data, b"GP_CONNECT_SERVICE_READY\n");
+    assert!(output.flushed);
+  }
+}
+
+#[cfg(target_os = "macos")]
+async fn await_broker_readiness(
+  websocket: tokio::sync::oneshot::Receiver<()>,
+  credential: tokio::sync::oneshot::Receiver<()>,
+) -> anyhow::Result<()> {
+  tokio::try_join!(async { websocket.await }, async { credential.await })
+    .context("Brokered service endpoints failed to start")?;
+  Ok(())
 }

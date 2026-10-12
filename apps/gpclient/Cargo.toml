@@ -17,6 +17,7 @@ clap.workspace = true
 env_logger.workspace = true
 inquire = "0.9"
 log.workspace = true
+nix = { version = "0.31", features = ["fs", "signal", "process"] }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-util.workspace = true
 sysinfo.workspace = true

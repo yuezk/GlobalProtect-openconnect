@@ -11,7 +11,7 @@ members = [
 
 [workspace.package]
 rust-version = "1.91"
-version = "3.0.3"
+version = "3.0.4"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
 edition = "2024"
@@ -26,7 +26,7 @@ clap = { version = "4", features = ["derive"] }
 clap-verbosity-flag = "3"
 ctrlc = "3.4"
 directories = "6.0"
-dns-lookup = "3"
+dns-lookup = "4.0.2"
 env_logger = "0.11"
 is_executable = "1.0"
 log = "0.4"
@@ -37,8 +37,8 @@ pem = "3"
 xmltree = { version = "0.12", features = ["attribute-order"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# Use 0.36 as newer versions requires Rust 1.88+
-sysinfo = "0.36"
+# The 0.39 series requires Rust 1.95, above the workspace minimum.
+sysinfo = "0.38.4"
 tempfile = "3.8"
 tokio = { version = "1" }
 tokio-util = "0.7"
@@ -57,7 +57,7 @@ md5 = "0.8"
 sha256 = "1"
 which = "8"
 uuid = "1"
-netdev = "0.40"
+netdev = "0.46.3"
 humantime = "2"
 snow = { version = "0.10", default-features = false, features = ["std", "use-getrandom", "use-curve25519", "use-chacha20poly1305", "use-sha2"] }
 zeroize = "1"

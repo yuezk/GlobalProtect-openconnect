@@ -23,7 +23,11 @@ impl CredentialServer {
     Self { registry }
   }
 
-  pub(crate) async fn start(self, cancel: CancellationToken) -> anyhow::Result<()> {
+  pub(crate) async fn start(
+    self,
+    cancel: CancellationToken,
+    ready: tokio::sync::oneshot::Sender<()>,
+  ) -> anyhow::Result<()> {
     if !Uid::effective().is_root() {
       bail!("macOS brokered mode requires root privileges");
     }
@@ -33,6 +37,7 @@ impl CredentialServer {
       .with_context(|| format!("Failed to bind broker credential socket at {}", path.display()))?;
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
     info!("Broker credential socket listening at {}", path.display());
+    let _ = ready.send(());
 
     loop {
       tokio::select! {

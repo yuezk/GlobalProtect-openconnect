@@ -26,6 +26,10 @@ impl ConnectHandler<'_> {
     first_session: super::gateway::GatewayLoginSession,
     remaining: &[&Gateway],
   ) -> anyhow::Result<()> {
+    ensure!(
+      self.background.is_none(),
+      "--background requires a VPN tunnel; internal non-tunnel sessions must run in the foreground"
+    );
     ensure!(remaining.len() < 64, "Too many internal non-tunnel candidates");
     let mut hosts = std::collections::HashSet::new();
     for gateway in std::iter::once(first_gateway).chain(remaining.iter().copied()) {

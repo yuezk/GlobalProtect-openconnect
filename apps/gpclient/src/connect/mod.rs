@@ -46,6 +46,7 @@ pub(crate) struct ConnectHandler<'a> {
   auth_recovery: RefCell<gpapi::process::rendering_recovery::RecoveryState>,
   sessions: RefCell<GatewaySessions>,
   pid_written: Arc<AtomicBool>,
+  background: Option<crate::background::BackgroundWorker>,
 }
 
 impl<'a> ConnectHandler<'a> {
@@ -71,7 +72,13 @@ impl<'a> ConnectHandler<'a> {
       auth_recovery: RefCell::default(),
       sessions: RefCell::default(),
       pid_written: Arc::default(),
+      background: None,
     }
+  }
+
+  pub(crate) fn with_background(mut self, background: Option<crate::background::BackgroundWorker>) -> Self {
+    self.background = background;
+    self
   }
 
   fn build_gp_params(&self) -> GpParams {

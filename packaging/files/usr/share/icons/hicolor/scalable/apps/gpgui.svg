@@ -19,14 +19,14 @@
       <circle cx="512" cy="455" r="315"/>
     </clipPath>
     <filter id="globe-shadow" x="150" y="90" width="730" height="760" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#174d6f" flood-opacity=".14"/>
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#174d6f" flood-opacity=".14"/>
     </filter>
     <filter id="lock-shadow" x="280" y="210" width="470" height="540" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#70430c" flood-opacity=".2"/>
     </filter>
   </defs>
 
-  <g transform="translate(512 512) scale(1.3) translate(-512 -455)">
+  <g transform="translate(512 512) scale(1.44) translate(-512 -455)">
     <g filter="url(#globe-shadow)">
       <circle cx="512" cy="455" r="315" fill="url(#ocean)"/>
       <g clip-path="url(#globe-clip)" fill="url(#land)">

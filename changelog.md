@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.4
+
+### Added
+
+- Added `gpclient connect --background` with connection logs and graceful disconnect.
+
+### Fixed
+
+- Improved macOS service startup, relaunch, and quit responsiveness.
+- Updated app icons for clearer artwork across platforms.
+
 ## 3.0.3
 
 ### Fixed

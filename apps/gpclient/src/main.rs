@@ -1,3 +1,4 @@
+mod background;
 mod cli;
 mod connect;
 mod diagnostics;

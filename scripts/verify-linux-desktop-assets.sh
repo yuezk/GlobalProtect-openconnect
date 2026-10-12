@@ -81,6 +81,12 @@ verify_same_file \
   "$GPGUI_APP_DIR/src-tauri/icons/icon.png" \
   "$GP_DIR/apps/gpauth/icons/icon.png"
 verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.icns" \
+  "$GP_DIR/apps/gpauth/icons/icon.icns"
+verify_same_file \
+  "$GPGUI_APP_DIR/src-tauri/icons/icon.ico" \
+  "$GP_DIR/apps/gpauth/icons/icon.ico"
+verify_same_file \
   "$GPGUI_APP_DIR/src-tauri/icons/32x32.png" \
   "$GP_DIR/apps/gpgui-helper/src-tauri/icons/32x32.png"
 verify_same_file \

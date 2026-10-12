@@ -484,6 +484,13 @@ impl ConnectHandler<'_> {
     let disconnect_requested_on_signal = Arc::clone(&disconnect_requested);
     let cancellation = self.cancellation.clone();
 
+    let mut background_stdio = self
+      .background
+      .as_ref()
+      .map(|background| background.redirect_stdio())
+      .transpose()
+      .map_err(GatewayConnectError::before_establishment)?;
+
     let disconnect_task = tokio::spawn(async move {
       cancellation.cancelled().await;
       info!("Received the interrupt signal, disconnecting...");
@@ -497,7 +504,7 @@ impl ConnectHandler<'_> {
     let session_cancellation = self.cancellation.clone();
     let (established_tx, established_rx) = tokio::sync::oneshot::channel();
     self.sessions.borrow_mut().relinquish_gateway(gateway);
-    let worker = tokio::task::spawn_blocking(move || {
+    let mut worker = tokio::task::spawn_blocking(move || {
       vpn.connect(move |vpn_session_info| {
         if session_cancellation.is_cancelled() {
           return;
@@ -516,7 +523,7 @@ impl ConnectHandler<'_> {
         session_task_on_connect.lock().unwrap().replace(task);
       })
     });
-    tokio::pin!(worker);
+    let mut background_error = None;
     let connect_result = tokio::select! {
       result = &mut worker => result,
       established = established_rx => {
@@ -525,11 +532,26 @@ impl ConnectHandler<'_> {
             .filter(|session| session.gateway.server() != gateway)
             .map(|session| session.gateway.server().to_owned())
             .collect::<Vec<_>>();
-          for server in unused {
-            self.logout_gateway(&server).await;
-          }
+          wait_for_tunnel_exit(&mut worker, async {
+            for server in unused {
+              self.logout_gateway(&server).await;
+            }
+          }, || {
+            if let (Some(background), Some(stdio)) = (&self.background, &mut background_stdio) {
+              let detach = if self.pid_written.load(Ordering::SeqCst) {
+                background.detach(stdio)
+              } else {
+                Err(anyhow::anyhow!("Cannot detach without a writable PID lock file"))
+              };
+              if let Err(error) = detach {
+                self.cancellation.cancel();
+                background_error = Some(error);
+              }
+            }
+          }).await
+        } else {
+          (&mut worker).await
         }
-        (&mut worker).await
       }
     };
     let tunnel_established = tunnel_established.load(Ordering::SeqCst);
@@ -540,6 +562,10 @@ impl ConnectHandler<'_> {
     if let Some(task) = session_task {
       task.abort();
       let _ = task.await;
+    }
+
+    if let Some(error) = background_error {
+      return Err(GatewayConnectError::after_establishment(error));
     }
 
     let disconnect_requested = disconnect_requested.load(Ordering::SeqCst);
@@ -582,6 +608,28 @@ impl ConnectHandler<'_> {
 
     self.args.csd_user.clone()
   }
+}
+
+async fn wait_for_tunnel_exit(
+  worker: &mut JoinHandle<i32>,
+  cleanup: impl std::future::Future<Output = ()>,
+  on_ready: impl FnOnce(),
+) -> Result<i32, tokio::task::JoinError> {
+  tokio::pin!(cleanup);
+  tokio::select! {
+    // A finished tunnel must not publish readiness, including when cleanup is
+    // also ready in the same poll.
+    biased;
+    result = &mut *worker => {
+      // Logout temporarily owns the session registry. Complete it even when
+      // the tunnel exits, so cancelling this future cannot discard sessions.
+      cleanup.await;
+      return result;
+    },
+    _ = &mut cleanup => {},
+  }
+  on_ready();
+  worker.await
 }
 
 fn classify_openconnect_result(
@@ -640,6 +688,70 @@ fn apply_os_profile(builder: VpnBuilder, profile: &OsProfile) -> VpnBuilder {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[tokio::test]
+  async fn tunnel_exit_during_startup_cleanup_does_not_publish_readiness() {
+    let (cleanup_started_tx, cleanup_started_rx) = tokio::sync::oneshot::channel();
+    let (worker_exited_tx, worker_exited_rx) = tokio::sync::oneshot::channel();
+    let mut worker = tokio::spawn(async move {
+      cleanup_started_rx.await.unwrap();
+      worker_exited_tx.send(()).unwrap();
+      7
+    });
+    let mut ready = false;
+    let result = tokio::time::timeout(
+      std::time::Duration::from_secs(5),
+      wait_for_tunnel_exit(
+        &mut worker,
+        async {
+          cleanup_started_tx.send(()).unwrap();
+          worker_exited_rx.await.unwrap();
+          tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        },
+        || ready = true,
+      ),
+    )
+    .await
+    .expect("Tunnel exit must preserve completed cleanup")
+    .unwrap();
+    assert_eq!(result, 7);
+    assert!(!ready, "An exited tunnel must not report background startup success");
+  }
+
+  #[tokio::test]
+  async fn finished_tunnel_takes_priority_over_finished_startup_cleanup() {
+    let mut worker = tokio::spawn(async { 7 });
+    while !worker.is_finished() {
+      tokio::task::yield_now().await;
+    }
+    let mut ready = false;
+    let result = wait_for_tunnel_exit(&mut worker, async {}, || ready = true)
+      .await
+      .unwrap();
+    assert_eq!(result, 7);
+    assert!(!ready, "A ready cleanup must not conceal a finished tunnel");
+  }
+
+  #[tokio::test]
+  async fn running_tunnel_publishes_readiness_after_startup_cleanup() {
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+    let mut worker = tokio::spawn(async move {
+      ready_rx.await.unwrap();
+      0
+    });
+    let cleanup_complete = AtomicBool::new(false);
+    let result = wait_for_tunnel_exit(
+      &mut worker,
+      async { cleanup_complete.store(true, Ordering::SeqCst) },
+      || {
+        assert!(cleanup_complete.load(Ordering::SeqCst));
+        ready_tx.send(()).unwrap();
+      },
+    )
+    .await
+    .unwrap();
+    assert_eq!(result, 0);
+  }
 
   #[test]
   fn hip_script_defaults_to_inherited_process_identity() {

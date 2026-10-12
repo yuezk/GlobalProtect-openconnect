@@ -9,13 +9,13 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.12.1",
+    "@tauri-apps/api": "^2.12.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.12.1",
-    "@types/node": "^26.6.4",
+    "@tauri-apps/cli": "^2.12.2",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@typescript-eslint/eslint-plugin": "^8.71.1",
@@ -27,7 +27,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "3.9.9",
     "typescript": "^6.0.3",
-    "vite": "^8.3.3"
+    "vite": "^8.3.4"
   },
   "packageManager": "pnpm@9.15.1"
 }

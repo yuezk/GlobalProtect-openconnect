@@ -20,7 +20,7 @@
     </clipPath>
   </defs>
 
-  <g transform="translate(512 512) scale(1.3) translate(-512 -455)">
+  <g transform="translate(512 512) scale(1.44) translate(-512 -455)">
     <circle cx="512" cy="455" r="315" fill="url(#ocean)"/>
     <g clip-path="url(#globe-clip)" fill="url(#land)">
       <path d="M177 326c74-121 177-185 302-190-13 51-49 84-105 98-4 45-32 79-86 101-37 17-75 14-111-9Z"/>

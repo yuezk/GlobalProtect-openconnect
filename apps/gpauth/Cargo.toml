@@ -24,8 +24,7 @@ tokio = { workspace = true, features = ["rt-multi-thread"] }
 tempfile.workspace = true
 compile-time.workspace = true
 
-# Pin to specific version due to MSRV
-home = "=0.5.11"
+home = "0.5.12"
 
 # webview auth dependencies
 tauri = { workspace = true, optional = true }

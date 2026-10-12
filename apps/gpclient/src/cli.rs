@@ -107,6 +107,9 @@ struct Cli {
   )]
   lock_file: PathBuf,
 
+  #[arg(long, hide = true, global = true)]
+  background_worker_fd: Option<i32>,
+
   #[arg(
     long,
     value_enum,
@@ -171,6 +174,9 @@ impl Cli {
   }
 
   async fn run(&self) -> anyhow::Result<()> {
+    if self.background_worker_fd.is_some() && !matches!(&self.command, CliCommand::Connect(args) if args.background) {
+      bail!("Background worker requires connect --background");
+    }
     if let CliCommand::Diagnostics(args) = &self.command {
       return args.run(VERSION).await;
     }
@@ -179,6 +185,23 @@ impl Cli {
     if !self.can_run_alongside_client() && self.is_running().await {
       bail!("Another instance of the client is already running");
     }
+
+    let background_worker = if let CliCommand::Connect(args) = &self.command {
+      if args.background {
+        let log_file = args
+          .log_file
+          .as_deref()
+          .unwrap_or_else(|| Path::new("/var/log/gpclient.log"));
+        match self.background_worker_fd {
+          Some(fd) => Some(crate::background::BackgroundWorker::new(fd, log_file)?),
+          None => return crate::background::start(log_file, self.log_format).await,
+        }
+      } else {
+        None
+      }
+    } else {
+      None
+    };
 
     // The temp file will be dropped automatically when the file handle is dropped
     // So, declare it here to ensure it's not dropped
@@ -196,7 +219,12 @@ impl Cli {
     }
 
     match &self.command {
-      CliCommand::Connect(args) => ConnectHandler::new(args, &shared_args).handle().await,
+      CliCommand::Connect(args) => {
+        ConnectHandler::new(args, &shared_args)
+          .with_background(background_worker)
+          .handle()
+          .await
+      }
       CliCommand::Disconnect(args) => DisconnectHandler::new(args, shared_args.lock_file).handle().await,
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
       CliCommand::Hip(args) => HipHandler::new(args).handle().await,
@@ -255,6 +283,47 @@ mod tests {
   use log::Log;
 
   use super::*;
+
+  #[test]
+  fn background_worker_option_precedes_user_option_terminator() {
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "--background-worker-fd",
+      "3",
+      "connect",
+      "--background",
+      "--",
+      "portal.example.com",
+    ])
+    .unwrap();
+    assert_eq!(cli.background_worker_fd, Some(3));
+    assert!(matches!(cli.command, CliCommand::Connect(args) if args.background));
+  }
+
+  #[test]
+  fn background_mode_rejects_cookie_only_and_requires_background_for_log_file() {
+    assert!(
+      Cli::try_parse_from([
+        "gpclient",
+        "connect",
+        "portal.example.com",
+        "--background",
+        "--cookie-only"
+      ])
+      .is_err()
+    );
+    assert!(Cli::try_parse_from(["gpclient", "connect", "portal.example.com", "--log-file", "/tmp/gp.log"]).is_err());
+    assert!(
+      Cli::try_parse_from([
+        "gpclient",
+        "connect",
+        "portal.example.com",
+        "--background",
+        "--passwd-on-stdin"
+      ])
+      .is_ok()
+    );
+  }
 
   #[test]
   fn diagnostics_accepts_output_options_and_runs_alongside_the_client() {
