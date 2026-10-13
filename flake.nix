@@ -29,8 +29,8 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         pname = "globalprotect-openconnect";
         version = cargoToml.workspace.package.version;
-        releaseTag = "v3.0.4";
-        releaseVersion = "3.0.4";
+        releaseTag = "v3.0.5";
+        releaseVersion = "3.0.5";
 
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
@@ -55,8 +55,8 @@
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
         gpguiHashes = {
-          x86_64 = "sha256-T14EbI8ja9i9kbVP/LirAjGupPeUtrVQx41ls02dx2U=";
-          aarch64 = "sha256-DWR9uLMlmjai8LRarbhmxPr1Cg3ejtGkcxmxkfwwfEA=";
+          x86_64 = "sha256-b0hqpAr/Sz9z+UTCmAGV3eIO8sNUjrH34NZZYcLyzzw=";
+          aarch64 = "sha256-QQh/T/fknvPeZ1UdRCo2idiIBX1LTJHSwQ2MK/j3Gm0=";
         };
 
         gpguiArchive = pkgs.fetchurl {
@@ -70,8 +70,8 @@
         };
 
         binaryHashes = {
-          x86_64 = "sha256-TqOqrWhanDX9IHKcRxT0+3s5kSHr/pSqXDdMH/v+Bwg=";
-          aarch64 = "sha256-EhoJ4GvJX0/+HmZVuDCXMfiTRgiFmb0QvB5jDNvEb1I=";
+          x86_64 = "sha256-zbs/StUxfD3nf5mjUiGTu3CUI96SkB+r0DD6kcvCqjY=";
+          aarch64 = "sha256-QGuTJvAlj9maV++LFQGdjSZCUYafFx60AzyZjulnEes=";
         };
 
         binaryArchive = pkgs.fetchurl {
