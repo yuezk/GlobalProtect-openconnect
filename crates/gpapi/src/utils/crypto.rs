@@ -1,11 +1,11 @@
 use chacha20poly1305::{
-  AeadCore, ChaCha20Poly1305, Key, KeyInit,
-  aead::{Aead, OsRng},
+  ChaCha20Poly1305, Key, KeyInit, Nonce,
+  aead::{Aead, Generate},
 };
 use serde::{Serialize, de::DeserializeOwned};
 
 pub fn generate_key() -> Key {
-  ChaCha20Poly1305::generate_key(&mut OsRng)
+  Key::generate()
 }
 
 pub fn encrypt<T>(key: &Key, value: &T) -> anyhow::Result<Vec<u8>>
@@ -13,7 +13,7 @@ where
   T: Serialize,
 {
   let cipher = ChaCha20Poly1305::new(key);
-  let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+  let nonce = Nonce::generate();
 
   let data = serde_json::to_vec(value)?;
   let cipher_text = cipher.encrypt(&nonce, data.as_ref())?;
@@ -34,7 +34,7 @@ where
   let nonce = &encrypted[..12];
   let cipher_text = &encrypted[12..];
 
-  let plaintext = cipher.decrypt(nonce.into(), cipher_text)?;
+  let plaintext = cipher.decrypt(nonce.try_into()?, cipher_text)?;
 
   let value = serde_json::from_slice(&plaintext)?;
 
@@ -52,14 +52,14 @@ impl Crypto {
 
   pub fn encrypt<T: Serialize>(&self, plain: T) -> anyhow::Result<Vec<u8>> {
     let key: &[u8] = &self.key;
-    let encrypted_data = encrypt(key.into(), &plain)?;
+    let encrypted_data = encrypt(key.try_into()?, &plain)?;
 
     Ok(encrypted_data)
   }
 
   pub fn decrypt<T: DeserializeOwned>(&self, encrypted: Vec<u8>) -> anyhow::Result<T> {
     let key: &[u8] = &self.key;
-    decrypt(key.into(), encrypted)
+    decrypt(key.try_into()?, encrypted)
   }
 
   pub fn encrypt_to<T: Serialize>(&self, path: &std::path::Path, plain: T) -> anyhow::Result<()> {
@@ -103,6 +103,27 @@ mod tests {
     assert_eq!(user.name, decrypted_user.name);
     assert_eq!(user.age, decrypted_user.age);
 
+    Ok(())
+  }
+
+  #[test]
+  fn decrypts_settings_written_with_chacha20poly1305_0_10() -> anyhow::Result<()> {
+    // Fixed key and ciphertext are test data produced with version 0.10.1.
+    let key = [7_u8; 32];
+    let encrypted =
+      crate::utils::base64::decode_to_vec("AwMDAwMDAwMDAwMDkIQjBvvxesN7T/Suv8tEE53zfpGGup/QlB6Dbj1ah+NIXCDMOv/4eg==")?;
+    let user: User = decrypt((&key).into(), encrypted.clone())?;
+    assert_eq!(user.name, "test");
+    assert_eq!(user.age, 18);
+
+    // The nonce prefix and appended authentication tag retain their existing format.
+    let cipher = ChaCha20Poly1305::new((&key).into());
+    let ciphertext = cipher.encrypt(encrypted[..12].try_into()?, serde_json::to_vec(&user)?.as_slice())?;
+    assert_eq!(ciphertext, encrypted[12..]);
+
+    let mut tampered = encrypted;
+    *tampered.last_mut().unwrap() ^= 1;
+    assert!(decrypt::<User>((&key).into(), tampered).is_err());
     Ok(())
   }
 }

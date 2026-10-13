@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.5
+
+### Added
+
+- Added adaptive macOS app icons for light and dark appearances.
+
+### Fixed
+
+- Fixed macOS browser sign-in by automatically selecting the installed callback handler.
+- Improved app icon proportions in Finder and across the app, installer, and website.
+
 ## 3.0.4
 
 ### Added

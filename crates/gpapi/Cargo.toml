@@ -20,13 +20,13 @@ xmltree.workspace = true
 serde.workspace = true
 specta = { workspace = true, features = ["derive", "uuid"] }
 urlencoding.workspace = true
-tokio = { workspace = true, features = ["process", "signal", "macros"] }
+tokio = { workspace = true, features = ["fs", "process", "signal", "macros"] }
 tokio-util.workspace = true
 serde_json.workspace = true
 whoami.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
-chacha20poly1305 = { version = "0.10", features = ["std"] }
+chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
 redact-engine.workspace = true
 url.workspace = true
 regex.workspace = true
@@ -34,7 +34,7 @@ uzers.workspace = true
 serde_urlencoded.workspace = true
 md5.workspace = true
 sha256.workspace = true
-sha2 = "0.10"
+sha2 = { version = "0.11", default-features = false }
 uuid = { workspace = true, features = ["v4", "v5", "serde"] }
 chrono.workspace = true
 humantime.workspace = true

@@ -1,8 +1,9 @@
-use std::{ffi::OsStr, os::raw::c_void, path::PathBuf, thread, time::Duration};
+use std::{ffi::OsStr, os::raw::c_void, path::PathBuf, sync::mpsc};
 
 use anyhow::{Context, bail};
+use block2::RcBlock;
 use objc2_app_kit::NSWorkspace;
-use objc2_foundation::{NSBundle, NSString, NSURL};
+use objc2_foundation::{NSBundle, NSDate, NSError, NSRunLoop, NSString, NSURL};
 
 const CALLBACK_SCHEME: &str = "globalprotectcallback";
 const CALLBACK_URL: &str = "globalprotectcallback:";
@@ -15,18 +16,19 @@ unsafe extern "C" {
 }
 
 pub(super) fn ensure_auth_callback_handler() -> anyhow::Result<()> {
+  set_auth_callback_handler().map_err(|error| {
+    log::warn!("Failed to set up browser sign-in: {error:#}");
+    anyhow::anyhow!("Couldn’t set up browser sign-in. Please try again.")
+  })
+}
+
+fn set_auth_callback_handler() -> anyhow::Result<()> {
   let workspace = NSWorkspace::sharedWorkspace();
   let app_paths = callback_app_paths();
-  let selected_handler = current_handler(&workspace);
-  match selected_handler.as_ref() {
-    Some((handler, path))
-      if handler == HANDLER_BUNDLE_ID && app_paths.iter().any(|candidate| same_path(candidate, path)) =>
-    {
-      return Ok(());
-    }
-    Some((handler, _)) if handler == HANDLER_BUNDLE_ID => {}
-    None => {}
-    Some((handler, _)) => bail!("The globalprotectcallback URL scheme is owned by {handler}"),
+  if current_handler(&workspace).is_some_and(|(handler, path)| {
+    handler == HANDLER_BUNDLE_ID && app_paths.iter().any(|candidate| same_path(candidate, &path))
+  }) {
+    return Ok(());
   }
 
   let app_path = app_paths
@@ -34,21 +36,40 @@ pub(super) fn ensure_auth_callback_handler() -> anyhow::Result<()> {
     .context("GP Connect Login.app is required for external-browser authentication; install GP Connect")?;
   let app_url = file_url(app_path);
   register_app(&app_url)?;
+  let (sender, receiver) = mpsc::channel();
+  let completion = RcBlock::new(move |error: *mut NSError| {
+    // The error is valid for the duration of Apple's completion callback.
+    let result = match unsafe { error.as_ref() } {
+      Some(error) => Err(anyhow::anyhow!("{}", error.localizedDescription())),
+      None => Ok(()),
+    };
+    let _ = sender.send(result);
+  });
   workspace.setDefaultApplicationAtURL_toOpenURLsWithScheme_completionHandler(
     &app_url,
     &NSString::from_str(CALLBACK_SCHEME),
-    None,
+    Some(&completion),
   );
 
-  for _ in 0..50 {
-    if current_handler(&workspace)
-      .is_some_and(|(handler, path)| handler == HANDLER_BUNDLE_ID && same_path(app_path, &path))
-    {
-      return Ok(());
+  // macOS may ask for consent. Keep its run loop active until the operation
+  // completes rather than imposing a deadline on the user's response.
+  let run_loop = NSRunLoop::currentRunLoop();
+  loop {
+    match receiver.try_recv() {
+      Ok(result) => {
+        result?;
+        break;
+      }
+      Err(mpsc::TryRecvError::Empty) => run_loop.runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.1)),
+      Err(mpsc::TryRecvError::Disconnected) => bail!("The URL handler setup completion was lost"),
     }
-    thread::sleep(Duration::from_millis(100));
   }
 
+  if current_handler(&workspace)
+    .is_some_and(|(handler, path)| handler == HANDLER_BUNDLE_ID && same_path(app_path, &path))
+  {
+    return Ok(());
+  }
   bail!("The globalprotectcallback URL handler registration did not take effect")
 }
 
