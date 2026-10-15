@@ -84,7 +84,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	INFO("OS: %s", options->os);
 	INFO("CLIENT_VERSION: %s", options->client_version);
 	INFO("HOST_ID: %s", options->host_id ? options->host_id : "(not set)");
-	INFO("VPNC_SCRIPT: %s", options->script);
+	INFO("Network configuration: %s", options->configure_network ? "callback" : options->script);
 	INFO("SCRIPT_TUN: %d", options->script_tun);
 	INFO("CSD_USER: %d", options->hip_script.uid);
 	INFO("CSD_WRAPPER: %s", options->hip_script.path);
@@ -200,6 +200,8 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 		openconnect_disable_dtls(vpninfo);
 	}
 	// Essential step
+	openconnect_set_configure_tun_handler(vpninfo, options->user_data,
+					     options->configure_network);
 	openconnect_set_setup_tun_handler(vpninfo, setup_tun_handler);
 
 	while (1) {

@@ -33,3 +33,6 @@ uzers.workspace = true
 [features]
 default = ["webview-auth"]
 webview-auth = ["gpapi/webview-auth"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpvpnc = { path = "../../crates/gpvpnc" }

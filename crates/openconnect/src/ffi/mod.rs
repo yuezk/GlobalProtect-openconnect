@@ -1,10 +1,12 @@
 mod hip;
+mod network_configuration;
 use crate::Vpn;
 use hip::HipGenerateFn;
 pub(crate) use hip::{
   HipControlRaw, HipScriptRaw, collect_hip_script, collect_hip_source, generate_hip_report, script_environment,
 };
 use log::{debug, info, trace, warn};
+pub(crate) use network_configuration::{VpnOptionRaw, configure_network};
 use std::ffi::{c_char, c_int, c_long, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -26,6 +28,7 @@ pub(crate) struct ConnectOptions {
   pub local_hostname: *const c_char,
 
   pub script: *const c_char,
+  pub configure_network: Option<unsafe extern "C" fn(*mut c_void, *const c_char, *const VpnOptionRaw) -> c_int>,
   pub interface: *const c_char,
   pub script_tun: u32,
 

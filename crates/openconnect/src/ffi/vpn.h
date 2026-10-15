@@ -44,6 +44,7 @@ typedef struct vpn_options {
 	const char *local_hostname;
 
 	const char *script;
+	openconnect_configure_tun_fn configure_network;
 	const char *interface;
 	const int script_tun;
 

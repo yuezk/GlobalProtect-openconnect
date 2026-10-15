@@ -4,6 +4,7 @@ mod credential;
 mod flow_tests;
 mod gateway;
 mod internal;
+mod vpn_script;
 
 use std::cell::RefCell;
 use std::sync::{

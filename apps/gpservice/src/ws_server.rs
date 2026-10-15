@@ -301,7 +301,7 @@ mod tests {
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       true,
-      None,
+      false,
     ));
     let (_state_tx, state_rx) = watch::channel(VpnState::Disconnected);
     let context = Arc::new(WsServerContext::new(
@@ -351,7 +351,7 @@ mod tests {
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       true,
-      None,
+      false,
     ));
     let (_state_tx, state_rx) = watch::channel(VpnState::Disconnected);
     let context = Arc::new(WsServerContext::new(

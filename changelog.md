@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.0.6
+
+### Changed
+
+- Embedded macOS VPN network configuration and added configuration logs for troubleshooting.
+
+### Fixed
+
+- Fixed desktop notifications disappearing immediately on GNOME.
+- Corrected the notification sender to GP Connect and clarified update notification titles on Linux and BSD.
+- Fixed ESP tunnel setup when a gateway reports a zero address, including load-balanced gateways.
+- Removed obsolete OpenConnect package dependencies from the AUR package.
+
 ## 3.0.5
 
 ### Added

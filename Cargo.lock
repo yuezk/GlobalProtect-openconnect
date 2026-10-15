@@ -224,7 +224,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auth"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "anyhow",
  "block2",
@@ -461,7 +461,7 @@ dependencies = [
 
 [[package]]
 name = "browser-launcher"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "anyhow",
  "log",
@@ -789,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "tempfile",
 ]
@@ -1908,7 +1908,7 @@ dependencies = [
 
 [[package]]
 name = "gpapi"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -1960,7 +1960,7 @@ dependencies = [
 
 [[package]]
 name = "gpauth"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "anyhow",
  "auth",
@@ -1979,7 +1979,7 @@ dependencies = [
 
 [[package]]
 name = "gpclient"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -1989,6 +1989,7 @@ dependencies = [
  "env_logger",
  "gpapi",
  "gphip",
+ "gpvpnc",
  "inquire",
  "log",
  "nix",
@@ -2006,7 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "gpgui-helper"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -2027,7 +2028,7 @@ dependencies = [
 
 [[package]]
 name = "gphip"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "anyhow",
  "askama",
@@ -2044,7 +2045,7 @@ dependencies = [
 
 [[package]]
 name = "gpservice"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "anyhow",
  "axum",
@@ -2057,6 +2058,7 @@ dependencies = [
  "getrandom 0.4.3",
  "gpapi",
  "gphip",
+ "gpvpnc",
  "log",
  "mac_address",
  "nix",
@@ -2074,6 +2076,13 @@ dependencies = [
  "uuid",
  "xz2",
  "zeroize",
+]
+
+[[package]]
+name = "gpvpnc"
+version = "3.0.6"
+dependencies = [
+ "log",
 ]
 
 [[package]]
@@ -3477,7 +3486,7 @@ dependencies = [
 
 [[package]]
 name = "openconnect"
-version = "3.0.5"
+version = "3.0.6"
 dependencies = [
  "autotools",
  "cc",

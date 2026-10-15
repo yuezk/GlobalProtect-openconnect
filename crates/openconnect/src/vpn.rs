@@ -7,7 +7,7 @@ use std::{
 use log::{info, warn};
 
 use crate::vpn_utils::{check_executable, find_vpnc_script};
-use crate::{HipSource, ffi};
+use crate::{HipSource, NetworkConfiguration, NetworkConfigurationHandler, ffi};
 
 type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce(VpnSessionInfo) + 'static + Send + Sync>>>>;
 type OnHipReportCallback = RwLock<Option<Arc<dyn Fn(&str) + Send + Sync>>>;
@@ -110,7 +110,8 @@ pub struct Vpn {
   host_id: Option<CString>,
   local_hostname: Option<CString>,
 
-  script: CString,
+  script: Option<CString>,
+  pub(crate) network_configuration_handler: Option<Arc<NetworkConfigurationHandler>>,
   interface: Option<CString>,
   script_tun: bool,
 
@@ -217,7 +218,11 @@ impl Vpn {
       host_id: Self::option_to_ptr(&self.host_id),
       local_hostname: Self::option_to_ptr(&self.local_hostname),
 
-      script: self.script.as_ptr(),
+      script: Self::option_to_ptr(&self.script),
+      configure_network: self
+        .network_configuration_handler
+        .as_ref()
+        .map(|_| ffi::configure_network as _),
       interface: Self::option_to_ptr(&self.interface),
       script_tun: self.script_tun as u32,
 
@@ -275,6 +280,7 @@ pub struct VpnBuilder {
   server: String,
   cookie: String,
   script: Option<String>,
+  network_configuration_handler: Option<Arc<NetworkConfigurationHandler>>,
   script_is_path: bool,
   interface: Option<String>,
   script_tun: bool,
@@ -307,6 +313,7 @@ impl VpnBuilder {
       server: server.to_string(),
       cookie: cookie.to_string(),
       script: None,
+      network_configuration_handler: None,
       script_is_path: false,
       interface: None,
       script_tun: false,
@@ -342,6 +349,17 @@ impl VpnBuilder {
   pub fn script_path<T: Into<Option<String>>>(mut self, script: T) -> Self {
     self.script = script.into();
     self.script_is_path = true;
+    self
+  }
+
+  /// Handle network configuration synchronously on OpenConnect's connection thread.
+  /// Replaces the external configuration script, not the tunnel device or packet I/O.
+  /// The handler receives a snapshot; it must not mutate the process environment.
+  pub fn network_configuration_handler(
+    mut self,
+    handler: impl Fn(&NetworkConfiguration) -> io::Result<()> + Send + Sync + 'static,
+  ) -> Self {
+    self.network_configuration_handler = Some(Arc::new(handler));
     self
   }
 
@@ -435,8 +453,16 @@ impl VpnBuilder {
     self
   }
 
-  fn determine_script(&self) -> Result<String, VpnError> {
-    match &self.script {
+  fn resolve_script(&self) -> Result<Option<CString>, VpnError> {
+    if self.network_configuration_handler.is_some() {
+      if self.script.is_some() || self.script_tun {
+        return Err(VpnError::new(
+          "Network configuration handler conflicts with script options".into(),
+        ));
+      }
+      return Ok(None);
+    }
+    let script = match &self.script {
       Some(script) => {
         if self.script_is_path && !std::path::Path::new(script).exists() {
           return Err(VpnError::new(format!("VPN script does not exist: {script}")));
@@ -445,16 +471,17 @@ impl VpnBuilder {
         Ok(script.clone())
       }
       None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script"))),
-    }
-  }
-
-  pub fn build(self) -> Result<Vpn, VpnError> {
-    let script = self.determine_script()?;
+    }?;
     let script = if self.script_is_path || self.script.is_none() {
       shell_quote_path(&script)
     } else {
       script
     };
+    Ok(Some(Self::to_cstring(&script)))
+  }
+
+  pub fn build(self) -> Result<Vpn, VpnError> {
+    let script = self.resolve_script()?;
 
     let user_agent = self.user_agent.unwrap_or_default();
     let os = self.os.unwrap_or("linux".to_string());
@@ -471,7 +498,8 @@ impl VpnBuilder {
       host_id: self.host_id.as_deref().map(Self::to_cstring),
       local_hostname: self.local_hostname.as_deref().map(Self::to_cstring),
 
-      script: Self::to_cstring(&script),
+      script,
+      network_configuration_handler: self.network_configuration_handler,
       interface: self.interface.as_deref().map(Self::to_cstring),
       script_tun: self.script_tun,
 
@@ -525,7 +553,7 @@ mod tests {
       .build()
       .unwrap();
 
-    assert_eq!(vpn.script.to_str().unwrap(), command);
+    assert_eq!(vpn.script.as_ref().unwrap().to_str().unwrap(), command);
   }
 
   #[test]
@@ -535,7 +563,7 @@ mod tests {
       .build()
       .unwrap();
 
-    assert_eq!(vpn.script.to_str().unwrap(), "'/bin/sh'");
+    assert_eq!(vpn.script.as_ref().unwrap().to_str().unwrap(), "'/bin/sh'");
   }
 
   #[test]
@@ -598,7 +626,8 @@ mod tests {
       client_version: None,
       host_id: Some(CString::new("profile-host-id").unwrap()),
       local_hostname: None,
-      script: CString::new("/bin/true").unwrap(),
+      script: Some(CString::new("/bin/true").unwrap()),
+      network_configuration_handler: None,
       interface: None,
       script_tun: false,
       certificate: None,
