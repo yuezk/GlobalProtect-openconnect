@@ -354,6 +354,7 @@ fn terminal_fixture() {
     let monitor = if mode == "tunnel" || mode == "active-tunnel" || mode == "prompted-tunnel" {
       let vpn = Arc::new(
         openconnect::Vpn::builder("vpn.example.com", "fixture-cookie")
+          .network_configuration_handler(|_| Ok(()))
           .build()
           .unwrap(),
       );

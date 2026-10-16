@@ -581,7 +581,12 @@ mod tests {
       fn vpn_detach_command_pipe(vpn: *mut std::ffi::c_void);
     }
 
-    let vpn = Arc::new(Vpn::builder("vpn.example.com", "cookie").build().unwrap());
+    let vpn = Arc::new(
+      Vpn::builder("vpn.example.com", "cookie")
+        .network_configuration_handler(|_| Ok(()))
+        .build()
+        .unwrap(),
+    );
     let (sender, mut receiver) = UnixStream::pair().unwrap();
     sender.set_nonblocking(true).unwrap();
     receiver.set_nonblocking(true).unwrap();
