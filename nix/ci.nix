@@ -19,7 +19,11 @@ let
   binaries = unpack "gp-ci-binaries" "GP_BINARY_ARCHIVE";
   gui = unpack "gp-ci-gui" "GP_GUI_ARCHIVE";
   sourcePackage = gp.packages.${system}.fromSource.override { inherit gui; };
-  prebuiltPackage = gp.packages.${system}.prebuilt.override { inherit binaries gui; };
+  prebuiltInputs = {
+    inherit binaries gui;
+    version = sourcePackage.version;
+  };
+  prebuiltPackage = gp.packages.${system}.prebuilt.override prebuiltInputs;
   hostSystem = nixpkgs.lib.nixosSystem {
     inherit system;
     modules = [
@@ -27,9 +31,7 @@ let
       ({ options, ... }: {
         programs.globalprotect-openconnect = {
           enable = true;
-          package = options.programs.globalprotect-openconnect.package.default.override {
-            inherit binaries gui;
-          };
+          package = options.programs.globalprotect-openconnect.package.default.override prebuiltInputs;
         };
         system.stateVersion = "25.11";
       })
@@ -38,8 +40,9 @@ let
   modulePackage = hostSystem.config.programs.globalprotect-openconnect.package;
 in {
   source = sourcePackage;
-  prebuilt = prebuiltPackage;
-  module = assert builtins.elem modulePackage hostSystem.config.environment.systemPackages;
+  prebuilt = assert prebuiltPackage.version == sourcePackage.version; prebuiltPackage;
+  module = assert modulePackage.version == sourcePackage.version;
+    assert builtins.elem modulePackage hostSystem.config.environment.systemPackages;
     assert hostSystem.config.services.ayatana-indicators.enable;
     assert hostSystem.config.security.polkit.enable;
     assert hostSystem.config.security.wrappers.pkexec.enable;
