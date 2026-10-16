@@ -492,7 +492,12 @@ mod tests {
     let (context, registry) = context();
     let (a, a_session, a_generation, _a_rx) = attach(&context, &registry).await;
     let (b, b_session, b_generation, _b_rx) = attach(&context, &registry).await;
-    let vpn = Arc::new(openconnect::Vpn::builder("vpn.example.com", "cookie").build().unwrap());
+    let vpn = Arc::new(
+      openconnect::Vpn::builder("vpn.example.com", "cookie")
+        .network_configuration_handler(|_| Ok(()))
+        .build()
+        .unwrap(),
+    );
     let monitor = gptunnel::TunnelMonitor::attach(vpn);
     context
       .bind_tunnel(crate::vpn_task::TunnelBinding {
