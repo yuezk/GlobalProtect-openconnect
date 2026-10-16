@@ -82,6 +82,9 @@ pub struct RequestDispatcher {
 }
 
 impl RequestDispatcher {
+  pub fn subscribe_tunnel(&self) -> tokio::sync::watch::Receiver<crate::vpn_task::TunnelBinding> {
+    self.lifecycle.subscribe_tunnel()
+  }
   pub fn new(
     lifecycle: crate::vpn_task::LifecycleHandle,
     gui_restart_requested: Arc<AtomicBool>,
@@ -267,7 +270,8 @@ impl RequestDispatcher {
       | WsRequest::PreviewHipReport(_)
       | WsRequest::GetHipApprovalStatus { .. }
       | WsRequest::ReadHipPreviewChunk(_)
-      | WsRequest::GetLastSubmittedHipReport => {
+      | WsRequest::GetLastSubmittedHipReport
+      | WsRequest::SetTunnelStatisticsEnabled { .. } => {
         unreachable!("session-bound request was already dispatched")
       }
     }

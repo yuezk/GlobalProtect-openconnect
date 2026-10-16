@@ -13,6 +13,7 @@ struct state {
 	int expected_count;
 	int tcp_connections;
 	int reconnection_notifications;
+	int reconnect_started;
 };
 
 static int configure(void *data, const char *reason, const struct oc_vpn_option *env)
@@ -101,6 +102,15 @@ static void reconnected(void *data)
 	state->reconnection_notifications++;
 }
 
+static void tunnel_event(void *data, enum openconnect_tunnel_event event)
+{
+	struct state *state = data;
+	assert(event == OC_TUNNEL_RECONNECTING);
+	state->reconnect_started++;
+	/* Start observation precedes configuration callbacks and new TCP work. */
+	assert(state->calls == 0);
+}
+
 static void reconnect_refusal_propagates(void)
 {
 	const char *expected[] = { "attempt-reconnect", "reconnect" };
@@ -115,8 +125,10 @@ static void reconnect_refusal_propagates(void)
 	assert(!pipe(fds));
 	vpninfo->tun_fd = fds[0];
 	protocol.tcp_connect = tcp_connect;
+	protocol.proto = PROTO_GPST;
 	vpninfo->proto = &protocol;
 	openconnect_set_reconnected_handler(vpninfo, reconnected);
+	openconnect_set_tunnel_handler(vpninfo, tunnel_event);
 
 	/* Attempt refusal prevents even the protocol's reconnect request. */
 	assert(ssl_reconnect(vpninfo) == -EPERM);
@@ -137,6 +149,7 @@ static void reconnect_refusal_propagates(void)
 	assert(!ssl_reconnect(vpninfo));
 	assert(state.calls == 2 && state.tcp_connections == 2);
 	assert(state.reconnection_notifications == 1);
+	assert(state.reconnect_started == 3);
 
 	state.expected_reasons = NULL;
 	state.reason = "disconnect";

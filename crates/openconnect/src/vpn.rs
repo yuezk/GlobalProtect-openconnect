@@ -11,6 +11,7 @@ use crate::{HipSource, NetworkConfiguration, NetworkConfigurationHandler, ffi};
 
 type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce(VpnSessionInfo) + 'static + Send + Sync>>>>;
 type OnHipReportCallback = RwLock<Option<Arc<dyn Fn(&str) + Send + Sync>>>;
+type OnTunnelCallback = RwLock<Option<Arc<dyn Fn(crate::tunnel::Event) + Send + Sync>>>;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VpnSessionInfo {
@@ -72,6 +73,7 @@ struct Cancellation {
 struct CancellationState {
   requested: bool,
   command_fd: Option<i32>,
+  statistics_pending: bool,
 }
 
 impl Cancellation {
@@ -82,7 +84,31 @@ impl Cancellation {
   }
 
   fn detach(&self) {
-    self.state.lock().unwrap().command_fd = None;
+    let mut state = self.state.lock().unwrap();
+    state.command_fd = None;
+    state.statistics_pending = false;
+  }
+
+  fn request_statistics(&self) -> io::Result<bool> {
+    let mut state = self.state.lock().unwrap();
+    if state.requested || state.statistics_pending {
+      return Ok(false);
+    }
+    let Some(fd) = state.command_fd else {
+      return Ok(false);
+    };
+    match ffi::write_statistics(fd) {
+      Ok(()) => {
+        state.statistics_pending = true;
+        Ok(true)
+      }
+      Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(false),
+      Err(error) => Err(error),
+    }
+  }
+
+  fn statistics_received(&self) {
+    self.state.lock().unwrap().statistics_pending = false;
   }
 
   fn cancel(&self) -> io::Result<()> {
@@ -132,9 +158,45 @@ pub struct Vpn {
 
   callback: OnConnectedCallback,
   hip_report_callback: OnHipReportCallback,
+  tunnel_callback: OnTunnelCallback,
+  observed_transport: Mutex<Option<crate::tunnel::Transport>>,
 }
 
 impl Vpn {
+  /// Install before `connect`. The observer runs synchronously on the native
+  /// connection thread and must return promptly. Clear it after joining connect.
+  pub fn set_tunnel_observer(&self, callback: impl Fn(crate::tunnel::Event) + Send + Sync + 'static) {
+    *self.tunnel_callback.write().unwrap() = Some(Arc::new(callback));
+  }
+
+  pub fn clear_tunnel_observer(&self) {
+    *self.tunnel_callback.write().unwrap() = None;
+  }
+
+  /// Signal a nonblocking statistics request. False means no command was issued
+  /// because collection was coalesced, unavailable, cancelled, or the pipe full.
+  pub fn request_statistics(&self) -> io::Result<bool> {
+    self.cancellation.request_statistics()
+  }
+
+  pub(crate) fn statistics_received(&self) {
+    self.cancellation.statistics_received();
+  }
+
+  pub(crate) fn on_tunnel_event(&self, event: crate::tunnel::Event) {
+    if let crate::tunnel::Event::Transport(transport) = &event {
+      let mut previous = self.observed_transport.lock().unwrap();
+      if previous.as_ref() == Some(transport) {
+        return;
+      }
+      *previous = Some(*transport);
+    }
+    let callback = self.tunnel_callback.read().unwrap().clone();
+    if let Some(callback) = callback {
+      callback(event);
+    }
+  }
+
   pub fn builder(server: &str, cookie: &str) -> VpnBuilder {
     VpnBuilder::new(server, cookie)
   }
@@ -519,6 +581,8 @@ impl VpnBuilder {
 
       callback: Default::default(),
       hip_report_callback: Default::default(),
+      tunnel_callback: Default::default(),
+      observed_transport: Default::default(),
     })
   }
 
@@ -643,6 +707,8 @@ mod tests {
       no_xmlpost: false,
       callback: Default::default(),
       hip_report_callback: Default::default(),
+      tunnel_callback: Default::default(),
+      observed_transport: Default::default(),
     };
 
     let options = vpn.build_connect_options();
@@ -690,23 +756,38 @@ mod tests {
       ffi::{c_int, c_void},
       fs::File,
       os::fd::AsFd,
+      os::unix::process::CommandExt,
       process::{Command, Stdio},
     };
 
     const CHILD: &str = "OPENCONNECT_TEST_PIPE_FAILURE";
     if std::env::var_os(CHILD).is_none() {
       // Limit descriptors only in a subprocess, leaving the test runner untouched.
-      let output = Command::new("sh")
+      let mut child = Command::new(std::env::current_exe().unwrap());
+      child
         .args([
-          "-c",
-          "ulimit -n 64 && exec \"$1\" --exact vpn::tests::command_pipe_failure_preserves_stdin --nocapture",
-          "sh",
+          "--exact",
+          "vpn::tests::command_pipe_failure_preserves_stdin",
+          "--nocapture",
         ])
-        .arg(std::env::current_exe().unwrap())
         .env(CHILD, "1")
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
+        .stdin(Stdio::null());
+      // Launch directly: system shells can strip the dynamic-library search
+      // environment required by the replaceable macOS OpenConnect library.
+      unsafe {
+        child.pre_exec(|| {
+          let limit = libc::rlimit {
+            rlim_cur: 64,
+            rlim_max: 64,
+          };
+          if libc::setrlimit(libc::RLIMIT_NOFILE, &limit) == 0 {
+            Ok(())
+          } else {
+            Err(io::Error::last_os_error())
+          }
+        });
+      }
+      let output = child.output().unwrap();
       assert!(
         output.status.success(),
         "{}\n{}",
@@ -840,5 +921,55 @@ mod tests {
     cancellation.detach();
     cancellation.cancel().unwrap();
     assert_eq!(reader.read(&mut [0]).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+  }
+
+  #[test]
+  fn statistics_are_coalesced_and_fenced_by_cancellation_and_detach() {
+    use std::{
+      io::Read,
+      os::{fd::AsRawFd, unix::net::UnixStream},
+    };
+    let cancellation = Cancellation::default();
+    let (mut reader, writer) = UnixStream::pair().unwrap();
+    reader.set_nonblocking(true).unwrap();
+    assert!(!cancellation.request_statistics().unwrap());
+    assert!(!cancellation.attach(writer.as_raw_fd()));
+    assert!(cancellation.request_statistics().unwrap());
+    assert!(!cancellation.request_statistics().unwrap());
+    let mut command = [0];
+    reader.read_exact(&mut command).unwrap();
+    assert_eq!(command, [b's']);
+    cancellation.statistics_received();
+    assert!(cancellation.request_statistics().unwrap());
+    reader.read_exact(&mut command).unwrap();
+    cancellation.cancel().unwrap();
+    assert!(!cancellation.request_statistics().unwrap());
+    reader.read_exact(&mut command).unwrap();
+    assert_eq!(command, [b'x']);
+    cancellation.detach();
+    assert!(!cancellation.state.lock().unwrap().statistics_pending);
+    assert!(!cancellation.request_statistics().unwrap());
+    assert_eq!(reader.read(&mut command).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+  }
+
+  #[test]
+  fn full_command_pipe_does_not_latch_a_statistics_request() {
+    use std::{
+      io::{Read, Write},
+      os::{fd::AsRawFd, unix::net::UnixStream},
+    };
+    let cancellation = Cancellation::default();
+    let (mut reader, mut writer) = UnixStream::pair().unwrap();
+    reader.set_nonblocking(true).unwrap();
+    writer.set_nonblocking(true).unwrap();
+    while writer.write(&[0; 1024]).is_ok() {}
+    while writer.write(&[0]).is_ok() {}
+    assert!(!cancellation.attach(writer.as_raw_fd()));
+    assert!(!cancellation.request_statistics().unwrap());
+    assert!(!cancellation.state.lock().unwrap().statistics_pending);
+    let mut bytes = [0; 4096];
+    while reader.read(&mut bytes).is_ok() {}
+    assert!(cancellation.request_statistics().unwrap());
+    cancellation.detach();
   }
 }

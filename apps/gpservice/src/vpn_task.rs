@@ -32,9 +32,20 @@ mod runtime;
 pub(crate) struct LifecycleHandle {
   events: mpsc::Sender<LifecycleEvent>,
   admissions: Arc<Mutex<Admissions>>,
+  tunnel: watch::Sender<TunnelBinding>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct TunnelBinding {
+  pub attempt: u64,
+  pub monitor: Option<Arc<gptunnel::TunnelMonitor>>,
+  pub non_tunnel: bool,
 }
 
 impl LifecycleHandle {
+  pub fn subscribe_tunnel(&self) -> watch::Receiver<TunnelBinding> {
+    self.tunnel.subscribe()
+  }
   pub fn reserve_connect(&self) -> Result<ConnectReservation, ServiceResult> {
     let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
     if admissions.closed {
@@ -370,6 +381,10 @@ enum AdmissionPhase {
 }
 
 enum LifecycleEvent {
+  TunnelMonitor {
+    attempt: u64,
+    monitor: Arc<gptunnel::TunnelMonitor>,
+  },
   Start {
     attempt: u64,
     connection: PreparedConnection,
@@ -429,6 +444,7 @@ impl VpnTask {
     let lifecycle = LifecycleHandle {
       events: events_tx,
       admissions: Arc::new(Mutex::new(Admissions::default())),
+      tunnel: watch::channel(TunnelBinding::default()).0,
     };
     let task = Self {
       events,
@@ -493,6 +509,16 @@ impl VpnTask {
 
   async fn handle_event(&mut self, event: LifecycleEvent) {
     match event {
+      LifecycleEvent::TunnelMonitor { attempt, monitor } => {
+        if self.active.as_ref().is_some_and(|active| active.attempt == attempt) {
+          let non_tunnel = false;
+          self.lifecycle.tunnel.send_replace(TunnelBinding {
+            attempt,
+            monitor: Some(monitor),
+            non_tunnel,
+          });
+        }
+      }
       LifecycleEvent::Start {
         attempt,
         connection,
@@ -526,6 +552,16 @@ impl VpnTask {
     session_id: Option<Uuid>,
   ) {
     let activated = self.lifecycle.activate_attempt(attempt);
+    self.lifecycle.tunnel.send_replace(TunnelBinding {
+      attempt,
+      monitor: None,
+      non_tunnel: connection
+        .request
+        .plan()
+        .members()
+        .iter()
+        .all(|member| member.authentication.mode() == gpapi::session::SessionMode::NonTunnel),
+    });
     let info = connection.request.info().clone();
     let allow_extend_session = connection.request.args().allow_extend_session();
     let cancellation = self.lifecycle.attempt_cancellation(attempt);
@@ -660,6 +696,12 @@ impl VpnTask {
     }
     if let Some(session_id) = active.session_id {
       self.registry.clear_successful_hip_report(session_id);
+    }
+    if self.lifecycle.tunnel.borrow().monitor.is_none() {
+      self.lifecycle.tunnel.send_replace(TunnelBinding {
+        attempt,
+        ..Default::default()
+      });
     }
     if let Some(reason) = active.failure {
       self.send_state(VpnState::Failed(reason));

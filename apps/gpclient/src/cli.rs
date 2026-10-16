@@ -174,6 +174,11 @@ impl Cli {
   }
 
   async fn run(&self) -> anyhow::Result<()> {
+    if let CliCommand::Connect(args) = &self.command {
+      if args.dashboard {
+        crate::dashboard::validate(self.log_format)?;
+      }
+    }
     if self.background_worker_fd.is_some() && !matches!(&self.command, CliCommand::Connect(args) if args.background) {
       bail!("Background worker requires connect --background");
     }
@@ -263,7 +268,13 @@ fn build_logger(cli: &Cli) -> env_logger::Builder {
 pub(crate) async fn run() {
   let cli = Cli::parse();
 
-  build_logger(&cli).init();
+  if matches!(&cli.command, CliCommand::Connect(args) if args.dashboard) {
+    let logger = build_logger(&cli).build();
+    log::set_max_level(logger.filter());
+    log::set_boxed_logger(Box::new(crate::dashboard::NoticeLogger::new(logger))).expect("failed to initialize logger");
+  } else {
+    build_logger(&cli).init();
+  }
 
   info!("gpclient started: {}", VERSION);
 
@@ -322,6 +333,31 @@ mod tests {
         "--passwd-on-stdin"
       ])
       .is_ok()
+    );
+  }
+
+  #[test]
+  fn dashboard_is_opt_in_and_conflicts_with_noninteractive_connection_modes() {
+    for option in ["--background", "--cookie-only"] {
+      assert!(Cli::try_parse_from(["gpclient", "connect", "portal.example.com", "--dashboard", option]).is_err());
+    }
+    assert!(Cli::try_parse_from(["gpclient", "connect", "portal.example.com", "--stats"]).is_err());
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "connect",
+      "portal.example.com",
+      "--dashboard",
+      "--cookie-on-stdin",
+    ])
+    .unwrap();
+    assert!(matches!(cli.command, CliCommand::Connect(args) if args.dashboard));
+    let cli = Cli::try_parse_from(["gpclient", "connect", "portal.example.com"]).unwrap();
+    assert!(matches!(cli.command, CliCommand::Connect(args) if !args.dashboard));
+    assert!(
+      crate::dashboard::validate(LogFormat::Json)
+        .unwrap_err()
+        .to_string()
+        .contains("--log-format json")
     );
   }
 

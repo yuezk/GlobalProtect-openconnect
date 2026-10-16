@@ -11,13 +11,17 @@ common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap"] }
 gphip = { path = "../../crates/gphip" }
 openconnect = { path = "../../crates/openconnect" }
+gptunnel = { path = "../../crates/gptunnel" }
 
 anyhow.workspace = true
 clap.workspace = true
 env_logger.workspace = true
 inquire = "0.9"
 log.workspace = true
-nix = { version = "0.31", features = ["fs", "signal", "process"] }
+nix = { version = "0.31", features = ["fs", "signal", "process", "poll", "term"] }
+ratatui = { version = "=0.30.2", default-features = false, features = ["crossterm"] }
+crossterm = { version = "0.29", features = ["use-dev-tty"] }
+strip-ansi-escapes = "0.2"
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-util.workspace = true
 sysinfo.workspace = true

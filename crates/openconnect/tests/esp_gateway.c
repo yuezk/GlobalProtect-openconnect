@@ -1,13 +1,42 @@
 /* Exercise the production parser and probe dispatch, inspecting packets at the
  * encryption boundary. No VPN server, privileged networking, or real keys. */
 #define construct_esp_packet inspect_esp_packet
+#define openconnect_open_https fixture_open_https
 #include "gpst.c"
 #undef construct_esp_packet
+#undef openconnect_open_https
 #include "gpst_nlb.c"
 #include <assert.h>
 
 static const char *expected_destination;
 static int packets_inspected;
+static enum openconnect_tunnel_event observed_events[4];
+static int observed_count;
+static int ssl_response_valid;
+
+int fixture_open_https(struct openconnect_info *vpninfo)
+{
+	return 0;
+}
+
+static int fixture_ssl_write(struct openconnect_info *vpninfo, char *buf, size_t len)
+{
+	return len;
+}
+
+static int fixture_ssl_read(struct openconnect_info *vpninfo, char *buf, size_t len)
+{
+	const char *response = ssl_response_valid ? "START_TUNNEL" : "invalid";
+	assert(len >= strlen(response));
+	memcpy(buf, response, strlen(response));
+	return strlen(response);
+}
+
+static void observe_transport(void *data, enum openconnect_tunnel_event event)
+{
+	assert(observed_count < 4);
+	observed_events[observed_count++] = event;
+}
 
 static void progress(void *data, int level, const char *format, ...)
 {
@@ -138,6 +167,34 @@ int main(int argc, char **argv)
 		expected_destination = gateway;
 		assert(!gpst_esp_send_probes(vpninfo));
 		assert(packets_inspected == 1);
+		/* Configuration/probes alone do not advertise ESP. Exercise the actual
+		 * GP activation and ESP shutdown paths rather than synthesizing events. */
+		int timeout = 1000;
+		openconnect_set_tunnel_handler(vpninfo, observe_transport);
+		assert(observed_count == 0);
+		vpninfo->dtls_state = DTLS_CONNECTED;
+		memset(&vpninfo->ssl_times, 0, sizeof(vpninfo->ssl_times));
+		vpninfo->trojan_interval = 0;
+		assert(!gpst_mainloop(vpninfo, &timeout, 0));
+		assert(vpninfo->dtls_state == DTLS_ESTABLISHED);
+		assert(observed_count == 1 && observed_events[0] == OC_TUNNEL_IPSEC_ESP);
+		esp_close(vpninfo);
+		assert(observed_count == 2 && observed_events[1] == OC_TUNNEL_UNAVAILABLE);
+		/* Repeated shutdown of an inactive transport cannot claim another loss. */
+		esp_close(vpninfo);
+		assert(observed_count == 2);
+		/* Replace only HTTPS I/O: run the actual SSL response acceptance path. */
+		vpninfo->dtls_state = DTLS_DISABLED;
+		vpninfo->ssl_read = fixture_ssl_read;
+		vpninfo->ssl_write = fixture_ssl_write;
+		openconnect_set_cookie(vpninfo, "user=test&authcookie=fixture");
+		free(vpninfo->urlpath);
+		vpninfo->urlpath = strdup("ssl-tunnel-connect.sslvpn");
+		assert(gpst_connect(vpninfo) == -EINVAL);
+		assert(observed_count == 2);
+		ssl_response_valid = 1;
+		assert(!gpst_connect(vpninfo));
+		assert(observed_count == 3 && observed_events[2] == OC_TUNNEL_SSL_TLS);
 	}
 	close(sockets[1]);
 	openconnect_vpninfo_free(vpninfo);

@@ -71,6 +71,15 @@ int vpn_collect_hip_report(const vpn_hip_script *, const struct openconnect_gp_h
 
 extern int vpn_attach_command_pipe(void *user_data, int fd);
 extern void vpn_detach_command_pipe(void *user_data);
+enum vpn_tunnel_event {
+	VPN_TUNNEL_ESTABLISHED = 5,
+	VPN_TUNNEL_RECONNECTED,
+	VPN_TUNNEL_ENDED,
+};
+extern void vpn_tunnel_event(void *user_data, int event);
+extern void vpn_tunnel_configuration(void *user_data, const char *interface,
+				     const struct oc_ip_info *info);
+extern void vpn_tunnel_statistics(void *user_data, const struct oc_stats *stats);
 
 extern void vpn_log(int level, const char *msg);
 

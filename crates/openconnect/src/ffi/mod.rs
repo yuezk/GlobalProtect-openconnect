@@ -1,5 +1,6 @@
 mod hip;
 mod network_configuration;
+mod tunnel;
 use crate::Vpn;
 use hip::HipGenerateFn;
 pub(crate) use hip::{
@@ -64,6 +65,7 @@ pub(crate) struct VpnSessionInfoRaw {
 #[link(name = "vpn")]
 unsafe extern "C" {
   fn vpn_write_cancel(fd: c_int) -> c_int;
+  fn vpn_write_statistics(fd: c_int) -> c_int;
   #[link_name = "vpn_connect"]
   fn vpn_connect(
     options: *const ConnectOptions,
@@ -74,6 +76,15 @@ unsafe extern "C" {
 
 pub(crate) fn write_cancel(fd: i32) -> std::io::Result<()> {
   let error = unsafe { vpn_write_cancel(fd) };
+  if error == 0 {
+    Ok(())
+  } else {
+    Err(std::io::Error::from_raw_os_error(error))
+  }
+}
+
+pub(crate) fn write_statistics(fd: i32) -> std::io::Result<()> {
+  let error = unsafe { vpn_write_statistics(fd) };
   if error == 0 {
     Ok(())
   } else {

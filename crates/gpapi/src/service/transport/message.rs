@@ -17,6 +17,9 @@ pub enum ClientMessage {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ServerMessage {
+  TunnelStatistics {
+    snapshot: crate::session::tunnel::TunnelStatisticsSnapshot,
+  },
   Attached {
     connection_id: Uuid,
     current_revision: u64,
@@ -39,6 +42,7 @@ pub enum ServerMessage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ServiceResult {
+  TunnelStatisticsSnapshot(crate::session::tunnel::TunnelStatisticsSnapshot),
   Accepted,
   StoredHipReport {
     report_id: String,
@@ -191,5 +195,74 @@ mod tests {
 
     let encoded = encode(&message).unwrap();
     assert!(encoded.len() <= MAX_PLAINTEXT);
+  }
+
+  #[test]
+  fn full_configuration_and_large_metadata_fit_complete_snapshot_envelopes_at_the_budget() {
+    use crate::{
+      os_profile::HostIdentity,
+      service::{
+        vpn_env::HostInfo,
+        vpn_state::{ConnectedInfo, VpnState},
+      },
+      session::tunnel::{MAX_CONFIGURATION_BYTES, TunnelConfiguration, TunnelPhase, TunnelState, TunnelTransport},
+    };
+    let mut configuration = TunnelConfiguration::default();
+    configuration.included_routes.items = vec!["r".repeat(1024); 15];
+    configuration.included_routes.items.push(String::new());
+    configuration.included_routes.total_count = 16;
+    let padding = MAX_CONFIGURATION_BYTES - serde_json::to_vec(&configuration).unwrap().len();
+    assert!(padding <= 1024);
+    *configuration.included_routes.items.last_mut().unwrap() = "r".repeat(padding);
+    assert_eq!(
+      serde_json::to_vec(&configuration).unwrap().len(),
+      MAX_CONFIGURATION_BYTES
+    );
+    let gateway = Gateway::new("Gateway".repeat(20), "vpn.example.com".into());
+    let info = ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway; 32]);
+    let snapshot = VpnEnv {
+      tunnel_state: Some(TunnelState {
+        tunnel_id: Uuid::new_v4(),
+        sequence: u64::MAX,
+        phase: TunnelPhase::Connected,
+        configuration_revision: u64::MAX,
+        configuration: Some(configuration),
+        transport: TunnelTransport::IpsecEsp,
+        elapsed_ms: u64::MAX,
+      }),
+      vpn_state: VpnState::Connected(Box::new(ConnectedInfo::new(info, None))),
+      vpnc_script: Some("s".repeat(1024)),
+      auth_executable: "a".repeat(1024),
+      host_info: HostInfo {
+        host_identity: HostIdentity::collect(),
+      },
+    };
+    for mut message in [
+      ServerMessage::Attached {
+        connection_id: Uuid::new_v4(),
+        current_revision: u64::MAX,
+        snapshot: snapshot.clone(),
+      },
+      ServerMessage::Snapshot {
+        current_revision: u64::MAX,
+        snapshot,
+      },
+    ] {
+      let remaining = MAX_PLAINTEXT - encode(&message).unwrap().len();
+      let snapshot = match &mut message {
+        ServerMessage::Attached { snapshot, .. } | ServerMessage::Snapshot { snapshot, .. } => snapshot,
+        _ => unreachable!(),
+      };
+      // Existing host/connection metadata has no declared maximum. Fill the
+      // remaining envelope budget, then assert its actual boundary explicitly.
+      snapshot.auth_executable.push_str(&"a".repeat(remaining));
+      assert_eq!(encode(&message).unwrap().len(), MAX_PLAINTEXT);
+      let snapshot = match &mut message {
+        ServerMessage::Attached { snapshot, .. } | ServerMessage::Snapshot { snapshot, .. } => snapshot,
+        _ => unreachable!(),
+      };
+      snapshot.auth_executable.push('a');
+      assert!(matches!(encode(&message), Err(TransportError::MessageTooLarge)));
+    }
   }
 }

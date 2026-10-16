@@ -22,6 +22,13 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
+    conflicts_with_all = ["background", "cookie_only"],
+    help = "Show an interactive connection dashboard after sign-in (requires a foreground terminal)"
+  )]
+  pub(crate) dashboard: bool,
+
+  #[arg(
+    long,
     requires = "background",
     help = "Background log file (default: /var/log/gpclient.log)"
   )]

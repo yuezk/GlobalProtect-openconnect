@@ -8,6 +8,7 @@ license.workspace = true
 common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap", "logger"] }
 gphip = { path = "../../crates/gphip" }
+gptunnel = { path = "../../crates/gptunnel" }
 base64.workspace = true
 sha256.workspace = true
 openconnect = { path = "../../crates/openconnect" }

@@ -1,4 +1,11 @@
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{
+  collections::HashSet,
+  sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+  },
+  time::Duration,
+};
 
 use axum::extract::ws::{CloseFrame, Message, Utf8Bytes, WebSocket};
 use futures::StreamExt;
@@ -34,6 +41,9 @@ pub(crate) struct ConnectionControl {
   connection_id: Uuid,
   tx: mpsc::Sender<ConnectionCommand>,
   close_tx: watch::Sender<Option<CloseReason>>,
+  statistics: watch::Sender<Option<gpapi::session::tunnel::TunnelStatisticsSnapshot>>,
+  statistics_enabled: Arc<AtomicBool>,
+  committed: Arc<AtomicBool>,
 }
 
 impl ConnectionControl {
@@ -44,6 +54,9 @@ impl ConnectionControl {
         connection_id,
         tx,
         close_tx,
+        statistics: watch::channel(None).0,
+        statistics_enabled: Arc::new(AtomicBool::new(false)),
+        committed: Arc::new(AtomicBool::new(false)),
       },
       close_rx,
     )
@@ -62,7 +75,41 @@ impl ConnectionControl {
   }
 
   pub fn close(&self, reason: CloseReason) {
+    self.set_statistics_enabled(false);
     self.close_tx.send_replace(Some(reason));
+  }
+
+  pub fn mark_committed(&self) {
+    self.committed.store(true, Ordering::Release);
+  }
+
+  pub fn is_committed(&self) -> bool {
+    self.committed.load(Ordering::Acquire)
+  }
+
+  pub fn statistics_enabled(&self) -> bool {
+    self.statistics_enabled.load(Ordering::Acquire)
+  }
+
+  pub fn set_statistics_enabled(&self, enabled: bool) {
+    self.statistics_enabled.store(enabled, Ordering::Release);
+    if !enabled {
+      self.statistics.send_replace(None);
+    }
+  }
+
+  pub fn clear_statistics(&self) {
+    self.statistics.send_replace(None);
+  }
+
+  pub fn publish_statistics(&self, snapshot: gpapi::session::tunnel::TunnelStatisticsSnapshot) {
+    if self.statistics_enabled() && !self.is_closed() {
+      self.statistics.send_replace(Some(snapshot));
+    }
+  }
+
+  pub fn subscribe_statistics(&self) -> watch::Receiver<Option<gpapi::session::tunnel::TunnelStatisticsSnapshot>> {
+    self.statistics.subscribe()
   }
 
   pub async fn send_reply(&self, id: Uuid, result: ServiceResult) {
@@ -96,12 +143,14 @@ impl WsConnection {
 
     info!("Authenticated GUI connection {}", control.connection_id());
     let mut pending_requests = HashSet::new();
+    let mut statistics_rx = control.subscribe_statistics();
     let mut heartbeat = tokio::time::interval(Duration::from_secs(1));
     let mut last_outbound = Instant::now();
     let mut pong_deadline = None;
 
     loop {
       tokio::select! {
+        biased;
         command = command_rx.recv() => {
           let Some(command) = command else { break };
           match command {
@@ -179,6 +228,16 @@ impl WsConnection {
             if send_frame(&mut socket, Message::Ping(Vec::new().into())).await.is_err() { break; }
             last_outbound = now;
             pong_deadline = Some(now + PONG_TIMEOUT);
+          }
+        }
+        changed = statistics_rx.changed() => {
+          if changed.is_err() { break; }
+          let snapshot = statistics_rx.borrow_and_update().clone();
+          if control.statistics_enabled() {
+            if let Some(snapshot) = snapshot {
+              if send_encrypted(&mut socket, &mut noise, &ServerMessage::TunnelStatistics { snapshot }).await.is_err() { break; }
+              last_outbound = Instant::now();
+            }
           }
         }
       }
@@ -339,6 +398,14 @@ async fn handle_client_message(
       if !ctx.registry().is_current(session_id, generation) {
         pending_requests.remove(&id);
         return Err(());
+      }
+
+      if let WsRequest::SetTunnelStatisticsEnabled { enabled } = request {
+        let result = ctx
+          .set_statistics_enabled(control, session_id, generation, enabled)
+          .await;
+        control.send(ConnectionCommand::Reply { id, result }).map_err(|_| ())?;
+        return Ok(());
       }
 
       if let WsRequest::StoreEditedHipReportChunk(report) = request {
@@ -668,6 +735,23 @@ mod tests {
         result: ServiceResult::Accepted,
       } if id == request_id
     ));
+
+    let statistics_id = Uuid::new_v4();
+    let request = ClientMessage::Request {
+      id: statistics_id,
+      request: WsRequest::SetTunnelStatisticsEnabled { enabled: true },
+    };
+    socket
+      .send(ClientFrame::Binary(noise.encrypt(&request).unwrap().into()))
+      .await
+      .unwrap();
+    let reply = noise
+      .decrypt::<ServerMessage>(&receive_client_binary(&mut socket).await)
+      .unwrap();
+    assert!(matches!(reply, ServerMessage::Reply {
+      id,
+      result: ServiceResult::TunnelStatisticsSnapshot(gpapi::session::tunnel::TunnelStatisticsSnapshot::Unavailable { reason: gpapi::session::tunnel::TunnelUnavailableReason::NoTunnel }),
+    } if id == statistics_id));
 
     let update_id = Uuid::new_v4();
     let update_file = tempfile::NamedTempFile::new().unwrap();

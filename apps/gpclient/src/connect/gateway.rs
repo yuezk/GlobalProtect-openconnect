@@ -480,6 +480,16 @@ impl ConnectHandler<'_> {
       .transpose()
       .map_err(GatewayConnectError::before_establishment)?;
 
+    let mut dashboard = if self.args.dashboard {
+      Some(
+        crate::dashboard::Dashboard::prepare(gateway.to_owned(), self.cancellation.clone())
+          .map_err(GatewayConnectError::before_establishment)?,
+      )
+    } else {
+      None
+    };
+    let monitor = gptunnel::TunnelMonitor::attach(vpn.clone());
+
     let disconnect_task = tokio::spawn(async move {
       cancellation.cancelled().await;
       info!("Received the interrupt signal, disconnecting...");
@@ -512,7 +522,7 @@ impl ConnectHandler<'_> {
         session_task_on_connect.lock().unwrap().replace(task);
       })
     });
-    let mut background_error = None;
+    let mut output_error = None;
     let connect_result = tokio::select! {
       result = &mut worker => result,
       established = established_rx => {
@@ -526,6 +536,12 @@ impl ConnectHandler<'_> {
               self.logout_gateway(&server).await;
             }
           }, || {
+            if let Some(dashboard) = &mut dashboard {
+              if let Err(error) = dashboard.start_tunnel(monitor.clone()) {
+                self.cancellation.cancel();
+                output_error = Some(error);
+              }
+            }
             if let (Some(background), Some(stdio)) = (&self.background, &mut background_stdio) {
               let detach = if self.pid_written.load(Ordering::SeqCst) {
                 background.detach(stdio)
@@ -534,7 +550,7 @@ impl ConnectHandler<'_> {
               };
               if let Err(error) = detach {
                 self.cancellation.cancel();
-                background_error = Some(error);
+                output_error = Some(error);
               }
             }
           }).await
@@ -543,6 +559,12 @@ impl ConnectHandler<'_> {
         }
       }
     };
+    monitor.stop().await;
+    if let Some(dashboard) = &mut dashboard {
+      if let Err(error) = dashboard.finish() {
+        output_error = Some(error);
+      }
+    }
     let tunnel_established = tunnel_established.load(Ordering::SeqCst);
     disconnect_task.abort();
     let _ = disconnect_task.await;
@@ -553,7 +575,7 @@ impl ConnectHandler<'_> {
       let _ = task.await;
     }
 
-    if let Some(error) = background_error {
+    if let Some(error) = output_error {
       return Err(GatewayConnectError::after_establishment(error));
     }
 

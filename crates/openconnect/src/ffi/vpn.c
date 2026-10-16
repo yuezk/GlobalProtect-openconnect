@@ -15,6 +15,34 @@ struct vpn_context {
 	vpn_connected_callback on_connected;
 };
 
+static void observe_configuration(struct vpn_context *context)
+{
+	const struct oc_ip_info *info = NULL;
+	if (openconnect_get_ip_info(context->vpninfo, &info, NULL, NULL))
+		info = NULL;
+	vpn_tunnel_configuration(context->options->user_data,
+		openconnect_get_ifname(context->vpninfo), info);
+}
+
+static void observe_reconnected(void *private_data)
+{
+	struct vpn_context *context = private_data;
+	observe_configuration(context);
+	vpn_tunnel_event(context->options->user_data, VPN_TUNNEL_RECONNECTED);
+}
+
+static void observe_tunnel(void *private_data, enum openconnect_tunnel_event event)
+{
+	struct vpn_context *context = private_data;
+	vpn_tunnel_event(context->options->user_data, event);
+}
+
+static void observe_statistics(void *private_data, const struct oc_stats *stats)
+{
+	struct vpn_context *context = private_data;
+	vpn_tunnel_statistics(context->options->user_data, stats);
+}
+
 /* Validate the peer certificate */
 static int validate_peer_cert(__attribute__((unused)) void *_vpninfo,
 			      const char *reason)
@@ -54,6 +82,8 @@ static void setup_tun_handler(void *private_data)
 	}
 
 	if (!ret) {
+		observe_configuration(context);
+		vpn_tunnel_event(options->user_data, VPN_TUNNEL_ESTABLISHED);
 		vpn_session_info session_info = {
 			.auth_expiration = (long)openconnect_get_auth_expiration(_vpninfo),
 			.lifetime_secs = openconnect_get_gp_session_lifetime(_vpninfo),
@@ -101,10 +131,14 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 
 	if (!vpninfo) {
 		ERROR("openconnect_vpninfo_new failed");
+		vpn_tunnel_event(options->user_data, VPN_TUNNEL_ENDED);
 		return 1;
 	}
 
 	context.vpninfo = vpninfo;
+	openconnect_set_tunnel_handler(vpninfo, observe_tunnel);
+	openconnect_set_reconnected_handler(vpninfo, observe_reconnected);
+	openconnect_set_stats_handler(vpninfo, observe_statistics);
 	openconnect_set_gp_hip_report_callback(vpninfo, options->user_data,
 					options->on_hip_report_submitted);
 	context.command_fd = openconnect_setup_cmd_pipe(vpninfo);
@@ -191,6 +225,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 		openconnect_set_dpd(vpninfo, options->dpd_interval);
 	}
 	// Essential step
+	vpn_tunnel_event(options->user_data, OC_TUNNEL_NEGOTIATING);
 	if (openconnect_make_cstp_connection(vpninfo) != 0) {
 		ERROR("openconnect_make_cstp_connection failed");
 		goto cleanup;
@@ -218,7 +253,9 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	}
 cleanup:
 	vpn_detach_command_pipe(options->user_data);
+	openconnect_set_tunnel_handler(vpninfo, NULL);
 	openconnect_vpninfo_free(vpninfo);
+	vpn_tunnel_event(options->user_data, VPN_TUNNEL_ENDED);
 	return result;
 }
 
@@ -226,6 +263,16 @@ cleanup:
 int vpn_write_cancel(int fd)
 {
 	char command = OC_CMD_CANCEL;
+	ssize_t written;
+	do {
+		written = write(fd, &command, 1);
+	} while (written < 0 && errno == EINTR);
+	return written == 1 ? 0 : (written < 0 ? errno : EIO);
+}
+
+int vpn_write_statistics(int fd)
+{
+	char command = OC_CMD_STATS;
 	ssize_t written;
 	do {
 		written = write(fd, &command, 1);

@@ -1,6 +1,7 @@
 mod ffi;
 mod hip;
 mod network_configuration;
+pub mod tunnel;
 mod vpn;
 mod vpn_utils;
 
