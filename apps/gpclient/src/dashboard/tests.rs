@@ -191,7 +191,7 @@ fn connected_tunnel_samples_statistics_and_accepts_ctrl_c() {
   let mut fixture = Fixture::start_mode("active-tunnel", false);
   fixture.wait_text("IPsec");
   fixture.wait_text("(ESP)");
-  fixture.wait_text("Bytes received");
+  fixture.wait_text("Received");
   fixture.wait_text("4.0");
   fixture.master.write_all(b"\x03").unwrap();
   fixture.finish();
@@ -200,7 +200,7 @@ fn connected_tunnel_samples_statistics_and_accepts_ctrl_c() {
 #[test]
 fn authenticated_terminal_input_remains_usable_after_dashboard_entry() {
   let mut fixture = Fixture::start_mode("prompted-tunnel", false);
-  fixture.wait_text("Bytes received");
+  fixture.wait_text("Received");
   fixture.master.write_all(b"\t").unwrap();
   fixture.wait_text("Live logs");
   fixture.master.write_all(b"\x03").unwrap();

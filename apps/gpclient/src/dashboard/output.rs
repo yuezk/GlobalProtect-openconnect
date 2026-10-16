@@ -90,9 +90,8 @@ impl LineDecoder {
   }
 
   fn text(&self) -> String {
-    let label = if self.stream == 0 { "stdout" } else { "stderr" };
     let suffix = if self.truncated { " [line truncated]" } else { "" };
-    format!("[{label}] {}{suffix}", plain_text(&self.bytes))
+    format!("{}{suffix}", plain_text(&self.bytes))
   }
 
   fn ingest(&mut self, bytes: &[u8], history: &mut History) {
@@ -309,14 +308,17 @@ mod tests {
 
   #[test]
   fn split_utf8_and_unterminated_lines_are_preserved_without_escape_commands() {
-    let mut history = History::default();
-    let mut decoder = LineDecoder::new(1);
-    let bytes = "connected 日本語\x1b[2J\npartial".as_bytes();
-    for byte in bytes {
-      decoder.ingest(&[*byte], &mut history);
+    for stream in [0, 1] {
+      let mut history = History::default();
+      let mut decoder = LineDecoder::new(stream);
+      let bytes = "connected 日本語\x1b[2J\npartial".as_bytes();
+      for byte in bytes {
+        decoder.ingest(&[*byte], &mut history);
+      }
+      assert_eq!(history.tail(10), ["connected 日本語", "partial"]);
+      decoder.finish(&mut history);
+      assert_eq!(history.tail(10), ["connected 日本語", "partial"]);
     }
-    decoder.finish(&mut history);
-    assert_eq!(history.tail(10), ["[stderr] connected 日本語", "[stderr] partial"]);
   }
 
   #[test]

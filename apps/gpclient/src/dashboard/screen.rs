@@ -15,7 +15,7 @@ use crossterm::{
   execute,
   terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use gpapi::session::tunnel::{TunnelList, TunnelPhase, TunnelState, TunnelStatisticsState};
+use gpapi::session::tunnel::TunnelPhase;
 use log::Level;
 use nix::unistd::{getpgrp, tcgetpgrp};
 use ratatui::{
@@ -23,13 +23,14 @@ use ratatui::{
   backend::CrosstermBackend,
   layout::{Constraint, Layout},
   style::{Color, Modifier, Style},
-  text::{Line, Span},
+  text::Line,
   widgets::{Block, Borders, Paragraph, Wrap},
 };
 use tokio_util::sync::CancellationToken;
 
 use super::{
   Command, Content,
+  layout::{DetailScroll, phase_label, render_tunnel, row},
   notice::{Notice, NoticeSlot},
   output::{History, plain_text},
   restoration::TerminalRestoration,
@@ -142,6 +143,7 @@ pub(super) fn run(context: Context, ready: mpsc::SyncSender<anyhow::Result<()>>)
     }
   };
   let mut logs = false;
+  let mut scroll = DetailScroll::default();
   let mut next_draw = Instant::now();
   let mut dirty = true;
   while !context.stop.load(Ordering::Acquire) {
@@ -160,7 +162,7 @@ pub(super) fn run(context: Context, ready: mpsc::SyncSender<anyhow::Result<()>>)
       }
     }
     if dirty || Instant::now() >= next_draw {
-      draw(&mut screen.terminal, &context, logs)?;
+      draw(&mut screen.terminal, &context, logs, &mut scroll)?;
       next_draw = Instant::now() + Duration::from_secs(1);
       dirty = false;
     }
@@ -172,6 +174,10 @@ pub(super) fn run(context: Context, ready: mpsc::SyncSender<anyhow::Result<()>>)
         match key.code {
           KeyCode::Tab | KeyCode::BackTab => {
             logs = !logs;
+            dirty = true;
+          }
+          KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown | KeyCode::Home | KeyCode::End if !logs => {
+            scroll.handle_key(key.code);
             dirty = true;
           }
           KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -187,139 +193,12 @@ pub(super) fn run(context: Context, ready: mpsc::SyncSender<anyhow::Result<()>>)
   Ok(())
 }
 
-fn phase_label(phase: TunnelPhase) -> &'static str {
-  match phase {
-    TunnelPhase::Establishing => "Establishing",
-    TunnelPhase::Connected => "Connected",
-    TunnelPhase::Reconnecting => "Reconnecting",
-    TunnelPhase::Ended => "Disconnected",
-  }
-}
-
-fn uptime(milliseconds: u64) -> String {
-  let seconds = milliseconds / 1000;
-  format!("{:02}:{:02}:{:02}", seconds / 3600, (seconds / 60) % 60, seconds % 60)
-}
-
-fn bytes(value: u64) -> String {
-  const UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
-  let mut amount = value as f64;
-  let mut unit = 0;
-  while amount >= 1024.0 && unit < UNITS.len() - 1 {
-    amount /= 1024.0;
-    unit += 1;
-  }
-  if unit == 0 {
-    format!("{value} B")
-  } else {
-    format!("{amount:.1} {}", UNITS[unit])
-  }
-}
-
-fn list(value: &TunnelList) -> String {
-  let content = if value.items.is_empty() {
-    "none".into()
-  } else {
-    value.items.join(", ")
-  };
-  if value.truncated {
-    format!("{content} [truncated; {} total]", value.total_count)
-  } else {
-    content
-  }
-}
-
-fn row(label: &str, value: impl Into<String>) -> Line<'static> {
-  Line::from(vec![
-    Span::styled(format!("{label:<16}  "), Style::default().fg(Color::DarkGray)),
-    Span::raw(plain_text(value.into().as_bytes())),
-  ])
-}
-
-fn tunnel_sections(
-  state: &TunnelState,
-  statistics: &gpapi::session::tunnel::TunnelStatisticsSnapshot,
-) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
-  let mut lines = vec![
-    row("Status", phase_label(state.phase)),
-    row("Transport", state.transport.label()),
-    row("Uptime", uptime(state.elapsed_ms)),
-    Line::default(),
-  ];
-  let mut settings = Vec::new();
-  if let Some(configuration) = &state.configuration {
-    settings.push(row(
-      "Interface",
-      configuration.interface.clone().unwrap_or_else(|| "none".into()),
-    ));
-    settings.push(row(
-      "Gateway IP",
-      configuration.server_ip.clone().unwrap_or_else(|| "none".into()),
-    ));
-    settings.push(row(
-      "Assigned IPv4",
-      configuration
-        .ipv4
-        .as_ref()
-        .map(|address| address.display())
-        .unwrap_or_else(|| "none".into()),
-    ));
-    settings.push(row(
-      "Assigned IPv6",
-      configuration
-        .ipv6
-        .as_ref()
-        .map(|address| address.display())
-        .unwrap_or_else(|| "none".into()),
-    ));
-    settings.push(Line::default());
-  } else {
-    settings.push(row("Configuration", "unavailable"));
-  }
-  if let Some(view) = statistics.view() {
-    let label = match view.state {
-      TunnelStatisticsState::Disabled => "disabled",
-      TunnelStatisticsState::Waiting => "waiting for sample",
-      TunnelStatisticsState::Fresh => "live",
-      TunnelStatisticsState::Stale => "stale",
-      TunnelStatisticsState::Ended => "ended",
-    };
-    lines.push(row("Statistics", label));
-    if let Some(sample) = &view.sample {
-      lines.push(row("Bytes received", bytes(sample.received_bytes)));
-      lines.push(row("Bytes sent", bytes(sample.sent_bytes)));
-      lines.push(row("Packets received", sample.received_packets.to_string()));
-      lines.push(row("Packets sent", sample.sent_packets.to_string()));
-      if view.state != TunnelStatisticsState::Fresh {
-        if let Some(age) = view.sample_age_ms {
-          lines.push(row("Sample age", format!("{} seconds", age / 1000)));
-        }
-      }
-    }
-  } else {
-    lines.push(row("Statistics", "unavailable"));
-  }
-  if let Some(configuration) = &state.configuration {
-    settings.push(row("DNS", list(&configuration.dns)));
-    settings.push(row("Search domains", list(&configuration.search_domains)));
-    settings.push(row("Split DNS", list(&configuration.split_dns)));
-    settings.push(row("Included routes", list(&configuration.included_routes)));
-    settings.push(row("Excluded routes", list(&configuration.excluded_routes)));
-    settings.push(row(
-      "MTU",
-      configuration
-        .mtu
-        .map(|mtu| mtu.to_string())
-        .unwrap_or_else(|| "none".into()),
-    ));
-    if configuration.truncated {
-      settings.push(row("Configuration", "truncated"));
-    }
-  }
-  (settings, lines)
-}
-
-fn draw(terminal: &mut Terminal<CrosstermBackend<File>>, context: &Context, logs: bool) -> anyhow::Result<()> {
+fn draw(
+  terminal: &mut Terminal<CrosstermBackend<File>>,
+  context: &Context,
+  logs: bool,
+  scroll: &mut DetailScroll,
+) -> anyhow::Result<()> {
   terminal.draw(|frame| {
     let area = frame.area();
     if area.height < 8 || area.width < 24 {
@@ -329,11 +208,13 @@ fn draw(terminal: &mut Terminal<CrosstermBackend<File>>, context: &Context, logs
       );
       return;
     }
+    let compact = area.height < 18;
+    let footer_height = if area.width < 80 { 2 } else { 1 };
     let [header, body, notice, footer] = Layout::vertical([
-      Constraint::Length(3),
+      Constraint::Length(2),
       Constraint::Min(1),
-      Constraint::Length(3),
-      Constraint::Length(1),
+      Constraint::Length(if compact { 1 } else { 3 }),
+      Constraint::Length(footer_height),
     ])
     .areas(area);
     let view = if logs { "Live logs" } else { "Dashboard" };
@@ -344,7 +225,6 @@ fn draw(terminal: &mut Terminal<CrosstermBackend<File>>, context: &Context, logs
       header,
     );
     let mut lines = vec![row("Server", context.server.clone()), Line::default()];
-    let mut side_panel = None;
     if logs {
       let history = context.history.lock().unwrap_or_else(|error| error.into_inner());
       let tail = history.tail(body.height as usize);
@@ -354,15 +234,14 @@ fn draw(terminal: &mut Terminal<CrosstermBackend<File>>, context: &Context, logs
     } else {
       match &context.content {
         Content::Tunnel(monitor) => {
-          let (settings, statistics) = tunnel_sections(&monitor.state(), &monitor.statistics());
-          if body.width >= 80 {
-            lines.extend(settings);
-            side_panel = Some(statistics);
-          } else {
-            lines.extend(statistics);
-            lines.push(Line::default());
-            lines.extend(settings);
-          }
+          render_tunnel(
+            frame,
+            body,
+            &context.server,
+            &monitor.state(),
+            &monitor.statistics(),
+            scroll,
+          );
         }
         Content::Internal(members) => {
           lines.push(row("Status", "Internal network session"));
@@ -378,14 +257,7 @@ fn draw(terminal: &mut Terminal<CrosstermBackend<File>>, context: &Context, logs
         }
       }
     }
-    if let Some(statistics) = side_panel {
-      let [settings_area, statistics_area] =
-        Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)])
-          .spacing(2)
-          .areas(body);
-      frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), settings_area);
-      frame.render_widget(Paragraph::new(statistics).wrap(Wrap { trim: false }), statistics_area);
-    } else {
+    if logs || matches!(context.content, Content::Internal(_)) {
       frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), body);
     }
     let current = context.notice.lock().unwrap_or_else(|error| error.into_inner()).clone();
@@ -402,11 +274,16 @@ fn draw(terminal: &mut Terminal<CrosstermBackend<File>>, context: &Context, logs
       } else {
         Color::Gray
       };
+      let block = if compact {
+        Block::default()
+      } else {
+        Block::default().title("Latest event").borders(Borders::TOP)
+      };
       frame.render_widget(
         Paragraph::new(current.message)
           .style(Style::default().fg(color))
           .wrap(Wrap { trim: false })
-          .block(Block::default().title("Latest event").borders(Borders::TOP)),
+          .block(block),
         notice,
       );
     }
@@ -416,11 +293,25 @@ fn draw(terminal: &mut Terminal<CrosstermBackend<File>>, context: &Context, logs
       "Ctrl+C Disconnect"
     };
     frame.render_widget(
-      Paragraph::new(format!(" Tab Switch view    {ending}")).style(Style::default().fg(Color::DarkGray)),
+      footer_text(logs, ending, scroll.can_scroll(), area.width).style(Style::default().fg(Color::DarkGray)),
       footer,
     );
   })?;
   Ok(())
+}
+
+fn footer_text(logs: bool, ending: &str, scrollable: bool, width: u16) -> Paragraph<'static> {
+  let view = if logs { "Dashboard" } else { "Logs" };
+  let scrolling = scrollable && !logs;
+  let text = if width < 80 {
+    format!("{ending}\nTab {view}{}", if scrolling { "  ↑↓ Scroll" } else { "" })
+  } else {
+    format!(
+      "Tab {view}    {ending}{}",
+      if scrolling { "    ↑↓/PgUp/PgDn Scroll" } else { "" }
+    )
+  };
+  Paragraph::new(text)
 }
 
 fn notice_for_status(
@@ -439,10 +330,17 @@ mod tests {
   use super::*;
 
   #[test]
-  fn units_and_long_sessions_are_explicit() {
-    assert_eq!(bytes(1024), "1.0 KiB");
-    assert_eq!(bytes(0), "0 B");
-    assert_eq!(uptime(90_061_000), "25:01:01");
+  fn narrow_footer_keeps_disconnect_switch_and_scroll_hints_visible() {
+    use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
+    let area = Rect::new(0, 0, 24, 2);
+    let mut buffer = Buffer::empty(area);
+    footer_text(false, "Ctrl+C Disconnect", true, area.width).render(area, &mut buffer);
+    let lines: Vec<String> = (0..2)
+      .map(|y| (0..24).map(|x| buffer[(x, y)].symbol()).collect())
+      .collect();
+    assert!(lines[0].contains("Ctrl+C Disconnect"));
+    assert!(lines[1].contains("Tab Logs"));
+    assert!(lines[1].contains("↑↓ Scroll"));
   }
 
   #[test]

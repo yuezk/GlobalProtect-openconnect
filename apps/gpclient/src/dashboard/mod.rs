@@ -1,4 +1,5 @@
 //! Optional foreground presentation. Connection ownership stays with ConnectHandler.
+mod layout;
 mod notice;
 mod output;
 mod restoration;
