@@ -158,13 +158,13 @@ pub(crate) struct ConnectArgs {
 
   #[arg(
     long,
-    help = "Use external browser authentication. With no value, auto-select Chrome, Firefox, then system default. Use `default` for the system default browser or `remote` for headless servers.",
+    help = "Use a browser; omit the value to auto-select. Use `manual` to open the URL and paste the callback.",
     default_missing_value = "auto",
     num_args=0..=1
   )]
   pub(super) browser: Option<String>,
 
-  #[arg(long, help = "Listen on this IP address when using '--browser remote'")]
+  #[arg(long, help = "Listen on this IP address when using '--browser manual'")]
   pub(super) browser_listen: Option<IpAddr>,
 
   #[arg(
@@ -299,7 +299,7 @@ mod tests {
       "test",
       "portal.example.com",
       "--browser",
-      "remote",
+      "manual",
       "--browser-listen",
       "192.168.107.15",
     ])

@@ -154,9 +154,9 @@ impl<'a> ConnectHandler<'a> {
 
   async fn handle_attempt(&self) -> anyhow::Result<()> {
     if self.args.browser_listen.is_some()
-      && !matches!(self.args.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("remote"))
+      && !matches!(self.args.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("manual") || browser.eq_ignore_ascii_case("remote"))
     {
-      bail!("The '--browser-listen' option requires '--browser remote'");
+      bail!("The '--browser-listen' option requires '--browser manual'");
     }
 
     #[cfg(feature = "webview-auth")]

@@ -104,13 +104,13 @@ struct Cli {
 
   #[arg(
     long,
-    help = "Use external browser authentication. With no value, auto-select Chrome, Firefox, then system default. Use `default` for the system default browser or `remote` for headless servers.",
+    help = "Use a browser; omit the value to auto-select. Use `manual` to open the URL and paste the callback.",
     default_missing_value = "auto",
     num_args=0..=1
   )]
   browser: Option<String>,
 
-  #[arg(long, help = "Listen on this IP address when using '--browser remote'")]
+  #[arg(long, help = "Listen on this IP address when using '--browser manual'")]
   browser_listen: Option<IpAddr>,
 
   #[cfg(feature = "webview-auth")]
@@ -174,9 +174,9 @@ impl Cli {
 
   async fn run(&self) -> anyhow::Result<()> {
     if self.browser_listen.is_some()
-      && !matches!(self.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("remote"))
+      && !matches!(self.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("manual") || browser.eq_ignore_ascii_case("remote"))
     {
-      anyhow::bail!("The '--browser-listen' option requires '--browser remote'");
+      anyhow::bail!("The '--browser-listen' option requires '--browser manual'");
     }
 
     if self.ignore_tls_errors {
@@ -399,7 +399,7 @@ mod tests {
       "gpauth",
       "portal.example.com",
       "--browser",
-      "remote",
+      "manual",
       "--browser-listen",
       "192.168.107.15",
     ])

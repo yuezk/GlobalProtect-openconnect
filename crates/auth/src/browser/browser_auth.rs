@@ -26,7 +26,7 @@ impl<'a> BrowserAuthenticator<'a> {
   }
 
   pub async fn authenticate(&self) -> anyhow::Result<SamlAuthData> {
-    let callback_receiver = if is_remote_browser(self.browser) {
+    let callback_receiver = if is_manual_browser(self.browser) {
       None
     } else {
       ensure_auth_callback_handler()?;
@@ -41,7 +41,7 @@ impl<'a> BrowserAuthenticator<'a> {
       auth_server.serve_request(&auth_request);
     });
 
-    if is_remote_browser(self.browser) {
+    if is_manual_browser(self.browser) {
       info!(
         r#"
 
@@ -69,7 +69,7 @@ Note that the URL is only valid for a single use.
   }
 
   async fn determine_addr(&self) -> anyhow::Result<SocketAddr> {
-    if is_remote_browser(self.browser) {
+    if is_manual_browser(self.browser) {
       let local_ip = match self.browser_listen {
         Some(ip) => ip,
         None => detect_local_ip().await?,
@@ -81,8 +81,8 @@ Note that the URL is only valid for a single use.
   }
 }
 
-fn is_remote_browser(browser: &str) -> bool {
-  browser.eq_ignore_ascii_case("remote")
+fn is_manual_browser(browser: &str) -> bool {
+  browser.eq_ignore_ascii_case("manual") || browser.eq_ignore_ascii_case("remote")
 }
 
 /// Detect the local IP address by creating a UDP socket and connecting to an external address
@@ -120,20 +120,24 @@ mod tests {
   }
 
   #[test]
-  fn browser_remote_remains_auth_specific() {
-    assert!(is_remote_browser("remote"));
-    assert!(is_remote_browser("REMOTE"));
-    assert_ne!(LaunchBrowser::from_name("remote"), LaunchBrowser::Default);
+  fn browser_manual_remains_auth_specific() {
+    assert!(is_manual_browser("manual"));
+    assert!(is_manual_browser("MANUAL"));
+    assert!(is_manual_browser("remote"));
+    assert!(is_manual_browser("REMOTE"));
+    assert_ne!(LaunchBrowser::from_name("manual"), LaunchBrowser::Default);
   }
 
   #[tokio::test]
-  async fn remote_browser_uses_explicit_listen_address() {
+  async fn manual_browser_uses_explicit_listen_address() {
     let listen_ip = "192.168.107.15".parse().unwrap();
-    let authenticator = BrowserAuthenticator::new("request", "remote", Some(listen_ip));
+    for browser in ["manual", "MANUAL", "remote", "REMOTE"] {
+      let authenticator = BrowserAuthenticator::new("request", browser, Some(listen_ip));
 
-    assert_eq!(
-      authenticator.determine_addr().await.unwrap(),
-      SocketAddr::new(listen_ip, 0)
-    );
+      assert_eq!(
+        authenticator.determine_addr().await.unwrap(),
+        SocketAddr::new(listen_ip, 0)
+      );
+    }
   }
 }
