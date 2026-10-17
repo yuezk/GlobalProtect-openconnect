@@ -19,6 +19,9 @@ use tauri::webview::PlatformWebview;
 
 use super::webview_auth::PlatformWebviewExt;
 
+#[path = "macos/address_bar.rs"]
+mod address_bar;
+
 static TLS_NAVIGATION_DELEGATE_KEY: u8 = 0;
 
 struct TlsNavigationDelegateIvars {
@@ -139,6 +142,24 @@ mod tests {
 }
 
 impl PlatformWebviewExt for PlatformWebview {
+  fn install_address_bar(&self, window: &tauri::WebviewWindow) -> anyhow::Result<()> {
+    let webview: &WKWebView = unsafe { &*self.inner().cast() };
+    address_bar::install(webview)?;
+    let window_handle = window.clone();
+    window.on_window_event(move |event| {
+      if matches!(
+        event,
+        tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+      ) {
+        let _ = window_handle.with_webview(|webview| {
+          let webview: &WKWebView = unsafe { &*webview.inner().cast() };
+          address_bar::resize(webview);
+        });
+      }
+    });
+    Ok(())
+  }
+
   fn ignore_tls_errors(&self) -> anyhow::Result<()> {
     let webview: &WKWebView = unsafe { &*self.inner().cast() };
     install_tls_navigation_delegate(webview)

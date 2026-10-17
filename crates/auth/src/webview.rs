@@ -1,3 +1,4 @@
+mod address_bar;
 mod auth_messenger;
 mod webview_auth;
 

@@ -26,9 +26,11 @@ tauri = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 tokio-util = { workspace = true, optional = true }
 html-escape = { version = "0.3", optional = true }
+url = { workspace = true, optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))'.dependencies]
 webkit2gtk = { version = "2", optional = true }
+gtk = { version = "0.18", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = { version = "0.6", optional = true }
@@ -54,11 +56,29 @@ webview-auth = [
   "dep:regex",
   "dep:tokio-util",
   "dep:html-escape",
+  "dep:url",
+  "dep:gtk",
   "dep:webkit2gtk",
   "dep:block2",
   "dep:objc2",
   "dep:objc2-foundation",
   "dep:objc2-web-kit",
+  "dep:objc2-app-kit",
+  "objc2-app-kit/NSView",
+  "objc2-app-kit/NSText",
+  "objc2-app-kit/NSTextView",
+  "objc2-app-kit/NSTextContainer",
+  "objc2-app-kit/NSParagraphStyle",
+  "objc2-app-kit/NSFont",
+  "objc2-app-kit/NSBox",
+  "objc2-app-kit/NSColor",
+  "objc2-app-kit/NSResponder",
+  "objc2-app-kit/NSAccessibilityProtocols",
+  "objc2-app-kit/NSWindow",
+  "objc2-app-kit/NSToolbar",
+  "objc2-app-kit/NSToolbarItem",
+  "objc2-app-kit/NSLayoutAnchor",
+  "objc2-app-kit/NSLayoutConstraint",
 ]
 release-devtools = ["webview-auth", "tauri/devtools"]
 

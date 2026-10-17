@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::bail;
 use gpapi::utils::redact::redact_uri;
+use gtk::prelude::*;
 use log::warn;
 use tauri::webview::PlatformWebview;
 use webkit2gtk::{
@@ -25,6 +26,48 @@ impl GetHeader for WebResource {
 }
 
 impl PlatformWebviewExt for PlatformWebview {
+  fn install_address_bar(&self, window: &tauri::WebviewWindow) -> anyhow::Result<()> {
+    use super::address_bar::display_address;
+
+    let entry = gtk::Entry::new();
+    entry.set_editable(false);
+    entry.set_can_focus(true);
+    entry.set_direction(gtk::TextDirection::Ltr);
+    entry.set_text(&display_address(self.inner().uri().as_deref()));
+    entry.set_margin_start(6);
+    entry.set_margin_end(6);
+    let item = gtk::ToolItem::new();
+    ToolItemExt::set_expand(&item, true);
+    item.add(&entry);
+    let bar = gtk::Toolbar::new();
+    bar.style_context().add_class(gtk::STYLE_CLASS_PRIMARY_TOOLBAR);
+    // Keep native colors, borders, and focus styling while reducing vertical space.
+    let spacing = gtk::CssProvider::new();
+    spacing.load_from_data(b"toolbar { padding: 2px 0; } entry { min-height: 22px; padding: 2px 6px; }")?;
+    entry
+      .style_context()
+      .add_provider(&spacing, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    bar
+      .style_context()
+      .add_provider(&spacing, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    bar.insert(&item, -1);
+    let container = window.default_vbox()?;
+    container.pack_start(&bar, false, false, 0);
+    container.reorder_child(&bar, 0);
+    bar.show_all();
+    let separator = gtk::Separator::new(gtk::Orientation::Horizontal);
+    container.pack_start(&separator, false, false, 0);
+    container.reorder_child(&separator, 1);
+    separator.show();
+
+    // Observe the top-level URI, including redirects and history API changes.
+    self.inner().connect_uri_notify(move |webview| {
+      entry.set_text(&display_address(webview.uri().as_deref()));
+      entry.set_position(0);
+    });
+    Ok(())
+  }
+
   fn ignore_tls_errors(&self) -> anyhow::Result<()> {
     if let Some(manager) = self.inner().website_data_manager() {
       manager.set_tls_errors_policy(TLSErrorsPolicy::Ignore);
@@ -34,7 +77,7 @@ impl PlatformWebviewExt for PlatformWebview {
   }
 
   fn user_agent(&self) -> anyhow::Result<String> {
-    let Some(settings) = self.inner().settings() else {
+    let Some(settings) = WebViewExt::settings(&self.inner()) else {
       bail!("Failed to get webview settings");
     };
 
@@ -45,7 +88,7 @@ impl PlatformWebviewExt for PlatformWebview {
   }
 
   fn set_user_agent(&self, user_agent: &str) -> anyhow::Result<()> {
-    let Some(settings) = self.inner().settings() else {
+    let Some(settings) = WebViewExt::settings(&self.inner()) else {
       bail!("Failed to get webview settings");
     };
 

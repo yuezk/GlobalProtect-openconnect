@@ -20,9 +20,12 @@ use tokio::{sync::oneshot, time};
 
 use crate::auth_prelogin;
 
+use super::address_bar::TOOLBAR_HEIGHT;
 use super::auth_messenger::{AuthError, AuthEvent, AuthMessenger};
 
 pub trait PlatformWebviewExt {
+  fn install_address_bar(&self, window: &WebviewWindow) -> anyhow::Result<()>;
+
   fn ignore_tls_errors(&self) -> anyhow::Result<()>;
 
   fn user_agent(&self) -> anyhow::Result<String>;
@@ -152,7 +155,8 @@ impl<'a> WebviewAuthenticator<'a> {
       .theme(native_theme(self.window_theme))
       .devtools(cfg!(any(debug_assertions, feature = "release-devtools")));
     let auth_window = auth_window_builder
-      .inner_size(900.0, 650.0 + get_title_bar_height())
+      .inner_size(900.0, 650.0 + get_title_bar_height() + TOOLBAR_HEIGHT)
+      .min_inner_size(400.0, 300.0)
       .focused(true)
       .visible(false)
       .center()
@@ -231,6 +235,7 @@ impl<'a> WebviewAuthenticator<'a> {
     let (tx, rx) = oneshot::channel::<anyhow::Result<()>>();
     let ignore_tls_errors = self.gp_params.ignore_tls_errors();
     let webview_user_agent = self.webview_user_agent.clone();
+    let window = auth_window.clone();
 
     // Set up webview
     auth_window.with_webview(move |wv| {
@@ -244,6 +249,7 @@ impl<'a> WebviewAuthenticator<'a> {
       }
 
       let result = || -> anyhow::Result<()> {
+        wv.install_address_bar(&window)?;
         if ignore_tls_errors {
           wv.ignore_tls_errors()?;
         }
