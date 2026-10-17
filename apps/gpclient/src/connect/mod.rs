@@ -184,6 +184,10 @@ impl<'a> ConnectHandler<'a> {
       };
 
       match root_cause {
+        RequestIdentityError::UnsupportedEncryption
+        | RequestIdentityError::UnsupportedKeyFormat
+        | RequestIdentityError::InvalidKey
+        | RequestIdentityError::InvalidCertificate => return Err(err),
         RequestIdentityError::NoKey => {
           let format = self.shared_args.log_format;
           report(

@@ -6,7 +6,9 @@ pub mod crypto;
 pub mod endpoint;
 pub mod env_utils;
 pub mod lock_file;
+#[cfg(not(target_os = "macos"))]
 pub mod openssl;
+mod pem_identity;
 pub mod redact;
 pub mod request;
 #[cfg(feature = "tauri")]

@@ -129,7 +129,6 @@ impl ConnectHandler<'_> {
           .gateway(is_gateway)
           .saml_request(prelogin.saml_request())
           .os_profile(&os_profile)
-          .fix_openssl(self.shared_args.fix_openssl)
           .ignore_tls_errors(self.shared_args.ignore_tls_errors)
           .certificate(self.args.certificate.as_deref())
           .sslkey(self.args.sslkey.as_deref())
@@ -138,6 +137,9 @@ impl ConnectHandler<'_> {
           .browser_listen(self.args.browser_listen)
           .log_format(self.shared_args.log_format)
           .verbose(verbose);
+
+        #[cfg(not(target_os = "macos"))]
+        let auth_launcher = auth_launcher.fix_openssl(self.shared_args.fix_openssl);
 
         #[cfg(feature = "webview-auth")]
         let use_default_browser = external_browser_supported && self.args.default_browser;

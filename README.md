@@ -73,6 +73,8 @@ Options:
   -V, --version                  Print version
 ```
 
+The `--fix-openssl` option is available on Linux, FreeBSD, and OpenBSD. macOS uses native TLS and GnuTLS and does not accept this option.
+
 > **Tip:** Use `gpclient help <command>` for detailed information on a specific command.
 
 #### HIP reports

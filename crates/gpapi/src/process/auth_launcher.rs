@@ -33,6 +33,7 @@ pub struct SamlAuthLauncher<'a> {
   certificate: Option<&'a str>,
   sslkey: Option<&'a str>,
   key_password: Option<&'a str>,
+  #[cfg(not(target_os = "macos"))]
   fix_openssl: bool,
   ignore_tls_errors: bool,
   #[cfg(feature = "webview-auth")]
@@ -66,6 +67,7 @@ impl<'a> SamlAuthLauncher<'a> {
       certificate: None,
       sslkey: None,
       key_password: None,
+      #[cfg(not(target_os = "macos"))]
       fix_openssl: false,
       ignore_tls_errors: false,
       #[cfg(feature = "webview-auth")]
@@ -113,6 +115,7 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  #[cfg(not(target_os = "macos"))]
   pub fn fix_openssl(mut self, fix_openssl: bool) -> Self {
     self.fix_openssl = fix_openssl;
     self
@@ -226,6 +229,7 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--client-version").arg(client_version);
     }
 
+    #[cfg(not(target_os = "macos"))]
     if self.fix_openssl {
       auth_cmd.arg("--fix-openssl");
     }
@@ -398,13 +402,15 @@ mod tests {
   }
 
   #[test]
-  fn launches_with_both_tls_options() {
-    let args = child_args(
-      SamlAuthLauncher::new("vpn.example.com")
-        .fix_openssl(true)
-        .ignore_tls_errors(true),
+  fn launches_with_platform_tls_options() {
+    let launcher = SamlAuthLauncher::new("vpn.example.com").ignore_tls_errors(true);
+    #[cfg(not(target_os = "macos"))]
+    let launcher = launcher.fix_openssl(true);
+    let args = child_args(launcher);
+    assert_eq!(
+      args.iter().any(|arg| arg == "--fix-openssl"),
+      !cfg!(target_os = "macos")
     );
-    assert!(args.iter().any(|arg| arg == "--fix-openssl"));
     assert!(args.iter().any(|arg| arg == "--ignore-tls-errors"));
   }
 

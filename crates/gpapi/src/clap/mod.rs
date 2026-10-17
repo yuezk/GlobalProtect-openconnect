@@ -11,6 +11,7 @@ use crate::{
 pub mod args;
 
 pub trait Args {
+  #[cfg(not(target_os = "macos"))]
   fn fix_openssl(&self) -> bool;
   fn ignore_tls_errors(&self) -> bool;
 
@@ -42,6 +43,7 @@ fn retry_hints(err: &anyhow::Error, args: &impl Args) -> Vec<String> {
   // users already see; keep it exactly.
   let mut hints = Vec::new();
 
+  #[cfg(not(target_os = "macos"))]
   if kind == ServerTlsErrorKind::LegacyRenegotiation && !args.fix_openssl() {
     let (program, rest) = command_line();
     hints.push(format!(
@@ -202,12 +204,14 @@ mod tests {
 
   #[derive(Default)]
   struct TestArgs {
+    #[cfg(not(target_os = "macos"))]
     fix_openssl: bool,
     ignore_tls_errors: bool,
     log_format: LogFormat,
   }
 
   impl Args for TestArgs {
+    #[cfg(not(target_os = "macos"))]
     fn fix_openssl(&self) -> bool {
       self.fix_openssl
     }
@@ -262,9 +266,14 @@ mod tests {
       kind: ServerTlsErrorKind::LegacyRenegotiation,
     };
     let hints = retry_hints(&anyhow!(legacy.clone()), &TestArgs::default());
-    assert_eq!(hints.len(), 1);
-    assert!(hints[0].contains("--fix-openssl"));
+    if cfg!(target_os = "macos") {
+      assert!(hints.is_empty());
+    } else {
+      assert_eq!(hints.len(), 1);
+      assert!(hints[0].contains("--fix-openssl"));
+    }
     let args = TestArgs {
+      #[cfg(not(target_os = "macos"))]
       fix_openssl: true,
       ignore_tls_errors: true,
       ..Default::default()

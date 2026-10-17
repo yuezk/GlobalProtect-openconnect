@@ -6,6 +6,8 @@ use clap::Parser;
 use clap::Subcommand;
 #[cfg(feature = "webview-auth")]
 use gpapi::auth::AuthWindowTheme;
+#[cfg(not(target_os = "macos"))]
+use gpapi::utils::openssl;
 use gpapi::{
   auth::{AuthenticationCancelled, SamlAuthData, SamlAuthResult},
   clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
@@ -13,11 +15,12 @@ use gpapi::{
   gp_params::GpParams,
   log_format::LogFormat,
   os_profile::{ClientOs, OsProfile},
-  utils::{normalize_server, openssl},
+  utils::normalize_server,
 };
 use log::info;
 use serde_json::json;
 use std::net::IpAddr;
+#[cfg(not(target_os = "macos"))]
 use tempfile::NamedTempFile;
 
 const VERSION: &str = concat!(
@@ -85,6 +88,7 @@ struct Cli {
   #[arg(short = 'p', long, help = "The key passphrase of the private key")]
   key_password: Option<String>,
 
+  #[cfg(not(target_os = "macos"))]
   #[arg(long, help = "Get around the OpenSSL `unsafe legacy renegotiation` error")]
   fix_openssl: bool,
 
@@ -145,6 +149,7 @@ enum CliCommand {
 }
 
 impl Args for Cli {
+  #[cfg(not(target_os = "macos"))]
   fn fix_openssl(&self) -> bool {
     self.fix_openssl
   }
@@ -159,10 +164,8 @@ impl Args for Cli {
 }
 
 impl Cli {
-  fn prepare_env(&self) -> anyhow::Result<Option<NamedTempFile>> {
-    #[cfg(feature = "webview-auth")]
-    gpapi::utils::env_utils::patch_gui_runtime_env(self.hidpi);
-
+  #[cfg(not(target_os = "macos"))]
+  fn prepare_openssl(&self) -> anyhow::Result<Option<NamedTempFile>> {
     if self.fix_openssl {
       info!("Fixing OpenSSL environment");
       let file = openssl::fix_openssl_env()?;
@@ -184,7 +187,10 @@ impl Cli {
       info!("TLS errors will be ignored");
     }
 
-    let openssl_conf = self.prepare_env()?;
+    #[cfg(feature = "webview-auth")]
+    gpapi::utils::env_utils::patch_gui_runtime_env(self.hidpi);
+    #[cfg(not(target_os = "macos"))]
+    let openssl_conf = self.prepare_openssl()?;
 
     let server = normalize_server(self.server.as_deref().expect("server is required for authentication"))?;
     let gp_params = self.build_gp_params();
@@ -224,7 +230,7 @@ impl Cli {
 
       print_auth_result(auth_result, Some(&auth_host_id));
 
-      // explicitly drop openssl_conf to avoid the unused variable warning
+      #[cfg(not(target_os = "macos"))]
       drop(openssl_conf);
       return Ok(());
     }
@@ -237,6 +243,7 @@ impl Cli {
       self.clean,
       self.window_title.clone(),
       self.window_theme,
+      #[cfg(not(target_os = "macos"))]
       openssl_conf,
     )
     .await?;
@@ -332,6 +339,12 @@ fn auth_outcome(auth_result: anyhow::Result<SamlAuthData>, host_id: Option<&str>
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn openssl_option_is_available_only_on_supported_platforms() {
+    let result = Cli::try_parse_from(["gpauth", "portal.example.com", "--fix-openssl"]);
+    assert_eq!(result.is_ok(), !cfg!(target_os = "macos"));
+  }
 
   #[test]
   fn result_keeps_server_tls_kind_and_generic_failure_format() {

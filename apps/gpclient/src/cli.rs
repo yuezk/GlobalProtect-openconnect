@@ -5,13 +5,15 @@ use std::{
 
 use anyhow::bail;
 use clap::{Parser, Subcommand};
+#[cfg(not(target_os = "macos"))]
+use gpapi::utils::openssl;
 use gpapi::{
   clap::{Args, InfoLevelVerbosity, handle_error},
   log_format::{LogFormat, write_json_record},
-  utils::openssl,
 };
 use log::info;
 use sysinfo::{Pid, System};
+#[cfg(not(target_os = "macos"))]
 use tempfile::NamedTempFile;
 use tokio::fs;
 
@@ -34,6 +36,7 @@ const VERSION: &str = concat!(
 );
 
 pub(crate) struct SharedArgs<'a> {
+  #[cfg(not(target_os = "macos"))]
   pub(crate) fix_openssl: bool,
   pub(crate) ignore_tls_errors: bool,
   pub(crate) lock_file: &'a Path,
@@ -92,6 +95,7 @@ struct Cli {
   #[command(subcommand)]
   command: CliCommand,
 
+  #[cfg(not(target_os = "macos"))]
   #[arg(
     long,
     help = "Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats."
@@ -123,6 +127,7 @@ struct Cli {
 }
 
 impl Args for Cli {
+  #[cfg(not(target_os = "macos"))]
   fn fix_openssl(&self) -> bool {
     self.fix_openssl
   }
@@ -164,6 +169,7 @@ impl Cli {
       .unwrap_or(false)
   }
 
+  #[cfg(not(target_os = "macos"))]
   fn fix_openssl(&self) -> anyhow::Result<Option<NamedTempFile>> {
     if self.fix_openssl {
       let file = openssl::fix_openssl_env()?;
@@ -210,8 +216,10 @@ impl Cli {
 
     // The temp file will be dropped automatically when the file handle is dropped
     // So, declare it here to ensure it's not dropped
+    #[cfg(not(target_os = "macos"))]
     let _file = self.fix_openssl()?;
     let shared_args = SharedArgs {
+      #[cfg(not(target_os = "macos"))]
       fix_openssl: self.fix_openssl,
       ignore_tls_errors: self.ignore_tls_errors,
       lock_file: &self.lock_file,
@@ -362,9 +370,16 @@ mod tests {
   }
 
   #[test]
+  fn openssl_option_is_available_only_on_supported_platforms() {
+    let result = Cli::try_parse_from(["gpclient", "--fix-openssl", "diagnostics"]);
+    assert_eq!(result.is_ok(), !cfg!(target_os = "macos"));
+  }
+
+  #[test]
   fn diagnostics_accepts_output_options_and_runs_alongside_the_client() {
     let cli = Cli::try_parse_from([
       "gpclient",
+      #[cfg(not(target_os = "macos"))]
       "--fix-openssl",
       "diagnostics",
       "--json",
