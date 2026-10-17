@@ -252,6 +252,7 @@ impl TryFrom<SamlAuthResult> for Credential {
       SamlAuthResult::Success(auth_data) => Ok(Self::from(auth_data)),
       SamlAuthResult::Cancelled => bail!(AuthenticationCancelled),
       SamlAuthResult::Failure(err) => bail!(err),
+      SamlAuthResult::ServerTlsError(err) => Err(err.into()),
     }
   }
 }

@@ -1,61 +1,149 @@
-use std::{ffi::c_void, ptr};
+use std::{
+  cell::{Cell, RefCell},
+  collections::HashMap,
+  ffi::c_void,
+  ptr,
+  sync::Arc,
+};
 
 use anyhow::{Context, bail};
 use block2::{DynBlock, RcBlock};
+use gpapi::utils::redact::redact_uri;
+use log::{info, warn};
 use objc2::{
-  DefinedClass, MainThreadOnly, define_class,
-  ffi::{OBJC_ASSOCIATION_RETAIN_NONATOMIC, objc_setAssociatedObject},
+  DefinedClass, MainThreadOnly, Message, define_class,
+  ffi::{OBJC_ASSOCIATION_RETAIN_NONATOMIC, objc_getAssociatedObject, objc_setAssociatedObject},
   msg_send,
   rc::Retained,
   runtime::{AnyObject, ProtocolObject, Sel},
+  sel,
 };
 use objc2_foundation::{
   MainThreadMarker, NSError, NSObject, NSObjectNSKeyValueCoding, NSObjectProtocol, NSString, NSURL,
-  NSURLAuthenticationChallenge, NSURLAuthenticationMethodServerTrust, NSURLCredential, NSURLRequest,
+  NSURLAuthenticationChallenge, NSURLAuthenticationMethodServerTrust, NSURLCredential, NSURLErrorCancelled,
+  NSURLErrorDomain, NSURLErrorFailingURLErrorKey, NSURLErrorUnsupportedURL, NSURLRequest,
   NSURLSessionAuthChallengeDisposition,
 };
-use objc2_web_kit::{WKNavigationDelegate, WKWebView};
+use objc2_web_kit::{WKNavigation, WKNavigationDelegate, WKWebView};
 use tauri::webview::PlatformWebview;
 
-use super::webview_auth::PlatformWebviewExt;
+use super::{
+  auth_messenger::{AuthError, AuthEvent, AuthMessenger},
+  recovery::RecoveryStatus,
+  webview_auth::PlatformWebviewExt,
+};
 
 #[path = "macos/address_bar.rs"]
 mod address_bar;
+#[path = "macos/recovery_row.rs"]
+mod recovery_row;
+#[path = "macos/tls.rs"]
+mod tls;
 
-static TLS_NAVIGATION_DELEGATE_KEY: u8 = 0;
+static AUTH_NAVIGATION_DELEGATE_KEY: u8 = 0;
 
-struct TlsNavigationDelegateIvars {
+struct AuthNavigationDelegateIvars {
   original: Retained<ProtocolObject<dyn WKNavigationDelegate>>,
+  messenger: Arc<AuthMessenger>,
+  ignore_tls_errors: Cell<bool>,
+  navigations: RefCell<HashMap<usize, (Retained<WKNavigation>, u64)>>,
+  tls: RefCell<tls::TlsState>,
 }
 
 define_class!(
   #[unsafe(super = NSObject)]
   #[thread_kind = MainThreadOnly]
-  #[ivars = TlsNavigationDelegateIvars]
-  struct TlsNavigationDelegate;
+  #[ivars = AuthNavigationDelegateIvars]
+  struct AuthNavigationDelegate;
 
-  unsafe impl NSObjectProtocol for TlsNavigationDelegate {}
+  unsafe impl NSObjectProtocol for AuthNavigationDelegate {}
 
   #[allow(non_snake_case)]
-  unsafe impl WKNavigationDelegate for TlsNavigationDelegate {
+  unsafe impl WKNavigationDelegate for AuthNavigationDelegate {
+    #[unsafe(method(webView:didStartProvisionalNavigation:))]
+    unsafe fn webView_didStartProvisionalNavigation(&self, webview: &WKWebView, navigation: Option<&WKNavigation>) {
+      self.track_navigation(navigation);
+      self.ivars().messenger.cancel_raise_window();
+      let original = &self.ivars().original;
+      if original.respondsToSelector(sel!(webView:didStartProvisionalNavigation:)) {
+        unsafe { original.webView_didStartProvisionalNavigation(webview, navigation); }
+      }
+    }
+
+    #[unsafe(method(webView:didCommitNavigation:))]
+    unsafe fn webView_didCommitNavigation(&self, webview: &WKWebView, navigation: Option<&WKNavigation>) {
+      if let Some(generation) = self.navigation_generation(navigation) {
+        info!("Started loading page: {}", navigation_address(webview));
+        read_navigation_html(webview, Arc::clone(&self.ivars().messenger), generation);
+      }
+      let original = &self.ivars().original;
+      if original.respondsToSelector(sel!(webView:didCommitNavigation:)) {
+        unsafe { original.webView_didCommitNavigation(webview, navigation); }
+      }
+    }
+
+    #[unsafe(method(webView:didFinishNavigation:))]
+    unsafe fn webView_didFinishNavigation(&self, webview: &WKWebView, navigation: Option<&WKNavigation>) {
+      if let Some(generation) = self.finish_navigation(navigation) {
+        info!("Finished loading page: {}", navigation_address(webview));
+        read_navigation_html(webview, Arc::clone(&self.ivars().messenger), generation);
+        self.ivars().messenger.send_auth_event(AuthEvent::PageLoaded(generation));
+      }
+      let original = &self.ivars().original;
+      if original.respondsToSelector(sel!(webView:didFinishNavigation:)) {
+        unsafe { original.webView_didFinishNavigation(webview, navigation); }
+      }
+    }
+
+    #[unsafe(method(webView:didFailProvisionalNavigation:withError:))]
+    unsafe fn webView_didFailProvisionalNavigation_withError(&self, webview: &WKWebView, navigation: Option<&WKNavigation>, error: &NSError) {
+      self.report_load_failure(webview, navigation, error);
+      let original = &self.ivars().original;
+      if original.respondsToSelector(sel!(webView:didFailProvisionalNavigation:withError:)) {
+        unsafe { original.webView_didFailProvisionalNavigation_withError(webview, navigation, error); }
+      }
+    }
+
+    #[unsafe(method(webView:didFailNavigation:withError:))]
+    unsafe fn webView_didFailNavigation_withError(&self, webview: &WKWebView, navigation: Option<&WKNavigation>, error: &NSError) {
+      self.report_load_failure(webview, navigation, error);
+      let original = &self.ivars().original;
+      if original.respondsToSelector(sel!(webView:didFailNavigation:withError:)) {
+        unsafe { original.webView_didFailNavigation_withError(webview, navigation, error); }
+      }
+    }
+
     #[unsafe(method(webView:didReceiveAuthenticationChallenge:completionHandler:))]
     unsafe fn webView_didReceiveAuthenticationChallenge_completionHandler(
       &self,
-      _webview: &WKWebView,
+      webview: &WKWebView,
       challenge: &NSURLAuthenticationChallenge,
       completion_handler: &DynBlock<dyn Fn(NSURLSessionAuthChallengeDisposition, *mut NSURLCredential)>,
     ) {
+      // Preserve Wry's normal authentication challenge handling unless the caller
+      // approved this certificate or requested the ignore-TLS-errors behavior.
       let protection_space = challenge.protectionSpace();
-      let is_server_trust = protection_space
-        .authenticationMethod()
-        .isEqualToString(unsafe { NSURLAuthenticationMethodServerTrust });
-
+      let is_server_trust = protection_space.authenticationMethod().isEqualToString(unsafe { NSURLAuthenticationMethodServerTrust });
+      let server_trust: *mut AnyObject = if is_server_trust {
+        msg_send![&*protection_space, serverTrust]
+      } else { ptr::null_mut() };
+      let approved = std::ptr::NonNull::new(server_trust.cast::<objc2_security::SecTrust>()).is_some_and(|trust| {
+        self.ivars().tls.borrow().allows(&protection_space.host().to_string(), unsafe { trust.as_ref() })
+      });
+      if !self.ivars().ignore_tls_errors.get() && !approved {
+        let original = &self.ivars().original;
+        if original.respondsToSelector(sel!(webView:didReceiveAuthenticationChallenge:completionHandler:)) {
+          unsafe { original.webView_didReceiveAuthenticationChallenge_completionHandler(webview, challenge, completion_handler); }
+        } else {
+          completion_handler.call((challenge_disposition(false), ptr::null_mut()));
+        }
+        return;
+      }
       if !is_server_trust {
         completion_handler.call((challenge_disposition(false), ptr::null_mut()));
         return;
       }
 
-      let server_trust: *mut AnyObject = msg_send![&*protection_space, serverTrust];
       if server_trust.is_null() {
         completion_handler.call((challenge_disposition(false), ptr::null_mut()));
         return;
@@ -67,7 +155,7 @@ define_class!(
     }
   }
 
-  impl TlsNavigationDelegate {
+  impl AuthNavigationDelegate {
     #[unsafe(method(respondsToSelector:))]
     fn responds_to_selector(&self, selector: Sel) -> bool {
       let responds: bool = unsafe { msg_send![super(self), respondsToSelector: selector] };
@@ -85,10 +173,92 @@ define_class!(
   }
 );
 
-impl TlsNavigationDelegate {
-  fn new(original: Retained<ProtocolObject<dyn WKNavigationDelegate>>, mtm: MainThreadMarker) -> Retained<Self> {
-    let this = Self::alloc(mtm).set_ivars(TlsNavigationDelegateIvars { original });
-    unsafe { msg_send![super(this), init] }
+impl AuthNavigationDelegate {
+  fn track_navigation(&self, navigation: Option<&WKNavigation>) {
+    if let Some(navigation) = navigation {
+      let key = navigation as *const WKNavigation as usize;
+      self
+        .ivars()
+        .navigations
+        .borrow_mut()
+        .entry(key)
+        .or_insert_with(|| (navigation.retain(), self.ivars().messenger.generation()));
+    }
+  }
+
+  fn navigation_generation(&self, navigation: Option<&WKNavigation>) -> Option<u64> {
+    let key = navigation? as *const WKNavigation as usize;
+    self
+      .ivars()
+      .navigations
+      .borrow()
+      .get(&key)
+      .map(|(_, generation)| *generation)
+  }
+
+  fn finish_navigation(&self, navigation: Option<&WKNavigation>) -> Option<u64> {
+    let key = navigation? as *const WKNavigation as usize;
+    self
+      .ivars()
+      .navigations
+      .borrow_mut()
+      .remove(&key)
+      .map(|(_, generation)| generation)
+  }
+
+  fn report_load_failure(&self, webview: &WKWebView, navigation: Option<&WKNavigation>, error: &NSError) {
+    let Some(generation) = self.finish_navigation(navigation) else {
+      return;
+    };
+    if generation != self.ivars().messenger.generation() {
+      return;
+    }
+    let is_url_error = error.domain().isEqualToString(unsafe { NSURLErrorDomain });
+    if is_url_error && error.code() == NSURLErrorCancelled {
+      return;
+    }
+    if is_url_error && error.code() == NSURLErrorUnsupportedURL {
+      let callback = error
+        .userInfo()
+        .objectForKey(unsafe { NSURLErrorFailingURLErrorKey })
+        .and_then(|value| value.downcast::<NSURL>().ok())
+        .and_then(|url| url.scheme());
+      if callback.is_some_and(|scheme| scheme.to_string() == "globalprotectcallback") {
+        return;
+      }
+    }
+    let messenger = &self.ivars().messenger;
+    if let Some(failure) = self.ivars().tls.borrow_mut().record_failure(webview, error, generation) {
+      messenger.send_auth_event(AuthEvent::Error(generation, failure));
+      return;
+    }
+    // Log codes rather than NSError descriptions, which may contain callback URLs.
+    messenger.send_auth_event(AuthEvent::Error(
+      generation,
+      AuthError::LoadFailed(anyhow::anyhow!(
+        "Navigation failed: {} ({})",
+        error.domain(),
+        error.code()
+      )),
+    ));
+  }
+}
+
+fn navigation_delegate(webview: &WKWebView) -> Option<Retained<AuthNavigationDelegate>> {
+  unsafe {
+    let pointer = objc_getAssociatedObject(
+      webview as *const WKWebView as *mut AnyObject,
+      &AUTH_NAVIGATION_DELEGATE_KEY as *const u8 as *const c_void,
+    )
+    .cast::<AuthNavigationDelegate>();
+    Retained::retain(pointer.cast_mut())
+  }
+}
+
+fn track_requested_navigation(webview: &WKWebView, navigation: Option<&WKNavigation>) {
+  let delegate = navigation_delegate(webview);
+  if let Some(delegate) = delegate {
+    delegate.track_navigation(navigation);
   }
 }
 
@@ -100,15 +270,22 @@ fn challenge_disposition(is_server_trust: bool) -> NSURLSessionAuthChallengeDisp
   }
 }
 
-fn install_tls_navigation_delegate(webview: &WKWebView) -> anyhow::Result<()> {
+fn install_navigation_delegate(webview: &WKWebView, messenger: Arc<AuthMessenger>) -> anyhow::Result<()> {
   let original = unsafe { webview.navigationDelegate() }.context("WebView navigation delegate is unavailable")?;
   let mtm = MainThreadMarker::new().context("WebView must be configured on the main thread")?;
-  let delegate = TlsNavigationDelegate::new(original, mtm);
+  let delegate = AuthNavigationDelegate::alloc(mtm).set_ivars(AuthNavigationDelegateIvars {
+    original,
+    messenger,
+    ignore_tls_errors: Cell::new(false),
+    tls: RefCell::new(tls::TlsState::default()),
+    navigations: RefCell::new(HashMap::new()),
+  });
+  let delegate: Retained<AuthNavigationDelegate> = unsafe { msg_send![super(delegate), init] };
 
   unsafe {
     objc_setAssociatedObject(
       webview as *const WKWebView as *mut AnyObject,
-      &TLS_NAVIGATION_DELEGATE_KEY as *const u8 as *const c_void,
+      &AUTH_NAVIGATION_DELEGATE_KEY as *const u8 as *const c_void,
       Retained::as_ptr(&delegate).cast_mut().cast(),
       OBJC_ASSOCIATION_RETAIN_NONATOMIC,
     );
@@ -142,9 +319,11 @@ mod tests {
 }
 
 impl PlatformWebviewExt for PlatformWebview {
-  fn install_address_bar(&self, window: &tauri::WebviewWindow) -> anyhow::Result<()> {
+  fn install_auth_controls(&self, window: &tauri::WebviewWindow, messenger: Arc<AuthMessenger>) -> anyhow::Result<()> {
     let webview: &WKWebView = unsafe { &*self.inner().cast() };
     address_bar::install(webview)?;
+    install_navigation_delegate(webview, Arc::clone(&messenger))?;
+    recovery_row::install(webview, messenger)?;
     let window_handle = window.clone();
     window.on_window_event(move |event| {
       if matches!(
@@ -160,9 +339,27 @@ impl PlatformWebviewExt for PlatformWebview {
     Ok(())
   }
 
+  fn set_recovery_status(&self, status: RecoveryStatus) -> anyhow::Result<()> {
+    let webview: &WKWebView = unsafe { &*self.inner().cast() };
+    recovery_row::update(webview, status)
+  }
+
+  fn stop_loading(&self) {
+    let webview: &WKWebView = unsafe { &*self.inner().cast() };
+    unsafe {
+      webview.stopLoading();
+    }
+  }
+
+  fn confirm_tls_exception(&self) -> anyhow::Result<()> {
+    tls::confirm(unsafe { &*self.inner().cast::<WKWebView>() })
+  }
+
   fn ignore_tls_errors(&self) -> anyhow::Result<()> {
     let webview: &WKWebView = unsafe { &*self.inner().cast() };
-    install_tls_navigation_delegate(webview)
+    let delegate = navigation_delegate(webview).context("Auth navigation delegate is unavailable")?;
+    delegate.ivars().ignore_tls_errors.set(true);
+    Ok(())
   }
 
   fn user_agent(&self) -> anyhow::Result<String> {
@@ -194,7 +391,8 @@ impl PlatformWebviewExt for PlatformWebview {
       let url = NSURL::URLWithString(&NSString::from_str(url)).ok_or_else(|| anyhow::anyhow!("Invalid URL"))?;
       let request = NSURLRequest::requestWithURL(&url);
 
-      wv.loadRequest(&request);
+      let navigation = wv.loadRequest(&request);
+      track_requested_navigation(wv, navigation.as_deref());
     }
 
     Ok(())
@@ -203,31 +401,31 @@ impl PlatformWebviewExt for PlatformWebview {
   fn load_html(&self, html: &str) -> anyhow::Result<()> {
     unsafe {
       let wv: &WKWebView = &*self.inner().cast();
-      wv.loadHTMLString_baseURL(&NSString::from_str(html), None);
+      let navigation = wv.loadHTMLString_baseURL(&NSString::from_str(html), None);
+      track_requested_navigation(wv, navigation.as_deref());
     }
 
     Ok(())
   }
+}
 
-  fn get_html(&self, callback: Box<dyn Fn(anyhow::Result<String>) + 'static>) {
-    unsafe {
-      let wv: &WKWebView = &*self.inner().cast();
+fn navigation_address(webview: &WKWebView) -> String {
+  let url = unsafe { webview.URL() }.and_then(|url| url.absoluteString());
+  redact_uri(&url.map(|url| url.to_string()).unwrap_or_default())
+}
 
-      let js_callback = RcBlock::new(move |body: *mut AnyObject, err: *mut NSError| {
-        if let Some(err) = err.as_ref() {
-          let code = err.code();
-          let message = err.localizedDescription();
-          callback(Err(anyhow::anyhow!("Error {}: {}", code, message)));
-        } else {
-          let body: &NSString = &*body.cast();
-          callback(Ok(body.to_string()));
-        }
-      });
-
-      wv.evaluateJavaScript_completionHandler(
-        &NSString::from_str("document.documentElement.outerHTML"),
-        Some(&js_callback),
-      );
+fn read_navigation_html(webview: &WKWebView, messenger: Arc<AuthMessenger>, generation: u64) {
+  let callback = RcBlock::new(move |body: *mut AnyObject, error: *mut NSError| {
+    if let Some(error) = unsafe { error.as_ref() } {
+      warn!("Failed to get html: {} ({})", error.domain(), error.code());
+    } else if let Some(body) = unsafe { body.as_ref() }.and_then(|body| body.downcast_ref::<NSString>()) {
+      messenger.read_from_html(&body.to_string(), generation);
     }
+  });
+  unsafe {
+    webview.evaluateJavaScript_completionHandler(
+      &NSString::from_str("document.documentElement.outerHTML"),
+      Some(&callback),
+    );
   }
 }

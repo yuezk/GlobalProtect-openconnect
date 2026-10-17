@@ -1,7 +1,9 @@
+use super::tls::TlsFailure;
 use anyhow::bail;
 use gpapi::{auth::SamlAuthData, error::AuthDataParseError};
 use log::{error, info};
 use regex::Regex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
 
@@ -14,36 +16,30 @@ pub(crate) enum AuthDataLocation {
 
 #[derive(Debug)]
 pub(crate) enum AuthError {
-  /// Failed to load page due to TLS error
-  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-  TlsError,
-  /// 1. Found auth data in headers/body but it's invalid
-  /// 2. Loaded an empty page, failed to load page. etc.
+  /// A certificate or TLS handshake failure in the native webview.
+  Tls(TlsFailure),
+  /// The authentication service returned a temporary failure.
+  TemporarilyUnavailable,
+  /// A sign-in request could not be loaded.
+  LoadFailed(anyhow::Error),
+  /// Found auth data in headers/body but it's invalid.
   Invalid(anyhow::Error, AuthDataLocation),
-  /// No auth data found in headers/body
-  NotFound(AuthDataLocation),
 }
 
 impl AuthError {
   pub fn invalid_from_body(err: anyhow::Error) -> Self {
     Self::Invalid(err, AuthDataLocation::Body)
   }
-
-  pub fn not_found_in_body() -> Self {
-    Self::NotFound(AuthDataLocation::Body)
-  }
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-impl AuthError {
-  pub fn not_found_in_headers() -> Self {
-    Self::NotFound(AuthDataLocation::Headers)
-  }
 }
 
 pub(crate) enum AuthEvent {
-  Data(SamlAuthData, AuthDataLocation),
-  Error(AuthError),
+  Data(u64, SamlAuthData, AuthDataLocation),
+  Error(u64, AuthError),
+  NoAuthData(u64, AuthDataLocation),
+  PageLoaded(u64),
+  Retry,
+  RequestTlsException,
+  TlsAccepted(u64),
   RaiseWindow,
   Close,
 }
@@ -52,6 +48,7 @@ pub struct AuthMessenger {
   tx: mpsc::UnboundedSender<AuthEvent>,
   rx: RwLock<mpsc::UnboundedReceiver<AuthEvent>>,
   raise_window_cancel_token: RwLock<Option<CancellationToken>>,
+  generation: AtomicU64,
 }
 
 impl AuthMessenger {
@@ -62,6 +59,7 @@ impl AuthMessenger {
       tx,
       rx: RwLock::new(rx),
       raise_window_cancel_token: Default::default(),
+      generation: AtomicU64::new(0),
     }
   }
 
@@ -79,12 +77,12 @@ impl AuthMessenger {
     }
   }
 
-  pub fn send_auth_error(&self, err: AuthError) {
-    self.send_auth_event(AuthEvent::Error(err));
+  pub fn generation(&self) -> u64 {
+    self.generation.load(Ordering::SeqCst)
   }
 
-  fn send_auth_data(&self, data: SamlAuthData, location: AuthDataLocation) {
-    self.send_auth_event(AuthEvent::Data(data, location));
+  pub fn begin_attempt(&self) {
+    self.generation.fetch_add(1, Ordering::SeqCst);
   }
 
   pub fn schedule_raise_window(&self, delay: u64) {
@@ -132,9 +130,9 @@ impl AuthMessenger {
     }
   }
 
-  pub fn read_from_html(&self, html: &str) {
+  pub fn read_from_html(&self, html: &str, generation: u64) {
     if html.contains("Temporarily Unavailable") {
-      return self.send_auth_error(AuthError::invalid_from_body(anyhow::anyhow!("Temporarily Unavailable")));
+      return self.send_auth_event(AuthEvent::Error(generation, AuthError::TemporarilyUnavailable));
     }
 
     let auth_result = SamlAuthData::from_html(html).or_else(|err| {
@@ -149,18 +147,20 @@ impl AuthMessenger {
     });
 
     match auth_result {
-      Ok(data) => self.send_auth_data(data, AuthDataLocation::Body),
-      Err(AuthDataParseError::NotFound) => self.send_auth_error(AuthError::not_found_in_body()),
-      Err(err) => self.send_auth_error(AuthError::invalid_from_body(err.into())),
+      Ok(data) => self.send_auth_event(AuthEvent::Data(generation, data, AuthDataLocation::Body)),
+      Err(AuthDataParseError::NotFound) => {
+        self.send_auth_event(AuthEvent::NoAuthData(generation, AuthDataLocation::Body))
+      }
+      Err(err) => self.send_auth_event(AuthEvent::Error(generation, AuthError::invalid_from_body(err.into()))),
     }
   }
 
   #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-  pub fn read_from_response(&self, auth_response: &impl super::webview_auth::GetHeader) {
+  pub fn read_from_response(&self, auth_response: &impl super::webview_auth::GetHeader, generation: u64) {
     use log::warn;
 
     let Some(status) = auth_response.get_header("saml-auth-status") else {
-      return self.send_auth_error(AuthError::not_found_in_headers());
+      return self.send_auth_event(AuthEvent::NoAuthData(generation, AuthDataLocation::Headers));
     };
 
     // Do not send auth error when reading from headers, as the html body may contain the auth data
@@ -174,7 +174,7 @@ impl AuthMessenger {
     let portal_userauthcookie = auth_response.get_header("portal-userauthcookie");
 
     match SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie) {
-      Ok(auth_data) => self.send_auth_data(auth_data, AuthDataLocation::Headers),
+      Ok(auth_data) => self.send_auth_event(AuthEvent::Data(generation, auth_data, AuthDataLocation::Headers)),
       Err(err) => {
         warn!("Failed to read auth data from headers: {}", err);
       }
@@ -192,6 +192,43 @@ fn extract_gpcallback(html: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[tokio::test]
+  async fn ordinary_sign_in_page_is_an_observation_with_its_original_generation() {
+    let messenger = AuthMessenger::new();
+    messenger.read_from_html("<html><h1>Sign in</h1></html>", 7);
+    assert!(matches!(
+      messenger.subscribe().await.unwrap(),
+      AuthEvent::NoAuthData(7, AuthDataLocation::Body)
+    ));
+  }
+
+  #[tokio::test]
+  async fn distinguishes_temporary_failure_from_rejected_authentication() {
+    let messenger = AuthMessenger::new();
+    messenger.read_from_html("<html>Temporarily Unavailable</html>", 0);
+    assert!(matches!(
+      messenger.subscribe().await.unwrap(),
+      AuthEvent::Error(0, AuthError::TemporarilyUnavailable)
+    ));
+    messenger.read_from_html("<saml-auth-status>0</saml-auth-status>", 0);
+    assert!(matches!(
+      messenger.subscribe().await.unwrap(),
+      AuthEvent::Error(0, AuthError::Invalid(..))
+    ));
+  }
+
+  #[tokio::test]
+  async fn html_callbacks_keep_the_generation_that_started_the_read() {
+    let messenger = AuthMessenger::new();
+    let generation = messenger.generation();
+    messenger.begin_attempt();
+    messenger.read_from_html("<html>Temporarily Unavailable</html>", generation);
+    match messenger.subscribe().await.unwrap() {
+      AuthEvent::Error(generation, _) => assert_ne!(generation, messenger.generation()),
+      _ => panic!("Expected an authentication error"),
+    }
+  }
 
   #[test]
   fn extract_gpcallback_some() {

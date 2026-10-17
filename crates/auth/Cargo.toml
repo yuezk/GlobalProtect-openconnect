@@ -38,6 +38,7 @@ objc2 = { version = "0.6", optional = true }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "block2"], optional = true }
 objc2-foundation = { version = "0.3", optional = true }
 objc2-web-kit = { version = "0.3", optional = true }
+objc2-security = { version = "0.3", default-features = false, features = ["std", "SecBase", "SecTrust", "SecCertificate"], optional = true }
 
 [features]
 browser-auth = [
@@ -63,6 +64,8 @@ webview-auth = [
   "dep:objc2",
   "dep:objc2-foundation",
   "dep:objc2-web-kit",
+  "dep:objc2-security",
+  "objc2-app-kit/NSAlert",
   "dep:objc2-app-kit",
   "objc2-app-kit/NSView",
   "objc2-app-kit/NSText",
@@ -71,6 +74,11 @@ webview-auth = [
   "objc2-app-kit/NSParagraphStyle",
   "objc2-app-kit/NSFont",
   "objc2-app-kit/NSBox",
+  "objc2-app-kit/NSButton",
+  "objc2-app-kit/NSButtonCell",
+  "objc2-app-kit/NSEvent",
+  "objc2-app-kit/NSTextField",
+  "objc2-app-kit/NSProgressIndicator",
   "objc2-app-kit/NSColor",
   "objc2-app-kit/NSResponder",
   "objc2-app-kit/NSAccessibilityProtocols",

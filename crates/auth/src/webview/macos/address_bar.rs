@@ -9,9 +9,9 @@ use objc2::{
   runtime::{AnyObject, ProtocolObject},
 };
 use objc2_app_kit::{
-  NSAccessibility, NSBox, NSBoxType, NSColor, NSFont, NSLayoutConstraint, NSLayoutConstraintOrientation,
-  NSLineBreakMode, NSTextView, NSToolbar, NSToolbarDelegate, NSToolbarDisplayMode, NSToolbarItem,
-  NSToolbarItemIdentifier, NSWindowTitleVisibility, NSWindowToolbarStyle,
+  NSAccessibility, NSAutoresizingMaskOptions, NSBox, NSBoxType, NSColor, NSFont, NSLayoutConstraint,
+  NSLayoutConstraintOrientation, NSLineBreakMode, NSTextView, NSToolbar, NSToolbarDelegate, NSToolbarDisplayMode,
+  NSToolbarItem, NSToolbarItemIdentifier, NSWindowTitleVisibility, NSWindowToolbarStyle,
 };
 use objc2_foundation::{
   MainThreadMarker, NSArray, NSDictionary, NSKeyValueChangeKey, NSKeyValueObservingOptions, NSObject,
@@ -146,6 +146,8 @@ pub(super) fn install(webview: &WKWebView) -> anyhow::Result<()> {
     address_view.heightAnchor().constraintEqualToConstant(22.0),
   ]));
   let separator = NSBox::new(mtm);
+  separator
+    .setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewMinYMargin);
   separator.setBoxType(NSBoxType::Custom);
   separator.setBorderWidth(0.0);
   separator.setCornerRadius(0.0);
@@ -157,7 +159,7 @@ pub(super) fn install(webview: &WKWebView) -> anyhow::Result<()> {
     separator,
   });
   let delegate: Retained<AddressToolbar> = unsafe { msg_send![super(delegate), init] };
-  // Observe the current URL without replacing Wry's navigation or TLS delegates.
+  // Observe the current URL independently of navigation callbacks.
   unsafe {
     webview.addObserver_forKeyPath_options_context(
       &delegate,
@@ -186,6 +188,25 @@ pub(super) fn install(webview: &WKWebView) -> anyhow::Result<()> {
   Ok(())
 }
 
+pub(super) fn address_view(webview: &WKWebView) -> Option<Retained<NSTextView>> {
+  let parent = unsafe { webview.superview() }?;
+  let delegate = unsafe {
+    objc_getAssociatedObject(
+      Retained::as_ptr(&parent).cast_mut().cast(),
+      &ADDRESS_TOOLBAR_KEY as *const u8 as *const c_void,
+    )
+    .cast::<AddressToolbar>()
+    .as_ref()
+  }?;
+  Some(delegate.ivars().address_view.clone())
+}
+
+pub(super) fn show_address(webview: &WKWebView, uri: &str) {
+  if let Some(view) = address_view(webview) {
+    view.setString(&NSString::from_str(&display_address(Some(uri))));
+  }
+}
+
 pub(super) fn resize(webview: &WKWebView) {
   let Some(parent) = (unsafe { webview.superview() }) else {
     return;
@@ -196,7 +217,8 @@ pub(super) fn resize(webview: &WKWebView) {
   // Keep the native separator outside WebKit so page backgrounds cannot cover it.
   let content = parent.convertRect_fromView(window.contentLayoutRect(), None);
   let separator_height = 1.0 / window.backingScaleFactor();
-  let page_height = (content.size.height - separator_height).max(0.0);
+  let recovery_height = super::recovery_row::layout(webview, content);
+  let page_height = (content.size.height - recovery_height - separator_height).max(0.0);
   let delegate = unsafe {
     objc_getAssociatedObject(
       Retained::as_ptr(&parent).cast_mut().cast(),

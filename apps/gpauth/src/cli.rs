@@ -9,6 +9,7 @@ use gpapi::auth::AuthWindowTheme;
 use gpapi::{
   auth::{AuthenticationCancelled, SamlAuthData, SamlAuthResult},
   clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
+  error::ServerTlsError,
   gp_params::GpParams,
   log_format::LogFormat,
   os_profile::{ClientOs, OsProfile},
@@ -194,7 +195,17 @@ impl Cli {
 
     let auth_request = match self.saml_request.as_deref() {
       Some(auth_request) => auth_request.to_string(),
-      None => auth_prelogin(&server, &gp_params, self.external_browser_requested(), self.gateway).await?,
+      None => match auth_prelogin(&server, &gp_params, self.external_browser_requested(), self.gateway).await {
+        Ok(request) => request,
+        Err(error) => {
+          let Some(tls) = error.downcast_ref::<ServerTlsError>().cloned() else {
+            return Err(error);
+          };
+          handle_error(error, self);
+          print_auth_result(Err(tls.into()), None);
+          return Ok(());
+        }
+      },
     };
 
     #[cfg(feature = "webview-auth")]
@@ -298,7 +309,11 @@ pub async fn run() {
 }
 
 pub fn print_auth_result(auth_result: anyhow::Result<SamlAuthData>, host_id: Option<&str>) {
-  let auth_result = match auth_result {
+  println!("{}", json!(auth_outcome(auth_result, host_id)));
+}
+
+fn auth_outcome(auth_result: anyhow::Result<SamlAuthData>, host_id: Option<&str>) -> SamlAuthResult {
+  match auth_result {
     Ok(auth_data) => {
       let auth_data = match host_id {
         Some(host_id) => auth_data.with_host_id(host_id),
@@ -307,15 +322,34 @@ pub fn print_auth_result(auth_result: anyhow::Result<SamlAuthData>, host_id: Opt
       SamlAuthResult::Success(auth_data)
     }
     Err(err) if err.downcast_ref::<AuthenticationCancelled>().is_some() => SamlAuthResult::Cancelled,
-    Err(err) => SamlAuthResult::Failure(format!("{}", err)),
-  };
-
-  println!("{}", json!(auth_result));
+    Err(err) => match err.downcast::<ServerTlsError>() {
+      Ok(tls) => SamlAuthResult::ServerTlsError(tls),
+      Err(err) => SamlAuthResult::Failure(err.to_string()),
+    },
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn result_keeps_server_tls_kind_and_generic_failure_format() {
+    use gpapi::error::ServerTlsErrorKind;
+    let tls = ServerTlsError {
+      server: "https://vpn.example.com".into(),
+      kind: ServerTlsErrorKind::LegacyRenegotiation,
+    };
+    let outcome = auth_outcome(Err(anyhow::Error::new(tls).context("retry failed")), None);
+    assert_eq!(
+      serde_json::to_value(outcome).unwrap(),
+      json!({"serverTlsError": {"server": "https://vpn.example.com", "kind": "legacyRenegotiation"}})
+    );
+    assert_eq!(
+      serde_json::to_value(auth_outcome(Err(anyhow::anyhow!("rejected")), None)).unwrap(),
+      json!({"failure": "rejected"})
+    );
+  }
 
   /// gpauth's own result already goes to stdout as JSON; this makes its *logs*
   /// readable the same way, so a caller driving it does not have to parse prose

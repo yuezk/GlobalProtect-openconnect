@@ -13,6 +13,7 @@ base64.workspace = true
 dns-lookup.workspace = true
 log.workspace = true
 reqwest.workspace = true
+native-tls = "0.2"
 openssl.workspace = true
 version-compare = "0.2"
 pem.workspace = true

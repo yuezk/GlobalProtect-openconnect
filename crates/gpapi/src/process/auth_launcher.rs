@@ -379,6 +379,36 @@ mod tests {
   use crate::os_profile::{ClientOs, OsProfileBuilder};
 
   #[test]
+  fn server_tls_result_survives_process_decoding_as_a_typed_error() {
+    use crate::error::{ServerTlsError, ServerTlsErrorKind};
+    use std::os::unix::process::ExitStatusExt;
+    let output = std::process::Output {
+      status: std::process::ExitStatus::from_raw(0),
+      stdout: br#"{"serverTlsError":{"server":"https://vpn.example.com:8443","kind":"certificate"}}"#.to_vec(),
+      stderr: Vec::new(),
+    };
+    let error = decode_auth_output(output, false).unwrap_err();
+    assert_eq!(
+      error.downcast_ref::<ServerTlsError>(),
+      Some(&ServerTlsError {
+        server: "https://vpn.example.com:8443".into(),
+        kind: ServerTlsErrorKind::Certificate,
+      })
+    );
+  }
+
+  #[test]
+  fn launches_with_both_tls_options() {
+    let args = child_args(
+      SamlAuthLauncher::new("vpn.example.com")
+        .fix_openssl(true)
+        .ignore_tls_errors(true),
+    );
+    assert!(args.iter().any(|arg| arg == "--fix-openssl"));
+    assert!(args.iter().any(|arg| arg == "--ignore-tls-errors"));
+  }
+
+  #[test]
   fn os_profile_sets_os_from_profile() {
     let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
 

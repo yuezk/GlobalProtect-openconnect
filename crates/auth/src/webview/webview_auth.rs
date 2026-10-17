@@ -1,10 +1,11 @@
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::bail;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 use gpapi::utils::window::{WindowTypeHint, set_window_type_hint};
 use gpapi::{
   auth::{AuthWindowTheme, AuthenticationCancelled, SamlAuthData},
+  error::ServerTlsError,
   gp_params::GpParams,
   os_profile::{WebviewUserAgent, WebviewUserAgentTransform},
   utils::{redact::redact_uri, window::get_title_bar_height},
@@ -12,19 +13,25 @@ use gpapi::{
 use log::{info, warn};
 #[cfg(target_os = "macos")]
 use tauri::Manager;
-use tauri::{
-  AppHandle, WebviewUrl, WebviewWindow, WindowEvent,
-  webview::{PageLoadEvent, PageLoadPayload},
-};
+use tauri::{AppHandle, WebviewUrl, WebviewWindow, WindowEvent};
 use tokio::{sync::oneshot, time};
 
 use crate::auth_prelogin;
 
 use super::address_bar::TOOLBAR_HEIGHT;
 use super::auth_messenger::{AuthError, AuthEvent, AuthMessenger};
+use super::recovery::{Recovery, RecoveryStatus, RetryPlan, RetrySource, RetryTiming};
+
+const RESTART_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub trait PlatformWebviewExt {
-  fn install_address_bar(&self, window: &WebviewWindow) -> anyhow::Result<()>;
+  fn install_auth_controls(&self, window: &WebviewWindow, messenger: Arc<AuthMessenger>) -> anyhow::Result<()>;
+
+  fn set_recovery_status(&self, status: RecoveryStatus) -> anyhow::Result<()>;
+
+  fn stop_loading(&self);
+
+  fn confirm_tls_exception(&self) -> anyhow::Result<()>;
 
   fn ignore_tls_errors(&self) -> anyhow::Result<()>;
 
@@ -35,8 +42,6 @@ pub trait PlatformWebviewExt {
   fn load_url(&self, url: &str) -> anyhow::Result<()>;
 
   fn load_html(&self, html: &str) -> anyhow::Result<()>;
-
-  fn get_html(&self, callback: Box<dyn Fn(anyhow::Result<String>) + 'static>);
 
   fn load_auth_request(&self, auth_request: &str) -> anyhow::Result<()> {
     if auth_request.starts_with("http") {
@@ -62,8 +67,6 @@ pub struct WebviewAuthenticator<'a> {
   clean: bool,
   window_title: &'a str,
   window_theme: AuthWindowTheme,
-
-  is_retrying: tokio::sync::RwLock<bool>,
 }
 
 fn native_theme(theme: AuthWindowTheme) -> Option<tauri::Theme> {
@@ -92,7 +95,6 @@ impl<'a> WebviewAuthenticator<'a> {
       clean: false,
       window_title: "GlobalProtect Login",
       window_theme: AuthWindowTheme::System,
-      is_retrying: Default::default(),
     }
   }
 
@@ -123,34 +125,7 @@ impl<'a> WebviewAuthenticator<'a> {
 
   pub async fn authenticate(&self, app_handle: &AppHandle) -> anyhow::Result<SamlAuthData> {
     let auth_messenger = Arc::new(AuthMessenger::new());
-    let auth_messenger_clone = Arc::clone(&auth_messenger);
-
-    let on_page_load = move |auth_window: WebviewWindow, event: PageLoadPayload<'_>| {
-      let auth_messenger_clone = Arc::clone(&auth_messenger_clone);
-      let redacted_url = redact_uri(event.url().as_str());
-
-      match event.event() {
-        PageLoadEvent::Started => {
-          info!("Started loading page: {}", redacted_url);
-          auth_messenger_clone.cancel_raise_window();
-        }
-        PageLoadEvent::Finished => {
-          info!("Finished loading page: {}", redacted_url);
-        }
-      }
-
-      // Read auth data from the page no matter whether it's finished loading or not
-      // Because we found that the finished event may not be triggered in some cases (e.g., on macOS)
-      let _ = auth_window.with_webview(move |wv| {
-        wv.get_html(Box::new(move |html| match html {
-          Ok(html) => auth_messenger_clone.read_from_html(&html),
-          Err(err) => warn!("Failed to get html: {}", err),
-        }));
-      });
-    };
-
     let auth_window_builder = WebviewWindow::builder(app_handle, "auth_window", WebviewUrl::default())
-      .on_page_load(on_page_load)
       .title(self.window_title)
       .theme(native_theme(self.window_theme))
       .devtools(cfg!(any(debug_assertions, feature = "release-devtools")));
@@ -165,38 +140,169 @@ impl<'a> WebviewAuthenticator<'a> {
     #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
     set_window_type_hint(&auth_window, WindowTypeHint::Dialog)?;
 
-    self
-      .setup_auth_window(&auth_window, Arc::clone(&auth_messenger))
-      .await?;
-
-    if present_after_setup(self.clean) {
-      self.raise_window(&auth_window);
+    let messenger = Arc::clone(&auth_messenger);
+    let raise_task = tokio::spawn(async move {
+      time::sleep(Duration::from_secs(10)).await;
+      messenger.send_auth_event(AuthEvent::RaiseWindow);
+    });
+    let result = async {
+      self
+        .setup_auth_window(&auth_window, Arc::clone(&auth_messenger))
+        .await?;
+      if present_after_setup(self.clean) {
+        self.raise_window(&auth_window);
+      }
+      self.wait_for_auth(&auth_window, Arc::clone(&auth_messenger)).await
     }
+    .await;
+
+    raise_task.abort();
+    auth_messenger.begin_attempt();
+    auth_messenger.cancel_raise_window();
+    // Preserve the authentication outcome even if native teardown fails.
+    if let Err(error) = auth_window.close() {
+      warn!("Failed to close authentication window: {error}");
+    }
+    result
+  }
+
+  async fn wait_for_auth(
+    &self,
+    auth_window: &WebviewWindow,
+    auth_messenger: Arc<AuthMessenger>,
+  ) -> anyhow::Result<SamlAuthData> {
+    let mut recovery = Recovery::default();
+    let mut restart: Option<Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + '_>>> = None;
+    let mut loading_deadline = None;
 
     loop {
-      match auth_messenger.subscribe().await? {
-        AuthEvent::Close => bail!(AuthenticationCancelled),
-        AuthEvent::RaiseWindow => self.raise_window(&auth_window),
-        #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-        AuthEvent::Error(AuthError::TlsError) => bail!(gpapi::error::PortalError::TlsError),
-        AuthEvent::Error(AuthError::NotFound(location)) => {
+      let event = tokio::select! {
+        event = auth_messenger.subscribe() => event?,
+        result = async {
+          match restart.as_mut() {
+            Some(restart) => restart.await,
+            None => std::future::pending().await,
+          }
+        } => {
+          restart = None;
+          match result {
+            Ok(auth_request) => {
+              // Fence off reads and cancellation notifications from the old page.
+              auth_messenger.begin_attempt();
+              recovery.loading();
+              loading_deadline = Some(time::Instant::now() + RESTART_TIMEOUT);
+              self.load_restarted_sign_in(auth_window, &auth_messenger, auth_request)?;
+            }
+            Err(err) => {
+              warn!("Failed to restart sign-in: {}", err);
+              if err.downcast_ref::<ServerTlsError>().is_some() {
+                return Err(err);
+              }
+              recovery.load_failed();
+            }
+          }
+          self.update_recovery(auth_window, recovery.status())?;
+          continue;
+        }
+        _ = async {
+          match loading_deadline {
+            Some(deadline) => time::sleep_until(deadline).await,
+            None => std::future::pending().await,
+          }
+        } => {
+          loading_deadline = None;
+          recovery.load_failed();
+          self.update_recovery(auth_window, recovery.status())?;
+          continue;
+        }
+      };
+      let mut retry_plan = None;
+      match event {
+        AuthEvent::Close => {
+          bail!(AuthenticationCancelled);
+        }
+        AuthEvent::RaiseWindow => self.raise_window(auth_window),
+        AuthEvent::Data(generation, ..)
+        | AuthEvent::Error(generation, _)
+        | AuthEvent::NoAuthData(generation, _)
+        | AuthEvent::PageLoaded(generation)
+        | AuthEvent::TlsAccepted(generation)
+          if generation != auth_messenger.generation() =>
+        {
+          continue;
+        }
+        AuthEvent::Error(_, AuthError::Tls(failure)) => {
+          warn!("TLS failure for {}: {}", failure.host, failure.reason.message());
+          restart = None;
+          loading_deadline = None;
+          recovery.tls_failed(failure.reason, failure.can_continue);
+        }
+        AuthEvent::RequestTlsException => {
+          if recovery.status().can_continue() {
+            auth_window.with_webview(|wv| {
+              if let Err(err) = wv.confirm_tls_exception() {
+                warn!("Failed to confirm certificate exception: {}", err);
+              }
+            })?;
+          }
+        }
+        AuthEvent::TlsAccepted(_) => {
+          retry_plan = recovery.certificate_accepted();
+        }
+        AuthEvent::NoAuthData(_, location) => {
           info!(
             "No auth data found in {:?}, it may not be the /SAML20/SP/ACS endpoint",
             location
           );
-          self.handle_not_found(&auth_window, &auth_messenger);
+          self.handle_not_found(auth_window, &auth_messenger);
         }
-        AuthEvent::Error(AuthError::Invalid(err, location)) => {
+        AuthEvent::Error(_, AuthError::Invalid(err, location)) => {
           warn!("Got invalid auth data in {:?}: {}", location, err);
-          self.retry_auth(&auth_window).await;
+          recovery.failure(false);
         }
-        AuthEvent::Data(auth_data, location) => {
+        AuthEvent::Error(_, AuthError::TemporarilyUnavailable) => {
+          retry_plan = recovery.failure(true);
+        }
+        AuthEvent::Error(_, AuthError::LoadFailed(err)) => {
+          if matches!(
+            recovery.status(),
+            RecoveryStatus::Loading | RecoveryStatus::Hidden | RecoveryStatus::CertificateBypassed
+          ) {
+            warn!("Failed to load sign-in: {}", err);
+            recovery.load_failed();
+            loading_deadline = None;
+          }
+        }
+        AuthEvent::Retry => {
+          retry_plan = recovery.retry();
+        }
+        AuthEvent::PageLoaded(_) => {
+          recovery.page_loaded();
+          if !recovery.status().blocks_page() {
+            loading_deadline = None;
+          }
+        }
+        AuthEvent::Data(_, auth_data, location) => {
+          if !recovery.status().accepts_auth_data() {
+            continue;
+          }
           info!("Got auth data from {:?}", location);
 
-          auth_window.close()?;
           return Ok(auth_data);
         }
       }
+      if let Some(plan) = retry_plan {
+        loading_deadline = None;
+        auth_messenger.begin_attempt();
+        auth_window.with_webview(|wv| wv.stop_loading())?;
+        restart = Some(Box::pin(async move {
+          time::timeout(RESTART_TIMEOUT, self.request_sign_in(plan)).await?
+        }));
+      }
+      if recovery.status() != RecoveryStatus::Loading {
+        loading_deadline = None;
+      }
+      self.update_recovery(auth_window, recovery.status())?;
     }
   }
 
@@ -220,13 +326,6 @@ impl<'a> WebviewAuthenticator<'a> {
       }
     });
 
-    // Show the window after 10 seconds, so that the user can see the window if the auth process is stuck
-    let auth_messenger_clone = Arc::clone(&auth_messenger);
-    tokio::spawn(async move {
-      time::sleep(Duration::from_secs(10)).await;
-      auth_messenger_clone.send_auth_event(AuthEvent::RaiseWindow);
-    });
-
     let auth_request = match self.auth_request {
       Some(auth_request) => auth_request.to_string(),
       None => auth_prelogin(&self.server, &self.gp_params, false, false).await?,
@@ -239,17 +338,9 @@ impl<'a> WebviewAuthenticator<'a> {
 
     // Set up webview
     auth_window.with_webview(move |wv| {
-      #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-      {
-        use super::platform_impl::PlatformWebviewOnResponse;
-        wv.on_response(Box::new(move |response| match response {
-          Ok(response) => auth_messenger.read_from_response(&response),
-          Err(err) => auth_messenger.send_auth_error(err),
-        }));
-      }
-
+      let controls_messenger = Arc::clone(&auth_messenger);
       let result = || -> anyhow::Result<()> {
-        wv.install_address_bar(&window)?;
+        wv.install_auth_controls(&window, controls_messenger)?;
         if ignore_tls_errors {
           wv.ignore_tls_errors()?;
         }
@@ -277,49 +368,48 @@ impl<'a> WebviewAuthenticator<'a> {
     auth_messenger.schedule_raise_window(2);
   }
 
-  async fn retry_auth(&self, auth_window: &WebviewWindow) {
-    let mut is_retrying = self.is_retrying.write().await;
-    if *is_retrying {
-      info!("Already retrying authentication, skipping...");
-      return;
+  fn update_recovery(&self, auth_window: &WebviewWindow, status: RecoveryStatus) -> anyhow::Result<()> {
+    if status != RecoveryStatus::Hidden {
+      self.raise_window(auth_window);
     }
-
-    *is_retrying = true;
-    drop(is_retrying);
-
-    if let Err(err) = self.retry_auth_impl(auth_window).await {
-      warn!("Failed to retry authentication: {}", err);
-    }
-
-    *self.is_retrying.write().await = false;
-  }
-
-  async fn retry_auth_impl(&self, auth_window: &WebviewWindow) -> anyhow::Result<()> {
-    info!("Retrying authentication...");
-
-    auth_window.eval( r#"
-      var loading = document.createElement("div");
-      loading.innerHTML = '<div style="position: absolute; width: 100%; text-align: center; font-size: 20px; font-weight: bold; top: 50%; left: 50%; transform: translate(-50%, -50%);">Got invalid token, retrying...</div>';
-      loading.style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.85); z-index: 99999;";
-      document.body.appendChild(loading);
-    "#)?;
-
-    let auth_request = auth_prelogin(&self.server, &self.gp_params, false, false).await?;
-
-    let (tx, rx) = oneshot::channel::<anyhow::Result<()>>();
-    let webview_user_agent = self.webview_user_agent.clone();
     auth_window.with_webview(move |wv| {
-      let result = || -> anyhow::Result<()> {
-        load_auth_request_with_user_agent(&wv, webview_user_agent.as_ref(), &auth_request)
-      }();
-
-      if let Err(result) = tx.send(result) {
-        warn!("Failed to send retry auth result: {:?}", result);
+      if let Err(err) = wv.set_recovery_status(status) {
+        warn!("Failed to update sign-in status: {}", err);
       }
     })?;
+    Ok(())
+  }
 
-    rx.await??;
+  async fn request_sign_in(&self, plan: RetryPlan) -> anyhow::Result<String> {
+    info!("Restarting sign-in...");
+    if plan.timing == RetryTiming::AutomaticDelay {
+      time::sleep(Duration::from_secs(1)).await;
+    }
+    if plan.source == RetrySource::SuppliedRequest {
+      if let Some(request) = self.auth_request {
+        return Ok(request.to_owned());
+      }
+    }
+    auth_prelogin(self.server, self.gp_params, false, false).await
+  }
 
+  fn load_restarted_sign_in(
+    &self,
+    auth_window: &WebviewWindow,
+    messenger: &Arc<AuthMessenger>,
+    auth_request: String,
+  ) -> anyhow::Result<()> {
+    let webview_user_agent = self.webview_user_agent.clone();
+    let generation = messenger.generation();
+    let messenger = Arc::clone(messenger);
+    auth_window.with_webview(move |wv| {
+      if generation != messenger.generation() {
+        return;
+      }
+      if let Err(err) = load_auth_request_with_user_agent(&wv, webview_user_agent.as_ref(), &auth_request) {
+        messenger.send_auth_event(AuthEvent::Error(generation, AuthError::LoadFailed(err)));
+      }
+    })?;
     Ok(())
   }
 
