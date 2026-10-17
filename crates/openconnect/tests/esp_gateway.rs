@@ -7,10 +7,7 @@ fn c_esp_gateway_configuration_and_probes() {
   let source = PathBuf::from(env!("OPENCONNECT_PROTOCOL_SOURCE"));
   let directory = tempfile::tempdir().unwrap();
   let executable = directory.path().join("esp-gateway");
-  let mut packages = vec![
-    "libxml-2.0",
-    if cfg!(target_os = "macos") { "openssl" } else { "gnutls" },
-  ];
+  let mut packages = vec!["libxml-2.0", "gnutls"];
   if fs::read_to_string(build.join("config.h"))
     .unwrap()
     .contains("#define HAVE_LZ4 ")

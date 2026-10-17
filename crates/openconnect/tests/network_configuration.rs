@@ -9,11 +9,7 @@ fn c_network_configuration_lifecycle_and_failure_paths() {
   fs::create_dir_all(&directory).unwrap();
   let executable = directory.join("network-configuration");
   let flags = Command::new("pkg-config")
-    .args([
-      "--cflags",
-      "libxml-2.0",
-      if cfg!(target_os = "macos") { "openssl" } else { "gnutls" },
-    ])
+    .args(["--cflags", "libxml-2.0", "gnutls"])
     .output()
     .unwrap();
   assert!(flags.status.success());
