@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Context, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use gpapi::hip::HipApprovalStatus;
+use gpapi::{hip::HipApprovalStatus, utils::checksum::sha256_hex};
 use serde::{Deserialize, Serialize};
 use tempfile::Builder;
 use uuid::Uuid;
@@ -169,7 +169,7 @@ fn install_at(
   let info = ApprovalInfo {
     approval_id: approval_id.clone(),
     owner_uid: approving_uid,
-    sha256: sha256::digest(contents),
+    sha256: sha256_hex(contents),
     original_path,
   };
   let staged = Builder::new().prefix(".install-").tempdir_in(base)?;
@@ -232,7 +232,7 @@ fn resolve_at_with_control(
   }
   ensure!(!contents.is_empty(), "Approved HIP script is empty");
   ensure!(
-    sha256::digest(&contents) == info.sha256,
+    sha256_hex(&contents) == info.sha256,
     "Approved HIP script digest mismatch"
   );
   control.check()?;

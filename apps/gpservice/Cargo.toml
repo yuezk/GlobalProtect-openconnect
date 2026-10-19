@@ -8,8 +8,8 @@ license.workspace = true
 common = { path = "../../crates/common" }
 gpapi = { path = "../../crates/gpapi", features = ["clap", "logger"] }
 gphip = { path = "../../crates/gphip" }
+gptunnel = { path = "../../crates/gptunnel" }
 base64.workspace = true
-sha256.workspace = true
 openconnect = { path = "../../crates/openconnect" }
 clap.workspace = true
 anyhow.workspace = true
@@ -37,3 +37,6 @@ nix = { version = "0.31", features = ["fs", "socket", "user"] }
 [dev-dependencies]
 openssl.workspace = true
 tokio-tungstenite = "0.29"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpvpnc = { path = "../../crates/gpvpnc" }

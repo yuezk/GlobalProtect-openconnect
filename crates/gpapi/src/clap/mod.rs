@@ -4,13 +4,14 @@ use clap_verbosity_flag::{LogLevel, Verbosity, VerbosityFilter};
 use log::Level;
 
 use crate::{
-  error::PortalError,
+  error::ServerTlsErrorKind,
   log_format::{LogFormat, write_json_record},
 };
 
 pub mod args;
 
 pub trait Args {
+  #[cfg(not(target_os = "macos"))]
   fn fix_openssl(&self) -> bool;
   fn ignore_tls_errors(&self) -> bool;
 
@@ -26,7 +27,7 @@ pub trait Args {
 /// workaround. Empty when there is nothing useful to say — including when the
 /// relevant option is already in use.
 fn retry_hints(err: &anyhow::Error, args: &impl Args) -> Vec<String> {
-  let Some(err) = err.downcast_ref::<PortalError>() else {
+  let Some(kind) = ServerTlsErrorKind::from_error(err) else {
     return Vec::new();
   };
 
@@ -42,14 +43,15 @@ fn retry_hints(err: &anyhow::Error, args: &impl Args) -> Vec<String> {
   // users already see; keep it exactly.
   let mut hints = Vec::new();
 
-  if err.is_legacy_openssl_error() && !args.fix_openssl() {
+  #[cfg(not(target_os = "macos"))]
+  if kind == ServerTlsErrorKind::LegacyRenegotiation && !args.fix_openssl() {
     let (program, rest) = command_line();
     hints.push(format!(
       "Re-run it with the `--fix-openssl` option to work around this issue, e.g.:\n\n{program} --fix-openssl {rest}"
     ));
   }
 
-  if err.is_tls_error() && !args.ignore_tls_errors() {
+  if kind == ServerTlsErrorKind::Certificate && !args.ignore_tls_errors() {
     let (program, rest) = command_line();
     hints.push(format!(
       "Re-run it with the `--ignore-tls-errors` option to ignore the certificate error, e.g.:\n\n{program} --ignore-tls-errors {rest}"
@@ -191,15 +193,25 @@ mod tests {
   use anyhow::anyhow;
 
   use super::*;
+  use crate::error::ServerTlsError;
+
+  fn certificate_error() -> ServerTlsError {
+    ServerTlsError {
+      server: "https://vpn.example.com".into(),
+      kind: ServerTlsErrorKind::Certificate,
+    }
+  }
 
   #[derive(Default)]
   struct TestArgs {
+    #[cfg(not(target_os = "macos"))]
     fix_openssl: bool,
     ignore_tls_errors: bool,
     log_format: LogFormat,
   }
 
   impl Args for TestArgs {
+    #[cfg(not(target_os = "macos"))]
     fn fix_openssl(&self) -> bool {
       self.fix_openssl
     }
@@ -224,7 +236,7 @@ mod tests {
     };
     let mut out = Vec::new();
 
-    handle_error_to(&mut out, anyhow!(PortalError::TlsError), &args).expect("writing to a Vec cannot fail");
+    handle_error_to(&mut out, anyhow!(certificate_error()), &args).expect("writing to a Vec cannot fail");
 
     let out = String::from_utf8(out).expect("output should be UTF-8");
     for line in out.lines() {
@@ -235,7 +247,7 @@ mod tests {
 
   #[test]
   fn a_tls_failure_suggests_ignoring_tls_errors() {
-    let hints = retry_hints(&anyhow!(PortalError::TlsError), &TestArgs::default());
+    let hints = retry_hints(&anyhow!(certificate_error()), &TestArgs::default());
 
     assert_eq!(hints.len(), 1, "expected one hint, got {hints:?}");
     assert!(hints[0].contains("--ignore-tls-errors"), "got {:?}", hints[0]);
@@ -247,6 +259,34 @@ mod tests {
     );
   }
 
+  #[test]
+  fn hints_distinguish_legacy_and_unknown_tls_and_respect_both_flags() {
+    let legacy = ServerTlsError {
+      server: "https://vpn.example.com".into(),
+      kind: ServerTlsErrorKind::LegacyRenegotiation,
+    };
+    let hints = retry_hints(&anyhow!(legacy.clone()), &TestArgs::default());
+    if cfg!(target_os = "macos") {
+      assert!(hints.is_empty());
+    } else {
+      assert_eq!(hints.len(), 1);
+      assert!(hints[0].contains("--fix-openssl"));
+    }
+    let args = TestArgs {
+      #[cfg(not(target_os = "macos"))]
+      fix_openssl: true,
+      ignore_tls_errors: true,
+      ..Default::default()
+    };
+    assert!(retry_hints(&anyhow!(legacy), &args).is_empty());
+    assert!(retry_hints(&anyhow!(certificate_error()), &args).is_empty());
+    let other = ServerTlsError {
+      server: "https://vpn.example.com".into(),
+      kind: ServerTlsErrorKind::Other,
+    };
+    assert!(retry_hints(&anyhow!(other), &TestArgs::default()).is_empty());
+  }
+
   /// Suggesting an option the user already passed is noise, and in JSON mode it
   /// would be an extra record on every failed run.
   #[test]
@@ -256,7 +296,7 @@ mod tests {
       ..Default::default()
     };
 
-    assert!(retry_hints(&anyhow!(PortalError::TlsError), &args).is_empty());
+    assert!(retry_hints(&anyhow!(certificate_error()), &args).is_empty());
   }
 
   /// Most failures have no known workaround; inventing advice for them would
@@ -272,7 +312,7 @@ mod tests {
     let hints = vec!["Re-run it with the `--ignore-tls-errors` option".to_string()];
     let mut out = Vec::new();
 
-    write_failure(&mut out, format, &anyhow!(PortalError::TlsError), &hints).expect("writing to a Vec cannot fail");
+    write_failure(&mut out, format, &anyhow!(certificate_error()), &hints).expect("writing to a Vec cannot fail");
 
     String::from_utf8(out).expect("output should be UTF-8")
   }

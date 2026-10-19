@@ -11,7 +11,7 @@ members = [
 
 [workspace.package]
 rust-version = "1.91"
-version = "3.0.5"
+version = "3.0.6"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
 edition = "2024"
@@ -30,7 +30,8 @@ dns-lookup = "4.0.2"
 env_logger = "0.11"
 is_executable = "1.0"
 log = "0.4"
-regex = "1"
+# RUST_LOG accepts user-supplied Unicode property filters through env_logger.
+regex = { version = "1", default-features = false, features = ["std", "perf", "unicode"] }
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "system-proxy", "json", "form", "query"] }
 openssl = "0.10"
 pem = "4"
@@ -50,11 +51,10 @@ futures-util = "0.3"
 uzers = "0.12"
 whoami = "2"
 thiserror = "2"
-redact-engine = "0.1"
 compile-time = "0.4"
 serde_urlencoded = "0.7"
 md5 = "0.8"
-sha256 = { version = "1", default-features = false }
+sha2 = { version = "0.11", default-features = false }
 which = "8"
 uuid = "1"
 netdev = "0.46.3"

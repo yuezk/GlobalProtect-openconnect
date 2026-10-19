@@ -49,6 +49,7 @@ pub enum SamlAuthResult {
   Success(SamlAuthData),
   Cancelled,
   Failure(String),
+  ServerTlsError(crate::error::ServerTlsError),
 }
 
 #[derive(Debug)]
@@ -68,6 +69,7 @@ impl SamlAuthResult {
       SamlAuthResult::Success(_) => true,
       SamlAuthResult::Cancelled => false,
       SamlAuthResult::Failure(_) => false,
+      SamlAuthResult::ServerTlsError(_) => false,
     }
   }
 
@@ -76,6 +78,7 @@ impl SamlAuthResult {
       SamlAuthResult::Success(auth_data) => auth_data.host_id(),
       SamlAuthResult::Cancelled => None,
       SamlAuthResult::Failure(_) => None,
+      SamlAuthResult::ServerTlsError(_) => None,
     }
   }
 }

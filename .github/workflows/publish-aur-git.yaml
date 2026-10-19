@@ -44,23 +44,34 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed \
             appmenu-gtk-module \
+            autoconf \
+            automake \
             cargo \
             curl \
             desktop-file-utils \
             file \
             git \
+            gettext \
+            gmp \
+            gnutls \
             libappindicator-gtk3 \
+            libp11-kit \
             libsecret \
+            libtool \
             libxml2 \
+            lz4 \
+            make \
             namcap \
-            openconnect \
+            nettle \
             openssl \
+            patch \
             pkgconf \
             librsvg \
             shared-mime-info \
-            vpnc \
             wget \
-            webkit2gtk-4.1
+            webkit2gtk-4.1 \
+            xdg-utils \
+            zlib
 
       - name: Save committed .SRCINFO
         if: ${{ github.event_name == 'push' }}

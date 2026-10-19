@@ -254,12 +254,18 @@ async fn receive_gateway_login(
     .await
     .map_err(|e| {
       warn!("Network error: {:?}", e);
-      anyhow::anyhow!(PortalError::NetworkError(e))
+      match crate::error::ServerTlsError::from_request(origin, &e) {
+        Some(tls) => anyhow::anyhow!(tls),
+        None => anyhow::anyhow!(PortalError::NetworkError(e)),
+      }
     })?;
 
   let endpoint = res.remote_addr();
   let url = res.url().clone();
   let res = parse_gp_response(res).await.map_err(|err| {
+    if let Some(tls) = crate::error::ServerTlsError::from_request(origin, &err) {
+      return anyhow::anyhow!(tls);
+    }
     warn!("Gateway login response failed: {}", err.reason);
     anyhow::anyhow!("Gateway login error: {}", err.reason)
   })?;

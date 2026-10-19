@@ -1,6 +1,7 @@
 mod background;
 mod cli;
 mod connect;
+mod dashboard;
 mod diagnostics;
 mod disconnect;
 mod hip;

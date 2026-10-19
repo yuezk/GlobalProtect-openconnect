@@ -119,23 +119,13 @@ impl Cli {
     } else {
       None
     };
-    let brokered_scripts_dir = if externally_brokered {
-      let executable = std::env::current_exe().context("Failed to locate the gpservice executable")?;
-      let contents_dir = executable
-        .parent()
-        .and_then(std::path::Path::parent)
-        .context("gpservice is not inside a macOS application bundle")?;
-      Some(contents_dir.join("Resources/Scripts"))
-    } else {
-      None
-    };
     let (mut vpn_task, lifecycle) = VpnTask::new(vpn_state_tx, externally_brokered, Arc::clone(&registry));
     let dispatcher = Arc::new(RequestDispatcher::new(
       lifecycle.clone(),
       Arc::clone(&gui_restart_requested),
       Arc::clone(&redaction),
       !externally_brokered,
-      brokered_scripts_dir,
+      externally_brokered,
     ));
     #[cfg(target_os = "macos")]
     let idle_vpn_state_rx = vpn_state_rx.clone();

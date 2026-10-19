@@ -7,10 +7,11 @@ use std::{
 use log::{info, warn};
 
 use crate::vpn_utils::{check_executable, find_vpnc_script};
-use crate::{HipSource, ffi};
+use crate::{HipSource, NetworkConfiguration, NetworkConfigurationHandler, ffi};
 
 type OnConnectedCallback = Arc<RwLock<Option<Box<dyn FnOnce(VpnSessionInfo) + 'static + Send + Sync>>>>;
 type OnHipReportCallback = RwLock<Option<Arc<dyn Fn(&str) + Send + Sync>>>;
+type OnTunnelCallback = RwLock<Option<Arc<dyn Fn(crate::tunnel::Event) + Send + Sync>>>;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VpnSessionInfo {
@@ -72,6 +73,7 @@ struct Cancellation {
 struct CancellationState {
   requested: bool,
   command_fd: Option<i32>,
+  statistics_pending: bool,
 }
 
 impl Cancellation {
@@ -82,7 +84,31 @@ impl Cancellation {
   }
 
   fn detach(&self) {
-    self.state.lock().unwrap().command_fd = None;
+    let mut state = self.state.lock().unwrap();
+    state.command_fd = None;
+    state.statistics_pending = false;
+  }
+
+  fn request_statistics(&self) -> io::Result<bool> {
+    let mut state = self.state.lock().unwrap();
+    if state.requested || state.statistics_pending {
+      return Ok(false);
+    }
+    let Some(fd) = state.command_fd else {
+      return Ok(false);
+    };
+    match ffi::write_statistics(fd) {
+      Ok(()) => {
+        state.statistics_pending = true;
+        Ok(true)
+      }
+      Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(false),
+      Err(error) => Err(error),
+    }
+  }
+
+  fn statistics_received(&self) {
+    self.state.lock().unwrap().statistics_pending = false;
   }
 
   fn cancel(&self) -> io::Result<()> {
@@ -110,7 +136,8 @@ pub struct Vpn {
   host_id: Option<CString>,
   local_hostname: Option<CString>,
 
-  script: CString,
+  script: Option<CString>,
+  pub(crate) network_configuration_handler: Option<Arc<NetworkConfigurationHandler>>,
   interface: Option<CString>,
   script_tun: bool,
 
@@ -131,9 +158,45 @@ pub struct Vpn {
 
   callback: OnConnectedCallback,
   hip_report_callback: OnHipReportCallback,
+  tunnel_callback: OnTunnelCallback,
+  observed_transport: Mutex<Option<crate::tunnel::Transport>>,
 }
 
 impl Vpn {
+  /// Install before `connect`. The observer runs synchronously on the native
+  /// connection thread and must return promptly. Clear it after joining connect.
+  pub fn set_tunnel_observer(&self, callback: impl Fn(crate::tunnel::Event) + Send + Sync + 'static) {
+    *self.tunnel_callback.write().unwrap() = Some(Arc::new(callback));
+  }
+
+  pub fn clear_tunnel_observer(&self) {
+    *self.tunnel_callback.write().unwrap() = None;
+  }
+
+  /// Signal a nonblocking statistics request. False means no command was issued
+  /// because collection was coalesced, unavailable, cancelled, or the pipe full.
+  pub fn request_statistics(&self) -> io::Result<bool> {
+    self.cancellation.request_statistics()
+  }
+
+  pub(crate) fn statistics_received(&self) {
+    self.cancellation.statistics_received();
+  }
+
+  pub(crate) fn on_tunnel_event(&self, event: crate::tunnel::Event) {
+    if let crate::tunnel::Event::Transport(transport) = &event {
+      let mut previous = self.observed_transport.lock().unwrap();
+      if previous.as_ref() == Some(transport) {
+        return;
+      }
+      *previous = Some(*transport);
+    }
+    let callback = self.tunnel_callback.read().unwrap().clone();
+    if let Some(callback) = callback {
+      callback(event);
+    }
+  }
+
   pub fn builder(server: &str, cookie: &str) -> VpnBuilder {
     VpnBuilder::new(server, cookie)
   }
@@ -217,7 +280,11 @@ impl Vpn {
       host_id: Self::option_to_ptr(&self.host_id),
       local_hostname: Self::option_to_ptr(&self.local_hostname),
 
-      script: self.script.as_ptr(),
+      script: Self::option_to_ptr(&self.script),
+      configure_network: self
+        .network_configuration_handler
+        .as_ref()
+        .map(|_| ffi::configure_network as _),
       interface: Self::option_to_ptr(&self.interface),
       script_tun: self.script_tun as u32,
 
@@ -275,6 +342,7 @@ pub struct VpnBuilder {
   server: String,
   cookie: String,
   script: Option<String>,
+  network_configuration_handler: Option<Arc<NetworkConfigurationHandler>>,
   script_is_path: bool,
   interface: Option<String>,
   script_tun: bool,
@@ -307,6 +375,7 @@ impl VpnBuilder {
       server: server.to_string(),
       cookie: cookie.to_string(),
       script: None,
+      network_configuration_handler: None,
       script_is_path: false,
       interface: None,
       script_tun: false,
@@ -342,6 +411,17 @@ impl VpnBuilder {
   pub fn script_path<T: Into<Option<String>>>(mut self, script: T) -> Self {
     self.script = script.into();
     self.script_is_path = true;
+    self
+  }
+
+  /// Handle network configuration synchronously on OpenConnect's connection thread.
+  /// Replaces the external configuration script, not the tunnel device or packet I/O.
+  /// The handler receives a snapshot; it must not mutate the process environment.
+  pub fn network_configuration_handler(
+    mut self,
+    handler: impl Fn(&NetworkConfiguration) -> io::Result<()> + Send + Sync + 'static,
+  ) -> Self {
+    self.network_configuration_handler = Some(Arc::new(handler));
     self
   }
 
@@ -435,8 +515,16 @@ impl VpnBuilder {
     self
   }
 
-  fn determine_script(&self) -> Result<String, VpnError> {
-    match &self.script {
+  fn resolve_script(&self) -> Result<Option<CString>, VpnError> {
+    if self.network_configuration_handler.is_some() {
+      if self.script.is_some() || self.script_tun {
+        return Err(VpnError::new(
+          "Network configuration handler conflicts with script options".into(),
+        ));
+      }
+      return Ok(None);
+    }
+    let script = match &self.script {
       Some(script) => {
         if self.script_is_path && !std::path::Path::new(script).exists() {
           return Err(VpnError::new(format!("VPN script does not exist: {script}")));
@@ -445,16 +533,17 @@ impl VpnBuilder {
         Ok(script.clone())
       }
       None => find_vpnc_script().ok_or_else(|| VpnError::new(String::from("Failed to find vpnc-script"))),
-    }
-  }
-
-  pub fn build(self) -> Result<Vpn, VpnError> {
-    let script = self.determine_script()?;
+    }?;
     let script = if self.script_is_path || self.script.is_none() {
       shell_quote_path(&script)
     } else {
       script
     };
+    Ok(Some(Self::to_cstring(&script)))
+  }
+
+  pub fn build(self) -> Result<Vpn, VpnError> {
+    let script = self.resolve_script()?;
 
     let user_agent = self.user_agent.unwrap_or_default();
     let os = self.os.unwrap_or("linux".to_string());
@@ -471,7 +560,8 @@ impl VpnBuilder {
       host_id: self.host_id.as_deref().map(Self::to_cstring),
       local_hostname: self.local_hostname.as_deref().map(Self::to_cstring),
 
-      script: Self::to_cstring(&script),
+      script,
+      network_configuration_handler: self.network_configuration_handler,
       interface: self.interface.as_deref().map(Self::to_cstring),
       script_tun: self.script_tun,
 
@@ -491,6 +581,8 @@ impl VpnBuilder {
 
       callback: Default::default(),
       hip_report_callback: Default::default(),
+      tunnel_callback: Default::default(),
+      observed_transport: Default::default(),
     })
   }
 
@@ -525,7 +617,7 @@ mod tests {
       .build()
       .unwrap();
 
-    assert_eq!(vpn.script.to_str().unwrap(), command);
+    assert_eq!(vpn.script.as_ref().unwrap().to_str().unwrap(), command);
   }
 
   #[test]
@@ -535,7 +627,7 @@ mod tests {
       .build()
       .unwrap();
 
-    assert_eq!(vpn.script.to_str().unwrap(), "'/bin/sh'");
+    assert_eq!(vpn.script.as_ref().unwrap().to_str().unwrap(), "'/bin/sh'");
   }
 
   #[test]
@@ -598,7 +690,8 @@ mod tests {
       client_version: None,
       host_id: Some(CString::new("profile-host-id").unwrap()),
       local_hostname: None,
-      script: CString::new("/bin/true").unwrap(),
+      script: Some(CString::new("/bin/true").unwrap()),
+      network_configuration_handler: None,
       interface: None,
       script_tun: false,
       certificate: None,
@@ -614,6 +707,8 @@ mod tests {
       no_xmlpost: false,
       callback: Default::default(),
       hip_report_callback: Default::default(),
+      tunnel_callback: Default::default(),
+      observed_transport: Default::default(),
     };
 
     let options = vpn.build_connect_options();
@@ -661,23 +756,38 @@ mod tests {
       ffi::{c_int, c_void},
       fs::File,
       os::fd::AsFd,
+      os::unix::process::CommandExt,
       process::{Command, Stdio},
     };
 
     const CHILD: &str = "OPENCONNECT_TEST_PIPE_FAILURE";
     if std::env::var_os(CHILD).is_none() {
       // Limit descriptors only in a subprocess, leaving the test runner untouched.
-      let output = Command::new("sh")
+      let mut child = Command::new(std::env::current_exe().unwrap());
+      child
         .args([
-          "-c",
-          "ulimit -n 64 && exec \"$1\" --exact vpn::tests::command_pipe_failure_preserves_stdin --nocapture",
-          "sh",
+          "--exact",
+          "vpn::tests::command_pipe_failure_preserves_stdin",
+          "--nocapture",
         ])
-        .arg(std::env::current_exe().unwrap())
         .env(CHILD, "1")
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
+        .stdin(Stdio::null());
+      // Launch directly: system shells can strip the dynamic-library search
+      // environment required by the replaceable macOS OpenConnect library.
+      unsafe {
+        child.pre_exec(|| {
+          let limit = libc::rlimit {
+            rlim_cur: 64,
+            rlim_max: 64,
+          };
+          if libc::setrlimit(libc::RLIMIT_NOFILE, &limit) == 0 {
+            Ok(())
+          } else {
+            Err(io::Error::last_os_error())
+          }
+        });
+      }
+      let output = child.output().unwrap();
       assert!(
         output.status.success(),
         "{}\n{}",
@@ -811,5 +921,55 @@ mod tests {
     cancellation.detach();
     cancellation.cancel().unwrap();
     assert_eq!(reader.read(&mut [0]).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+  }
+
+  #[test]
+  fn statistics_are_coalesced_and_fenced_by_cancellation_and_detach() {
+    use std::{
+      io::Read,
+      os::{fd::AsRawFd, unix::net::UnixStream},
+    };
+    let cancellation = Cancellation::default();
+    let (mut reader, writer) = UnixStream::pair().unwrap();
+    reader.set_nonblocking(true).unwrap();
+    assert!(!cancellation.request_statistics().unwrap());
+    assert!(!cancellation.attach(writer.as_raw_fd()));
+    assert!(cancellation.request_statistics().unwrap());
+    assert!(!cancellation.request_statistics().unwrap());
+    let mut command = [0];
+    reader.read_exact(&mut command).unwrap();
+    assert_eq!(command, [b's']);
+    cancellation.statistics_received();
+    assert!(cancellation.request_statistics().unwrap());
+    reader.read_exact(&mut command).unwrap();
+    cancellation.cancel().unwrap();
+    assert!(!cancellation.request_statistics().unwrap());
+    reader.read_exact(&mut command).unwrap();
+    assert_eq!(command, [b'x']);
+    cancellation.detach();
+    assert!(!cancellation.state.lock().unwrap().statistics_pending);
+    assert!(!cancellation.request_statistics().unwrap());
+    assert_eq!(reader.read(&mut command).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+  }
+
+  #[test]
+  fn full_command_pipe_does_not_latch_a_statistics_request() {
+    use std::{
+      io::{Read, Write},
+      os::{fd::AsRawFd, unix::net::UnixStream},
+    };
+    let cancellation = Cancellation::default();
+    let (mut reader, mut writer) = UnixStream::pair().unwrap();
+    reader.set_nonblocking(true).unwrap();
+    writer.set_nonblocking(true).unwrap();
+    while writer.write(&[0; 1024]).is_ok() {}
+    while writer.write(&[0]).is_ok() {}
+    assert!(!cancellation.attach(writer.as_raw_fd()));
+    assert!(!cancellation.request_statistics().unwrap());
+    assert!(!cancellation.state.lock().unwrap().statistics_pending);
+    let mut bytes = [0; 4096];
+    while reader.read(&mut bytes).is_ok() {}
+    assert!(cancellation.request_statistics().unwrap());
+    cancellation.detach();
   }
 }

@@ -20,14 +20,14 @@ use gpapi::{
 };
 use inquire::Text;
 use log::{Level, info, warn};
-use openconnect::{HipScript, HipSource, Vpn, VpnBuilder};
+use openconnect::{HipScript, HipSource, VpnBuilder};
 use tokio::{runtime::Handle, task::JoinHandle};
 
 use crate::session::{
   SessionContextInput, build_session_context, session_info_from_vpn, spawn_session_runtime_with_info,
 };
 
-use super::{ConnectHandler, args::cookie_cache_path};
+use super::{ConnectHandler, args::cookie_cache_path, vpn_script};
 
 const OPENCONNECT_INTERRUPTED_EXIT_CODE: i32 = -4;
 
@@ -443,10 +443,8 @@ impl ConnectHandler<'_> {
       disable_ipv6: self.args.disable_ipv6,
       extension_auth: Some(extension_auth),
     });
-    let vpn_builder = Vpn::builder(gateway, cookie)
-      .script(self.args.script.clone())
+    let vpn_builder = vpn_script::builder(gateway, cookie, self.args)
       .interface(self.args.interface.clone())
-      .script_tun(self.args.script_tun)
       .certificate(certificate)
       .sslkey(sslkey)
       .key_password(key_password)
@@ -458,15 +456,6 @@ impl ConnectHandler<'_> {
       .local_hostname(self.args.local_hostname.clone())
       .dpd_interval(self.args.dpd_interval.unwrap_or(0))
       .no_xmlpost(self.args.no_xmlpost);
-    #[cfg(target_os = "macos")]
-    let vpn_builder = if self.args.script.is_none()
-      && std::env::var_os("GP_VPNC_SCRIPT").is_none_or(|value| value.is_empty())
-      && let Some(script) = common::binary_paths::bundled_vpnc_script()
-    {
-      vpn_builder.script_path(script.to_string_lossy().into_owned())
-    } else {
-      vpn_builder
-    };
     let vpn = apply_os_profile(vpn_builder, &os_profile)
       .build()
       .map_err(|err| GatewayConnectError::before_establishment(err.into()))?;
@@ -490,6 +479,16 @@ impl ConnectHandler<'_> {
       .map(|background| background.redirect_stdio())
       .transpose()
       .map_err(GatewayConnectError::before_establishment)?;
+
+    let mut dashboard = if self.args.dashboard {
+      Some(
+        crate::dashboard::Dashboard::prepare(gateway.to_owned(), self.cancellation.clone())
+          .map_err(GatewayConnectError::before_establishment)?,
+      )
+    } else {
+      None
+    };
+    let monitor = gptunnel::TunnelMonitor::attach(vpn.clone());
 
     let disconnect_task = tokio::spawn(async move {
       cancellation.cancelled().await;
@@ -523,7 +522,7 @@ impl ConnectHandler<'_> {
         session_task_on_connect.lock().unwrap().replace(task);
       })
     });
-    let mut background_error = None;
+    let mut output_error = None;
     let connect_result = tokio::select! {
       result = &mut worker => result,
       established = established_rx => {
@@ -537,6 +536,12 @@ impl ConnectHandler<'_> {
               self.logout_gateway(&server).await;
             }
           }, || {
+            if let Some(dashboard) = &mut dashboard {
+              if let Err(error) = dashboard.start_tunnel(monitor.clone()) {
+                self.cancellation.cancel();
+                output_error = Some(error);
+              }
+            }
             if let (Some(background), Some(stdio)) = (&self.background, &mut background_stdio) {
               let detach = if self.pid_written.load(Ordering::SeqCst) {
                 background.detach(stdio)
@@ -545,7 +550,7 @@ impl ConnectHandler<'_> {
               };
               if let Err(error) = detach {
                 self.cancellation.cancel();
-                background_error = Some(error);
+                output_error = Some(error);
               }
             }
           }).await
@@ -554,6 +559,12 @@ impl ConnectHandler<'_> {
         }
       }
     };
+    monitor.stop().await;
+    if let Some(dashboard) = &mut dashboard {
+      if let Err(error) = dashboard.finish() {
+        output_error = Some(error);
+      }
+    }
     let tunnel_established = tunnel_established.load(Ordering::SeqCst);
     disconnect_task.abort();
     let _ = disconnect_task.await;
@@ -564,7 +575,7 @@ impl ConnectHandler<'_> {
       let _ = task.await;
     }
 
-    if let Some(error) = background_error {
+    if let Some(error) = output_error {
       return Err(GatewayConnectError::after_establishment(error));
     }
 

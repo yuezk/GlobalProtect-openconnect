@@ -32,9 +32,20 @@ mod runtime;
 pub(crate) struct LifecycleHandle {
   events: mpsc::Sender<LifecycleEvent>,
   admissions: Arc<Mutex<Admissions>>,
+  tunnel: watch::Sender<TunnelBinding>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct TunnelBinding {
+  pub attempt: u64,
+  pub monitor: Option<Arc<gptunnel::TunnelMonitor>>,
+  pub non_tunnel: bool,
 }
 
 impl LifecycleHandle {
+  pub fn subscribe_tunnel(&self) -> watch::Receiver<TunnelBinding> {
+    self.tunnel.subscribe()
+  }
   pub fn reserve_connect(&self) -> Result<ConnectReservation, ServiceResult> {
     let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
     if admissions.closed {
@@ -370,6 +381,10 @@ enum AdmissionPhase {
 }
 
 enum LifecycleEvent {
+  TunnelMonitor {
+    attempt: u64,
+    monitor: Arc<gptunnel::TunnelMonitor>,
+  },
   Start {
     attempt: u64,
     connection: PreparedConnection,
@@ -429,6 +444,7 @@ impl VpnTask {
     let lifecycle = LifecycleHandle {
       events: events_tx,
       admissions: Arc::new(Mutex::new(Admissions::default())),
+      tunnel: watch::channel(TunnelBinding::default()).0,
     };
     let task = Self {
       events,
@@ -493,6 +509,16 @@ impl VpnTask {
 
   async fn handle_event(&mut self, event: LifecycleEvent) {
     match event {
+      LifecycleEvent::TunnelMonitor { attempt, monitor } => {
+        if self.active.as_ref().is_some_and(|active| active.attempt == attempt) {
+          let non_tunnel = false;
+          self.lifecycle.tunnel.send_replace(TunnelBinding {
+            attempt,
+            monitor: Some(monitor),
+            non_tunnel,
+          });
+        }
+      }
       LifecycleEvent::Start {
         attempt,
         connection,
@@ -526,6 +552,16 @@ impl VpnTask {
     session_id: Option<Uuid>,
   ) {
     let activated = self.lifecycle.activate_attempt(attempt);
+    self.lifecycle.tunnel.send_replace(TunnelBinding {
+      attempt,
+      monitor: None,
+      non_tunnel: connection
+        .request
+        .plan()
+        .members()
+        .iter()
+        .all(|member| member.authentication.mode() == gpapi::session::SessionMode::NonTunnel),
+    });
     let info = connection.request.info().clone();
     let allow_extend_session = connection.request.args().allow_extend_session();
     let cancellation = self.lifecycle.attempt_cancellation(attempt);
@@ -660,6 +696,12 @@ impl VpnTask {
     }
     if let Some(session_id) = active.session_id {
       self.registry.clear_successful_hip_report(session_id);
+    }
+    if self.lifecycle.tunnel.borrow().monitor.is_none() {
+      self.lifecycle.tunnel.send_replace(TunnelBinding {
+        attempt,
+        ..Default::default()
+      });
     }
     if let Some(reason) = active.failure {
       self.send_state(VpnState::Failed(reason));
@@ -815,49 +857,22 @@ mod tests {
     );
   }
 
-  fn identity_material() -> (openssl::pkey::PKey<openssl::pkey::Private>, openssl::x509::X509) {
-    use openssl::{
-      asn1::Asn1Time,
-      hash::MessageDigest,
-      pkey::PKey,
-      rsa::Rsa,
-      x509::{X509, X509NameBuilder},
-    };
-    let key = PKey::from_rsa(Rsa::generate(2048).unwrap()).unwrap();
-    let mut name = X509NameBuilder::new().unwrap();
-    name.append_entry_by_text("CN", "service-identity-fixture").unwrap();
-    let name = name.build();
-    let mut certificate = X509::builder().unwrap();
-    certificate.set_version(2).unwrap();
-    certificate.set_subject_name(&name).unwrap();
-    certificate.set_issuer_name(&name).unwrap();
-    certificate.set_pubkey(&key).unwrap();
-    certificate
-      .set_not_before(&Asn1Time::days_from_now(0).unwrap())
-      .unwrap();
-    certificate.set_not_after(&Asn1Time::days_from_now(1).unwrap()).unwrap();
-    certificate.sign(&key, MessageDigest::sha256()).unwrap();
-    (key, certificate.build())
-  }
-
   #[test]
   fn tunnel_identity_paths_allow_large_files_and_retain_loaded_material() {
-    let (key, certificate) = identity_material();
+    let certificate = include_bytes!("../../../crates/gpapi/tests/files/client-identity/rsa-cert.pem");
+    let key = include_bytes!("../../../crates/gpapi/tests/files/client-identity/rsa-pkcs8.pem");
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("identity.pem");
-    let mut pem = certificate.to_pem().unwrap();
-    pem.extend(key.private_key_to_pem_pkcs8().unwrap());
+    let mut pem = certificate.to_vec();
+    pem.extend(key);
     pem.resize(gpapi::service::request::MAX_CLIENT_IDENTITY_DATA + 1, b'\n');
     std::fs::write(&path, pem).unwrap();
     let request = identity_request().with_certificate(Some(path.to_str().unwrap().into()));
     let identity = prepare_identity(request.args(), false).unwrap().unwrap();
     std::fs::remove_file(path).unwrap();
-    assert_eq!(identity.certificate_data(), certificate.to_pem().unwrap());
+    assert_eq!(identity.certificate_data(), certificate);
     let files = identity.write_files(None).unwrap();
-    assert_eq!(
-      std::fs::read(files.certificate()).unwrap(),
-      certificate.to_pem().unwrap()
-    );
+    assert_eq!(std::fs::read(files.certificate()).unwrap(), certificate);
     assert!(files.key().is_some());
   }
 
@@ -881,17 +896,8 @@ mod tests {
 
   #[test]
   fn protected_pkcs12_import_retains_password_and_single_file_material() {
-    use openssl::pkcs12::Pkcs12;
-    let (key, certificate) = identity_material();
-    let password = "service-fixture-password";
-    let p12 = Pkcs12::builder()
-      .name("fixture")
-      .pkey(&key)
-      .cert(&certificate)
-      .build2(password)
-      .unwrap()
-      .to_der()
-      .unwrap();
+    let password = "fixture-password";
+    let p12 = include_bytes!("../../../crates/gpapi/tests/files/client-identity/modern.p12").to_vec();
     let request = identity_request()
       .with_certificate_data(Some(p12.clone()))
       .with_key_password(Some(password.into()));
