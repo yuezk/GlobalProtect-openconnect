@@ -30,7 +30,13 @@ async fn embedded_collector_reports_missing_helpers_without_recursing_or_exposin
   let output = tokio::time::timeout(
     Duration::from_secs(30),
     Command::new(env!("CARGO_BIN_EXE_gpclient"))
-      .args(["--fix-openssl", "diagnostics", "--json", "--output"])
+      .args([
+        #[cfg(not(target_os = "macos"))]
+        "--fix-openssl",
+        "diagnostics",
+        "--json",
+        "--output",
+      ])
       .arg(&report_file)
       .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
       .env("GP_AUTH_BINARY", dir.path().join("missing-gpauth"))

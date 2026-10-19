@@ -320,8 +320,8 @@ fn parse_hip_check(root: &Element) -> Result<HipCheck, GatewayRequestError> {
       .map_err(|_| GatewayRequestError::MalformedResponse)?,
     None => 0,
   };
-  // Limit this client's supported response delay to one hour. The official
-  // registry scheduling cap is not evidence of a wire-protocol maximum.
+  // Accept response delays up to one hour as a client policy, not a
+  // wire-protocol maximum.
   if delay > 3600 {
     return Err(GatewayRequestError::MalformedResponse);
   }

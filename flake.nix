@@ -209,9 +209,12 @@
           '';
         }) {};
 
-        prebuilt = lib.makeOverridable ({ binaries ? binaryPackage, gui ? gpgui }: pkgs.stdenv.mkDerivation {
-          inherit pname;
-          version = releaseVersion;
+        prebuilt = lib.makeOverridable ({
+          binaries ? binaryPackage,
+          gui ? gpgui,
+          version ? releaseVersion,
+        }: pkgs.stdenv.mkDerivation {
+          inherit pname version;
 
           src = binaries;
           dontBuild = true;

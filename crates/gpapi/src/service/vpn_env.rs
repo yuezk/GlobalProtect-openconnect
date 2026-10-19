@@ -18,6 +18,7 @@ pub struct HostInfo {
 /// to the client so that it can configure itself accordingly.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VpnEnv {
+  pub tunnel_state: Option<crate::session::tunnel::TunnelState>,
   /// The VPN connection state
   pub vpn_state: VpnState,
 

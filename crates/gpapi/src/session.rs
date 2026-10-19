@@ -9,6 +9,7 @@ mod gateway_sessions;
 pub mod network;
 pub mod non_tunnel;
 pub mod transport;
+pub mod tunnel;
 pub use connection::*;
 pub use gateway_sessions::{ClientAddresses, GatewaySession, GatewaySessions};
 

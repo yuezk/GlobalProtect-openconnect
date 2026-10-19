@@ -75,6 +75,7 @@ async fn run_session_runtime(session_ctx: SessionContext, mut session_info: Sess
 
     tokio::time::sleep(schedule.delay).await;
 
+    crate::dashboard::session_notice(Level::Warn, &schedule.message);
     report(log_format, Level::Warn, &format!("\nWARNING: {}", schedule.message));
 
     if !schedule.should_auto_extend {
@@ -90,6 +91,7 @@ async fn run_session_runtime(session_ctx: SessionContext, mut session_info: Sess
           return;
         };
 
+        crate::dashboard::session_notice(Level::Info, "Session extended.");
         report(log_format, Level::Info, "Session extended.");
         session_info = next_session_info;
       }

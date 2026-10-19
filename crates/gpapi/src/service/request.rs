@@ -380,6 +380,7 @@ pub struct UpdateLogLevelRequest(pub String);
 /// Requests that can be sent to the service
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WsRequest {
+  SetTunnelStatisticsEnabled { enabled: bool },
   Connect(Box<ConnectRequest>),
   Disconnect(DisconnectRequest),
   StopNonTunnelAttachment { connection_id: uuid::Uuid },

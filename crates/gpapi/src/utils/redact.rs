@@ -1,11 +1,10 @@
 use std::sync::RwLock;
 
-use redact_engine::{Pattern, Redaction as RedactEngine};
 use regex::Regex;
 use url::{Url, form_urlencoded};
 
 pub struct Redaction {
-  redact_engine: RwLock<Option<RedactEngine>>,
+  patterns: RwLock<Vec<Regex>>,
 }
 
 impl Default for Redaction {
@@ -16,56 +15,45 @@ impl Default for Redaction {
 
 impl Redaction {
   pub fn new() -> Self {
-    let redact_engine = RedactEngine::custom("[**********]").add_pattern(Pattern {
-      test: Regex::new("(((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4})").unwrap(),
-      group: 1,
-    });
-
     Self {
-      redact_engine: RwLock::new(Some(redact_engine)),
+      patterns: RwLock::new(vec![
+        Regex::new("(((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4})").unwrap(),
+      ]),
     }
   }
 
   pub fn add_value(&self, text: &str) -> anyhow::Result<()> {
-    let mut redact_engine = self
-      .redact_engine
-      .write()
-      .map_err(|_| anyhow::anyhow!("Failed to acquire write lock on redact engine"))?;
-
-    *redact_engine = Some(
-      redact_engine
-        .take()
-        .ok_or_else(|| anyhow::anyhow!("Failed to take redact engine"))?
-        .add_value(text)?,
-    );
-
-    Ok(())
+    self.add_values(&[text])
   }
 
   pub fn add_values(&self, texts: &[&str]) -> anyhow::Result<()> {
-    let mut redact_engine = self
-      .redact_engine
+    let patterns = texts
+      .iter()
+      .map(|text| Regex::new(&regex::escape(text)))
+      .collect::<Result<Vec<_>, _>>()?;
+    self
+      .patterns
       .write()
-      .map_err(|_| anyhow::anyhow!("Failed to acquire write lock on redact engine"))?;
-
-    *redact_engine = Some(
-      redact_engine
-        .take()
-        .ok_or_else(|| anyhow::anyhow!("Failed to take redact engine"))?
-        .add_values(texts.to_vec())?,
-    );
+      .map_err(|_| anyhow::anyhow!("Failed to acquire write lock on redaction patterns"))?
+      .extend(patterns);
 
     Ok(())
   }
 
   pub fn redact_str(&self, text: &str) -> String {
-    self
-      .redact_engine
+    let patterns = self
+      .patterns
       .read()
-      .expect("Failed to acquire read lock on redact engine")
-      .as_ref()
-      .expect("Failed to get redact engine")
-      .redact_str(text)
+      .expect("Failed to acquire read lock on redaction patterns");
+    let mut redacted = text.to_owned();
+    // Match the original text, then replace in registration order. Matching the
+    // replacements would change how overlapping values are redacted.
+    for pattern in patterns.iter() {
+      for matched in pattern.find_iter(text) {
+        redacted = redacted.replacen(matched.as_str(), "[**********]", 1);
+      }
+    }
+    redacted
   }
 }
 
@@ -179,6 +167,38 @@ fn redact_query(query: Option<&str>) -> Option<String> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn redacts_repeated_ipv4_addresses() {
+    assert_eq!(
+      Redaction::new().redact_str("from 192.0.2.1 to 198.51.100.9, then 192.0.2.1"),
+      "from [**********] to [**********], then [**********]"
+    );
+  }
+
+  #[test]
+  fn registered_values_are_literal_and_support_unicode() {
+    let redaction = Redaction::new();
+    redaction.add_values(&["a.b+$[x]", "秘密🔑"]).unwrap();
+
+    assert_eq!(
+      redaction.redact_str("a.b+$[x] 秘密🔑 a.b+$[x] aXb"),
+      "[**********] [**********] [**********] aXb"
+    );
+  }
+
+  #[test]
+  fn overlapping_values_keep_registration_order() {
+    let redaction = Redaction::new();
+    redaction.add_values(&["foobar", "foo"]).unwrap();
+
+    assert_eq!(redaction.redact_str("foobar foo"), "[**********] [**********]");
+  }
+
+  #[test]
+  fn unicode_word_characters_preserve_ipv4_boundaries() {
+    assert_eq!(Redaction::new().redact_str("192.0.2.1é"), "192.0.2.1é");
+  }
 
   #[test]
   fn it_should_not_redact_value() {

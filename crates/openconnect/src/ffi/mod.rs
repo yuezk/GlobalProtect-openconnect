@@ -1,10 +1,13 @@
 mod hip;
+mod network_configuration;
+mod tunnel;
 use crate::Vpn;
 use hip::HipGenerateFn;
 pub(crate) use hip::{
   HipControlRaw, HipScriptRaw, collect_hip_script, collect_hip_source, generate_hip_report, script_environment,
 };
 use log::{debug, info, trace, warn};
+pub(crate) use network_configuration::{VpnOptionRaw, configure_network};
 use std::ffi::{c_char, c_int, c_long, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -26,6 +29,7 @@ pub(crate) struct ConnectOptions {
   pub local_hostname: *const c_char,
 
   pub script: *const c_char,
+  pub configure_network: Option<unsafe extern "C" fn(*mut c_void, *const c_char, *const VpnOptionRaw) -> c_int>,
   pub interface: *const c_char,
   pub script_tun: u32,
 
@@ -61,6 +65,7 @@ pub(crate) struct VpnSessionInfoRaw {
 #[link(name = "vpn")]
 unsafe extern "C" {
   fn vpn_write_cancel(fd: c_int) -> c_int;
+  fn vpn_write_statistics(fd: c_int) -> c_int;
   #[link_name = "vpn_connect"]
   fn vpn_connect(
     options: *const ConnectOptions,
@@ -71,6 +76,15 @@ unsafe extern "C" {
 
 pub(crate) fn write_cancel(fd: i32) -> std::io::Result<()> {
   let error = unsafe { vpn_write_cancel(fd) };
+  if error == 0 {
+    Ok(())
+  } else {
+    Err(std::io::Error::from_raw_os_error(error))
+  }
+}
+
+pub(crate) fn write_statistics(fd: i32) -> std::io::Result<()> {
+  let error = unsafe { vpn_write_statistics(fd) };
   if error == 0 {
     Ok(())
   } else {

@@ -223,7 +223,7 @@ impl PhysicalNetwork {
   }
 
   fn fingerprint(&self) -> anyhow::Result<String> {
-    Ok(sha256::digest(serde_json::to_vec(&self.snapshot)?))
+    Ok(crate::utils::checksum::sha256_hex(serde_json::to_vec(&self.snapshot)?))
   }
 
   pub fn capture(control: &dyn CollectionControl) -> anyhow::Result<Self> {

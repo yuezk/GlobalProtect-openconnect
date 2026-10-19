@@ -250,7 +250,7 @@ async fn run_installer_connection(
               };
               let _ = command.reply.send(result);
             }
-            ServerMessage::Event { .. } | ServerMessage::Snapshot { .. } => {}
+            ServerMessage::Event { .. } | ServerMessage::Snapshot { .. } | ServerMessage::TunnelStatistics { .. } => {}
             ServerMessage::Attached { .. } => bail!("Service sent a duplicate attach response"),
           },
           Message::Ping(data) => socket.send(Message::Pong(data)).await?,
@@ -631,6 +631,7 @@ mod tests {
         current_revision: 0,
         snapshot: VpnEnv {
           vpn_state: VpnState::Disconnected,
+          tunnel_state: None,
           vpnc_script: None,
           auth_executable: String::new(),
           host_info: HostInfo {

@@ -44,9 +44,6 @@ on:
       - .devcontainer
     branches:
       - main
-      - hotfix/*
-      - feature/*
-      - release/*
     tags:
       - v*.*.*
 

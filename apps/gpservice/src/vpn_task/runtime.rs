@@ -262,6 +262,18 @@ async fn run_tunnel(
   if cancellation.is_cancelled() {
     return;
   }
+  let monitor = gptunnel::TunnelMonitor::attach(prepared.vpn.clone());
+  if events
+    .send(LifecycleEvent::TunnelMonitor {
+      attempt,
+      monitor: monitor.clone(),
+    })
+    .await
+    .is_err()
+  {
+    monitor.stop().await;
+    return;
+  }
   let vpn = prepared.vpn.clone();
   // The native tunnel keeps its reconnect endpoint and cookie current and owns
   // normal logout. The ledger remains responsible only before native execution.
@@ -291,6 +303,7 @@ async fn run_tunnel(
     Ok(code) => warn!("Tunnel worker exited with status {code}"),
     Err(error) => warn!("Tunnel worker failed: {error}"),
   }
+  monitor.stop().await;
 }
 
 pub(super) fn stop_for_revoked_approval(lifecycle: &LifecycleHandle, cancellation: &CancellationToken) {

@@ -108,17 +108,6 @@ fn sibling_binary_for_executable(executable: &Path, binary_name: &str) -> Option
   None
 }
 
-#[cfg(target_os = "macos")]
-pub fn bundled_vpnc_script() -> Option<PathBuf> {
-  bundled_vpnc_script_for_executable(&env::current_exe().ok()?)
-}
-
-#[cfg(target_os = "macos")]
-fn bundled_vpnc_script_for_executable(executable: &Path) -> Option<PathBuf> {
-  let executable = executable.canonicalize().ok()?;
-  macos::vpnc_script_path(&executable)
-}
-
 fn is_file(path: &Path) -> bool {
   path.is_file()
 }
@@ -173,18 +162,6 @@ mod tests {
     assert_eq!(
       sibling_binary_for_executable(&bin.join("gpclient"), "gpauth"),
       Some(helpers.canonicalize().unwrap().join("gpauth"))
-    );
-    #[cfg(target_os = "macos")]
-    assert_eq!(
-      bundled_vpnc_script_for_executable(&bin.join("gpclient")),
-      Some(
-        helpers
-          .canonicalize()
-          .unwrap()
-          .parent()
-          .unwrap()
-          .join("Resources/Scripts/vpnc-script")
-      )
     );
   }
 

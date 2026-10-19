@@ -33,6 +33,7 @@ pub struct SamlAuthLauncher<'a> {
   certificate: Option<&'a str>,
   sslkey: Option<&'a str>,
   key_password: Option<&'a str>,
+  #[cfg(not(target_os = "macos"))]
   fix_openssl: bool,
   ignore_tls_errors: bool,
   #[cfg(feature = "webview-auth")]
@@ -66,6 +67,7 @@ impl<'a> SamlAuthLauncher<'a> {
       certificate: None,
       sslkey: None,
       key_password: None,
+      #[cfg(not(target_os = "macos"))]
       fix_openssl: false,
       ignore_tls_errors: false,
       #[cfg(feature = "webview-auth")]
@@ -113,6 +115,7 @@ impl<'a> SamlAuthLauncher<'a> {
     self
   }
 
+  #[cfg(not(target_os = "macos"))]
   pub fn fix_openssl(mut self, fix_openssl: bool) -> Self {
     self.fix_openssl = fix_openssl;
     self
@@ -226,6 +229,7 @@ impl<'a> SamlAuthLauncher<'a> {
       auth_cmd.arg("--client-version").arg(client_version);
     }
 
+    #[cfg(not(target_os = "macos"))]
     if self.fix_openssl {
       auth_cmd.arg("--fix-openssl");
     }
@@ -343,10 +347,12 @@ impl<'a> SamlAuthLauncher<'a> {
   }
 }
 
-/// `gpauth --browser remote` reads the pasted `globalprotectcallback:` data from the user's terminal.
+/// `gpauth --browser manual` reads the pasted `globalprotectcallback:` data from the user's terminal.
 fn auth_stdin(browser: Option<&str>) -> ChildInput<'static> {
   match browser {
-    Some(browser) if browser.eq_ignore_ascii_case("remote") => ChildInput::Terminal,
+    Some(browser) if browser.eq_ignore_ascii_case("manual") || browser.eq_ignore_ascii_case("remote") => {
+      ChildInput::Terminal
+    }
     _ => ChildInput::Null,
   }
 }
@@ -375,6 +381,53 @@ fn decode_auth_output(output: std::process::Output, rendering_failure: bool) -> 
 mod tests {
   use super::*;
   use crate::os_profile::{ClientOs, OsProfileBuilder};
+
+  #[test]
+  fn server_tls_result_survives_process_decoding_as_a_typed_error() {
+    use crate::error::{ServerTlsError, ServerTlsErrorKind};
+    use std::os::unix::process::ExitStatusExt;
+    let output = std::process::Output {
+      status: std::process::ExitStatus::from_raw(0),
+      stdout: br#"{"serverTlsError":{"server":"https://vpn.example.com:8443","kind":"certificate"}}"#.to_vec(),
+      stderr: Vec::new(),
+    };
+    let error = decode_auth_output(output, false).unwrap_err();
+    assert_eq!(
+      error.downcast_ref::<ServerTlsError>(),
+      Some(&ServerTlsError {
+        server: "https://vpn.example.com:8443".into(),
+        kind: ServerTlsErrorKind::Certificate,
+      })
+    );
+  }
+
+  #[test]
+  fn client_certificate_required_result_survives_process_decoding() {
+    use crate::error::{ServerTlsError, ServerTlsErrorKind};
+    use std::os::unix::process::ExitStatusExt;
+    let output = std::process::Output {
+      status: std::process::ExitStatus::from_raw(0),
+      stdout: br#"{"serverTlsError":{"server":"https://vpn.example.com","kind":"clientCertificateRequired"}}"#.to_vec(),
+      stderr: Vec::new(),
+    };
+    let error = decode_auth_output(output, false).unwrap_err();
+    let tls = error.downcast_ref::<ServerTlsError>().unwrap();
+    assert_eq!(tls.kind, ServerTlsErrorKind::ClientCertificateRequired);
+    assert_eq!(tls.server, "https://vpn.example.com");
+  }
+
+  #[test]
+  fn launches_with_platform_tls_options() {
+    let launcher = SamlAuthLauncher::new("vpn.example.com").ignore_tls_errors(true);
+    #[cfg(not(target_os = "macos"))]
+    let launcher = launcher.fix_openssl(true);
+    let args = child_args(launcher);
+    assert_eq!(
+      args.iter().any(|arg| arg == "--fix-openssl"),
+      !cfg!(target_os = "macos")
+    );
+    assert!(args.iter().any(|arg| arg == "--ignore-tls-errors"));
+  }
 
   #[test]
   fn os_profile_sets_os_from_profile() {
@@ -463,7 +516,9 @@ mod tests {
   }
 
   #[test]
-  fn only_a_remote_browser_reads_the_terminal() {
+  fn only_a_manual_browser_reads_the_terminal() {
+    assert!(matches!(auth_stdin(Some("manual")), ChildInput::Terminal));
+    assert!(matches!(auth_stdin(Some("MANUAL")), ChildInput::Terminal));
     assert!(matches!(auth_stdin(Some("remote")), ChildInput::Terminal));
     assert!(matches!(auth_stdin(Some("REMOTE")), ChildInput::Terminal));
     assert!(matches!(auth_stdin(Some("firefox")), ChildInput::Null));

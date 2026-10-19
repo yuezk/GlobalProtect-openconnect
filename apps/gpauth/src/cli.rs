@@ -6,17 +6,21 @@ use clap::Parser;
 use clap::Subcommand;
 #[cfg(feature = "webview-auth")]
 use gpapi::auth::AuthWindowTheme;
+#[cfg(not(target_os = "macos"))]
+use gpapi::utils::openssl;
 use gpapi::{
   auth::{AuthenticationCancelled, SamlAuthData, SamlAuthResult},
   clap::{Args, InfoLevelVerbosity, args::Os, handle_error},
+  error::ServerTlsError,
   gp_params::GpParams,
   log_format::LogFormat,
   os_profile::{ClientOs, OsProfile},
-  utils::{normalize_server, openssl},
+  utils::normalize_server,
 };
 use log::info;
 use serde_json::json;
 use std::net::IpAddr;
+#[cfg(not(target_os = "macos"))]
 use tempfile::NamedTempFile;
 
 const VERSION: &str = concat!(
@@ -84,6 +88,7 @@ struct Cli {
   #[arg(short = 'p', long, help = "The key passphrase of the private key")]
   key_password: Option<String>,
 
+  #[cfg(not(target_os = "macos"))]
   #[arg(long, help = "Get around the OpenSSL `unsafe legacy renegotiation` error")]
   fix_openssl: bool,
 
@@ -104,13 +109,13 @@ struct Cli {
 
   #[arg(
     long,
-    help = "Use external browser authentication. With no value, auto-select Chrome, Firefox, then system default. Use `default` for the system default browser or `remote` for headless servers.",
+    help = "Use a browser; omit the value to auto-select. Use `manual` to open the URL and paste the callback.",
     default_missing_value = "auto",
     num_args=0..=1
   )]
   browser: Option<String>,
 
-  #[arg(long, help = "Listen on this IP address when using '--browser remote'")]
+  #[arg(long, help = "Listen on this IP address when using '--browser manual'")]
   browser_listen: Option<IpAddr>,
 
   #[cfg(feature = "webview-auth")]
@@ -144,6 +149,7 @@ enum CliCommand {
 }
 
 impl Args for Cli {
+  #[cfg(not(target_os = "macos"))]
   fn fix_openssl(&self) -> bool {
     self.fix_openssl
   }
@@ -158,10 +164,8 @@ impl Args for Cli {
 }
 
 impl Cli {
-  fn prepare_env(&self) -> anyhow::Result<Option<NamedTempFile>> {
-    #[cfg(feature = "webview-auth")]
-    gpapi::utils::env_utils::patch_gui_runtime_env(self.hidpi);
-
+  #[cfg(not(target_os = "macos"))]
+  fn prepare_openssl(&self) -> anyhow::Result<Option<NamedTempFile>> {
     if self.fix_openssl {
       info!("Fixing OpenSSL environment");
       let file = openssl::fix_openssl_env()?;
@@ -174,16 +178,19 @@ impl Cli {
 
   async fn run(&self) -> anyhow::Result<()> {
     if self.browser_listen.is_some()
-      && !matches!(self.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("remote"))
+      && !matches!(self.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("manual") || browser.eq_ignore_ascii_case("remote"))
     {
-      anyhow::bail!("The '--browser-listen' option requires '--browser remote'");
+      anyhow::bail!("The '--browser-listen' option requires '--browser manual'");
     }
 
     if self.ignore_tls_errors {
       info!("TLS errors will be ignored");
     }
 
-    let openssl_conf = self.prepare_env()?;
+    #[cfg(feature = "webview-auth")]
+    gpapi::utils::env_utils::patch_gui_runtime_env(self.hidpi);
+    #[cfg(not(target_os = "macos"))]
+    let openssl_conf = self.prepare_openssl()?;
 
     let server = normalize_server(self.server.as_deref().expect("server is required for authentication"))?;
     let gp_params = self.build_gp_params();
@@ -194,7 +201,17 @@ impl Cli {
 
     let auth_request = match self.saml_request.as_deref() {
       Some(auth_request) => auth_request.to_string(),
-      None => auth_prelogin(&server, &gp_params, self.external_browser_requested(), self.gateway).await?,
+      None => match auth_prelogin(&server, &gp_params, self.external_browser_requested(), self.gateway).await {
+        Ok(request) => request,
+        Err(error) => {
+          let Some(tls) = error.downcast_ref::<ServerTlsError>().cloned() else {
+            return Err(error);
+          };
+          handle_error(error, self);
+          print_auth_result(Err(tls.into()), None);
+          return Ok(());
+        }
+      },
     };
 
     #[cfg(feature = "webview-auth")]
@@ -213,7 +230,7 @@ impl Cli {
 
       print_auth_result(auth_result, Some(&auth_host_id));
 
-      // explicitly drop openssl_conf to avoid the unused variable warning
+      #[cfg(not(target_os = "macos"))]
       drop(openssl_conf);
       return Ok(());
     }
@@ -226,6 +243,7 @@ impl Cli {
       self.clean,
       self.window_title.clone(),
       self.window_theme,
+      #[cfg(not(target_os = "macos"))]
       openssl_conf,
     )
     .await?;
@@ -298,7 +316,11 @@ pub async fn run() {
 }
 
 pub fn print_auth_result(auth_result: anyhow::Result<SamlAuthData>, host_id: Option<&str>) {
-  let auth_result = match auth_result {
+  println!("{}", json!(auth_outcome(auth_result, host_id)));
+}
+
+fn auth_outcome(auth_result: anyhow::Result<SamlAuthData>, host_id: Option<&str>) -> SamlAuthResult {
+  match auth_result {
     Ok(auth_data) => {
       let auth_data = match host_id {
         Some(host_id) => auth_data.with_host_id(host_id),
@@ -307,15 +329,53 @@ pub fn print_auth_result(auth_result: anyhow::Result<SamlAuthData>, host_id: Opt
       SamlAuthResult::Success(auth_data)
     }
     Err(err) if err.downcast_ref::<AuthenticationCancelled>().is_some() => SamlAuthResult::Cancelled,
-    Err(err) => SamlAuthResult::Failure(format!("{}", err)),
-  };
-
-  println!("{}", json!(auth_result));
+    Err(err) => match err.downcast::<ServerTlsError>() {
+      Ok(tls) => SamlAuthResult::ServerTlsError(tls),
+      Err(err) => SamlAuthResult::Failure(err.to_string()),
+    },
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn openssl_option_is_available_only_on_supported_platforms() {
+    let result = Cli::try_parse_from(["gpauth", "portal.example.com", "--fix-openssl"]);
+    assert_eq!(result.is_ok(), !cfg!(target_os = "macos"));
+  }
+
+  #[test]
+  fn result_keeps_server_tls_kind_and_generic_failure_format() {
+    use gpapi::error::ServerTlsErrorKind;
+    let tls = ServerTlsError {
+      server: "https://vpn.example.com".into(),
+      kind: ServerTlsErrorKind::LegacyRenegotiation,
+    };
+    let outcome = auth_outcome(Err(anyhow::Error::new(tls).context("retry failed")), None);
+    assert_eq!(
+      serde_json::to_value(outcome).unwrap(),
+      json!({"serverTlsError": {"server": "https://vpn.example.com", "kind": "legacyRenegotiation"}})
+    );
+    assert_eq!(
+      serde_json::to_value(auth_outcome(Err(anyhow::anyhow!("rejected")), None)).unwrap(),
+      json!({"failure": "rejected"})
+    );
+  }
+
+  #[test]
+  fn retry_result_preserves_client_certificate_requirement() {
+    let error = ServerTlsError {
+      server: "https://vpn.example.com".into(),
+      kind: gpapi::error::ServerTlsErrorKind::ClientCertificateRequired,
+    };
+    let outcome = auth_outcome(Err(anyhow::Error::new(error).context("retry failed")), None);
+    assert_eq!(
+      serde_json::to_value(outcome).unwrap(),
+      json!({"serverTlsError": {"server": "https://vpn.example.com", "kind": "clientCertificateRequired"}})
+    );
+  }
 
   /// gpauth's own result already goes to stdout as JSON; this makes its *logs*
   /// readable the same way, so a caller driving it does not have to parse prose
@@ -399,7 +459,7 @@ mod tests {
       "gpauth",
       "portal.example.com",
       "--browser",
-      "remote",
+      "manual",
       "--browser-listen",
       "192.168.107.15",
     ])

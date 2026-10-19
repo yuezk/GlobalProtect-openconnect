@@ -34,11 +34,7 @@ fn c_protocol_submits_initial_periodic_and_reconnect_reports() {
   fs::create_dir(&directory.0).unwrap();
   let executable = directory.0.join("hip-protocol");
   let flags = Command::new("pkg-config")
-    .args([
-      "--cflags",
-      "libxml-2.0",
-      if cfg!(target_os = "macos") { "openssl" } else { "gnutls" },
-    ])
+    .args(["--cflags", "libxml-2.0", "gnutls"])
     .output()
     .unwrap();
   assert!(flags.status.success());

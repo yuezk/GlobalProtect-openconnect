@@ -5,10 +5,25 @@ pub mod checksum;
 pub mod crypto;
 pub mod endpoint;
 pub mod env_utils;
+mod identity_encoding;
+mod legacy_pkcs8;
 pub mod lock_file;
+#[cfg(not(target_os = "macos"))]
 pub mod openssl;
+#[cfg(target_os = "macos")]
+#[path = "pkcs12_identity/macos.rs"]
+mod pkcs12_identity;
+#[cfg(not(target_os = "macos"))]
+#[path = "pkcs12_identity/openssl.rs"]
+mod pkcs12_identity;
 pub mod redact;
 pub mod request;
+#[cfg(target_os = "macos")]
+#[path = "traditional_key/macos.rs"]
+mod traditional_key;
+#[cfg(not(target_os = "macos"))]
+#[path = "traditional_key/openssl.rs"]
+mod traditional_key;
 #[cfg(feature = "tauri")]
 pub mod window;
 
@@ -51,6 +66,8 @@ pub struct GpError {
   pub status: StatusCode,
   pub reason: String,
   body: String,
+  #[source]
+  source: Option<reqwest::Error>,
 }
 
 impl GpError {
@@ -63,9 +80,7 @@ pub async fn parse_gp_response(res: Response) -> anyhow::Result<String, GpError>
   let status = res.status();
 
   if status.is_client_error() || status.is_server_error() {
-    let (reason, body) = parse_gp_error(res).await;
-
-    return Err(GpError { status, reason, body });
+    return Err(parse_gp_error(res).await);
   }
 
   res.text().await.map_err(|err| {
@@ -75,21 +90,28 @@ pub async fn parse_gp_response(res: Response) -> anyhow::Result<String, GpError>
       status,
       reason: "failed to read response".to_string(),
       body: "<failed to read response>".to_string(),
+      source: Some(err),
     }
   })
 }
 
-async fn parse_gp_error(res: Response) -> (String, String) {
+async fn parse_gp_error(res: Response) -> GpError {
+  let status = res.status();
   let reason = res
     .headers()
     .get("x-private-pan-globalprotect")
     .map_or_else(|| "<none>", |v| v.to_str().unwrap_or("<invalid header>"))
     .to_string();
 
-  let res = res.text().await.map_or_else(
-    |_| "<failed to read response>".to_string(),
-    |v| if v.is_empty() { "<empty>".to_string() } else { v },
-  );
+  let (body, source) = match res.text().await {
+    Ok(body) => (if body.is_empty() { "<empty>".to_string() } else { body }, None),
+    Err(error) => ("<failed to read response>".to_string(), Some(error)),
+  };
 
-  (reason, res)
+  GpError {
+    status,
+    reason,
+    body,
+    source,
+  }
 }
