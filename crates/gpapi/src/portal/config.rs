@@ -10,7 +10,7 @@ use xmltree::Element;
 
 use crate::{
   credential::{AuthCookieCredential, Credential},
-  error::PortalError,
+  error::{PortalError, ServerTlsError},
   gateway::{Gateway, parse_gateways},
   gp_params::GpParams,
   params,
@@ -149,6 +149,7 @@ pub async fn retrieve_config(
   cancellation: &CancellationToken,
 ) -> anyhow::Result<PortalConfig> {
   let portal = normalize_server(portal)?;
+  let server_url = url::Url::parse(&portal)?;
   let server = remove_url_scheme(&portal);
 
   let url = format!("{}/global-protect/getconfig.esp", portal);
@@ -170,10 +171,16 @@ pub async fn retrieve_config(
     result = async {
       let res = client.post(&url).form(&request_params.body).send().await.map_err(|e| {
         warn!("Network error: {:?}", e);
-        anyhow::anyhow!(PortalError::NetworkError(e))
+        match ServerTlsError::from_request(&server_url, &e) {
+          Some(tls) => anyhow::anyhow!(tls),
+          None => anyhow::anyhow!(PortalError::NetworkError(e)),
+        }
       })?;
 
       parse_gp_response(res).await.or_else(|err| {
+        if let Some(tls) = ServerTlsError::from_request(&server_url, &err) {
+          return Err(anyhow::anyhow!(tls));
+        }
         if err.status == StatusCode::NOT_FOUND {
           bail!(PortalError::ConfigError("Config endpoint not found".to_string()));
         }
@@ -227,16 +234,23 @@ async fn retrieve_csc_config(
   let swg_nonce = csc::swg_nonce();
   let params = csc::csc_params(&csc_req, username, gp_params, &swg_nonce);
   let url = format!("{}/global-protect/getconfig_csc.esp", portal);
+  let server_url = url::Url::parse(portal)?;
 
   info!("Portal CSC config request summary: {}", csc_req.summary());
   info!("Portal CSC config request params: {}", redact_params(&params));
 
   let res = client.post(&url).form(&params).send().await.map_err(|e| {
     warn!("Network error: {:?}", e);
-    anyhow::anyhow!(PortalError::NetworkError(e))
+    match ServerTlsError::from_request(&server_url, &e) {
+      Some(tls) => anyhow::anyhow!(tls),
+      None => anyhow::anyhow!(PortalError::NetworkError(e)),
+    }
   })?;
 
   parse_gp_response(res).await.or_else(|err| {
+    if let Some(tls) = ServerTlsError::from_request(&server_url, &err) {
+      return Err(anyhow::anyhow!(tls));
+    }
     if err.status == StatusCode::NOT_FOUND {
       bail!(PortalError::ConfigError("CSC config endpoint not found".to_string()));
     }

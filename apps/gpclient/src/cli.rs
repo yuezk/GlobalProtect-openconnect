@@ -5,13 +5,15 @@ use std::{
 
 use anyhow::bail;
 use clap::{Parser, Subcommand};
+#[cfg(not(target_os = "macos"))]
+use gpapi::utils::openssl;
 use gpapi::{
   clap::{Args, InfoLevelVerbosity, handle_error},
   log_format::{LogFormat, write_json_record},
-  utils::openssl,
 };
 use log::info;
 use sysinfo::{Pid, System};
+#[cfg(not(target_os = "macos"))]
 use tempfile::NamedTempFile;
 use tokio::fs;
 
@@ -34,6 +36,7 @@ const VERSION: &str = concat!(
 );
 
 pub(crate) struct SharedArgs<'a> {
+  #[cfg(not(target_os = "macos"))]
   pub(crate) fix_openssl: bool,
   pub(crate) ignore_tls_errors: bool,
   pub(crate) lock_file: &'a Path,
@@ -92,6 +95,7 @@ struct Cli {
   #[command(subcommand)]
   command: CliCommand,
 
+  #[cfg(not(target_os = "macos"))]
   #[arg(
     long,
     help = "Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats."
@@ -123,6 +127,7 @@ struct Cli {
 }
 
 impl Args for Cli {
+  #[cfg(not(target_os = "macos"))]
   fn fix_openssl(&self) -> bool {
     self.fix_openssl
   }
@@ -164,6 +169,7 @@ impl Cli {
       .unwrap_or(false)
   }
 
+  #[cfg(not(target_os = "macos"))]
   fn fix_openssl(&self) -> anyhow::Result<Option<NamedTempFile>> {
     if self.fix_openssl {
       let file = openssl::fix_openssl_env()?;
@@ -174,6 +180,11 @@ impl Cli {
   }
 
   async fn run(&self) -> anyhow::Result<()> {
+    if let CliCommand::Connect(args) = &self.command {
+      if args.dashboard {
+        crate::dashboard::validate(self.log_format)?;
+      }
+    }
     if self.background_worker_fd.is_some() && !matches!(&self.command, CliCommand::Connect(args) if args.background) {
       bail!("Background worker requires connect --background");
     }
@@ -205,8 +216,10 @@ impl Cli {
 
     // The temp file will be dropped automatically when the file handle is dropped
     // So, declare it here to ensure it's not dropped
+    #[cfg(not(target_os = "macos"))]
     let _file = self.fix_openssl()?;
     let shared_args = SharedArgs {
+      #[cfg(not(target_os = "macos"))]
       fix_openssl: self.fix_openssl,
       ignore_tls_errors: self.ignore_tls_errors,
       lock_file: &self.lock_file,
@@ -263,7 +276,13 @@ fn build_logger(cli: &Cli) -> env_logger::Builder {
 pub(crate) async fn run() {
   let cli = Cli::parse();
 
-  build_logger(&cli).init();
+  if matches!(&cli.command, CliCommand::Connect(args) if args.dashboard) {
+    let logger = build_logger(&cli).build();
+    log::set_max_level(logger.filter());
+    log::set_boxed_logger(Box::new(crate::dashboard::NoticeLogger::new(logger))).expect("failed to initialize logger");
+  } else {
+    build_logger(&cli).init();
+  }
 
   info!("gpclient started: {}", VERSION);
 
@@ -326,9 +345,41 @@ mod tests {
   }
 
   #[test]
+  fn dashboard_is_opt_in_and_conflicts_with_noninteractive_connection_modes() {
+    for option in ["--background", "--cookie-only"] {
+      assert!(Cli::try_parse_from(["gpclient", "connect", "portal.example.com", "--dashboard", option]).is_err());
+    }
+    assert!(Cli::try_parse_from(["gpclient", "connect", "portal.example.com", "--stats"]).is_err());
+    let cli = Cli::try_parse_from([
+      "gpclient",
+      "connect",
+      "portal.example.com",
+      "--dashboard",
+      "--cookie-on-stdin",
+    ])
+    .unwrap();
+    assert!(matches!(cli.command, CliCommand::Connect(args) if args.dashboard));
+    let cli = Cli::try_parse_from(["gpclient", "connect", "portal.example.com"]).unwrap();
+    assert!(matches!(cli.command, CliCommand::Connect(args) if !args.dashboard));
+    assert!(
+      crate::dashboard::validate(LogFormat::Json)
+        .unwrap_err()
+        .to_string()
+        .contains("--log-format json")
+    );
+  }
+
+  #[test]
+  fn openssl_option_is_available_only_on_supported_platforms() {
+    let result = Cli::try_parse_from(["gpclient", "--fix-openssl", "diagnostics"]);
+    assert_eq!(result.is_ok(), !cfg!(target_os = "macos"));
+  }
+
+  #[test]
   fn diagnostics_accepts_output_options_and_runs_alongside_the_client() {
     let cli = Cli::try_parse_from([
       "gpclient",
+      #[cfg(not(target_os = "macos"))]
       "--fix-openssl",
       "diagnostics",
       "--json",
@@ -499,6 +550,40 @@ mod tests {
     logger.flush();
 
     captured.contents()
+  }
+
+  #[test]
+  fn unicode_property_log_filters_keep_matching_and_excluding_records() {
+    for (pattern, matching, excluded) in [
+      (r"\p{Greek}", "α", "plain ASCII"),
+      (r"\p{Mark}", "\u{0301}", "plain ASCII"),
+      (r"\p{Alphabetic}", "α", "123"),
+      (r"\p{Grapheme_Extend}", "\u{0301}", "plain ASCII"),
+    ] {
+      let captured = Captured::default();
+      let logger = build_logger(&parse_cli(&["gpclient", "disconnect"]))
+        .parse_filters(&format!("info/{pattern}"))
+        .target(env_logger::Target::Pipe(Box::new(captured.clone())))
+        .build();
+      for message in [excluded, matching] {
+        logger.log(
+          &log::Record::builder()
+            .level(log::Level::Info)
+            .target("gpclient")
+            .args(format_args!("{message}"))
+            .build(),
+        );
+      }
+      let output = captured.contents();
+      assert!(
+        output.contains(matching),
+        "filter {pattern} dropped its matching record"
+      );
+      assert!(
+        !output.contains(excluded),
+        "filter {pattern} allowed an excluded record"
+      );
+    }
   }
 
   /// The point of the flag: with `json`, a caller gets fields, and gets them one

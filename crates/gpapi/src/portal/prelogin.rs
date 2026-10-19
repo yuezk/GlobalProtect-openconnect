@@ -135,6 +135,7 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams, options: PreloginOptio
   );
 
   let client = Client::try_from(gp_params)?;
+  let server_url = url::Url::parse(&portal)?;
 
   let mut request = client.post(&prelogin_url);
   if !request_params.query.is_empty() {
@@ -146,10 +147,16 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams, options: PreloginOptio
 
   let res = request.send().await.map_err(|e| {
     warn!("Network error: {:?}", e);
-    anyhow::anyhow!(PortalError::NetworkError(e))
+    match crate::error::ServerTlsError::from_request(&server_url, &e) {
+      Some(error) => anyhow!(error),
+      None => anyhow!(PortalError::NetworkError(e)),
+    }
   })?;
 
   let res_xml = parse_gp_response(res).await.or_else(|err| {
+    if let Some(tls) = crate::error::ServerTlsError::from_request(&server_url, &err) {
+      return Err(anyhow!(tls));
+    }
     if err.status == StatusCode::NOT_FOUND {
       bail!(PortalError::PreloginError("Prelogin endpoint not found".to_string()))
     }

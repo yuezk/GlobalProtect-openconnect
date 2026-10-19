@@ -1,5 +1,35 @@
 # Changelog
 
+## 3.1.0
+
+### Added
+
+- Added a Connection Details panel showing VPN information and live upload and download activity.
+- Added an optional terminal dashboard showing connection status and logs, enabled with `--dashboard`.
+- Added client certificate setup in Settings, with guidance when a VPN requires a certificate.
+
+### Improved
+
+- Refreshed Settings and dialogs, with automatic saving for most settings and Save and Cancel buttons for detailed edits.
+- Made sign-in errors clearer and added recovery options within the app.
+- Added a website address bar to the sign-in window.
+- Expanded support for client certificate files, including password-protected files, with clearer file and password errors.
+- Improved license activation error messages and troubleshooting logs.
+
+### Fixed
+
+- Fixed sign-in retries losing the selected VPN server after a security error.
+- Fixed mismatched certificate and key files being accepted and replacing a working certificate setup.
+- Fixed failed saves discarding certificate details or custom device report (HIP) edits, allowing a retry without re-entering changes.
+- Fixed theme, automatic-update, and logging settings appearing saved when saving had failed; errors are now shown and previous settings remain in use.
+- Fixed notifications disappearing too quickly on GNOME and clarified notification sender names and update titles.
+- Fixed connection failures with some VPN gateways.
+
+### Command-line notes
+
+- Renamed copy-and-paste browser sign-in to `--browser manual`; existing commands using `--browser remote` still work.
+- Removed the unneeded `--fix-openssl` option on macOS; existing macOS commands and scripts must omit it.
+
 ## 3.0.5
 
 ### Added

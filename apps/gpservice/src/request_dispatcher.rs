@@ -78,16 +78,19 @@ pub struct RequestDispatcher {
   redaction: Arc<Redaction>,
   install_lock: Mutex<()>,
   gui_management_enabled: bool,
-  brokered_scripts_dir: Option<std::path::PathBuf>,
+  externally_brokered: bool,
 }
 
 impl RequestDispatcher {
+  pub fn subscribe_tunnel(&self) -> tokio::sync::watch::Receiver<crate::vpn_task::TunnelBinding> {
+    self.lifecycle.subscribe_tunnel()
+  }
   pub fn new(
     lifecycle: crate::vpn_task::LifecycleHandle,
     gui_restart_requested: Arc<AtomicBool>,
     redaction: Arc<Redaction>,
     gui_management_enabled: bool,
-    brokered_scripts_dir: Option<std::path::PathBuf>,
+    externally_brokered: bool,
   ) -> Self {
     Self {
       lifecycle,
@@ -95,7 +98,7 @@ impl RequestDispatcher {
       redaction,
       install_lock: Mutex::new(()),
       gui_management_enabled,
-      brokered_scripts_dir,
+      externally_brokered,
     }
   }
 
@@ -108,7 +111,7 @@ impl RequestDispatcher {
   ) -> Result<PendingDispatch, ServiceResult> {
     match request {
       WsRequest::Connect(request) => {
-        if let Err(message) = self.validate_connect_paths(&request) {
+        if let Err(message) = self.validate_connect_request(&request) {
           return Err(ServiceResult::rejected(ServiceErrorCode::InvalidRequest, message));
         }
         let redaction_values = request
@@ -197,12 +200,8 @@ impl RequestDispatcher {
         desktop_uid,
         edited_report,
       } => {
-        let prepared = crate::vpn_task::prepare_connection(
-          *request,
-          self.brokered_scripts_dir.is_some(),
-          preparation.cancellation(),
-        )
-        .await;
+        let prepared =
+          crate::vpn_task::prepare_connection(*request, self.externally_brokered, preparation.cancellation()).await;
         return match prepared {
           Ok(connection) => preparation.commit(connection, desktop_uid, edited_report),
           Err(error) => {
@@ -271,19 +270,19 @@ impl RequestDispatcher {
       | WsRequest::PreviewHipReport(_)
       | WsRequest::GetHipApprovalStatus { .. }
       | WsRequest::ReadHipPreviewChunk(_)
-      | WsRequest::GetLastSubmittedHipReport => {
+      | WsRequest::GetLastSubmittedHipReport
+      | WsRequest::SetTunnelStatisticsEnabled { .. } => {
         unreachable!("session-bound request was already dispatched")
       }
     }
   }
 
-  fn validate_connect_paths(&self, request: &gpapi::service::request::ConnectRequest) -> Result<(), &'static str> {
-    let Some(scripts) = &self.brokered_scripts_dir else {
+  fn validate_connect_request(&self, request: &gpapi::service::request::ConnectRequest) -> Result<(), &'static str> {
+    if !self.externally_brokered {
       return Ok(());
-    };
-    let expected_script = scripts.join("vpnc-script").to_string_lossy().into_owned();
-    if request.args().vpnc_script().as_deref() != Some(expected_script.as_str()) {
-      return Err("macOS VPN script must be the bundled script");
+    }
+    if request.args().vpnc_script().is_some() {
+      return Err("macOS does not support custom VPN scripts");
     }
     if matches!(
       request.args().hip_source(),
@@ -520,7 +519,7 @@ mod tests {
   #[test]
   fn installs_gui_at_the_supplied_target() {
     let archive = compressed_gui_archive(b"gui binary");
-    let checksum = sha256::try_digest(archive.path()).unwrap();
+    let checksum = gpapi::utils::checksum::file_sha256(archive.path()).unwrap();
     let output = tempfile::tempdir().unwrap();
     let target = output.path().join("gpclient/gpgui");
 
@@ -549,7 +548,7 @@ mod tests {
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       false,
-      Some(std::path::PathBuf::from("/app/Contents/Resources/Scripts")),
+      true,
     );
     let ServiceResult::Rejected(rejection) = dispatcher.dispatch(WsRequest::RestartGui).await else {
       panic!("brokered mode accepted GUI restart");
@@ -558,9 +557,7 @@ mod tests {
 
     let gateway = Gateway::new("Gateway".into(), "vpn.example.com".into());
     let info = gpapi::service::vpn_state::ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway]);
-    let request = test_request(info)
-      .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
-      .with_certificate(Some("/Users/example/client.pem".to_string()));
+    let request = test_request(info).with_certificate(Some("/Users/example/client.pem".to_string()));
     let ServiceResult::Rejected(rejection) = dispatcher.dispatch(WsRequest::Connect(Box::new(request))).await else {
       panic!("brokered mode accepted a root-readable identity path");
     };
@@ -568,33 +565,37 @@ mod tests {
   }
 
   #[test]
-  fn brokered_mode_accepts_only_resource_script_paths() {
+  fn brokered_mode_rejects_script_overrides() {
     let dispatcher = RequestDispatcher::new(
       crate::vpn_task::LifecycleHandle::for_tests(),
       Arc::new(AtomicBool::new(false)),
       Arc::new(Redaction::new()),
       false,
-      Some(std::path::PathBuf::from("/app/Contents/Resources/Scripts")),
+      true,
     );
     let gateway = Gateway::new("Gateway".into(), "vpn.example.com".into());
     let info = gpapi::service::vpn_state::ConnectInfo::new("portal.example.com".into(), gateway.clone(), vec![gateway]);
-    let bundled =
-      test_request(info.clone()).with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()));
-    assert_eq!(dispatcher.validate_connect_paths(&bundled), Ok(()));
+    let embedded = test_request(info.clone());
+    assert_eq!(dispatcher.validate_connect_request(&embedded), Ok(()));
 
-    let old_layout = test_request(info.clone()).with_vpnc_script(Some("/app/Contents/Helpers/vpnc-script".to_string()));
-    assert_eq!(
-      dispatcher.validate_connect_paths(&old_layout),
-      Err("macOS VPN script must be the bundled script")
-    );
+    for script in [
+      "/app/Contents/Resources/Scripts/vpnc-script",
+      "/tmp/custom-vpnc-script",
+      "echo untrusted",
+      "",
+    ] {
+      let custom = test_request(info.clone()).with_vpnc_script(Some(script.to_string()));
+      assert_eq!(
+        dispatcher.validate_connect_request(&custom),
+        Err("macOS does not support custom VPN scripts")
+      );
+    }
 
-    let custom = test_request(info)
-      .with_vpnc_script(Some("/app/Contents/Resources/Scripts/vpnc-script".to_string()))
-      .with_hip_source(gpapi::hip::HipSource::UserScript {
-        path: "/tmp/hip.sh".into(),
-      });
+    let custom = test_request(info).with_hip_source(gpapi::hip::HipSource::UserScript {
+      path: "/tmp/hip.sh".into(),
+    });
     assert_eq!(
-      dispatcher.validate_connect_paths(&custom),
+      dispatcher.validate_connect_request(&custom),
       Err("macOS does not support custom HIP scripts")
     );
   }

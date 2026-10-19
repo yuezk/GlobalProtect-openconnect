@@ -4,6 +4,7 @@ mod credential;
 mod flow_tests;
 mod gateway;
 mod internal;
+mod vpn_script;
 
 use std::cell::RefCell;
 use std::sync::{
@@ -153,9 +154,9 @@ impl<'a> ConnectHandler<'a> {
 
   async fn handle_attempt(&self) -> anyhow::Result<()> {
     if self.args.browser_listen.is_some()
-      && !matches!(self.args.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("remote"))
+      && !matches!(self.args.browser.as_deref(), Some(browser) if browser.eq_ignore_ascii_case("manual") || browser.eq_ignore_ascii_case("remote"))
     {
-      bail!("The '--browser-listen' option requires '--browser remote'");
+      bail!("The '--browser-listen' option requires '--browser manual'");
     }
 
     #[cfg(feature = "webview-auth")]
@@ -178,11 +179,18 @@ impl<'a> ConnectHandler<'a> {
       {
         return Err(err);
       }
-      let Some(root_cause) = err.root_cause().downcast_ref::<RequestIdentityError>() else {
+      let Some(identity_error) = err.downcast_ref::<RequestIdentityError>() else {
         return Err(err);
       };
 
-      match root_cause {
+      match identity_error {
+        RequestIdentityError::UnsupportedEncryption
+        | RequestIdentityError::LegacyKeyConversion(_)
+        | RequestIdentityError::UnsupportedKeyFormat
+        | RequestIdentityError::InvalidKey
+        | RequestIdentityError::InvalidCertificate
+        | RequestIdentityError::IncompletePkcs12
+        | RequestIdentityError::InvalidPkcs12(_) => return Err(err),
         RequestIdentityError::NoKey => {
           let format = self.shared_args.log_format;
           report(

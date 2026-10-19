@@ -112,6 +112,18 @@ impl ConnectHandler<'_> {
     let source = Arc::new(source);
     let validate_network = network.clone();
     let validate_detection = detection.clone();
+    let members = crate::dashboard::InternalMembers::default();
+    let dashboard_members = members.clone();
+    let (established_tx, established_rx) = tokio::sync::oneshot::channel();
+    let established_tx = std::sync::Mutex::new(Some(established_tx));
+    let mut dashboard = if self.args.dashboard {
+      Some(crate::dashboard::Dashboard::prepare(
+        authenticated[0].0.server().to_owned(),
+        cancellation.clone(),
+      )?)
+    } else {
+      None
+    };
     let callbacks = SessionCallbacks {
       produce_report: Arc::new(move |request, control| {
         control.check()?;
@@ -143,12 +155,23 @@ impl ConnectHandler<'_> {
         )
       }),
       report_submitted: Arc::new(|_, _| {}),
-      status_changed: Arc::new(|member| match member.maintenance {
-        MaintenanceState::Healthy => info!(
-          "Internal network — authenticated: {} (IPv4: {:?}, IPv6: {:?})",
-          member.gateway, member.client_ip, member.client_ipv6
-        ),
-        state => info!("Internal gateway {}: {state:?}", member.gateway),
+      status_changed: Arc::new(move |member| {
+        match member.maintenance {
+          MaintenanceState::Healthy => {
+            info!(
+              "Internal network — authenticated: {} (IPv4: {:?}, IPv6: {:?})",
+              member.gateway, member.client_ip, member.client_ipv6
+            );
+            if let Some(established) = established_tx.lock().unwrap().take() {
+              let _ = established.send(());
+            }
+          }
+          state => info!("Internal gateway {}: {state:?}", member.gateway),
+        }
+        members.lock().unwrap().insert(
+          member.gateway.server().to_owned(),
+          format!("{}: {:?}", member.gateway, member.maintenance),
+        );
       }),
       validate_network: Arc::new(move |cancellation| {
         let network = validate_network.clone();
@@ -183,13 +206,38 @@ impl ConnectHandler<'_> {
       std::sync::atomic::Ordering::SeqCst,
     );
     let mut sessions = self.sessions.take();
-    let result = maintain_non_tunnel_sessions(&mut sessions, policy, callbacks, cancellation, async move {
-      network_signal.await.unwrap_or(SessionEndReason::NetworkChanged)
-    })
-    .await;
+    let mut dashboard_error = None;
+    let result = {
+      let maintenance = maintain_non_tunnel_sessions(&mut sessions, policy, callbacks, cancellation, async move {
+        network_signal.await.unwrap_or(SessionEndReason::NetworkChanged)
+      });
+      tokio::pin!(maintenance);
+      tokio::select! {
+        result = &mut maintenance => result,
+        established = established_rx => {
+          if established.is_ok() {
+            if let Some(dashboard) = &mut dashboard {
+              if let Err(error) = dashboard.start_internal(dashboard_members) {
+                self.cancellation.cancel();
+                dashboard_error = Some(error);
+              }
+            }
+          }
+          maintenance.await
+        }
+      }
+    };
+    if let Some(dashboard) = &mut dashboard {
+      if let Err(error) = dashboard.finish() {
+        dashboard_error = Some(error);
+      }
+    }
     self.sessions.replace(sessions);
     monitor_cancel.cancel();
     monitor.await.context("Internal network monitor failed")?;
+    if let Some(error) = dashboard_error {
+      return Err(error);
+    }
     match result? {
       SessionExit::Disconnected => Ok(()),
       SessionExit::Failed(reason) => bail!("Internal session ended: {reason:?}. Connect again to authenticate."),

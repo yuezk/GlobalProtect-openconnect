@@ -117,7 +117,11 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
 
   #[cfg(target_os = "macos")]
   {
-    config.disable_static().enable_shared().without("gnutls", None);
+    config
+      .disable_static()
+      .enable_shared()
+      .with("gnutls", None)
+      .without("openssl", None);
     config.ldflag("-liconv");
     config.env("LIBS", "-liconv");
   }
@@ -139,6 +143,15 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
 
   #[cfg(target_os = "macos")]
   {
+    let configuration = std::fs::read_to_string(dst.join("build/config.h"))
+      .expect("Failed to read the OpenConnect TLS backend configuration");
+    assert!(
+      configuration.lines().any(|line| line == "#define OPENCONNECT_GNUTLS 1")
+        && !configuration
+          .lines()
+          .any(|line| line == "#define OPENCONNECT_OPENSSL 1"),
+      "macOS OpenConnect must use GnuTLS"
+    );
     // Do not embed Cargo's temporary build directory in consumers of this library.
     let library = std::fs::canonicalize(lib_dir.join("libopenconnect.dylib")).unwrap();
     let library_name = library.file_name().unwrap().to_str().unwrap();
@@ -198,7 +211,7 @@ fn main() {
   // Using pkg-config to find system deps
   pkg_config::probe_library("zlib").unwrap();
   #[cfg(target_os = "macos")]
-  pkg_config::probe_library("openssl").unwrap();
+  pkg_config::probe_library("gnutls").unwrap();
 
   #[cfg(not(target_os = "macos"))]
   {

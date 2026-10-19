@@ -73,6 +73,8 @@ Options:
   -V, --version                  Print version
 ```
 
+The `--fix-openssl` option is available on Linux, FreeBSD, and OpenBSD. macOS uses native TLS and GnuTLS and does not accept this option.
+
 > **Tip:** Use `gpclient help <command>` for detailed information on a specific command.
 
 #### HIP reports
@@ -95,6 +97,8 @@ Use `gpclient` directly for browser-based authentication. It opens the browser a
 sudo gpclient connect <portal> --browser
 ```
 
+For standalone CLI installations, use `--browser manual` (`--browser remote` before v3.0.6): open the printed URL and paste the resulting `globalprotectcallback:…` data into the terminal.
+
 To reuse a saved portal cookie for later connections, add `--cookie-cache`:
 
 ```bash
@@ -109,10 +113,9 @@ sudo gpclient connect <portal> --browser --cookie-cache=/absolute/path/to/cookie
 
 **Browser Options:**
 
-- Use `--browser` to try your recognized default browser first, then another detected browser, and finally the system URL handler
-- Use `--browser default` to use the system default browser
+- Use `--browser` to automatically select an available browser
 - Use `--browser <browser>` to specify a browser (e.g., `firefox`, `chrome`)
-- Use `--browser remote` for headless servers – this provides a URL you can access from another machine to complete authentication
+- Use `--browser manual` for standalone CLI installations or headless servers
 
 ### Graphical User Interface
 
@@ -365,18 +368,18 @@ docker run --rm -it --cap-add=NET_ADMIN --device=/dev/net/tun \
   connect <portal>
 ```
 
-For browser authentication in a headless environment, use remote browser authentication:
+For browser authentication in a headless environment, use manual browser authentication:
 
 ```bash
 docker run --rm -it --cap-add=NET_ADMIN --device=/dev/net/tun \
   yuezk/globalprotect-openconnect:<version> \
-  connect <portal> --browser remote
+  connect <portal> --browser manual
 ```
 
 On a host with multiple network interfaces, use `--browser-listen` to select the IP address reachable from the browser machine:
 
 ```bash
-gpclient connect <portal> --browser remote --browser-listen 192.168.107.15
+gpclient connect <portal> --browser manual --browser-listen 192.168.107.15
 ```
 
 On a Linux host, add host networking if the VPN routes should affect the host network namespace:
@@ -384,7 +387,7 @@ On a Linux host, add host networking if the VPN routes should affect the host ne
 ```bash
 docker run --rm -it --network host --cap-add=NET_ADMIN --device=/dev/net/tun \
   yuezk/globalprotect-openconnect:<version> \
-  connect <portal> --browser remote
+  connect <portal> --browser manual
 ```
 
 Without `--network host`, the VPN connection stays inside the container's network namespace. Docker Desktop on macOS and Windows does not make the host use the VPN through `--network host`; run `gpclient` on the host or use a container gateway setup for host traffic.
@@ -513,7 +516,7 @@ Verify the CLI client is working correctly:
 ### Build Options
 
 - `BUILD_GUI_HELPER=0` – Skip building and installing the GUI helper
-- `BUILD_WEBVIEW_AUTH=0` – Build `gpauth` without embedded browser authentication; use an external or remote browser
+- `BUILD_WEBVIEW_AUTH=0` – Build `gpauth` without embedded browser authentication; use an external browser or manual authentication
 - `INCLUDE_GUI=1` – Download the matching published Linux desktop application for installation
 - `OFFLINE=1` – Build in offline mode using vendored dependencies
 
@@ -539,7 +542,7 @@ sudo gpclient connect <portal> --browser
 
 See related issue: [#316](https://github.com/yuezk/GlobalProtect-openconnect/issues/316)
 
-On a headless server, use `--browser remote` and complete authentication from another machine.
+On a headless server, use `--browser manual` and complete authentication from another machine.
 
 ## NetworkManager Integration
 
