@@ -3,7 +3,11 @@
 A GlobalProtect VPN client built on OpenConnect with support for SSO authentication. It provides command-line tools and the GP Connect desktop application for macOS, Linux, FreeBSD, and OpenBSD.
 
 <p align="center">
-  <img width="300" src="https://github.com/user-attachments/assets/2fb6116c-dc57-43f2-af75-9c3d97ab7122">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/gp-connect-showcase-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/gp-connect-showcase-light.png">
+    <img alt="GP Connect Desktop" src="docs/images/gp-connect-showcase-light.png" width="640">
+  </picture>
 </p>
 
 > **Inspired by** [gp-saml-gui](https://github.com/dlenski/gp-saml-gui)
