@@ -18,11 +18,20 @@
     <clipPath id="globe-clip">
       <circle cx="512" cy="455" r="315"/>
     </clipPath>
+    <!-- Use SVG 1.1 primitives: feDropShadow needs librsvg >= 2.55.91. -->
     <filter id="globe-shadow" x="150" y="90" width="730" height="760" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#174d6f" flood-opacity=".14"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="12" result="blur"/>
+      <feOffset in="blur" dx="0" dy="8" result="offsetBlur"/>
+      <feFlood flood-color="#174d6f" flood-opacity=".14" result="shadowColor"/>
+      <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
     <filter id="lock-shadow" x="280" y="210" width="470" height="540" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#70430c" flood-opacity=".2"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="18" result="blur"/>
+      <feOffset in="blur" dx="0" dy="18" result="offsetBlur"/>
+      <feFlood flood-color="#70430c" flood-opacity=".2" result="shadowColor"/>
+      <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
