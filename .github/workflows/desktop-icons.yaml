@@ -1,0 +1,34 @@
+name: Desktop icon compatibility
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/desktop-icons.yaml'
+      - 'scripts/tests/test_desktop_icon.py'
+      - 'packaging/files/usr/share/icons/**'
+      - 'apps/gpgui-helper/src-tauri/icons/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/desktop-icons.yaml'
+      - 'scripts/tests/test_desktop_icon.py'
+      - 'packaging/files/usr/share/icons/**'
+      - 'apps/gpgui-helper/src-tauri/icons/**'
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the distro SVG loader
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-gdkpixbuf-2.0 librsvg2-common
+      - name: Render desktop icons
+        run: /usr/bin/python3 -m unittest discover -s scripts/tests -p test_desktop_icon.py
