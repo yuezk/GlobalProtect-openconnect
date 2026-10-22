@@ -1,0 +1,135 @@
+name: Publish macOS assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: 'Public gp Build run ID with a successful build-macos job'
+        required: true
+        type: string
+      release_tag:
+        description: 'Existing public release tag (vX.Y.Z or snapshot)'
+        required: true
+        type: string
+
+concurrency:
+  group: publish-macos-assets
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: macos-release
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check completed build and public release
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_REPOSITORY: yuezk/GlobalProtect-openconnect
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_TAG" == snapshot || "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          run="$(gh api "repos/$BUILD_REPOSITORY/actions/runs/$BUILD_RUN_ID")"
+          jq -e '(.event == "workflow_dispatch" or .event == "push") and
+            .path == ".github/workflows/build.yaml"' <<<"$run" >/dev/null
+          attempt="$(jq -r '.run_attempt' <<<"$run")"
+          artifact_name="$(bash scripts/select-macos-artifact.sh "$BUILD_REPOSITORY" "$BUILD_RUN_ID" "$attempt")"
+          {
+            echo "artifact=$artifact_name"
+            echo "workflow_commit=$(jq -r '.head_sha' <<<"$run")"
+          } >> "$GITHUB_OUTPUT"
+          gh release view "$RELEASE_TAG" \
+            --repo yuezk/GlobalProtect-openconnect --json isDraft,isPrerelease \
+            --jq 'select(.isDraft == false and .isPrerelease == false)' | jq -e .
+
+      - name: Download completed build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          repository: yuezk/GlobalProtect-openconnect
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+          name: ${{ steps.build.outputs.artifact }}
+          path: release-assets
+
+      - name: Validate build identity and checksums
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          WORKFLOW_COMMIT: ${{ steps.build.outputs.workflow_commit }}
+          ARTIFACT_NAME: ${{ steps.build.outputs.artifact }}
+        run: |
+          set -euo pipefail
+          metadata="$(python3 scripts/validate-macos-release.py release-assets \
+            --release-tag "$RELEASE_TAG" --workflow-commit "$WORKFLOW_COMMIT")"
+          [[ "$ARTIFACT_NAME" == "macos-release-$(jq -r '.request_id' <<<"$metadata")" ]]
+          {
+            echo "gp_ref=$(jq -r '.gp_ref' <<<"$metadata")"
+            echo "gpgui_ref=$(jq -r '.gpgui_ref' <<<"$metadata")"
+            echo "channel=$(jq -r '.channel' <<<"$metadata")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout public upload helper
+        uses: actions/checkout@v6
+        with:
+          repository: yuezk/GlobalProtect-openconnect
+          ref: ${{ steps.metadata.outputs.gp_ref }}
+          path: gp-release
+
+      - name: Check stable tags
+        if: ${{ steps.metadata.outputs.channel == 'stable' }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          GP_REF: ${{ steps.metadata.outputs.gp_ref }}
+          GPGUI_REF: ${{ steps.metadata.outputs.gpgui_ref }}
+        run: |
+          set -euo pipefail
+          git -C gp-release fetch --no-tags origin "refs/tags/$RELEASE_TAG"
+          if [[ "$(git -C gp-release rev-parse 'FETCH_HEAD^{commit}')" != "$GP_REF" ]]; then
+            echo "gp source commit does not match $RELEASE_TAG" >&2
+            exit 1
+          fi
+          if ! tagged_gui_commit="$(gh api "repos/yuezk/gpgui/commits/$RELEASE_TAG" --jq .sha 2>/dev/null)"; then
+            echo "Private source tag verification failed; diagnostics suppressed." >&2
+            exit 1
+          fi
+          if [[ "$tagged_gui_commit" != "$GPGUI_REF" ]]; then
+            echo "gpgui source commit does not match $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+      - name: Publish and verify macOS assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: yuezk/GlobalProtect-openconnect
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CHANNEL: ${{ steps.metadata.outputs.channel }}
+        run: |
+          set -euo pipefail
+          files=(release-assets/*.dmg release-assets/*.zip release-assets/*.sha256)
+          args=()
+          if [[ "$CHANNEL" == snapshot ]]; then
+            args+=(--clobber)
+          fi
+          gp-release/scripts/upload-release-assets.sh "${args[@]}" "$RELEASE_TAG" "${files[@]}"
+          gh release download "$RELEASE_TAG" --repo yuezk/GlobalProtect-openconnect \
+            --pattern 'GPConnect_*_arm64.*' --dir published-assets
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          metadata = json.loads(Path("release-assets/release-build.json").read_text())
+          for name, digest in metadata["assets"].items():
+              if hashlib.sha256((Path("published-assets") / name).read_bytes()).hexdigest() != digest:
+                  raise SystemExit(f"Published asset checksum mismatch: {name}")
+          PY
+          echo "Published verified macOS assets to $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"

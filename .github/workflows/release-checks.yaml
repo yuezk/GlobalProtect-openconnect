@@ -4,18 +4,34 @@ on:
   pull_request:
     paths:
       - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'scripts/select-macos-artifact.sh'
+      - 'scripts/test-private-desktop.sh'
+      - 'scripts/tests/test_private_ci.py'
       - 'scripts/wait-for-publication.py'
       - 'scripts/select-publication-targets.py'
       - 'scripts/verify-docker-publication.sh'
       - 'scripts/tests/test_*publication.py'
+      - 'scripts/validate-macos-release.py'
+      - 'scripts/validate-macos-appcast.py'
+      - 'scripts/validate-update-manifest.py'
+      - 'scripts/tests/test_validate_*.py'
   push:
     branches: [main]
     paths:
       - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'scripts/select-macos-artifact.sh'
+      - 'scripts/test-private-desktop.sh'
+      - 'scripts/tests/test_private_ci.py'
       - 'scripts/wait-for-publication.py'
       - 'scripts/select-publication-targets.py'
       - 'scripts/verify-docker-publication.sh'
       - 'scripts/tests/test_*publication.py'
+      - 'scripts/validate-macos-release.py'
+      - 'scripts/validate-macos-appcast.py'
+      - 'scripts/validate-update-manifest.py'
+      - 'scripts/tests/test_validate_*.py'
 
 permissions:
   contents: read
@@ -36,3 +52,11 @@ jobs:
           shellcheck scripts/verify-docker-publication.sh
       - name: Test publication verification
         run: python3 -m unittest discover -s scripts/tests -p 'test_*publication.py'
+      - name: Test macOS publication and update feed validation
+        run: python3 -m unittest discover -s scripts/tests -p 'test_validate_*.py'
+      - name: Check private CI and macOS artifact selection
+        run: |
+          bash -n scripts/select-macos-artifact.sh
+          shellcheck scripts/select-macos-artifact.sh scripts/test-private-desktop.sh
+          bash -n scripts/test-private-desktop.sh
+          python3 -m unittest discover -s scripts/tests -p 'test_private_ci.py'
