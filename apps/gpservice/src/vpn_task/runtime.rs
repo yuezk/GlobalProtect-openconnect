@@ -31,10 +31,12 @@ struct TunnelInput {
   source: Arc<openconnect::HipSource>,
   session_id: Option<Uuid>,
   registry: Arc<crate::session_registry::SessionRegistry>,
+  desktop_uid: Option<u32>,
 }
 
 struct PreparedTunnel {
   vpn: Arc<Vpn>,
+  script_tun: Option<super::script_tun::PreparedScriptTun>,
 }
 
 /// The accepted attempt owns cleanup through fallible setup. Non-tunnel workers
@@ -47,13 +49,6 @@ pub(super) fn spawn(
 ) -> JoinHandle<()> {
   tokio::spawn(async move {
     let attempt = input.attempt;
-    let non_tunnel = input
-      .connection
-      .request
-      .plan()
-      .members()
-      .iter()
-      .all(|member| member.authentication.mode() == SessionMode::NonTunnel);
     let mut failure = None;
     let mut approval = None;
     if !cancellation.is_cancelled() {
@@ -110,24 +105,65 @@ pub(super) fn spawn(
               source,
               session_id: input.session_id,
               registry: input.registry.clone(),
+              desktop_uid: input.desktop_uid,
             };
+            input.connection.request.release_script_tun_bootstrap();
             let setup_cancel = cancellation.clone();
             let prepared = tokio::task::spawn_blocking(move || prepare_tunnel(tunnel_input, &setup_cancel)).await;
             match prepared {
-              Ok(Ok(prepared)) => {
-                run_tunnel(
-                  attempt,
-                  &prepared,
-                  guard,
-                  &input.lifecycle,
-                  &mut input.connection.sessions,
-                  cancellation.clone(),
-                  events.clone(),
-                )
-                .await
+              Ok(Ok(mut prepared)) => {
+                if let Some(script_tun) = prepared.script_tun.take() {
+                  if let Some(session_id) = input.session_id {
+                    match super::script_tun::run(
+                      gpapi::script_tun::Identity {
+                        service_instance: input.registry.service_instance_id(),
+                        attempt,
+                        launch_id: match input.connection.request.args().packet_delivery() {
+                          gpapi::script_tun::PacketDelivery::ScriptTun(request) => request.launch_id,
+                          _ => unreachable!(),
+                        },
+                      },
+                      prepared.vpn.clone(),
+                      script_tun,
+                      guard,
+                      &input.lifecycle,
+                      cancellation.clone(),
+                      events.clone(),
+                      session_id,
+                      input.registry.clone(),
+                      &mut input.connection.sessions,
+                    )
+                    .await
+                    {
+                      Ok(()) => {}
+                      Err(error) if error.is::<super::script_tun::NetworkChanged>() && !cancellation.is_cancelled() => {
+                        let _ = events.send(LifecycleEvent::ReconnectRequired { attempt }).await;
+                      }
+                      Err(error) if !cancellation.is_cancelled() => {
+                        failure = Some(error.to_string());
+                      }
+                      Err(_) => {}
+                    }
+                  }
+                } else {
+                  run_tunnel(
+                    attempt,
+                    &prepared,
+                    guard,
+                    &input.lifecycle,
+                    &mut input.connection.sessions,
+                    cancellation.clone(),
+                    events.clone(),
+                  )
+                  .await;
+                }
               }
-              Ok(Err(error)) => warn!("Failed to prepare tunnel: {error:#}"),
-              Err(error) => warn!("Tunnel setup worker failed: {error}"),
+              Ok(Err(error)) => {
+                failure = Some(format!("Failed to prepare tunnel: {error:#}"));
+              }
+              Err(error) => {
+                failure = Some(format!("Tunnel setup worker failed: {error}"));
+              }
             }
           }
         }
@@ -145,7 +181,7 @@ pub(super) fn spawn(
     // Identity and approval remain alive through worker drain and logout. Ended
     // only releases admission after the actor also joins this task.
     drop(approval);
-    if non_tunnel && !cancellation.is_cancelled() {
+    if !cancellation.is_cancelled() {
       if let Some(reason) = failure {
         let _ = events.send(LifecycleEvent::Failed { attempt, reason }).await;
       }
@@ -210,8 +246,24 @@ fn prepare_tunnel(input: TunnelInput, cancellation: &CancellationToken) -> anyho
   );
   let member = &input.request.plan().members()[0];
   let identity_files = &input.resources.identity_files;
+  let (builder, script_tun) = match args.packet_delivery() {
+    gpapi::script_tun::PacketDelivery::System => (
+      crate::vpn_script::builder(member.gateway.server(), member.authentication.cookie(), args)?,
+      None,
+    ),
+    gpapi::script_tun::PacketDelivery::ScriptTun(request) => {
+      ensure!(input.session_id.is_some(), "Script-tun requires a desktop session");
+      let (builder, script_tun) = super::script_tun::builder(
+        member.gateway.server(),
+        member.authentication.cookie(),
+        request,
+        input.desktop_uid.context("Desktop identity is unavailable")?,
+      )?;
+      (builder, Some(script_tun))
+    }
+  };
   let vpn = Arc::new(
-    crate::vpn_script::builder(member.gateway.server(), member.authentication.cookie(), args)?
+    builder
       .user_agent(args.user_agent())
       .os(args.openconnect_os())
       .os_version(args.os_version())
@@ -231,6 +283,11 @@ fn prepare_tunnel(input: TunnelInput, cancellation: &CancellationToken) -> anyho
       .reconnect_timeout(args.reconnect_timeout())
       .mtu(args.mtu())
       .disable_ipv6(args.disable_ipv6())
+      .gateway_ip_preference(match args.gateway_ip_preference() {
+        gpapi::gateway::GatewayIpPreference::Auto => openconnect::GatewayIpPreference::Auto,
+        gpapi::gateway::GatewayIpPreference::Ipv4 => openconnect::GatewayIpPreference::Ipv4,
+        gpapi::gateway::GatewayIpPreference::Ipv6 => openconnect::GatewayIpPreference::Ipv6,
+      })
       .no_dtls(args.no_dtls())
       .local_hostname(args.local_hostname())
       .dpd_interval(args.force_dpd())
@@ -247,7 +304,7 @@ fn prepare_tunnel(input: TunnelInput, cancellation: &CancellationToken) -> anyho
       }
     });
   }
-  Ok(PreparedTunnel { vpn })
+  Ok(PreparedTunnel { vpn, script_tun })
 }
 
 async fn run_tunnel(

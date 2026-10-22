@@ -57,6 +57,16 @@ pub enum GatewaySelection {
   Manual,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Type, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[serde(rename_all = "camelCase")]
+pub enum GatewayIpPreference {
+  #[default]
+  Auto,
+  Ipv4,
+  Ipv6,
+}
+
 impl GatewaySelection {
   pub fn as_login_param(self) -> &'static str {
     match self {

@@ -31,7 +31,17 @@ pub(crate) async fn prepare_connection(
   brokered_macos: bool,
   cancellation: CancellationToken,
 ) -> anyhow::Result<PreparedConnection> {
+  let mode = request.args().packet_delivery().clone();
+  let request = request.with_packet_delivery(mode);
   let args = request.args();
+  if let gpapi::script_tun::PacketDelivery::ScriptTun(consumer) = args.packet_delivery() {
+    consumer.validate()?;
+    anyhow::ensure!(
+      request.plan().members().len() == 1
+        && request.plan().members()[0].authentication.mode() == gpapi::session::SessionMode::Tunnel,
+      "Script-tun requires a tunnel gateway"
+    );
+  }
   let non_tunnel = request
     .plan()
     .members()

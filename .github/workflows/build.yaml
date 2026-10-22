@@ -18,7 +18,7 @@ on:
         required: true
         default: dev
       gpgui_branch:
-        description: 'gpgui ref to build (use the matching tag for stable builds)'
+        description: 'gpgui branch or tag to build and test (use the matching tag for stable builds)'
         required: true
         default: dev
       build_macos:
@@ -106,6 +106,36 @@ jobs:
             sudo -E env PATH="$PATH" PKEXEC_UID="$(id -u)" cargo test --locked -p gpservice \
               --bin gpservice device_anchor::tests
           '
+
+  test-gpgui:
+    needs: validate-inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout GlobalProtect-openconnect
+      uses: actions/checkout@v6
+      with:
+        repository: yuezk/GlobalProtect-openconnect
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        submodules: recursive
+        path: source/gp
+        persist-credentials: false
+    - name: Checkout CI helpers
+      uses: actions/checkout@v6
+      with:
+        path: .ci
+        persist-credentials: false
+    - name: Checkout gpgui
+      uses: ./.ci/.github/actions/checkout-private
+      with:
+        token: ${{ secrets.GH_PAT }}
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+        path: source/gpgui
+    - name: Run frontend and Rust unit tests as an ordinary user
+      timeout-minutes: 80
+      run: bash .ci/scripts/test-private-desktop.sh "$PWD/source"
 
   tarball:
     needs: validate-inputs
@@ -467,93 +497,278 @@ jobs:
           nix build --impure --file gp/nix/ci.nix runtime-prebuilt \
             --extra-experimental-features "nix-command flakes" --print-build-logs
 
-  trigger-gpgui-macos:
-    needs: test-gp
+  build-macos:
+    name: build-macos
+    needs: [test-gp, test-gpgui]
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_macos) || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_MACOS_ON_TAG == 'true') }}
     permissions:
       contents: read
-    runs-on: ubuntu-latest
-    name: trigger private macOS build
-    outputs:
-      run_id: ${{ steps.dispatch.outputs.run_id }}
-      run_url: ${{ steps.dispatch.outputs.run_url }}
+    concurrency:
+      group: macos-build
+      cancel-in-progress: false
+    runs-on: ${{ vars.MACOS_RUNNER || 'macos-15' }}
+    environment: macos-release
+    timeout-minutes: 120
     steps:
-      - name: Dispatch private macOS build
-        id: dispatch
+      - name: Verify runner architecture
+        run: test "$(uname -m)" = arm64
+
+      - name: Select Xcode toolchain
         env:
-          GH_TOKEN: ${{ secrets.GPGUI_ACTIONS_TOKEN }}
-          PUBLIC_GH_TOKEN: ${{ github.token }}
-          CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
-          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && (inputs.channel == 'stable' && inputs.gp_branch || 'snapshot') || github.ref_name }}
-          GP_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref_name }}
-          GPGUI_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
-          BUILD_VERSION: ${{ github.run_number }}.${{ github.run_attempt }}
-          REQUEST_ID: ${{ github.run_id }}.${{ github.run_attempt }}.macos
+          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun swift --version
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.1
+
+      - name: Checkout CI helpers
+        uses: actions/checkout@v6
+        with:
+          path: .ci
+          persist-credentials: false
+      - name: Checkout gpgui source
+        uses: ./.ci/.github/actions/checkout-private
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name) }}
+          path: source/gpgui
+
+      - name: Checkout GlobalProtect-openconnect source
+        uses: actions/checkout@v6
+        with:
+          repository: yuezk/GlobalProtect-openconnect
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref) }}
+          path: source/gp
+          submodules: recursive
+
+      - name: Verify stable source commits
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.channel || 'stable') == 'stable' }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          RELEASE_TAG: ${{ (github.event_name == 'workflow_dispatch' && (inputs.channel == 'stable' && inputs.gp_branch || 'snapshot') || github.ref_name) }}
+        run: |
+          trap 'status=$?; if [ "$status" -ne 0 ]; then echo "::error::Stable source tag verification failed; diagnostics suppressed."; fi' EXIT
+          (
+            set -euo pipefail
+            git -C source/gp fetch --no-tags origin "refs/tags/$RELEASE_TAG"
+            test "$(git -C source/gp rev-parse HEAD)" = "$(git -C source/gp rev-parse 'FETCH_HEAD^{commit}')"
+            tagged_gui_commit="$(gh api "repos/yuezk/gpgui/commits/$RELEASE_TAG" --jq .sha)"
+            test "$(git -C source/gpgui rev-parse HEAD)" = "$tagged_gui_commit"
+          ) >/dev/null 2>&1
+          echo "Stable source tags verified."
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Prepare release metadata
+        env:
+          FEED_URL: ${{ vars.SPARKLE_FEED_URL }}
+          CHANNEL: ${{ (github.event_name == 'workflow_dispatch' && inputs.channel || 'stable') }}
+          RELEASE_TAG: ${{ (github.event_name == 'workflow_dispatch' && (inputs.channel == 'stable' && inputs.gp_branch || 'snapshot') || github.ref_name) }}
+          BUILD_VERSION: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
         run: |
           set -euo pipefail
 
-          if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "GPGUI_ACTIONS_TOKEN is not configured" >&2
+          gp_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' source/gp/Cargo.toml | head -1)"
+          gpgui_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' source/gpgui/Cargo.toml | head -1)"
+          if [[ -z "$gp_version" || "$gp_version" != "$gpgui_version" ]]; then
+            echo "gp and gpgui versions must match: gp=$gp_version, gpgui=$gpgui_version" >&2
+            exit 1
+          fi
+          if [[ "$FEED_URL" != https://*/appcast.xml ]]; then
+            echo "SPARKLE_FEED_URL must be an HTTPS URL ending in /appcast.xml" >&2
             exit 1
           fi
 
-          gp_ref_path="$(jq -rn --arg ref "$GP_REF" '$ref | @uri')"
-          gpgui_ref_path="$(jq -rn --arg ref "$GPGUI_REF" '$ref | @uri')"
-          gp_sha="$(GH_TOKEN="$PUBLIC_GH_TOKEN" gh api \
-            "repos/yuezk/GlobalProtect-openconnect/commits/$gp_ref_path" --jq .sha)"
-          gpgui_sha="$(gh api "repos/yuezk/gpgui/commits/$gpgui_ref_path" --jq .sha)"
-          if [[ -z "$gp_sha" || -z "$gpgui_sha" ]]; then
-            echo "Could not resolve release source refs" >&2
-            exit 1
-          fi
-
-          expected_title="macOS build $CHANNEL $RELEASE_TAG ($REQUEST_ID)"
-          jq -n \
-            --arg workflow_ref "$GPGUI_REF" \
-            --arg request_id "$REQUEST_ID" \
-            --arg build_version "$BUILD_VERSION" \
-            --arg channel "$CHANNEL" \
-            --arg release_tag "$RELEASE_TAG" \
-            --arg gp_ref "$gp_sha" \
-            --arg gpgui_ref "$gpgui_sha" \
-            '{
-              ref: $workflow_ref,
-              inputs: {
-                request_id: $request_id,
-                build_version: $build_version,
-                channel: $channel,
-                release_tag: $release_tag,
-                gp_ref: $gp_ref,
-                gpgui_ref: $gpgui_ref
-              }
-            }' | gh api --method POST \
-              repos/yuezk/gpgui/actions/workflows/build-macos.yaml/dispatches \
-              --input -
-
-          run_id=""
-          run_url=""
-          for _ in {1..40}; do
-            runs="$(gh api \
-              'repos/yuezk/gpgui/actions/workflows/build-macos.yaml/runs?event=workflow_dispatch&per_page=50')"
-            run_id="$(jq -r --arg title "$expected_title" \
-              '[.workflow_runs[] | select(.display_title == $title)] | first | .id // empty' \
-              <<<"$runs")"
-            run_url="$(jq -r --arg title "$expected_title" \
-              '[.workflow_runs[] | select(.display_title == $title)] | first | .html_url // empty' \
-              <<<"$runs")"
-            if [[ -n "$run_id" ]]; then
-              {
-                echo "run_id=$run_id"
-                echo "run_url=$run_url"
-              } >> "$GITHUB_OUTPUT"
-              echo "Triggered private workflow: $run_url"
-              exit 0
+          if [[ "$CHANNEL" == "stable" ]]; then
+            artifact_version="$gpgui_version"
+            if [[ "$RELEASE_TAG" != "v$gpgui_version" ]]; then
+              echo "Release tag does not match gpgui version $gpgui_version" >&2
+              exit 1
             fi
-            sleep 3
+          else
+            artifact_version="${gpgui_version}-snapshot.${BUILD_VERSION}"
+          fi
+
+          {
+            echo "MACOS_BUILD_NUMBER=$BUILD_VERSION"
+            echo "MACOS_ARTIFACT_VERSION=$artifact_version"
+            echo "SPARKLE_FEED_URL=$FEED_URL"
+            echo "SPARKLE_UPDATE_CHANNEL=$CHANNEL"
+          } >> "$GITHUB_ENV"
+
+      - name: Install build dependencies
+        run: |
+          brew install \
+            autoconf \
+            automake \
+            create-dmg \
+            dylibbundler \
+            gettext \
+            libtool \
+            meson \
+            ninja \
+            pkgconf \
+            python
+
+      - name: Import signing identity
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_KEY_P8: ${{ secrets.APPLE_NOTARY_KEY_P8 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+
+          for variable in \
+            MACOS_CERTIFICATE_P12 \
+            MACOS_CERTIFICATE_PASSWORD; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "$variable is not configured" >&2
+              exit 1
+            fi
+          done
+          for variable in \
+            APPLE_NOTARY_KEY_P8 \
+            APPLE_NOTARY_KEY_ID \
+            APPLE_NOTARY_ISSUER_ID; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "$variable is not configured" >&2
+              exit 1
+            fi
           done
 
-          echo "Could not locate the dispatched private workflow run" >&2
-          exit 1
+          keychain="$RUNNER_TEMP/gp-connect.keychain-db"
+          keychain_password="$(uuidgen)"
+          certificate="$RUNNER_TEMP/signing-identity.p12"
+          printf '%s' "$MACOS_CERTIFICATE_P12" | base64 -D > "$certificate"
+          chmod 600 "$certificate"
+
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"
+          if [[ -z "$identity" ]]; then
+            echo "A Developer ID Application signing identity was not found" >&2
+            exit 1
+          fi
+
+          {
+            echo "CI_KEYCHAIN=$keychain"
+            echo "MACOS_SIGN_IDENTITY=$identity"
+          } >> "$GITHUB_ENV"
+          notary_key="$RUNNER_TEMP/AuthKey.p8"
+          notary_profile="gp-connect-ci"
+          printf '%s' "$APPLE_NOTARY_KEY_P8" > "$notary_key"
+          chmod 600 "$notary_key"
+          xcrun notarytool store-credentials "$notary_profile" \
+            --key "$notary_key" \
+            --key-id "$APPLE_NOTARY_KEY_ID" \
+            --issuer "$APPLE_NOTARY_ISSUER_ID" \
+            --keychain "$keychain"
+          {
+            echo "APPLE_NOTARY_PROFILE=$notary_profile"
+            echo "APPLE_NOTARY_KEYCHAIN=$keychain"
+          } >> "$GITHUB_ENV"
+
+      - name: Build macOS release artifacts
+        env:
+          CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+          GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
+        run: |
+          set -euo pipefail
+          trap 'status=$?; if [ "$status" -ne 0 ]; then echo "::error::Private operation failed; diagnostics suppressed."; fi' EXIT
+          (
+            set -euo pipefail
+            if [[ "$CHANNEL" == "snapshot" ]]; then
+              export GPGUI_RELEASE_DEVTOOLS=1
+            fi
+            source/gpgui/scripts/build-macos.sh dmg release
+          ) 2>&1 | awk '
+            /^MACOS_STAGE: (Native dependencies|Components|Frontend|Application|Bundle|Bundle icons|Bundle metadata|Bundle licenses|Bundle libraries|Bundle frameworks|Bundle optimization|Signing|Validation|App notarization|Update archive|Disk image|Disk image notarization|Complete)$/ {
+              print "::notice::" $0
+              fflush()
+            }
+          '
+          echo "Private operation passed."
+
+      - name: Prepare release assets
+        run: |
+          set -euo pipefail
+
+          artifact_dir="release-assets"
+          rm -rf "$artifact_dir"
+          mkdir -p "$artifact_dir"
+          dmg_name="GPConnect_${MACOS_ARTIFACT_VERSION}_arm64.dmg"
+          archive_name="GPConnect_${MACOS_ARTIFACT_VERSION}_arm64.zip"
+          mv "source/gpgui/target/release/bundle/dmg/GP Connect.dmg" \
+            "$artifact_dir/$dmg_name"
+          mv "source/gpgui/target/release/bundle/sparkle/$archive_name" \
+            "$artifact_dir/$archive_name"
+          (
+            cd "$artifact_dir"
+            for file in *; do
+              shasum -a 256 "$file" > "$file.sha256"
+            done
+          )
+
+      - name: Record build identity
+        env:
+          CHANNEL: ${{ (github.event_name == 'workflow_dispatch' && inputs.channel || 'stable') }}
+          RELEASE_TAG: ${{ (github.event_name == 'workflow_dispatch' && (inputs.channel == 'stable' && inputs.gp_branch || 'snapshot') || github.ref_name) }}
+          REQUEST_ID: ${{ format('{0}.{1}.macos', github.run_id, github.run_attempt) }}
+          BUILD_VERSION: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          GP_REF="$(git -C source/gp rev-parse HEAD)"
+          GPGUI_REF="$(git -C source/gpgui rev-parse HEAD)"
+          export GP_REF GPGUI_REF
+          python3 - <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          directory = Path("release-assets")
+          metadata = {key.lower(): os.environ[key] for key in (
+              "CHANNEL", "RELEASE_TAG", "GP_REF", "GPGUI_REF", "REQUEST_ID", "BUILD_VERSION", "WORKFLOW_SHA")}
+          metadata["artifact_version"] = os.environ["MACOS_ARTIFACT_VERSION"]
+          metadata["assets"] = {
+              file.name: hashlib.sha256(file.read_bytes()).hexdigest()
+              for file in directory.iterdir() if file.is_file()
+          }
+          (directory / "release-build.json").write_text(json.dumps(metadata, indent=2) + "\n")
+          PYTHON
+
+      - name: Upload macOS build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-release-${{ format('{0}.{1}.macos', github.run_id, github.run_attempt) }}
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+          path: release-assets/*
+
+      - name: Remove signing keychain
+        if: ${{ always() }}
+        run: |
+          if [[ -n "${CI_KEYCHAIN:-}" && -f "$CI_KEYCHAIN" ]]; then
+            security delete-keychain "$CI_KEYCHAIN"
+          fi
 
   setup-bsd-matrix:
     needs: validate-inputs
@@ -617,18 +832,28 @@ jobs:
         ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
         path: gpgui-frontend/gp
         submodules: recursive
-    - name: Checkout gpgui
+    - name: Checkout CI helpers
       uses: actions/checkout@v6
       with:
+        path: .ci
+        persist-credentials: false
+    - name: Checkout gpgui
+      uses: ./.ci/.github/actions/checkout-private
+      with:
         token: ${{ secrets.GH_PAT }}
-        repository: yuezk/gpgui
         ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
         path: gpgui-frontend/gpgui
     - name: Build gpgui frontend
       run: |
-        cd gpgui-frontend/gpgui/apps/desktop
-        pnpm install --frozen-lockfile
-        pnpm build
+        trap 'status=$?; if [ "$status" -ne 0 ]; then echo "::error::Private operation failed; diagnostics suppressed."; fi' EXIT
+        (
+          set -euo pipefail
+          cd gpgui-frontend/gpgui/apps/desktop
+          pnpm install --frozen-lockfile
+          pnpm build
+        ) >/dev/null 2>&1
+        echo "Private operation passed."
+
     - name: Upload gpgui frontend
       uses: actions/upload-artifact@v7
       with:
@@ -657,11 +882,15 @@ jobs:
         ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
         path: ${{ matrix.workspace }}/gp
         submodules: recursive
-    - name: Checkout gpgui
+    - name: Checkout CI helpers
       uses: actions/checkout@v6
       with:
+        path: .ci
+        persist-credentials: false
+    - name: Checkout gpgui
+      uses: ./.ci/.github/actions/checkout-private
+      with:
         token: ${{ secrets.GH_PAT }}
-        repository: yuezk/gpgui
         ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
         path: ${{ matrix.workspace }}/gpgui
     - name: Download gpgui frontend
@@ -699,24 +928,28 @@ jobs:
             webkit2-gtk_41
         run: |
           set -eu
-          export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
-          export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
-          export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
+          (
+            set -eu
+            export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
+            export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+            export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
-          cd "${{ matrix.workspace }}/gp"
-          cargo build --release --workspace
+            cd "${{ matrix.workspace }}/gp"
+            cargo build --release --workspace
 
-          cd ../gpgui/apps/desktop/src-tauri
-          cargo build --release --workspace
+            cd ../gpgui/apps/desktop/src-tauri
+            cargo build --release --workspace
 
-          cd ../../../../gp
-          gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
-          pkg install -y ".build/${{ matrix.artifact_dir }}"/artifacts/*.pkg
-          gpclient --version
-          gpauth --version
-          gpgui --version
-          rm -rf target ../gpgui/target
-          find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+            cd ../../../../gp
+            gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
+            pkg install -y ".build/${{ matrix.artifact_dir }}"/artifacts/*.pkg
+            gpclient --version
+            gpauth --version
+            gpgui --version
+            rm -rf target ../gpgui/target
+            find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+          ) >/dev/null 2>&1
+          echo "BSD build passed."
     - name: Build on OpenBSD
       if: ${{ matrix.os == 'openbsd' }}
       uses: vmactions/openbsd-vm@v1
@@ -754,26 +987,30 @@ jobs:
           ln -sf /usr/local/bin/automake-1.17 /usr/local/bin/automake
         run: |
           set -eu
-          export AUTOCONF_VERSION=2.72
-          export AUTOMAKE_VERSION=1.17
-          export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
-          export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
-          export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
+          (
+            set -eu
+            export AUTOCONF_VERSION=2.72
+            export AUTOMAKE_VERSION=1.17
+            export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
+            export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+            export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
-          cd "${{ matrix.workspace }}/gp"
-          cargo build --release --workspace
+            cd "${{ matrix.workspace }}/gp"
+            cargo build --release --workspace
 
-          cd ../gpgui/apps/desktop/src-tauri
-          cargo build --release --workspace
+            cd ../gpgui/apps/desktop/src-tauri
+            cargo build --release --workspace
 
-          cd ../../../../gp
-          gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
-          pkg_add -D unsigned ".build/${{ matrix.artifact_dir }}"/artifacts/*.tgz
-          gpclient --version
-          gpauth --version
-          gpgui --version
-          rm -rf target ../gpgui/target
-          find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+            cd ../../../../gp
+            gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
+            pkg_add -D unsigned ".build/${{ matrix.artifact_dir }}"/artifacts/*.tgz
+            gpclient --version
+            gpauth --version
+            gpgui --version
+            rm -rf target ../gpgui/target
+            find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+          ) >/dev/null 2>&1
+          echo "BSD build passed."
     - name: Upload BSD package
       uses: actions/upload-artifact@v7
       with:
@@ -793,6 +1030,7 @@ jobs:
       artifact-metadata: write
     needs:
       - test-gp
+      - test-gpgui
       - nix-source
       - nix-prebuilt
       - tarball
@@ -896,48 +1134,10 @@ jobs:
       run: |
         cd gh-release/gp/scripts && ./gh-release.sh "$RELEASE_TAG"
 
-  wait-gpgui-macos:
-    if: ${{ !cancelled() && needs.trigger-gpgui-macos.result == 'success' }}
-    needs:
-      - trigger-gpgui-macos
-    runs-on: ubuntu-latest
-    timeout-minutes: 130
-    steps:
-      - name: Wait for private macOS build
-        env:
-          GH_TOKEN: ${{ secrets.GPGUI_ACTIONS_TOKEN }}
-          PRIVATE_RUN_ID: ${{ needs.trigger-gpgui-macos.outputs.run_id }}
-          PRIVATE_RUN_URL: ${{ needs.trigger-gpgui-macos.outputs.run_url }}
-        run: |
-          set -euo pipefail
-
-          if [[ -z "$PRIVATE_RUN_ID" ]]; then
-            echo "The private macOS workflow was not started" >&2
-            exit 1
-          fi
-          for _ in $(seq 1 480); do
-            run="$(gh api "repos/yuezk/gpgui/actions/runs/$PRIVATE_RUN_ID")"
-            status="$(jq -r '.status' <<<"$run")"
-            conclusion="$(jq -r '.conclusion // ""' <<<"$run")"
-            if [[ "$status" == "completed" ]]; then
-              echo "Private macOS build completed: $PRIVATE_RUN_URL"
-              if [[ "$conclusion" != "success" ]]; then
-                echo "Private macOS build concluded with: $conclusion" >&2
-                exit 1
-              fi
-              exit 0
-            fi
-            sleep 15
-          done
-
-          gh api --method POST \
-            "repos/yuezk/gpgui/actions/runs/$PRIVATE_RUN_ID/cancel" >/dev/null || true
-          echo "Private macOS build timed out: $PRIVATE_RUN_URL" >&2
-          exit 1
-
   publish-docker-image:
     needs:
       - test-gp
+      - test-gpgui
       - build-docker-image
     if: ${{ (github.event_name == 'workflow_dispatch' && !inputs.build_only) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-latest

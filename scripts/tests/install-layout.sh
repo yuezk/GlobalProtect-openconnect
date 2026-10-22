@@ -24,7 +24,7 @@ for platform in linux bsd; do
     installed="$stage/custom/gp"
     test -x "$installed/bin/gpclient"
     test -x "$installed/libexec/gpclient/gp-vpnc-script-installer"
-    grep -q 'Exec="/custom/gp/bin/gpclient" ' "$installed/share/applications/gpgui.desktop"
+    grep -Fxq 'Exec=/custom/gp/bin/gpclient launch-gui %u' "$installed/share/applications/gpgui.desktop"
     grep -q '>/custom/gp/bin/gpservice<' "$installed/share/polkit-1/actions/com.yuezk.gpgui.policy"
     grep -q '>/custom/gp/libexec/gpclient/gp-hip-script-installer<' "$installed/share/polkit-1/actions/com.yuezk.gpgui.policy"
     ! grep -F "$stage" "$installed/share/applications/gpgui.desktop"

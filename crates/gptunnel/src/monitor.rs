@@ -293,6 +293,12 @@ pub struct TunnelMonitor {
 
 impl TunnelMonitor {
   pub fn attach(vpn: Arc<Vpn>) -> Arc<Self> {
+    Self::attach_with_observer(vpn, |_| {})
+  }
+
+  /// Observe every native transition as well as the coalesced telemetry stream.
+  /// The callback runs on the native worker and must not block.
+  pub fn attach_with_observer(vpn: Arc<Vpn>, on_event: impl Fn(&Event) + Send + Sync + 'static) -> Arc<Self> {
     let observation = Observation::new();
     let (updates, _) = watch::channel(observation.project(Instant::now()));
     let monitor = Arc::new(Self {
@@ -304,6 +310,7 @@ impl TunnelMonitor {
     });
     let observer = Arc::downgrade(&monitor);
     monitor.vpn.set_tunnel_observer(move |event| {
+      on_event(&event);
       if let Some(monitor) = observer.upgrade() {
         monitor.observe(event);
       }

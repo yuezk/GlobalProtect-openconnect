@@ -13,6 +13,38 @@ struct peer {
 };
 struct policy { int accept, calls, unsafe_renegotiation_denied; };
 
+struct stalled_logout_peer {
+	int listener, stop, complete_tls;
+	gnutls_certificate_credentials_t credentials;
+};
+
+static void *stall_logout(void *data)
+{
+	struct stalled_logout_peer *peer = data;
+	struct timeval timeout = { .tv_sec = 7 };
+	fd_set reads;
+	gnutls_session_t session = NULL;
+	int fd = accept(peer->listener, NULL, NULL);
+	assert(fd >= 0);
+	if (peer->complete_tls) {
+		assert(!gnutls_init(&session, GNUTLS_SERVER));
+		assert(!gnutls_set_default_priority(session));
+		assert(!gnutls_credentials_set(session, GNUTLS_CRD_CERTIFICATE, peer->credentials));
+		gnutls_transport_set_int(session, fd);
+		gnutls_handshake_set_timeout(session, 5000);
+		assert(!gnutls_handshake(session));
+	}
+	/* Stall either the TLS handshake or the HTTP logout response. The watchdog
+	 * lets the regression fail without leaving either peer blocked forever. */
+	FD_ZERO(&reads);
+	FD_SET(peer->stop, &reads);
+	select(peer->stop + 1, &reads, NULL, NULL, &timeout);
+	if (session)
+		gnutls_deinit(session);
+	close(fd);
+	return NULL;
+}
+
 static void progress(void *data, int level, const char *format, ...)
 {
 	va_list args;
@@ -33,6 +65,53 @@ static int certificate_policy(void *data, const char *reason)
 	assert(reason && *reason);
 	policy->calls++;
 	return policy->accept ? 0 : -EINVAL;
+}
+
+static void logout_finishes_when_gateway_stalls(const char *cert, const char *key, int complete_tls)
+{
+	struct stalled_logout_peer peer;
+	struct policy policy = { .accept = 1 };
+	struct sockaddr_in address = { .sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK) };
+	socklen_t length = sizeof(address);
+	struct timespec start, end;
+	struct openconnect_info *client;
+	pthread_t thread;
+	char url[128];
+	int stop[2];
+	double elapsed;
+
+	assert(!pipe(stop));
+	peer.complete_tls = complete_tls;
+	assert(!gnutls_certificate_allocate_credentials(&peer.credentials));
+	assert(!gnutls_certificate_set_x509_key_file(peer.credentials, cert, key, GNUTLS_X509_FMT_PEM));
+	peer.stop = stop[0];
+	peer.listener = socket(AF_INET, SOCK_STREAM, 0);
+	assert(peer.listener >= 0);
+	assert(!bind(peer.listener, (struct sockaddr *)&address, sizeof(address)));
+	assert(!getsockname(peer.listener, (struct sockaddr *)&address, &length));
+	assert(!listen(peer.listener, 1));
+	assert(!pthread_create(&thread, NULL, stall_logout, &peer));
+	client = openconnect_vpninfo_new("Logout timeout regression", certificate_policy, NULL, NULL, progress, &policy);
+	assert(client);
+	snprintf(url, sizeof(url), "https://127.0.0.1:%u/", ntohs(address.sin_port));
+	assert(!openconnect_parse_url(client, url));
+	assert(!openconnect_set_protocol(client, "gp"));
+	assert(!openconnect_set_cookie(client, "user=fixture&authcookie=fixture"));
+	/* Enter the same cleanup branch as a consumed OC_CMD_CANCEL. */
+	client->quit_reason = "Aborted by caller";
+	assert(!clock_gettime(CLOCK_MONOTONIC, &start));
+	assert(openconnect_mainloop(client, 0, 0) < 0);
+	assert(!client->https_deadline.tv_sec && !client->https_deadline.tv_nsec);
+	assert(!clock_gettime(CLOCK_MONOTONIC, &end));
+	elapsed = end.tv_sec - start.tv_sec + (end.tv_nsec - start.tv_nsec) / 1e9;
+	(void)write(stop[1], "x", 1);
+	assert(!pthread_join(thread, NULL));
+	close(stop[0]);
+	close(stop[1]);
+	close(peer.listener);
+	gnutls_certificate_free_credentials(peer.credentials);
+	openconnect_vpninfo_free(client);
+	assert(elapsed < 6.0);
 }
 
 static void *serve(void *data)
@@ -134,6 +213,8 @@ int main(int argc, char **argv)
 	assert(argc == 6);
 	signal(SIGPIPE, SIG_IGN);
 	assert(!openconnect_init_ssl());
+	logout_finishes_when_gateway_stalls(argv[1], argv[2], 0);
+	logout_finishes_when_gateway_stalls(argv[1], argv[2], 1);
 #ifdef __APPLE__
 	/* Read-only check of the source-built library's native Keychain integration.
 	 * Local fixture trust is tested separately, without changing OS trust settings. */

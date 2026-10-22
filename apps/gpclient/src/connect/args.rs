@@ -112,7 +112,15 @@ pub(crate) struct ConnectArgs {
   #[arg(short, long, help = "Request MTU from server (legacy servers only)")]
   pub(super) mtu: Option<u32>,
 
-  #[arg(long, help = "Do not ask for IPv6 connectivity")]
+  #[arg(
+    long,
+    value_enum,
+    default_value = "auto",
+    help = "Choose which IP version to try first when connecting to the gateway"
+  )]
+  pub(super) ip_preference: gpapi::gateway::GatewayIpPreference,
+
+  #[arg(long, help = "Use only IPv4 for traffic inside the VPN tunnel")]
   pub(super) disable_ipv6: bool,
 
   #[arg(long = "user-agent", hide = true)]
@@ -468,5 +476,29 @@ mod tests {
     let cli = ConnectArgsTestCli::try_parse_from(["test", "portal.example.com"]).expect("connect args should parse");
 
     assert!(!cli.args.cookie_only);
+  }
+
+  #[test]
+  fn ip_preference_parses_independently_of_tunnel_ipv6() {
+    use clap::Parser;
+    use gpapi::gateway::GatewayIpPreference;
+    let default = ConnectArgsTestCli::try_parse_from(["test", "portal.example.com"]).unwrap();
+    assert_eq!(default.args.ip_preference, GatewayIpPreference::Auto);
+    for (value, expected) in [
+      ("auto", GatewayIpPreference::Auto),
+      ("ipv4", GatewayIpPreference::Ipv4),
+      ("ipv6", GatewayIpPreference::Ipv6),
+    ] {
+      let cli = ConnectArgsTestCli::try_parse_from([
+        "test",
+        "portal.example.com",
+        "--ip-preference",
+        value,
+        "--disable-ipv6",
+      ])
+      .unwrap();
+      assert_eq!(cli.args.ip_preference, expected);
+      assert!(cli.args.disable_ipv6);
+    }
   }
 }

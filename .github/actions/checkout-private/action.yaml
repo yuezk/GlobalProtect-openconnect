@@ -1,0 +1,35 @@
+name: Checkout private source quietly
+description: Fetch private source without printing Git diagnostics or retaining credentials.
+inputs:
+  token:
+    required: true
+    description: Token with read access to the private repository
+  ref:
+    required: true
+    description: Branch, tag, or full commit SHA
+  path:
+    required: true
+    description: Destination within the workspace
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PRIVATE_TOKEN: ${{ inputs.token }}
+        PRIVATE_REF: ${{ inputs.ref }}
+        PRIVATE_PATH: ${{ inputs.path }}
+      run: |
+        trap 'status=$?; if [ "$status" -ne 0 ]; then echo "::error::Private source checkout failed; diagnostics suppressed."; fi' EXIT
+        (
+          set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$PRIVATE_TOKEN" | base64 | tr -d '\n')"
+          export GIT_CONFIG_VALUE_0
+          git init "$PRIVATE_PATH"
+          git -C "$PRIVATE_PATH" remote add origin https://github.com/yuezk/gpgui
+          git -C "$PRIVATE_PATH" fetch --no-tags --depth=1 -- origin "$PRIVATE_REF"
+          git -C "$PRIVATE_PATH" checkout --detach FETCH_HEAD
+        ) >/dev/null 2>&1
+        echo "Private source checkout passed."

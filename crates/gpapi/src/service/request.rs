@@ -58,6 +58,8 @@ impl LaunchGuiRequest {
 
 #[derive(Deserialize, Serialize, Type, Clone)]
 pub struct ConnectArgs {
+  #[serde(default)]
+  packet_delivery: crate::script_tun::PacketDelivery,
   vpnc_script: Option<String>,
   host_identity: Option<HostIdentity>,
   ignore_tls_errors: bool,
@@ -79,6 +81,8 @@ pub struct ConnectArgs {
   reconnect_timeout: u32,
   mtu: u32,
   disable_ipv6: bool,
+  #[serde(default)]
+  gateway_ip_preference: crate::gateway::GatewayIpPreference,
   no_dtls: bool,
   local_hostname: Option<String>,
   force_dpd: u32,
@@ -88,8 +92,13 @@ pub struct ConnectArgs {
 }
 
 impl ConnectArgs {
+  pub fn packet_delivery(&self) -> &crate::script_tun::PacketDelivery {
+    &self.packet_delivery
+  }
+
   fn new() -> Self {
     Self {
+      packet_delivery: Default::default(),
       vpnc_script: None,
       host_identity: None,
       ignore_tls_errors: false,
@@ -107,6 +116,7 @@ impl ConnectArgs {
       reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,
+      gateway_ip_preference: Default::default(),
       no_dtls: false,
       local_hostname: None,
       force_dpd: 0,
@@ -195,6 +205,10 @@ impl ConnectArgs {
     self.disable_ipv6
   }
 
+  pub fn gateway_ip_preference(&self) -> crate::gateway::GatewayIpPreference {
+    self.gateway_ip_preference
+  }
+
   pub fn no_dtls(&self) -> bool {
     self.no_dtls
   }
@@ -232,6 +246,7 @@ impl fmt::Debug for ConnectArgs {
       .field("reconnect_timeout", &self.reconnect_timeout)
       .field("mtu", &self.mtu)
       .field("disable_ipv6", &self.disable_ipv6)
+      .field("gateway_ip_preference", &self.gateway_ip_preference)
       .field("no_dtls", &self.no_dtls)
       .field("allow_extend_session", &self.allow_extend_session)
       .finish_non_exhaustive()
@@ -248,17 +263,40 @@ impl Drop for ConnectArgs {
 
 #[derive(Debug, Deserialize, Serialize, Type, Clone)]
 pub struct ConnectRequest {
+  #[serde(default)]
+  restart_of: Option<u64>,
   info: ConnectInfo,
   plan: ConnectionPlan,
   args: ConnectArgs,
 }
 
 impl ConnectRequest {
+  pub fn with_restart_of(mut self, attempt: Option<u64>) -> Self {
+    self.restart_of = attempt;
+    self
+  }
+  pub fn restart_of(&self) -> Option<u64> {
+    self.restart_of
+  }
+  /// Release the one-shot payload once tunnel setup has taken ownership of it.
+  pub fn release_script_tun_bootstrap(&mut self) {
+    if let crate::script_tun::PacketDelivery::ScriptTun(request) = &mut self.args.packet_delivery {
+      request.bootstrap = Default::default();
+    }
+  }
+
+  pub fn with_packet_delivery(mut self, mode: crate::script_tun::PacketDelivery) -> Self {
+    self.info.set_packet_delivery(mode.kind());
+    self.args.packet_delivery = mode;
+    self
+  }
+
   pub fn new(info: ConnectInfo, plan: ConnectionPlan) -> Self {
     Self {
       info,
       plan,
       args: ConnectArgs::new(),
+      restart_of: None,
     }
   }
 
@@ -324,6 +362,11 @@ impl ConnectRequest {
 
   pub fn with_disable_ipv6(mut self, disable_ipv6: bool) -> Self {
     self.args.disable_ipv6 = disable_ipv6;
+    self
+  }
+
+  pub fn with_gateway_ip_preference(mut self, preference: crate::gateway::GatewayIpPreference) -> Self {
+    self.args.gateway_ip_preference = preference;
     self
   }
 
@@ -456,6 +499,30 @@ mod tests {
     let value = serde_json::to_value(req).unwrap();
 
     assert_eq!(value["args"]["allowExtendSession"], json!(true));
+  }
+
+  #[test]
+  fn gateway_preference_round_trips_and_defaults_for_existing_requests() {
+    use crate::gateway::GatewayIpPreference;
+    for preference in [
+      GatewayIpPreference::Auto,
+      GatewayIpPreference::Ipv4,
+      GatewayIpPreference::Ipv6,
+    ] {
+      let request = test_request(test_connect_info())
+        .with_disable_ipv6(true)
+        .with_gateway_ip_preference(preference);
+      let value = serde_json::to_value(&request).unwrap();
+      let decoded: ConnectRequest = serde_json::from_value(value).unwrap();
+      assert_eq!(decoded.args().gateway_ip_preference(), preference);
+      assert!(decoded.args().disable_ipv6());
+    }
+    let request = test_request(test_connect_info()).with_disable_ipv6(true);
+    let mut value = serde_json::to_value(request).unwrap();
+    value["args"].as_object_mut().unwrap().remove("gateway_ip_preference");
+    let decoded: ConnectRequest = serde_json::from_value(value).unwrap();
+    assert_eq!(decoded.args().gateway_ip_preference(), GatewayIpPreference::Auto);
+    assert!(decoded.args().disable_ipv6());
   }
 
   #[test]

@@ -47,6 +47,7 @@ typedef struct vpn_options {
 	openconnect_configure_tun_fn configure_network;
 	const char *interface;
 	const int script_tun;
+	const struct openconnect_script_tun_launch *script_tun_launch;
 
 	const char *certificate;
 	const char *sslkey;
@@ -59,6 +60,7 @@ typedef struct vpn_options {
 	const int reconnect_timeout;
 	const int mtu;
 	const int disable_ipv6;
+	const int gateway_ip_preference;
 	const int no_dtls;
 
 	const int dpd_interval;
@@ -66,11 +68,14 @@ typedef struct vpn_options {
 } vpn_options;
 
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback);
+extern int vpn_resolve_gateway(const char *node, const char *service,
+	const struct addrinfo *hints, struct addrinfo **result, unsigned int preference);
 int vpn_collect_hip_report(const vpn_hip_script *, const struct openconnect_gp_hip_request *,
 	const struct openconnect_gp_hip_control *, openconnect_gp_hip_generate_fn, void *, char *, size_t, size_t *);
 
 extern int vpn_attach_command_pipe(void *user_data, int fd);
 extern void vpn_detach_command_pipe(void *user_data);
+extern void vpn_script_started(void *user_data);
 enum vpn_tunnel_event {
 	VPN_TUNNEL_ESTABLISHED = 5,
 	VPN_TUNNEL_RECONNECTED,

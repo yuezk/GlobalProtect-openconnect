@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.2.0
+
+### Added
+
+- Added Local Proxy mode with configurable SOCKS5 and HTTP listeners, so selected apps can use the VPN without changing system routes or DNS.
+- Added a gateway IP preference for trying IPv4 or IPv6 first, available in Settings and through `gpclient connect --ip-preference`.
+
+### Improved
+
+- Enabled switching between the macOS main window and menu bar popover without restarting the app.
+- Refined gateway selection, connection status, and proxy listener details.
+- Made numeric settings validation clearer before saving.
+
+### Fixed
+
+- Fixed VPN shutdown waiting too long when a gateway stops responding to logout.
+- Fixed segmented controls sometimes losing the selected option when clicked.
+- Fixed app shortcuts failing to open with some Linux and BSD desktop launchers.
+
 ## 3.1.0
 
 ### Added
