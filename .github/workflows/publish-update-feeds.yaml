@@ -472,7 +472,7 @@ jobs:
           archive_url="https://github.com/$REPOSITORY/releases/download/$RELEASE_TAG/${{ steps.archive.outputs.name }}"
           if [[ "$CHANNEL" == "stable" ]] && \
              gh release view "$RELEASE_TAG" --repo "$REPOSITORY" --json assets \
-               --jq '.assets[].name' | grep -Fxq appcast.xml; then
+               --jq '.assets[].name' | grep -Fx appcast.xml >/dev/null; then
             existing="$RUNNER_TEMP/existing-release-appcast.xml"
             gh release download "$RELEASE_TAG" --repo "$REPOSITORY" \
               --pattern appcast.xml --output "$existing"
@@ -482,6 +482,7 @@ jobs:
               --short-version "${{ steps.bundle.outputs.short_version }}" \
               --channel "$CHANNEL" \
               --archive-url "$archive_url"
+            cp "$existing" "$appcast"
           else
             if [[ "$CHANNEL" == "snapshot" ]]; then
               RELEASE_REPOSITORY="$REPOSITORY" \

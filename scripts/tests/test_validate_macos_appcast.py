@@ -1,7 +1,13 @@
+import os
+import shutil
 import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
+
+from test_private_ci import run_block
 
 
 REPOSITORY = "yuezk/GlobalProtect-openconnect"
@@ -110,6 +116,55 @@ class ValidateMacosAppcastTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unexpected update archive URL", result.stderr)
+
+
+class PublishMacosAppcastTests(unittest.TestCase):
+    def test_retry_reuses_existing_stable_appcast_without_uploading(self):
+        archive = f"https://github.com/{REPOSITORY}/releases/download/v2.6.4/GPConnect_2.6.4_arm64.zip"
+        existing = appcast(item("806.1", "2.6.4", archive))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "updates").mkdir()
+            (root / "updates/appcast.xml").write_text("newly generated candidate")
+            (root / "existing.xml").write_text(existing)
+            (root / "scripts").mkdir()
+            shutil.copy(SCRIPT, root / "scripts/validate-macos-appcast.py")
+            (root / "python3").symlink_to(sys.executable)
+            gh = root / "gh"
+            gh.write_text(f"#!{sys.executable}\n" + textwrap.dedent('''\
+                import os, shutil, signal, sys
+                signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+                if sys.argv[1:3] == ['release', 'view']:
+                    print('appcast.xml', flush=True)
+                    for number in range(10000):
+                        print(f'other-asset-{number}')
+                elif sys.argv[1:3] == ['release', 'download']:
+                    shutil.copy(os.environ['EXISTING_APPCAST'],
+                                sys.argv[sys.argv.index('--output') + 1])
+                else:
+                    sys.exit(99)
+                '''))
+            gh.chmod(0o755)
+            uploader = root / "gp-release/scripts/upload-release-assets.sh"
+            uploader.parent.mkdir(parents=True)
+            uploader.write_text("#!/bin/sh\ntouch upload-attempted\nexit 7\n")
+            uploader.chmod(0o755)
+            command = run_block('.github/workflows/publish-update-feeds.yaml', 'Publish appcast')
+            for expression, value in {
+                '${{ steps.archive.outputs.name }}': 'GPConnect_2.6.4_arm64.zip',
+                '${{ steps.bundle.outputs.version }}': '806.1',
+                '${{ steps.bundle.outputs.short_version }}': '2.6.4',
+            }.items():
+                command = command.replace(expression, value)
+            result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', command], cwd=root,
+                                    env=dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}',
+                                             RUNNER_TEMP=str(root), CHANNEL='stable',
+                                             RELEASE_TAG='v2.6.4', REPOSITORY=REPOSITORY,
+                                             EXISTING_APPCAST=str(root / 'existing.xml')),
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse((root / 'upload-attempted').exists())
+            self.assertEqual((root / 'updates/appcast.xml').read_text(), existing)
 
 
 if __name__ == "__main__":
