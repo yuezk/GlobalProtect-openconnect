@@ -1,6 +1,7 @@
 use std::{
   ffi::{CStr, CString, c_char},
   fmt, io,
+  os::fd::{AsRawFd, OwnedFd},
   sync::{Arc, Mutex, RwLock},
 };
 
@@ -124,6 +125,15 @@ impl Cancellation {
   }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum GatewayIpPreference {
+  #[default]
+  Auto = 0,
+  Ipv4 = 4,
+  Ipv6 = 6,
+}
+
 pub struct Vpn {
   cancellation: Cancellation,
   server: CString,
@@ -140,6 +150,7 @@ pub struct Vpn {
   pub(crate) network_configuration_handler: Option<Arc<NetworkConfigurationHandler>>,
   interface: Option<CString>,
   script_tun: bool,
+  script_tun_launch: Option<ScriptTunLaunch>,
 
   certificate: Option<CString>,
   sslkey: Option<CString>,
@@ -151,6 +162,7 @@ pub struct Vpn {
   reconnect_timeout: u32,
   mtu: u32,
   disable_ipv6: bool,
+  gateway_ip_preference: GatewayIpPreference,
   no_dtls: bool,
 
   dpd_interval: u32,
@@ -220,6 +232,20 @@ impl Vpn {
     }
     self.callback.write().unwrap().replace(Box::new(on_connected));
     let mut options = self.build_connect_options();
+    let mut argv = Vec::new();
+    let launch = self.script_tun_launch.as_ref().map(|launch| {
+      argv.push(launch.program.as_ptr());
+      argv.extend(launch.arguments.iter().map(|s| s.as_ptr()));
+      argv.push(std::ptr::null());
+      ffi::ScriptTunLaunchRaw {
+        program: launch.program.as_ptr(),
+        argv: argv.as_ptr(),
+        uid: launch.uid,
+        control_fd: launch.control.lock().unwrap().as_ref().map_or(-1, AsRawFd::as_raw_fd),
+      }
+    });
+    // Both the borrowed launch record and argv remain alive through native connect.
+    options.script_tun_launch = launch.as_ref().map_or(std::ptr::null(), |launch| launch);
     let environment = match self.hip_source.as_ref() {
       HipSource::Script(script) => ffi::script_environment(script),
       _ => Vec::new(),
@@ -287,6 +313,7 @@ impl Vpn {
         .map(|_| ffi::configure_network as _),
       interface: Self::option_to_ptr(&self.interface),
       script_tun: self.script_tun as u32,
+      script_tun_launch: std::ptr::null(),
 
       certificate: Self::option_to_ptr(&self.certificate),
       sslkey: Self::option_to_ptr(&self.sslkey),
@@ -305,6 +332,7 @@ impl Vpn {
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6 as u32,
+      gateway_ip_preference: self.gateway_ip_preference as u32,
       no_dtls: self.no_dtls as u32,
       dpd_interval: self.dpd_interval,
       no_xmlpost: self.no_xmlpost as u32,
@@ -338,6 +366,13 @@ impl fmt::Display for VpnError {
 
 impl std::error::Error for VpnError {}
 
+struct ScriptTunLaunch {
+  program: CString,
+  arguments: Vec<CString>,
+  uid: u32,
+  control: Mutex<Option<OwnedFd>>,
+}
+
 pub struct VpnBuilder {
   server: String,
   cookie: String,
@@ -346,6 +381,7 @@ pub struct VpnBuilder {
   script_is_path: bool,
   interface: Option<String>,
   script_tun: bool,
+  script_tun_launch: Option<ScriptTunLaunch>,
 
   user_agent: Option<String>,
   os: Option<String>,
@@ -363,6 +399,7 @@ pub struct VpnBuilder {
   reconnect_timeout: u32,
   mtu: u32,
   disable_ipv6: bool,
+  gateway_ip_preference: GatewayIpPreference,
   no_dtls: bool,
 
   dpd_interval: u32,
@@ -379,6 +416,7 @@ impl VpnBuilder {
       script_is_path: false,
       interface: None,
       script_tun: false,
+      script_tun_launch: None,
 
       user_agent: None,
       os: None,
@@ -396,6 +434,7 @@ impl VpnBuilder {
       reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,
+      gateway_ip_preference: GatewayIpPreference::Auto,
       no_dtls: false,
       dpd_interval: 0,
       no_xmlpost: false,
@@ -428,6 +467,32 @@ impl VpnBuilder {
   pub fn interface<T: Into<Option<String>>>(mut self, interface: T) -> Self {
     self.interface = interface.into();
     self
+  }
+
+  pub fn script_tun_program(
+    mut self,
+    program: &str,
+    arguments: &[String],
+    uid: u32,
+    inherited: OwnedFd,
+  ) -> Result<Self, VpnError> {
+    if !std::path::Path::new(program).is_absolute() || program.contains('\0') {
+      return Err(VpnError::new("Script-tun requires an absolute executable path".into()));
+    }
+    let arguments = arguments
+      .iter()
+      .map(|arg| CString::new(arg.as_str()).map_err(|_| VpnError::new("Script-tun argument contains NUL".into())))
+      .collect::<Result<_, _>>()?;
+    self.script = None;
+    self.script_tun = true;
+    self.script_is_path = false;
+    self.script_tun_launch = Some(ScriptTunLaunch {
+      program: CString::new(program).expect("program was checked for NUL"),
+      arguments,
+      uid,
+      control: Mutex::new(Some(inherited)),
+    });
+    Ok(self)
   }
 
   pub fn script_tun(mut self, script_tun: bool) -> Self {
@@ -495,8 +560,15 @@ impl VpnBuilder {
     self
   }
 
+  /// Request IPv4-only connectivity inside the VPN tunnel.
   pub fn disable_ipv6(mut self, disable_ipv6: bool) -> Self {
     self.disable_ipv6 = disable_ipv6;
+    self
+  }
+
+  /// Order gateway addresses without excluding either IP family.
+  pub fn gateway_ip_preference(mut self, preference: GatewayIpPreference) -> Self {
+    self.gateway_ip_preference = preference;
     self
   }
 
@@ -524,6 +596,9 @@ impl VpnBuilder {
       }
       return Ok(None);
     }
+    if self.script_tun_launch.is_some() {
+      return Ok(None);
+    }
     let script = match &self.script {
       Some(script) => {
         if self.script_is_path && !std::path::Path::new(script).exists() {
@@ -543,6 +618,9 @@ impl VpnBuilder {
   }
 
   pub fn build(self) -> Result<Vpn, VpnError> {
+    if self.script_tun_launch.is_some() && !self.script_tun {
+      return Err(VpnError::new("Child identity requires script-tun".into()));
+    }
     let script = self.resolve_script()?;
 
     let user_agent = self.user_agent.unwrap_or_default();
@@ -564,6 +642,7 @@ impl VpnBuilder {
       network_configuration_handler: self.network_configuration_handler,
       interface: self.interface.as_deref().map(Self::to_cstring),
       script_tun: self.script_tun,
+      script_tun_launch: self.script_tun_launch,
 
       certificate: self.certificate.as_deref().map(Self::to_cstring),
       sslkey: self.sslkey.as_deref().map(Self::to_cstring),
@@ -575,6 +654,7 @@ impl VpnBuilder {
       reconnect_timeout: self.reconnect_timeout,
       mtu: self.mtu,
       disable_ipv6: self.disable_ipv6,
+      gateway_ip_preference: self.gateway_ip_preference,
       no_dtls: self.no_dtls,
       dpd_interval: self.dpd_interval,
       no_xmlpost: self.no_xmlpost,
@@ -694,6 +774,7 @@ mod tests {
       network_configuration_handler: None,
       interface: None,
       script_tun: false,
+      script_tun_launch: None,
       certificate: None,
       sslkey: None,
       key_password: None,
@@ -702,6 +783,7 @@ mod tests {
       reconnect_timeout: 300,
       mtu: 0,
       disable_ipv6: false,
+      gateway_ip_preference: GatewayIpPreference::Auto,
       no_dtls: false,
       dpd_interval: 0,
       no_xmlpost: false,
@@ -715,6 +797,27 @@ mod tests {
 
     let host_id = unsafe { CStr::from_ptr(options.host_id) }.to_str().unwrap();
     assert_eq!(host_id, "profile-host-id");
+  }
+
+  #[test]
+  fn gateway_preference_and_tunnel_ipv6_are_independent_in_native_options() {
+    for preference in [
+      GatewayIpPreference::Auto,
+      GatewayIpPreference::Ipv4,
+      GatewayIpPreference::Ipv6,
+    ] {
+      for disable_ipv6 in [false, true] {
+        let vpn = Vpn::builder("https://gateway.example", "fixture")
+          .script_path("/bin/sh".to_string())
+          .disable_ipv6(disable_ipv6)
+          .gateway_ip_preference(preference)
+          .build()
+          .unwrap();
+        let options = vpn.build_connect_options();
+        assert_eq!(options.gateway_ip_preference, preference as u32);
+        assert_eq!(options.disable_ipv6, disable_ipv6 as u32);
+      }
+    }
   }
 
   #[test]
@@ -971,5 +1074,14 @@ mod tests {
     while reader.read(&mut bytes).is_ok() {}
     assert!(cancellation.request_statistics().unwrap());
     cancellation.detach();
+  }
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn vpn_script_started(data: *mut std::ffi::c_void) {
+  // Native setup has forked or failed; only the child may retain this endpoint.
+  let vpn = unsafe { &*(data as *const Vpn) };
+  if let Some(launch) = &vpn.script_tun_launch {
+    launch.control.lock().unwrap().take();
   }
 }

@@ -15,13 +15,21 @@ struct vpn_context {
 	vpn_connected_callback on_connected;
 };
 
+static int resolve_gateway(void *private_data, const char *node, const char *service,
+			   const struct addrinfo *hints, struct addrinfo **result)
+{
+	struct vpn_context *context = private_data;
+	return vpn_resolve_gateway(node, service, hints, result,
+		context->options->gateway_ip_preference);
+}
+
 static void observe_configuration(struct vpn_context *context)
 {
 	const struct oc_ip_info *info = NULL;
 	if (openconnect_get_ip_info(context->vpninfo, &info, NULL, NULL))
 		info = NULL;
 	vpn_tunnel_configuration(context->options->user_data,
-		openconnect_get_ifname(context->vpninfo), info);
+		context->options->script_tun ? NULL : openconnect_get_ifname(context->vpninfo), info);
 }
 
 static void observe_reconnected(void *private_data)
@@ -75,7 +83,13 @@ static void setup_tun_handler(void *private_data)
 	const vpn_options *options = context->options;
 	int ret;
 	if (options->script_tun) {
-		ret = openconnect_setup_tun_script(_vpninfo, options->script);
+		const struct openconnect_script_tun_launch *launch = options->script_tun_launch;
+		if (launch) {
+			ret = openconnect_setup_tun_script_exec(_vpninfo, launch);
+			vpn_script_started(options->user_data);
+		} else {
+			ret = openconnect_setup_tun_script(_vpninfo, options->script);
+		}
 	} else {
 		ret = openconnect_setup_tun_device(_vpninfo, options->script,
 						   options->interface);
@@ -114,13 +128,19 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	INFO("OS: %s", options->os);
 	INFO("CLIENT_VERSION: %s", options->client_version);
 	INFO("HOST_ID: %s", options->host_id ? options->host_id : "(not set)");
-	INFO("Network configuration: %s", options->configure_network ? "callback" : options->script);
+	const char *configuration = options->script;
+	if (options->configure_network)
+		configuration = "callback";
+	else if (options->script_tun_launch)
+		configuration = options->script_tun_launch->program;
+	INFO("Network configuration: %s", configuration);
 	INFO("SCRIPT_TUN: %d", options->script_tun);
 	INFO("CSD_USER: %d", options->hip_script.uid);
 	INFO("CSD_WRAPPER: %s", options->hip_script.path);
 	INFO("RECONNECT_TIMEOUT: %d", options->reconnect_timeout);
 	INFO("MTU: %d", options->mtu);
 	INFO("DISABLE_IPV6: %d", options->disable_ipv6);
+	INFO("GATEWAY_IP_PREFERENCE: %d", options->gateway_ip_preference);
 	INFO("NO_DTLS: %d", options->no_dtls);
 	INFO("DPD_INTERVAL: %d", options->dpd_interval);
 	INFO("NO_XMLPOST: %d", options->no_xmlpost);
@@ -157,6 +177,8 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	openconnect_init_ssl();
 	openconnect_set_protocol(vpninfo, "gp");
 	openconnect_parse_url(vpninfo, options->server);
+	if (options->gateway_ip_preference)
+		openconnect_override_getaddrinfo(vpninfo, resolve_gateway);
 	openconnect_set_cookie(vpninfo, options->cookie);
 	openconnect_set_useragent(vpninfo, options->user_agent);
 

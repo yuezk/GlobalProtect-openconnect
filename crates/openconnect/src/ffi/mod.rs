@@ -1,3 +1,4 @@
+mod gateway;
 mod hip;
 mod network_configuration;
 mod tunnel;
@@ -10,6 +11,16 @@ use log::{debug, info, trace, warn};
 pub(crate) use network_configuration::{VpnOptionRaw, configure_network};
 use std::ffi::{c_char, c_int, c_long, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+
+/// Borrowed launch data; layout must match openconnect_script_tun_launch in openconnect.h.
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct ScriptTunLaunchRaw {
+  pub program: *const c_char,
+  pub argv: *const *const c_char,
+  pub uid: u32,
+  pub control_fd: c_int,
+}
 
 /// ConnectOptions struct for FFI, the field names and order must match the C definition.
 #[repr(C)]
@@ -32,6 +43,7 @@ pub(crate) struct ConnectOptions {
   pub configure_network: Option<unsafe extern "C" fn(*mut c_void, *const c_char, *const VpnOptionRaw) -> c_int>,
   pub interface: *const c_char,
   pub script_tun: u32,
+  pub script_tun_launch: *const ScriptTunLaunchRaw,
 
   pub certificate: *const c_char,
   pub sslkey: *const c_char,
@@ -44,6 +56,7 @@ pub(crate) struct ConnectOptions {
   pub reconnect_timeout: u32,
   pub mtu: u32,
   pub disable_ipv6: u32,
+  pub gateway_ip_preference: u32,
   pub no_dtls: u32,
 
   pub dpd_interval: u32,

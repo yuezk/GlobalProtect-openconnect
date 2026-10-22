@@ -3,6 +3,7 @@ use std::{
   path::{Path, PathBuf},
   sync::Arc,
 };
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use anyhow::{Context, bail};
 use log::{info, warn};
@@ -43,14 +44,20 @@ impl CredentialServer {
       tokio::select! {
         _ = cancel.cancelled() => break,
         accepted = listener.accept() => {
-          let (stream, _) = accepted?;
+          let (mut stream, _) = accepted?;
           if peer_uid(&stream)? != 0 {
             warn!("Rejected non-root broker credential client");
             continue;
           }
           let registry = Arc::clone(&self.registry);
           tokio::spawn(async move {
-            if let Err(err) = credential_lease::serve(stream, registry, None).await {
+            let identity = tokio::time::timeout(std::time::Duration::from_secs(5), stream.read_u32()).await;
+            let uid = match identity {
+              Ok(Ok(0)) => { let _ = stream.write_u8(1).await; return; }
+              Ok(Ok(uid)) => uid,
+              _ => { warn!("Invalid desktop identity from broker"); return; }
+            };
+            if let Err(err) = credential_lease::serve(stream, registry, Some(uid)).await {
               warn!("Broker credential lease ended: {err}");
             }
           });

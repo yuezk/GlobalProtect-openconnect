@@ -138,7 +138,9 @@ impl RequestDispatcher {
           authority
             .registry
             .reserve_connection(authority.session_id, authority.generation, non_tunnel, || {
-              self.lifecycle.reserve_connect()
+              self
+                .lifecycle
+                .reserve_connect(request.restart_of().map(|attempt| (attempt, authority.session_id)))
             })?;
         let preparation = ConnectionPreparation {
           authority,
@@ -598,5 +600,30 @@ mod tests {
       dispatcher.validate_connect_request(&custom),
       Err("macOS does not support custom HIP scripts")
     );
+  }
+  #[test]
+  #[ignore = "requires GP_TEST_GUI_BINARY pointing to a built gpgui"]
+  fn installs_single_gui_binary_for_fresh_and_upgrade_downloads() {
+    let binary = std::fs::read(std::env::var("GP_TEST_GUI_BINARY").expect("GP_TEST_GUI_BINARY")).unwrap();
+    let archive = compressed_gui_archive(&binary);
+    let checksum = gpapi::utils::checksum::file_sha256(archive.path()).unwrap();
+    let temporary = tempfile::tempdir().unwrap();
+    let output = std::env::var_os("GP_TEST_GUI_INSTALL_DIR")
+      .map(std::path::PathBuf::from)
+      .unwrap_or_else(|| temporary.path().to_owned());
+    std::fs::create_dir_all(&output).unwrap();
+    std::fs::set_permissions(&output, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let target = output.join("gpclient/gpgui");
+    for upgrade in [false, true] {
+      if upgrade {
+        std::fs::write(&target, b"old GUI").unwrap();
+      }
+      install_gui_at(archive.path(), &checksum, &target).unwrap();
+      assert_eq!(std::fs::read_dir(target.parent().unwrap()).unwrap().count(), 1);
+      assert_eq!(std::fs::read(&target).unwrap(), binary);
+      let result = std::process::Command::new(&target).arg("--version").output().unwrap();
+      assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+      assert!(String::from_utf8_lossy(&result.stdout).contains(env!("CARGO_PKG_VERSION")));
+    }
   }
 }

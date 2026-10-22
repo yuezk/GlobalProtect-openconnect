@@ -10,6 +10,10 @@ use crate::{
 
 #[derive(Debug, Deserialize, Serialize, Type, Clone)]
 pub struct ConnectInfo {
+  #[serde(default)]
+  packet_delivery: crate::script_tun::PacketDeliveryKind,
+  #[serde(default)]
+  script_tun_identity: Option<crate::script_tun::Identity>,
   portal: String,
   gateway: Gateway,
   gateways: Vec<Gateway>,
@@ -71,12 +75,31 @@ fn unix_timestamp() -> u32 {
 }
 
 impl ConnectInfo {
+  pub fn script_tun_identity(&self) -> Option<crate::script_tun::Identity> {
+    self.script_tun_identity
+  }
+  pub fn set_script_tun_identity(&mut self, identity: crate::script_tun::Identity) {
+    self.script_tun_identity = Some(identity);
+  }
+  pub fn packet_delivery(&self) -> &crate::script_tun::PacketDeliveryKind {
+    &self.packet_delivery
+  }
+  pub fn set_packet_delivery(&mut self, mode: crate::script_tun::PacketDeliveryKind) {
+    self.packet_delivery = mode;
+    self.script_tun_identity = None;
+  }
   pub fn new(portal: String, gateway: Gateway, gateways: Vec<Gateway>) -> Self {
     Self {
+      packet_delivery: Default::default(),
+      script_tun_identity: None,
       portal,
       gateway,
       gateways,
     }
+  }
+
+  pub fn portal(&self) -> &str {
+    &self.portal
   }
 
   pub fn gateway(&self) -> &Gateway {
@@ -87,6 +110,7 @@ impl ConnectInfo {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum VpnState {
+  ReconnectRequired(Box<ReconnectRequest>),
   Disconnected,
   Failed(String),
   Connecting(Box<ConnectInfo>),
@@ -118,4 +142,12 @@ mod tests {
     assert_eq!(value["connected"]["sessionInfo"]["allowExtendSession"], true);
     assert!(value["connected"]["connectedAt"].as_u64().is_some());
   }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconnectRequest {
+  pub attempt: u64,
+  pub owner: uuid::Uuid,
+  pub info: ConnectInfo,
 }

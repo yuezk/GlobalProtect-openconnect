@@ -151,7 +151,7 @@ async fn cancelled_pending_owner_logs_out_and_releases_admission_after_response(
   let (state, state_rx) = watch::channel(VpnState::Disconnected);
   let (mut task, lifecycle) = VpnTask::new(state, false, registry.clone());
   let reservation = registry
-    .reserve_connection(session_id, 1, true, || lifecycle.reserve_connect())
+    .reserve_connection(session_id, 1, true, || lifecycle.reserve_connect(None))
     .unwrap();
   assert_eq!(
     registry.commit_connection(session_id, 1, true, || reservation.commit(
@@ -178,7 +178,7 @@ async fn cancelled_pending_owner_logs_out_and_releases_admission_after_response(
     .unwrap();
   assert!(lifecycle.has_attempt(0));
   assert!(!drain_waiter.is_finished());
-  assert!(lifecycle.reserve_connect().is_err());
+  assert!(lifecycle.reserve_connect(None).is_err());
   assert!(!task.active.as_ref().unwrap().task.is_finished());
   assert!(matches!(*state_rx.borrow(), VpnState::Disconnected));
   release.send(()).unwrap();
@@ -191,7 +191,7 @@ async fn cancelled_pending_owner_logs_out_and_releases_admission_after_response(
   }
   assert!(!lifecycle.has_attempt(0));
   drain_waiter.await.unwrap();
-  assert!(lifecycle.reserve_connect().is_ok());
+  assert!(lifecycle.reserve_connect(None).is_ok());
   assert!(matches!(*state_rx.borrow(), VpnState::Disconnected));
   let request = server.await.unwrap();
   assert!(request.starts_with("POST /ssl-vpn/logout.esp "));

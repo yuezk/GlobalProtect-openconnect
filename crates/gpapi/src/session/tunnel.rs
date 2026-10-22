@@ -276,7 +276,7 @@ impl TunnelStatisticsSnapshot {
   }
 }
 
-mod decimal {
+pub(crate) mod decimal {
   use serde::{Deserialize, Deserializer, Serializer};
 
   pub fn serialize<S: Serializer>(value: &u64, serializer: S) -> Result<S::Ok, S::Error> {
@@ -350,4 +350,12 @@ mod tests {
       snapshot
     );
   }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NegotiatedNetwork {
+  pub addresses: Vec<std::net::IpAddr>,
+  pub dns: Vec<std::net::IpAddr>,
+  pub search: Vec<String>,
+  pub mtu: usize,
 }

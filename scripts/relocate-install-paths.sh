@@ -9,7 +9,11 @@ escape_replacement() {
 }
 # Each integration format has its own quoting rules.
 desktop_prefix=$(printf '%s' "$prefix" | sed -e 's/\\/\\\\\\\\/g' -e 's/["`$]/\\\\&/g' -e 's/%/%%/g')
-desktop_command=$(escape_replacement "\"$desktop_prefix/bin/gpclient\"")
+# Avoid unnecessary quotes for older xdg-open parsers.
+case "$prefix/bin/gpclient" in
+    *[!A-Za-z0-9_./-]*) desktop_command=$(escape_replacement "\"$desktop_prefix/bin/gpclient\"") ;;
+    *) desktop_command=$(escape_replacement "$desktop_prefix/bin/gpclient") ;;
+esac
 shell_prefix=$(printf '%s' "$prefix" | sed "s/'/'\\\\''/g")
 shell_command=$(escape_replacement "'$shell_prefix/bin/gpclient'")
 xml_prefix=$(printf '%s' "$prefix" | sed -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')

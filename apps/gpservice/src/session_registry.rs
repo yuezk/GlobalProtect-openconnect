@@ -190,6 +190,10 @@ impl SessionRegistry {
     Ok(None)
   }
 
+  pub fn service_instance_id(&self) -> Uuid {
+    self.service_instance_id
+  }
+
   pub fn new(service_instance_id: Uuid) -> Self {
     Self {
       service_instance_id,
@@ -425,6 +429,13 @@ impl SessionRegistry {
     }
   }
 
+  pub fn has_session(&self, session_id: Uuid) -> bool {
+    self
+      .sessions
+      .lock()
+      .is_ok_and(|sessions| sessions.contains_key(&session_id))
+  }
+
   pub fn is_current(&self, session_id: Uuid, generation: u64) -> bool {
     let Ok(sessions) = self.sessions.lock() else {
       return false;
@@ -653,7 +664,7 @@ mod tests {
     let (state, _state_rx) = tokio::sync::watch::channel(gpapi::service::vpn_state::VpnState::Disconnected);
     let (_task, lifecycle) = crate::vpn_task::VpnTask::new(state, false, registry.clone());
     let reservation = registry
-      .reserve_connection(session, 1, true, || lifecycle.reserve_connect())
+      .reserve_connection(session, 1, true, || lifecycle.reserve_connect(None))
       .unwrap();
     let drain = reservation.drain();
     let cancel = reservation.cancellation();
@@ -669,7 +680,7 @@ mod tests {
     assert!(!drain.is_complete());
     assert!(
       registry
-        .reserve_connection(session, 2, true, || lifecycle.reserve_connect())
+        .reserve_connection(session, 2, true, || lifecycle.reserve_connect(None))
         .is_err()
     );
     assert!(matches!(
@@ -680,7 +691,7 @@ mod tests {
     drain.wait().await;
 
     let next_reservation = registry
-      .reserve_connection(session, 2, true, || lifecycle.reserve_connect())
+      .reserve_connection(session, 2, true, || lifecycle.reserve_connect(None))
       .unwrap();
     assert!(
       registry
@@ -710,7 +721,7 @@ mod tests {
     let (state, _state_rx) = tokio::sync::watch::channel(gpapi::service::vpn_state::VpnState::Disconnected);
     let (_task, lifecycle) = crate::vpn_task::VpnTask::new(state, false, registry.clone());
     let reservation = registry
-      .reserve_connection(session, 1, true, || lifecycle.reserve_connect())
+      .reserve_connection(session, 1, true, || lifecycle.reserve_connect(None))
       .unwrap();
     let drain = registry.stop_non_tunnel_attachment(session, 1, id).unwrap().unwrap();
     assert!(reservation.cancellation().is_cancelled());
@@ -728,7 +739,7 @@ mod tests {
     );
     assert!(
       registry
-        .reserve_connection(session, 1, false, || lifecycle.reserve_connect())
+        .reserve_connection(session, 1, false, || lifecycle.reserve_connect(None))
         .is_ok()
     );
   }
@@ -748,7 +759,7 @@ mod tests {
     let (state, _state_rx) = tokio::sync::watch::channel(gpapi::service::vpn_state::VpnState::Disconnected);
     let (_task, lifecycle) = crate::vpn_task::VpnTask::new(state, false, registry.clone());
     let tunnel = registry
-      .reserve_connection(session, 1, false, || lifecycle.reserve_connect())
+      .reserve_connection(session, 1, false, || lifecycle.reserve_connect(None))
       .unwrap();
     registry.disconnect_if_current(session, 1);
     assert!(!tunnel.cancellation().is_cancelled());
@@ -765,7 +776,7 @@ mod tests {
       .commit_attach(&permit, ConnectionControl::new(Uuid::new_v4(), tx).0)
       .unwrap();
     let session_work = registry
-      .reserve_connection(session, 2, true, || lifecycle.reserve_connect())
+      .reserve_connection(session, 2, true, || lifecycle.reserve_connect(None))
       .unwrap();
     registry.revoke(session);
     assert!(session_work.cancellation().is_cancelled());

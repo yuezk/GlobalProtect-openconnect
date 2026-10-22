@@ -452,6 +452,11 @@ impl ConnectHandler<'_> {
       .reconnect_timeout(self.args.reconnect_timeout)
       .mtu(mtu)
       .disable_ipv6(self.args.disable_ipv6)
+      .gateway_ip_preference(match self.args.ip_preference {
+        gpapi::gateway::GatewayIpPreference::Auto => openconnect::GatewayIpPreference::Auto,
+        gpapi::gateway::GatewayIpPreference::Ipv4 => openconnect::GatewayIpPreference::Ipv4,
+        gpapi::gateway::GatewayIpPreference::Ipv6 => openconnect::GatewayIpPreference::Ipv6,
+      })
       .no_dtls(self.args.no_dtls)
       .local_hostname(self.args.local_hostname.clone())
       .dpd_interval(self.args.dpd_interval.unwrap_or(0))

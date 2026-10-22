@@ -9,3 +9,6 @@ pub use hip::*;
 pub use network_configuration::*;
 pub use vpn::*;
 pub use vpn_utils::*;
+
+#[cfg(all(test, unix))]
+mod script_child_tests;
