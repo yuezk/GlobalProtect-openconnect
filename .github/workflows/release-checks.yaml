@@ -5,6 +5,11 @@ on:
     paths:
       - '.github/workflows/**'
       - '.github/actions/**'
+      - 'scripts/record-build-sources.py'
+      - 'scripts/validate-release-version.py'
+      - 'scripts/publish-flake-test-branch.sh'
+      - 'scripts/prepare-release-promotion.sh'
+      - 'scripts/tests/test_release_flow.py'
       - 'scripts/select-macos-artifact.sh'
       - 'scripts/test-private-desktop.sh'
       - 'scripts/tests/test_private_ci.py'
@@ -21,6 +26,11 @@ on:
     paths:
       - '.github/workflows/**'
       - '.github/actions/**'
+      - 'scripts/record-build-sources.py'
+      - 'scripts/validate-release-version.py'
+      - 'scripts/publish-flake-test-branch.sh'
+      - 'scripts/prepare-release-promotion.sh'
+      - 'scripts/tests/test_release_flow.py'
       - 'scripts/select-macos-artifact.sh'
       - 'scripts/test-private-desktop.sh'
       - 'scripts/tests/test_private_ci.py'
@@ -60,3 +70,8 @@ jobs:
           shellcheck scripts/select-macos-artifact.sh scripts/test-private-desktop.sh
           bash -n scripts/test-private-desktop.sh
           python3 -m unittest discover -s scripts/tests -p 'test_private_ci.py'
+      - name: Test release promotion and source selection
+        run: |
+          bash -n scripts/prepare-release-promotion.sh scripts/publish-flake-test-branch.sh
+          shellcheck scripts/prepare-release-promotion.sh scripts/publish-flake-test-branch.sh
+          python3 -m unittest discover -s scripts/tests -p 'test_release_flow.py'

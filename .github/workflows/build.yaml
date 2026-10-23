@@ -16,11 +16,11 @@ on:
       gp_branch:
         description: 'GlobalProtect-openconnect ref to build (use the matching tag for stable builds)'
         required: true
-        default: dev
+        default: release/next
       gpgui_branch:
         description: 'gpgui branch or tag to build and test (use the matching tag for stable builds)'
         required: true
-        default: dev
+        default: release/next
       build_macos:
         description: 'Build Apple Silicon artifacts for this run'
         required: true
@@ -54,6 +54,12 @@ concurrency:
 jobs:
   validate-inputs:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      gp_sha: ${{ steps.sources.outputs.gp_sha }}
+      gpgui_sha: ${{ steps.sources.outputs.gpgui_sha }}
     steps:
     - name: Validate stable refs
       env:
@@ -69,6 +75,53 @@ jobs:
           fi
         fi
 
+    - name: Checkout CI helpers
+      uses: actions/checkout@v6
+    - name: Restore selected sources on retry
+      id: restored
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        artifacts="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100")"
+        existing="$(jq -r '.artifacts[] | select(.name == "build-source-refs") | .id' <<<"$artifacts")"
+        if [[ -n "$existing" ]]; then
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name build-source-refs --dir selected-sources
+          echo "cached=true" >> "$GITHUB_OUTPUT"
+        elif [[ "$GITHUB_RUN_ATTEMPT" -gt 1 ]]; then
+          echo "Retained source refs are unavailable; start a fresh dispatch." >&2
+          exit 1
+        else
+          echo "cached=false" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Select public source
+      if: steps.restored.outputs.cached != 'true'
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.sha }}
+        path: selected/gp
+    - name: Select private source
+      if: steps.restored.outputs.cached != 'true'
+      uses: ./.github/actions/checkout-private
+      with:
+        token: ${{ secrets.GH_PAT }}
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+        path: selected/gpgui
+    - name: Record selected sources
+      id: sources
+      run: |
+        python3 scripts/record-build-sources.py selected-sources/sources.json \
+          --gp selected/gp --gpgui selected/gpgui
+    - name: Retain selected sources for retries
+      if: steps.restored.outputs.cached != 'true'
+      uses: actions/upload-artifact@v7
+      with:
+        name: build-source-refs
+        path: selected-sources/sources.json
+        retention-days: 30
+
+
   test-gp:
     needs: validate-inputs
     runs-on: ubuntu-latest
@@ -78,7 +131,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        ref: ${{ needs.validate-inputs.outputs.gp_sha }}
         submodules: recursive
     - name: Run Rust tests as a non-root user with focused privilege checks
       run: |
@@ -118,7 +171,7 @@ jobs:
       uses: actions/checkout@v6
       with:
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        ref: ${{ needs.validate-inputs.outputs.gp_sha }}
         submodules: recursive
         path: source/gp
         persist-credentials: false
@@ -131,7 +184,7 @@ jobs:
       uses: ./.ci/.github/actions/checkout-private
       with:
         token: ${{ secrets.GH_PAT }}
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+        ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
         path: source/gpgui
     - name: Run frontend and Rust unit tests as an ordinary user
       timeout-minutes: 80
@@ -152,7 +205,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        ref: ${{ needs.validate-inputs.outputs.gp_sha }}
         path: source/gp
         submodules: recursive
 
@@ -282,6 +335,7 @@ jobs:
           build-gp-${{ matrix.package }}/artifacts/*
 
   build-docker-image:
+    needs: validate-inputs
     if: ${{ !(startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.channel == 'stable')) }}
     strategy:
       fail-fast: false
@@ -302,7 +356,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        ref: ${{ needs.validate-inputs.outputs.gp_sha }}
         submodules: recursive
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v4
@@ -364,8 +418,8 @@ jobs:
     name: build-gpgui (glibc)
     uses: ./.github/workflows/build-gpgui-linux.yaml
     with:
-      gp_ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
-      gpgui_ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+      gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
+      gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
       channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
       builder: gpgui-builder-tauri2
       verify_desktop_assets: true
@@ -377,8 +431,8 @@ jobs:
     name: build-gpgui (musl)
     uses: ./.github/workflows/build-gpgui-linux.yaml
     with:
-      gp_ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
-      gpgui_ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+      gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
+      gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
       channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
       builder: gpgui-alpine-builder-tauri2
       artifact_suffix: -musl
@@ -386,7 +440,7 @@ jobs:
       GH_PAT: ${{ secrets.GH_PAT }}
 
   nix-source:
-    needs: [build-gpgui-glibc]
+    needs: [validate-inputs, build-gpgui-glibc]
     strategy:
       fail-fast: false
       matrix:
@@ -407,7 +461,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           token: ${{ secrets.GH_PAT }}
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+          ref: ${{ needs.validate-inputs.outputs.gp_sha }}
           submodules: recursive
           path: gp
       - name: Download current GUI artifact
@@ -435,7 +489,7 @@ jobs:
             --extra-experimental-features "nix-command flakes" --print-build-logs
 
   nix-prebuilt:
-    needs: [build-gp, build-gpgui-glibc]
+    needs: [validate-inputs, build-gp, build-gpgui-glibc]
     strategy:
       fail-fast: false
       matrix:
@@ -457,7 +511,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           token: ${{ secrets.GH_PAT }}
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+          ref: ${{ needs.validate-inputs.outputs.gp_sha }}
           submodules: recursive
           path: gp
       - name: Download current Linux binary artifact
@@ -499,7 +553,7 @@ jobs:
 
   build-macos:
     name: build-macos
-    needs: [test-gp, test-gpgui]
+    needs: [validate-inputs, test-gp, test-gpgui]
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_macos) || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_MACOS_ON_TAG == 'true') }}
     permissions:
       contents: read
@@ -535,14 +589,14 @@ jobs:
         uses: ./.ci/.github/actions/checkout-private
         with:
           token: ${{ secrets.GH_PAT }}
-          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name) }}
+          ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
           path: source/gpgui
 
       - name: Checkout GlobalProtect-openconnect source
         uses: actions/checkout@v6
         with:
           repository: yuezk/GlobalProtect-openconnect
-          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref) }}
+          ref: ${{ needs.validate-inputs.outputs.gp_sha }}
           path: source/gp
           submodules: recursive
 
@@ -815,7 +869,7 @@ jobs:
         PY
 
   build-gpgui-frontend:
-    needs: setup-bsd-matrix
+    needs: [validate-inputs, setup-bsd-matrix]
     if: ${{ needs.setup-bsd-matrix.outputs.enabled == 'true' }}
     runs-on: ubuntu-latest
     steps:
@@ -829,7 +883,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        ref: ${{ needs.validate-inputs.outputs.gp_sha }}
         path: gpgui-frontend/gp
         submodules: recursive
     - name: Checkout CI helpers
@@ -841,7 +895,7 @@ jobs:
       uses: ./.ci/.github/actions/checkout-private
       with:
         token: ${{ secrets.GH_PAT }}
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+        ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
         path: gpgui-frontend/gpgui
     - name: Build gpgui frontend
       run: |
@@ -863,6 +917,7 @@ jobs:
 
   build-bsd:
     needs:
+      - validate-inputs
       - setup-bsd-matrix
       - build-gpgui-frontend
     if: ${{ needs.setup-bsd-matrix.outputs.enabled == 'true' }}
@@ -879,7 +934,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        ref: ${{ needs.validate-inputs.outputs.gp_sha }}
         path: ${{ matrix.workspace }}/gp
         submodules: recursive
     - name: Checkout CI helpers
@@ -891,7 +946,7 @@ jobs:
       uses: ./.ci/.github/actions/checkout-private
       with:
         token: ${{ secrets.GH_PAT }}
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
+        ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
         path: ${{ matrix.workspace }}/gpgui
     - name: Download gpgui frontend
       uses: actions/download-artifact@v8
@@ -1029,6 +1084,7 @@ jobs:
       attestations: write
       artifact-metadata: write
     needs:
+      - validate-inputs
       - test-gp
       - test-gpgui
       - nix-source
@@ -1086,7 +1142,7 @@ jobs:
       with:
         token: ${{ secrets.GH_PAT }}
         repository: yuezk/GlobalProtect-openconnect
-        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gp_branch || github.ref }}
+        ref: ${{ needs.validate-inputs.outputs.gp_sha }}
         path: gh-release/gp
         submodules: recursive
 
@@ -1136,6 +1192,7 @@ jobs:
 
   publish-docker-image:
     needs:
+      - validate-inputs
       - test-gp
       - test-gpgui
       - build-docker-image

@@ -20,14 +20,47 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   update-flake-hashes:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      release_tag: ${{ steps.release.outputs.release_tag }}
     steps:
       - name: Checkout GlobalProtect-openconnect
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Resolve candidate release
+        id: release
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          python3 - <<'PYRELEASE'
+          import json, os, re, runpy, subprocess
+          from pathlib import Path
+          helpers = runpy.run_path('scripts/validate-release-version.py')
+          version = os.environ['RELEASE_VERSION'].removeprefix('v') or helpers['cargo_version'](Path('.'))
+          tag = os.environ['RELEASE_TAG'] or f'v{version}'
+          if not re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', version) or tag not in (f'v{version}', 'snapshot'):
+              raise SystemExit('Expected a stable version and its matching release tag, or snapshot')
+          source_slug = re.sub(r'[^A-Za-z0-9._-]', '', re.sub(r'[/\s]+', '-', os.environ['GITHUB_REF_NAME'])).strip('-')
+          test_branch = f'chore/flake-{source_slug}'
+          expected_head = ''
+          if tag == 'snapshot':
+              remote = subprocess.check_output(['git', 'ls-remote', '--heads', 'origin', f'refs/heads/{test_branch}'], text=True)
+              expected_head = remote.split()[0] if remote.strip() else ''
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\nrelease_tag={tag}\n')
+          Path('release-candidate.json').write_text(json.dumps({
+              'version': version, 'releaseTag': tag, 'sourceSha': os.environ['GITHUB_SHA'],
+              'workflowRunId': os.environ['GITHUB_RUN_ID'],
+              'testBranch': test_branch, 'expectedTestHead': expected_head,
+          }, indent=2) + '\n')
+          PYRELEASE
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31
@@ -39,8 +72,8 @@ jobs:
 
       - name: Update flake hashes
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
         run: |
           if [[ -n "$RELEASE_VERSION" ]]; then
             scripts/update-flake-hashes.sh "$RELEASE_VERSION" "$RELEASE_TAG"
@@ -55,6 +88,7 @@ jobs:
           path: |
             flake.nix
             flake.lock
+            release-candidate.json
           if-no-files-found: error
 
   validate-nix-prebuilt:
@@ -79,6 +113,8 @@ jobs:
     steps:
       - name: Checkout GlobalProtect-openconnect
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
 
       - name: Download updated flake
         uses: actions/download-artifact@v8
@@ -104,6 +140,12 @@ jobs:
               --print-build-logs
           fi
 
+      - name: Validate installed release versions
+        run: |
+          python3 scripts/validate-release-version.py \
+            --version '${{ needs.update-flake-hashes.outputs.version }}' \
+            --release-tag '${{ needs.update-flake-hashes.outputs.release_tag }}' --package result
+
       - name: Inspect prebuilt Nix package
         run: |
           test -x result/bin/gpclient
@@ -126,13 +168,15 @@ jobs:
       - name: Verify desktop authorization runs on the host
         run: bash scripts/tests/nix-desktop-authorization.sh result
 
-  open-pull-request:
-    needs:
-      - validate-nix-prebuilt
+  publish-test-branch:
+    if: needs.update-flake-hashes.outputs.release_tag == 'snapshot'
+    needs: [update-flake-hashes, validate-nix-prebuilt]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout GlobalProtect-openconnect
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
 
       - name: Download updated flake
         uses: actions/download-artifact@v8
@@ -140,9 +184,7 @@ jobs:
           name: updated-flake
           path: .
 
-      - name: Open pull request
+      - name: Publish branch for snapshot testing
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: scripts/open-flake-hashes-pr.sh "$RELEASE_VERSION" "$RELEASE_TAG"
+        run: scripts/publish-flake-test-branch.sh
