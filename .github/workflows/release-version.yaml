@@ -1,0 +1,23 @@
+name: Release version consistency
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-version:
+    runs-on: ubuntu-latest
+    steps:
+      # The default PR checkout is the candidate merged with the current base.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Check main release version
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/validate-release-version.py --base-ref "$BASE_REF"

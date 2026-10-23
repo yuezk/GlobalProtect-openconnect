@@ -73,6 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.result }}
+      docker_matrix: ${{ steps.set-matrix.outputs.docker_matrix }}
     steps:
     - name: Set up matrix
       id: set-matrix
@@ -87,6 +88,12 @@ jobs:
             "x86_64": ["ubuntu-latest"],
             "arm64": ["ubuntu-24.04-arm"]
           }
+
+          const docker = [
+            { runner: 'ubuntu-latest', platform: 'linux/amd64' },
+            { runner: 'ubuntu-24.04-arm', platform: 'linux/arm64' },
+          ].filter(item => osMap[arch].includes(item.runner))
+          core.setOutput('docker_matrix', JSON.stringify({ include: docker }))
 
           const package = Object.entries(inputs)
             .filter(([key, value]) => key.startsWith('release-') && key !== 'release-docker' && value)
@@ -145,15 +152,11 @@ jobs:
   build-docker-image:
     needs:
     - check
+    - setup-matrix
     if: ${{ inputs.release-docker }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            platform: linux/amd64
-          - runner: ubuntu-24.04-arm
-            platform: linux/arm64
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.docker_matrix) }}
     runs-on: ${{ matrix.runner }}
     steps:
     - name: Prepare
@@ -235,6 +238,17 @@ jobs:
         IMAGE: yuezk/globalprotect-openconnect
         TAG: ${{ inputs.tag }}
       run: |
+        # Reject an incomplete or unexpected selection before writing any tag.
+        shopt -s nullglob
+        digest_files=(*)
+        expected_count=1
+        if [[ "${{ inputs.arch }}" == all ]]; then
+          expected_count=2
+        fi
+        [[ ${#digest_files[@]} -eq $expected_count ]]
+        for digest in "${digest_files[@]}"; do
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+        done
         VERSION="${TAG#v}"
         tags=(-t "$IMAGE:$TAG")
 
@@ -335,7 +349,6 @@ jobs:
     if: ${{ inputs.release-binary && inputs.arch == 'all' && needs.gh-release.outputs.stable_version != '' }}
     permissions:
       contents: write
-      pull-requests: write
     uses: ./.github/workflows/update-flake-hashes.yaml
     with:
       version: ${{ needs.gh-release.outputs.stable_version }}

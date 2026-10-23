@@ -3,6 +3,8 @@ name: Nix
 on:
   pull_request:
     paths:
+      - "Cargo.toml"
+      - "scripts/validate-release-version.py"
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
@@ -11,6 +13,8 @@ on:
     branches:
       - main
     paths:
+      - "Cargo.toml"
+      - "scripts/validate-release-version.py"
       - "flake.nix"
       - "flake.lock"
       - "nix/**"
@@ -43,6 +47,9 @@ jobs:
           nix build .#prebuilt \
             --extra-experimental-features "nix-command flakes" \
             --print-build-logs
+
+      - name: Check installed release versions
+        run: python3 scripts/validate-release-version.py --package result
 
       - name: Inspect prebuilt package
         run: |
@@ -108,6 +115,9 @@ jobs:
               assert hostSystem.config.services.ayatana-indicators.enable;
               package
             '
+
+      - name: Check installed release versions
+        run: python3 scripts/validate-release-version.py --package result
 
       - name: Inspect module package
         run: |
