@@ -18,6 +18,7 @@
 - Fixed VPN shutdown waiting too long when a gateway stops responding to logout.
 - Fixed segmented controls sometimes losing the selected option when clicked.
 - Fixed app shortcuts failing to open with some Linux and BSD desktop launchers.
+- Fixed invisible desktop icons on systems using older versions of librsvg.
 
 ## 3.1.0
 
