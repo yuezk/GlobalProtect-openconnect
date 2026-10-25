@@ -165,7 +165,10 @@ if [ $? = 0 ];then
 	fi
 fi
 
-if [ -r /etc/openwrt_release ] && [ -n "$OPENWRT_INTERFACE" ]; then
+if [ "$OS" = "Darwin" ]; then
+	MODIFYRESOLVCONF=configure_macos_dns
+	RESTORERESOLVCONF=remove_macos_dns
+elif [ -r /etc/openwrt_release ] && [ -n "$OPENWRT_INTERFACE" ]; then
 	. /etc/functions.sh
 	include /lib/network
 	MODIFYRESOLVCONF=modify_resolvconf_openwrt
@@ -582,7 +585,109 @@ fi
 
 # =========== resolv.conf handling ====================================
 
-# =========== resolv.conf handling for any OS =========================
+# =========== macOS resolver configuration =========================
+
+macos_scutil_update() {
+	local output status
+	output=$(scutil 2>&1)
+	status=$?
+	# scutil can print a command error and still exit successfully. Updates
+	# produce no output on success; do not hide failures behind its exit status.
+	if [ "$status" -ne 0 ] || [ -n "$output" ]; then
+		printf 'macOS network configuration failed: %s\n' "$output" >&2
+		return 1
+	fi
+}
+
+macos_remove_state() {
+	local key output status
+	key="State:/Network/Service/$TUNDEV/$1"
+	output=$(printf 'get %s\nquit\n' "$key" | scutil 2>&1)
+	status=$?
+	if [ "$status" -eq 0 ] && [ "$output" = "  No such key" ]; then
+		return 0
+	fi
+	if [ "$status" -ne 0 ] || [ -n "$output" ]; then
+		printf 'Cannot inspect macOS network state: %s\n' "$output" >&2
+		return 1
+	fi
+	macos_scutil_update <<-EOF
+		remove $key
+		quit
+	EOF
+}
+
+macos_dns_source_service() {
+	local output source
+	output=$(printf 'show State:/Network/Global/IPv4\nquit\n' | scutil 2>&1) || {
+		printf 'macOS network configuration failed: cannot read primary IPv4 service: %s\n' "$output" >&2
+		return 1
+	}
+	source=$(printf '%s\n' "$output" | awk '$1 == "PrimaryService" && $2 == ":" { print $3 }')
+	if [ "$source" = "$TUNDEV" ]; then
+		# Our DNS service may now be primary. Re-read its original service on
+		# reconnect so DHCP changes are not copied from an outdated snapshot.
+		output=$(printf 'show State:/Network/Service/%s/IPv4\nquit\n' "$TUNDEV" | scutil 2>&1) || {
+			printf 'macOS network configuration failed: cannot read DNS source service: %s\n' "$output" >&2
+			return 1
+		}
+		source=$(printf '%s\n' "$output" | awk '$1 == "GPConnectSourceService" && $2 == ":" { print $3 }')
+	fi
+	if [ -z "$source" ] || [ "$source" = "$TUNDEV" ]; then
+		printf 'Cannot identify the primary macOS IPv4 service for VPN DNS\n' >&2
+		return 1
+	fi
+	printf '%s\n' "$source"
+}
+
+configure_macos_dns() {
+	local search_domains ipv4
+	if [ -z "$INTERNAL_IP4_DNS" ]; then
+		remove_macos_dns
+		return $?
+	fi
+	search_domains=""
+	if [ -n "$CISCO_DEF_DOMAIN" ]; then
+		search_domains="d.add SearchDomains * $CISCO_DEF_DOMAIN"
+	fi
+	if [ -n "$CISCO_SPLIT_INC" ]; then
+		local source
+		source=$(macos_dns_source_service) || return 1
+		# A split tunnel has no default router. Like GlobalProtect, register
+		# a copy of the primary service so DNS can become primary without
+		# moving ordinary internet traffic onto the tunnel interface.
+		ipv4="get State:/Network/Service/$source/IPv4
+d.add GPConnectSourceService $source"
+	else
+		ipv4="d.init
+d.add Addresses * $INTERNAL_IP4_ADDRESS
+d.add SubnetMasks * 255.255.255.255
+d.add InterfaceName $TUNDEV
+d.add Router $INTERNAL_IP4_ADDRESS"
+	fi
+	# Publish a default resolver owned by this tunnel. Search suffixes do not
+	# imply supplemental DNS matching, and physical-service DNS stays intact.
+	macos_scutil_update <<-EOF
+		$ipv4
+		d.add OverridePrimary # 1
+		set State:/Network/Service/$TUNDEV/IPv4
+		d.init
+		d.add ServerAddresses * $INTERNAL_IP4_DNS
+		$search_domains
+		d.add SearchOrder # 50000
+		set State:/Network/Service/$TUNDEV/DNS
+		quit
+	EOF
+}
+
+remove_macos_dns() {
+	local status=0
+	macos_remove_state DNS || status=1
+	macos_remove_state IPv4 || status=1
+	return "$status"
+}
+
+# =========== resolv.conf handling for other OSes =========================
 
 modify_resolvconf_generic() {
 	grep '^#@VPNC_GENERATED@' /etc/resolv.conf > /dev/null 2>&1 || cp -- /etc/resolv.conf "$RESOLV_CONF_BACKUP"
@@ -617,81 +722,6 @@ nameserver $i"
 search $DOMAINS"
 	fi
 	echo "$NEW_RESOLVCONF" > /etc/resolv.conf
-
-	if [ "$OS" = "Darwin" ]; then
-		case "`uname -r`" in
-			# Skip for pre-10.4 systems
-			4.*|5.*|6.*|7.*)
-				;;
-			# 10.4 and later require use of scutil for DNS to work properly
-			*)
-				OVERRIDE_PRIMARY=""
-				if [ -n "$CISCO_SPLIT_INC" ]; then
-					if [ $CISCO_SPLIT_INC -lt 1 ]; then
-						# Must override for correct default route
-						# Cannot use multiple DNS matching in this case
-						OVERRIDE_PRIMARY='d.add OverridePrimary # 1'
-					fi
-					# Overriding the default gateway breaks split routing
-					OVERRIDE_GATEWAY=""
-					# Not overriding the default gateway breaks usage of
-					# INTERNAL_IP4_DNS. Prepend INTERNAL_IP4_DNS to list
-					# of used DNS servers
-					SERVICE=`echo "show State:/Network/Global/IPv4" | scutil | grep -oE '[a-fA-F0-9]{8}-([a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}'`
-					SERVICE_DNS=`echo "show State:/Network/Service/$SERVICE/DNS" | scutil | grep -oE '([0-9]{1,3}[\.]){3}[0-9]{1,3}' | xargs`
-					if [ X"$SERVICE_DNS" != X"$INTERNAL_IP4_DNS" ]; then
-						scutil >/dev/null 2>&1 <<-EOF
-							open
-							get State:/Network/Service/$SERVICE/DNS
-							d.add ServerAddresses * $INTERNAL_IP4_DNS $SERVICE_DNS
-							set State:/Network/Service/$SERVICE/DNS
-							close
-						EOF
-					fi
-				else
-					# No split routing. Override default gateway
-					OVERRIDE_GATEWAY="d.add Router $INTERNAL_IP4_ADDRESS"
-				fi
-				# Uncomment the following if/fi pair to use multiple
-				# DNS matching when available.  When multiple DNS matching
-				# is present, anything reading the /etc/resolv.conf file
-				# directly will probably not work as intended.
-				#if [ -z "$CISCO_DEF_DOMAIN" ]; then
-					# Cannot use multiple DNS matching without a domain
-					OVERRIDE_PRIMARY='d.add OverridePrimary # 1'
-				#fi
-				scutil >/dev/null 2>&1 <<-EOF
-					open
-					d.init
-					d.add ServerAddresses * $INTERNAL_IP4_DNS
-					set State:/Network/Service/$TUNDEV/DNS
-					d.init
-					$OVERRIDE_GATEWAY
-					d.add Addresses * $INTERNAL_IP4_ADDRESS
-					d.add SubnetMasks * 255.255.255.255
-					d.add InterfaceName $TUNDEV
-					$OVERRIDE_PRIMARY
-					set State:/Network/Service/$TUNDEV/IPv4
-					close
-				EOF
-				if [ -n "$CISCO_DEF_DOMAIN" ]; then
-					scutil >/dev/null 2>&1 <<-EOF
-						open
-						get State:/Network/Service/$TUNDEV/DNS
-						d.add DomainName $CISCO_DEF_DOMAIN
-						d.add SearchDomains * $CISCO_DEF_DOMAIN
-						d.add SupplementalMatchDomains * $CISCO_DEF_DOMAIN
-						set State:/Network/Service/$TUNDEV/DNS
-						close
-					EOF
-				fi
-				# For newer MacOS versions it is needed to set DNS
-				ACTIVE_INTERFACE=`route -n get default | grep interface | awk '{print $2}'`
-				ACTIVE_NETWORK_SERVICE=`networksetup -listnetworkserviceorder | grep -B 1 "$ACTIVE_INTERFACE" | head -n 1 | awk '/\([0-9]+\)/{ print }'|cut -d " " -f2-`
-				networksetup -setdnsservers "$ACTIVE_NETWORK_SERVICE" $INTERNAL_IP4_DNS
-				;;
-		esac
-	fi
 }
 
 restore_resolvconf_generic() {
@@ -700,43 +730,6 @@ restore_resolvconf_generic() {
 	fi
 	grep '^#@VPNC_GENERATED@' /etc/resolv.conf > /dev/null 2>&1 && cat "$RESOLV_CONF_BACKUP" > /etc/resolv.conf
 	rm -f -- "$RESOLV_CONF_BACKUP"
-
-	if [ "$OS" = "Darwin" ]; then
-		case "`uname -r`" in
-			# Skip for pre-10.4 systems
-			4.*|5.*|6.*|7.*)
-				;;
-			# 10.4 and later require use of scutil for DNS to work properly
-			*)
-				scutil >/dev/null 2>&1 <<-EOF
-					open
-					remove State:/Network/Service/$TUNDEV/IPv4
-					remove State:/Network/Service/$TUNDEV/DNS
-					close
-				EOF
-				# Split routing required prepending of INTERNAL_IP4_DNS
-				# to list of used DNS servers
-				if [ -n "$CISCO_SPLIT_INC" ]; then
-					SERVICE=`echo "show State:/Network/Global/IPv4" | scutil | grep -oE '[a-fA-F0-9]{8}-([a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}'`
-					SERVICE_DNS=`echo "show State:/Network/Service/$SERVICE/DNS" | scutil | grep -oE '([0-9]{1,3}[\.]){3}[0-9]{1,3}'`
-					FILTERED_SERVICE_DNS=`echo "$SERVICE_DNS" | grep -Fv "$(echo $INTERNAL_IP4_DNS | tr ' ' '\n')" | xargs`
-					if [ -n "$FILTERED_SERVICE_DNS" ]; then
-						scutil >/dev/null 2>&1 <<-EOF
-							open
-							get State:/Network/Service/$SERVICE/DNS
-							d.add ServerAddresses * ${FILTERED_SERVICE_DNS}
-							set State:/Network/Service/$SERVICE/DNS
-							close
-						EOF
-					fi
-				fi
-				# For newer MacOS versions it is needed to unset DNS
-				ACTIVE_INTERFACE=`route -n get default | grep interface | awk '{print $2}'`
-				ACTIVE_NETWORK_SERVICE=`networksetup -listnetworkserviceorder | grep -B 1 "$ACTIVE_INTERFACE" | head -n 1 | awk '/\([0-9]+\)/{ print }'|cut -d " " -f2-`
-				networksetup -setdnsservers "$ACTIVE_NETWORK_SERVICE" Empty
-				;;
-		esac
-	fi
 }
 # === resolv.conf handling via /sbin/netconfig (Suse 11.1) =====================
 
@@ -1037,12 +1030,13 @@ do_connect() {
 		set_ipv6_default_route
 	fi
 
-	if [ -n "$INTERNAL_IP4_DNS" ]; then
-		$MODIFYRESOLVCONF
+	if [ "$OS" = "Darwin" ] || [ -n "$INTERNAL_IP4_DNS" ]; then
+		$MODIFYRESOLVCONF || return $?
 	fi
 }
 
 do_disconnect() {
+	local dns_status=0
 	if [ -n "$CISCO_SPLIT_INC" ]; then
 		i=0
 		while [ $i -lt $CISCO_SPLIT_INC ] ; do
@@ -1102,8 +1096,8 @@ do_disconnect() {
 
 	del_vpngateway_route
 
-	if [ -n "$INTERNAL_IP4_DNS" ]; then
-		$RESTORERESOLVCONF
+	if [ "$OS" = "Darwin" ] || [ -n "$INTERNAL_IP4_DNS" ]; then
+		$RESTORERESOLVCONF || dns_status=$?
 	fi
 
 
@@ -1140,6 +1134,7 @@ do_disconnect() {
 		ifconfig "$TUNDEV" destroy > /dev/null 2>&1 &
 		;;
 	esac
+	return "$dns_status"
 }
 
 do_attempt_reconnect() {
@@ -1158,10 +1153,10 @@ case "$reason" in
 		do_pre_init
 		;;
 	connect)
-		do_connect
+		do_connect || exit $?
 		;;
 	disconnect)
-		do_disconnect
+		do_disconnect || exit $?
 		;;
 	attempt-reconnect)
 		# Invoked before each attempt to re-establish the session.
@@ -1172,7 +1167,9 @@ case "$reason" in
 		;;
 	reconnect)
 		# After successfully re-establishing the session.
-		:
+		if [ "$OS" = "Darwin" ]; then
+			configure_macos_dns || exit $?
+		fi
 		;;
 	*)
 		echo "unknown reason '$reason'. Maybe vpnc-script is out of date" 1>&2
