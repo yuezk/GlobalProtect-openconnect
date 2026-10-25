@@ -420,7 +420,7 @@ enum LifecycleEvent {
   MembersChanged {
     attempt: u64,
     members: Vec<gpapi::session::GatewaySessionSummary>,
-    failures: Vec<gpapi::session::GatewayFailureSummary>,
+    failures: Vec<gpapi::session::desktop::GatewayFailureSummary>,
   },
   Ended {
     attempt: u64,
@@ -679,7 +679,7 @@ impl VpnTask {
     &self,
     attempt: u64,
     members: Vec<gpapi::session::GatewaySessionSummary>,
-    failures: Vec<gpapi::session::GatewayFailureSummary>,
+    failures: Vec<gpapi::session::desktop::GatewayFailureSummary>,
   ) {
     let Some(active) = &self.active else {
       return;
@@ -855,12 +855,12 @@ pub(crate) fn test_connect_request(info: ConnectInfo) -> ConnectRequest {
   } else {
     "fixture"
   };
-  let binding = gpapi::session::network::GatewayBinding::new(
+  let binding = gpapi::session::desktop::network::GatewayBinding::new(
     endpoint,
     std::net::SocketAddr::new(source, 0),
     interface.into(),
     1,
-    gpapi::session::ClientAddresses {
+    gpapi::session::desktop::ClientAddresses {
       ipv4: match source {
         std::net::IpAddr::V4(ip) => Some(ip),
         _ => None,
@@ -873,8 +873,8 @@ pub(crate) fn test_connect_request(info: ConnectInfo) -> ConnectRequest {
     "0".repeat(64),
   )
   .unwrap();
-  let plan = gpapi::session::ConnectionPlan::new(
-    vec![gpapi::session::AuthenticatedGateway {
+  let plan = gpapi::session::desktop::ConnectionPlan::new(
+    vec![gpapi::session::desktop::AuthenticatedGateway {
       gateway: info.gateway().clone(),
       binding: Some(binding),
       authentication: gpapi::session::GatewayAuthentication::new("authcookie=token&user=user".into(), "tunnel".into())

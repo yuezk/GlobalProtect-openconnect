@@ -5,7 +5,7 @@ use specta::Type;
 
 use crate::{
   gateway::Gateway,
-  session::{GatewayFailureSummary, GatewaySessionSummary, SessionInfo},
+  session::{GatewaySessionSummary, SessionInfo, desktop::GatewayFailureSummary},
 };
 
 #[derive(Debug, Deserialize, Serialize, Type, Clone)]

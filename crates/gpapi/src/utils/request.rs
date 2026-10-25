@@ -4,7 +4,7 @@ use anyhow::{Context, ensure};
 use reqwest::Identity;
 use zeroize::Zeroizing;
 
-use super::{identity_encoding, pkcs12_identity};
+use super::{certificate::pkcs12_identity, identity_encoding};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RequestIdentityError {

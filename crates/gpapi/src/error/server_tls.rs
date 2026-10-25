@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use super::PortalError;
 
-#[cfg(target_os = "macos")]
-#[path = "server_tls/macos.rs"]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[path = "server_tls/apple.rs"]
 mod backend;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 #[path = "server_tls/openssl.rs"]
 mod backend;
 
@@ -303,7 +303,7 @@ mod tests {
       portal::{PreloginOptions, prelogin},
     };
     let (address, worker) = server(true);
-    let profile = OsProfile::builder(ClientOs::Linux).build();
+    let profile = OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot());
     let params = GpParams::builder(profile).build();
     let error = prelogin(&address, &params, PreloginOptions::default())
       .await
@@ -324,7 +324,7 @@ mod tests {
       portal::{PreloginOptions, prelogin},
     };
     let (address, worker) = server(true);
-    let params = GpParams::builder(OsProfile::builder(ClientOs::Linux).build())
+    let params = GpParams::builder(OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot()))
       .ignore_tls_errors(true)
       .build();
     let result = prelogin(&address, &params, PreloginOptions::default()).await;
@@ -365,7 +365,7 @@ mod tests {
     assert_eq!(classify(&error), None);
   }
 
-  #[cfg(target_os = "macos")]
+  #[cfg(any(target_os = "macos", target_os = "ios"))]
   #[test]
   fn wrapped_macos_io_status_retains_the_client_certificate_requirement() {
     let error = std::io::Error::other(std::io::Error::other(security_framework::base::Error::from(-9863)));
@@ -376,6 +376,7 @@ mod tests {
     assert_eq!(classify(&std::io::Error::other("alert certificate required")), None);
   }
 
+  #[cfg(feature = "desktop")]
   #[test]
   fn rendering_recovery_retains_client_certificate_requirement() {
     use crate::process::rendering_recovery::{RecoveryState, RenderingCrash};
@@ -409,7 +410,7 @@ mod tests {
       os_profile::{ClientOs, OsProfile},
       portal::{PreloginOptions, prelogin},
     };
-    let params = GpParams::builder(OsProfile::builder(ClientOs::Linux).build())
+    let params = GpParams::builder(OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot()))
       .ignore_tls_errors(true)
       .build();
     let credential = crate::credential::PasswordCredential::new("alice", "password").into();
@@ -465,7 +466,8 @@ mod tests {
         SslVerifyMode::PEER
       };
       let (address, worker) = server_with_client_auth(true, verify);
-      let mut builder = GpParams::builder(OsProfile::builder(ClientOs::Linux).build());
+      let mut builder =
+        GpParams::builder(OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot()));
       builder.ignore_tls_errors(true);
       if required {
         builder

@@ -480,13 +480,13 @@ mod tests {
 
   fn gp_params(client_os: ClientOs) -> GpParams {
     let profile = OsProfile::builder(client_os)
-      .host_identity(HostIdentity::new(
+      .host_identity(HostIdentity::from_parts(
         "test-computer".to_string(),
         "host-id".to_string(),
         "serial".to_string(),
         "aa:bb:cc:dd:ee:ff".to_string(),
       ))
-      .build();
+      .build(crate::os_profile::test_snapshot());
     GpParams::builder(profile).build()
   }
 

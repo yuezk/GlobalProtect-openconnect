@@ -3,7 +3,6 @@ use std::net::IpAddr;
 use anyhow::ensure;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(try_from = "DetectionFields")]
@@ -52,13 +51,11 @@ impl InternalHostDetection {
     Ok(Self { targets })
   }
 
-  pub async fn detect(&self, cancellation: &CancellationToken) -> anyhow::Result<bool> {
-    for target in &self.targets {
-      if super::native::detect(target.address, &target.hostname, cancellation).await? {
-        return Ok(true);
-      }
-    }
-    Ok(false)
+  pub(crate) fn targets(&self) -> impl Iterator<Item = (IpAddr, &str)> {
+    self
+      .targets
+      .iter()
+      .map(|target| (target.address, target.hostname.as_str()))
   }
 }
 

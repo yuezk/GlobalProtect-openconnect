@@ -16,7 +16,7 @@ use nix::{
 use pkcs8::SecretDocument;
 use zeroize::Zeroizing;
 
-use super::request::RequestIdentityError::{self, LegacyKeyConversion};
+use crate::utils::request::RequestIdentityError::{self, LegacyKeyConversion};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_OUTPUT: u64 = 1024 * 1024;
@@ -57,7 +57,7 @@ fn read_output(pipe: &mut impl Read, output: &mut Zeroizing<Vec<u8>>, limit: u64
   }
 }
 
-pub(super) fn decrypt(der: &[u8], passphrase: Option<&str>) -> anyhow::Result<SecretDocument> {
+pub(in crate::utils) fn decrypt(der: &[u8], passphrase: Option<&str>) -> anyhow::Result<SecretDocument> {
   let passphrase = passphrase.ok_or(RequestIdentityError::NoPassphrase("PEM"))?;
   // The command's line reader reserves one byte for a terminator. The linked
   // OpenSSL API accepted 1024 bytes, but the CLI would truncate that password.

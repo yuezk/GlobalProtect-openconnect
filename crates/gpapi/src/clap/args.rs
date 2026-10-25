@@ -2,7 +2,7 @@ use clap::{ValueEnum, builder::PossibleValue};
 
 use crate::{
   gp_params::CscMode,
-  os_profile::{ClientOs, runtime_client_os},
+  os_profile::{ClientOs, desktop::runtime_client_os},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -31,6 +31,7 @@ impl Default for Os {
       ClientOs::Linux => Os::Linux,
       ClientOs::Windows => Os::Windows,
       ClientOs::Mac => Os::Mac,
+      ClientOs::Ios => unreachable!("The desktop CLI is not available on iOS"),
     }
   }
 }

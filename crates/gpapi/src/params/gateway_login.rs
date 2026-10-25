@@ -1,7 +1,7 @@
 use std::net::ToSocketAddrs;
 
 use super::{RequestParams, credential as credential_params};
-use crate::{credential::Credential, gateway::GatewayLoginContext, gp_params::GpParams};
+use crate::{credential::Credential, gateway::GatewayLoginContext, gp_params::GpParams, os_profile::ClientOs};
 
 /// Inputs required to build gateway login request parameters.
 pub(crate) struct GatewayLoginInput<'a> {
@@ -17,7 +17,7 @@ pub(crate) struct GatewayLoginInput<'a> {
 ///
 /// Resolves the `server` parameter to an IPv4 address when
 /// `profile.gateway_server_uses_resolved_ipv4()` is true.
-/// Sets `gw` and `gateway-name` to the gateway FQDN.
+/// iOS uses the portal gateway name for `gw` and `gateway-name`; desktop profiles use its FQDN.
 pub(crate) fn build(input: &GatewayLoginInput) -> RequestParams {
   let profile = input.gp_params.os_profile();
   let mut body: Vec<(String, String)> = Vec::new();
@@ -51,6 +51,10 @@ pub(crate) fn build(input: &GatewayLoginInput) -> RequestParams {
 
   // Identity fields
   body.push(("host-id".into(), profile.host_id().into()));
+  if profile.client_os() == ClientOs::Ios {
+    body.push(("mobile-id".into(), profile.host_id().into()));
+    body.push(("vpn-type".into(), "App Level VPN".into()));
+  }
   body.push(("serialno".into(), profile.serialno().into()));
   body.push(("preferred-ip".into(), String::new()));
   body.push(("preferred-ipv6".into(), String::new()));
@@ -64,8 +68,13 @@ pub(crate) fn build(input: &GatewayLoginInput) -> RequestParams {
   if let Some(context) = input.context {
     let gateway_host = context.host().to_string();
     body.push(("host".into(), gateway_host.clone()));
-    body.push(("gw".into(), gateway_host.clone()));
-    body.push(("gateway-name".into(), gateway_host));
+    let gateway_name = if profile.client_os() == ClientOs::Ios {
+      context.name().to_owned()
+    } else {
+      gateway_host
+    };
+    body.push(("gw".into(), gateway_name.clone()));
+    body.push(("gateway-name".into(), gateway_name));
     body.push(("internal".into(), context.kind().as_login_param().to_string()));
     body.push((
       "selection-type".into(),
@@ -141,8 +150,39 @@ mod tests {
     os_profile::{ClientOs, HostIdentity, OsProfile},
   };
 
+  #[test]
+  fn mobile_login_fields_and_gateway_names_are_ios_only() {
+    for os in [ClientOs::Ios, ClientOs::Linux, ClientOs::Mac, ClientOs::Windows] {
+      let params = GpParams::builder(test_profile(os)).build();
+      let gateway = Gateway::new("Regional_Gateway".into(), "192.0.2.1".into());
+      let context = GatewayLoginContext::new(&gateway, GatewaySelection::Manual);
+      let cred = make_credential();
+      let result = build(&GatewayLoginInput {
+        gp_params: &params,
+        cred: &cred,
+        gateway_host: "192.0.2.1",
+        context: Some(&context),
+        client_ip: Some("192.0.2.2"),
+        extend_lifetime: false,
+      });
+      let find = |key: &str| result.body.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+      assert_eq!(find("host"), Some("192.0.2.1"));
+      if os == ClientOs::Ios {
+        assert_eq!(find("mobile-id"), Some(params.os_profile().host_id()));
+        assert_eq!(find("vpn-type"), Some("App Level VPN"));
+        assert_eq!(find("gw"), Some("Regional_Gateway"));
+        assert_eq!(find("gateway-name"), Some("Regional_Gateway"));
+      } else {
+        assert_eq!(find("mobile-id"), None);
+        assert_eq!(find("vpn-type"), None);
+        assert_eq!(find("gw"), Some("192.0.2.1"));
+        assert_eq!(find("gateway-name"), Some("192.0.2.1"));
+      }
+    }
+  }
+
   fn test_identity() -> HostIdentity {
-    HostIdentity::new(
+    HostIdentity::from_parts(
       "test-computer".to_string(),
       "host-id-123".to_string(),
       "serial-456".to_string(),
@@ -151,7 +191,9 @@ mod tests {
   }
 
   fn test_profile(os: ClientOs) -> OsProfile {
-    OsProfile::builder(os).host_identity(test_identity()).build()
+    OsProfile::builder(os)
+      .host_identity(test_identity())
+      .build(crate::os_profile::test_snapshot())
   }
 
   fn make_gp_params() -> GpParams {

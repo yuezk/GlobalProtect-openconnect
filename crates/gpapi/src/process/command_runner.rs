@@ -12,7 +12,7 @@ use nix::{
   unistd::Pid,
 };
 
-use super::collection::CollectionControl;
+use crate::collection::CollectionControl;
 
 /// What the child reads on stdin.
 pub(crate) enum ChildInput<'a> {

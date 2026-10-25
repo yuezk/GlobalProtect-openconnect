@@ -6,11 +6,11 @@ edition.workspace = true
 license = "MIT"
 
 [dependencies]
-nix = { version = "0.31", features = ["fs", "signal", "process"] }
+nix = { version = "0.31", features = ["fs", "signal", "process"], optional = true }
 common = { path = "../common" }
 anyhow.workspace = true
 base64.workspace = true
-dns-lookup.workspace = true
+dns-lookup = { workspace = true, optional = true }
 log.workspace = true
 reqwest.workspace = true
 native-tls = "0.2"
@@ -21,25 +21,25 @@ xmltree.workspace = true
 serde.workspace = true
 specta = { workspace = true, features = ["derive", "uuid"] }
 urlencoding.workspace = true
-tokio = { workspace = true, features = ["fs", "process", "signal", "macros"] }
+tokio = { workspace = true, features = ["fs", "macros", "rt", "time"] }
 tokio-util.workspace = true
 serde_json.workspace = true
-whoami.workspace = true
+whoami = { workspace = true, optional = true }
 tempfile.workspace = true
 thiserror.workspace = true
 chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
 url.workspace = true
 regex.workspace = true
-uzers.workspace = true
+uzers = { workspace = true, optional = true }
 serde_urlencoded.workspace = true
 md5.workspace = true
 sha2.workspace = true
 uuid = { workspace = true, features = ["v4", "v5", "serde"] }
 chrono.workspace = true
 humantime.workspace = true
-netdev.workspace = true
-socket2 = { version = "0.6", features = ["all"] }
-os_info = { version = "3", default-features = false }
+netdev = { workspace = true, optional = true }
+socket2 = { version = "0.6", features = ["all"], optional = true }
+os_info = { version = "3", default-features = false, optional = true }
 snow.workspace = true
 zeroize = { workspace = true, features = ["serde"] }
 getrandom = "0.4"
@@ -52,7 +52,7 @@ clap-verbosity-flag = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 log-reload = { version = "0.1", optional = true }
 
-[target.'cfg(target_os="macos")'.dependencies]
+[target.'cfg(any(target_os="macos", target_os="ios"))'.dependencies]
 security-framework = "3"
 oslog = { version = "0.2", default-features = false, optional = true }
 
@@ -60,7 +60,7 @@ oslog = { version = "0.2", default-features = false, optional = true }
 [target.'cfg(not(any(target_os="macos", target_os="windows")))'.dependencies]
 gtk = { version = "0.18", optional = true }
 
-[target.'cfg(not(target_os = "macos"))'.dependencies]
+[target.'cfg(not(any(target_os = "macos", target_os = "ios")))'.dependencies]
 openssl.workspace = true
 version-compare = "0.2"
 
@@ -70,7 +70,9 @@ proptest.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 
 [features]
-tauri = ["dep:tauri", "dep:gtk"]
-clap = ["dep:clap", "dep:clap-verbosity-flag"]
+default = ["desktop"]
+desktop = ["tokio/process", "tokio/signal", "dep:nix", "dep:uzers", "dep:netdev", "dep:os_info", "dep:whoami", "dep:dns-lookup", "dep:socket2"]
+tauri = ["desktop", "dep:tauri", "dep:gtk"]
+clap = ["desktop", "dep:clap", "dep:clap-verbosity-flag"]
 webview-auth = []
-logger = ["dep:env_logger", "dep:log-reload", "dep:oslog"]
+logger = ["desktop", "dep:env_logger", "dep:log-reload", "dep:oslog"]

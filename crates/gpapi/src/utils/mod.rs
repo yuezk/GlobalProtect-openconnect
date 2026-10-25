@@ -1,35 +1,28 @@
 pub mod xml;
 
 pub mod base64;
+mod certificate;
 pub mod checksum;
 pub mod crypto;
+#[cfg(feature = "desktop")]
 pub mod endpoint;
+#[cfg(feature = "desktop")]
 pub mod env_utils;
 mod identity_encoding;
-mod legacy_pkcs8;
+#[cfg(feature = "desktop")]
 pub mod lock_file;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub mod openssl;
-#[cfg(target_os = "macos")]
-#[path = "pkcs12_identity/macos.rs"]
-mod pkcs12_identity;
-#[cfg(not(target_os = "macos"))]
-#[path = "pkcs12_identity/openssl.rs"]
-mod pkcs12_identity;
 pub mod redact;
 pub mod request;
-#[cfg(target_os = "macos")]
-#[path = "traditional_key/macos.rs"]
-mod traditional_key;
-#[cfg(not(target_os = "macos"))]
-#[path = "traditional_key/openssl.rs"]
-mod traditional_key;
 #[cfg(feature = "tauri")]
 pub mod window;
 
+#[cfg(feature = "desktop")]
 mod shutdown_signal;
 
 use log::warn;
+#[cfg(feature = "desktop")]
 pub use shutdown_signal::shutdown_signal;
 
 use reqwest::{Response, StatusCode, Url};
@@ -73,6 +66,10 @@ pub struct GpError {
 impl GpError {
   pub fn is_status_error(&self) -> bool {
     self.status.is_client_error() || self.status.is_server_error()
+  }
+
+  pub fn is_authentication_rejection(&self) -> bool {
+    matches!(self.status.as_u16(), 401 | 403)
   }
 }
 

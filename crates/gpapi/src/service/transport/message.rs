@@ -18,7 +18,7 @@ pub enum ClientMessage {
 #[serde(tag = "type", content = "data", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ServerMessage {
   TunnelStatistics {
-    snapshot: crate::session::tunnel::TunnelStatisticsSnapshot,
+    snapshot: crate::session::desktop::tunnel::TunnelStatisticsSnapshot,
   },
   Attached {
     connection_id: Uuid,
@@ -42,7 +42,7 @@ pub enum ServerMessage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ServiceResult {
-  TunnelStatisticsSnapshot(crate::session::tunnel::TunnelStatisticsSnapshot),
+  TunnelStatisticsSnapshot(crate::session::desktop::tunnel::TunnelStatisticsSnapshot),
   Accepted,
   StoredHipReport {
     report_id: String,
@@ -171,10 +171,10 @@ mod tests {
     let gateway = Gateway::new("Gateway".to_string(), "vpn.example.com".to_string());
     let info = ConnectInfo::new("portal.example.com".to_string(), gateway.clone(), vec![gateway]);
     let certificate_size = MAX_CLIENT_IDENTITY_DATA / 2;
-    let plan = crate::session::ConnectionPlan::new(
-      vec![crate::session::AuthenticatedGateway {
+    let plan = crate::session::desktop::ConnectionPlan::new(
+      vec![crate::session::desktop::AuthenticatedGateway {
         gateway: info.gateway().clone(),
-        binding: Some(crate::session::network::test_binding()),
+        binding: Some(crate::session::desktop::network::test_binding()),
         authentication: crate::session::GatewayAuthentication::new(
           "authcookie=token&user=user".into(),
           "tunnel".into(),
@@ -200,12 +200,13 @@ mod tests {
   #[test]
   fn full_configuration_and_large_metadata_fit_complete_snapshot_envelopes_at_the_budget() {
     use crate::{
-      os_profile::HostIdentity,
       service::{
         vpn_env::HostInfo,
         vpn_state::{ConnectedInfo, VpnState},
       },
-      session::tunnel::{MAX_CONFIGURATION_BYTES, TunnelConfiguration, TunnelPhase, TunnelState, TunnelTransport},
+      session::desktop::tunnel::{
+        MAX_CONFIGURATION_BYTES, TunnelConfiguration, TunnelPhase, TunnelState, TunnelTransport,
+      },
     };
     let mut configuration = TunnelConfiguration::default();
     configuration.included_routes.items = vec!["r".repeat(1024); 15];
@@ -234,7 +235,7 @@ mod tests {
       vpnc_script: Some("s".repeat(1024)),
       auth_executable: "a".repeat(1024),
       host_info: HostInfo {
-        host_identity: HostIdentity::collect(),
+        host_identity: crate::os_profile::desktop::collect_identity(),
       },
     };
     for mut message in [

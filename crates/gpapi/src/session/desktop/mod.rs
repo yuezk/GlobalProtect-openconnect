@@ -1,0 +1,12 @@
+use super::{GatewayAuthentication, InternalHostDetection, InternalSessionPolicy, SessionMode, detection, transport};
+use crate::gateway::Gateway;
+use anyhow::ensure;
+use serde::{Deserialize, Serialize};
+use specta::Type;
+mod connection_plan;
+mod gateway_sessions;
+pub mod network;
+pub mod non_tunnel;
+pub mod tunnel;
+pub use connection_plan::{AuthenticatedGateway, ConnectionPlan, GatewayFailure, GatewayFailureSummary};
+pub use gateway_sessions::{ClientAddresses, GatewaySession, GatewaySessions};

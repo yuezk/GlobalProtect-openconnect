@@ -19,12 +19,17 @@ pub struct SamlPrelogin {
   region: String,
   is_gateway: bool,
   saml_request: String,
+  saml_method: String,
   support_default_browser: bool,
 }
 
 impl SamlPrelogin {
   pub fn region(&self) -> &str {
     &self.region
+  }
+
+  pub fn saml_method(&self) -> &str {
+    &self.saml_method
   }
 
   pub fn saml_request(&self) -> &str {
@@ -211,6 +216,11 @@ fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
   let saml_default_browser = root.descendant_text("saml-default-browser");
   // Check if the prelogin response is SAML
   if saml_method.is_some() && saml_request.is_some() {
+    let saml_method = saml_method.unwrap();
+    anyhow::ensure!(
+      matches!(saml_method.as_str(), "REDIRECT" | "POST"),
+      "Unsupported SAML binding"
+    );
     let saml_request = base64::decode_to_string(&saml_request.unwrap())?;
     let support_default_browser = saml_default_browser.map(|s| s.to_lowercase() == "yes").unwrap_or(false);
 
@@ -218,6 +228,7 @@ fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
       region,
       is_gateway,
       saml_request,
+      saml_method,
       support_default_browser,
     };
 
@@ -258,13 +269,13 @@ mod tests {
 
   fn gp_params(client_os: ClientOs) -> GpParams {
     let profile = OsProfile::builder(client_os)
-      .host_identity(HostIdentity::new(
+      .host_identity(HostIdentity::from_parts(
         "test-computer".to_string(),
         "host-id".to_string(),
         "serial".to_string(),
         "aa:bb:cc:dd:ee:ff".to_string(),
       ))
-      .build();
+      .build(crate::os_profile::test_snapshot());
     GpParams::builder(profile).build()
   }
 

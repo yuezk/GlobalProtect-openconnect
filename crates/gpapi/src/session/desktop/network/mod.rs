@@ -9,8 +9,9 @@ use anyhow::{Context, ensure};
 use netdev::Interface;
 use tokio_util::sync::CancellationToken;
 
-use super::ClientAddresses;
-use crate::process::collection::{CollectionBudget, CollectionControl, CollectorCommands};
+use super::{ClientAddresses, InternalHostDetection};
+use crate::collection::{CollectionBudget, CollectionControl};
+use crate::process::collection::CollectorCommands;
 
 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
 mod bsd;
@@ -29,10 +30,9 @@ use linux as platform;
 use macos as platform;
 
 mod binding;
-mod detection;
+use super::detection;
 pub mod native;
 pub use binding::GatewayBinding;
-pub use detection::InternalHostDetection;
 
 const INSPECTION_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
@@ -170,7 +170,7 @@ impl PhysicalNetwork {
     ensure!(resolver_count > 0, "Physical resolver context is unavailable");
     if let Some(detection) = detection {
       ensure!(
-        detection.detect(cancellation).await?,
+        detect(detection, cancellation).await?,
         "Internal host detection no longer matches"
       );
     }
@@ -298,7 +298,7 @@ async fn resolve_binding(
   cancellation: &CancellationToken,
   authenticated_endpoint: SocketAddr,
 ) -> anyhow::Result<GatewayBinding> {
-  let origin = super::transport::gateway_origin(server)?;
+  let origin = super::transport::binding::gateway_origin(server)?;
   let host = origin.host_str().context("Gateway host is missing")?;
   let port = origin.port_or_known_default().context("Gateway port is missing")?;
   let literal = literal_gateway_address(&origin)?;
@@ -628,7 +628,7 @@ mod tests {
 
   #[test]
   fn bracketed_ipv6_gateway_is_a_literal_endpoint() {
-    let origin = super::super::transport::gateway_origin("https://[2001:db8::1]:444").unwrap();
+    let origin = super::super::transport::binding::gateway_origin("https://[2001:db8::1]:444").unwrap();
     assert_eq!(
       literal_gateway_address(&origin).unwrap(),
       Some("2001:db8::1".parse().unwrap())
@@ -677,4 +677,16 @@ pub(crate) fn test_binding() -> GatewayBinding {
     "0".repeat(64),
   )
   .unwrap()
+}
+
+pub async fn detect(
+  policy: &super::InternalHostDetection,
+  cancellation: &tokio_util::sync::CancellationToken,
+) -> anyhow::Result<bool> {
+  for (address, hostname) in policy.targets() {
+    if native::detect(address, hostname, cancellation).await? {
+      return Ok(true);
+    }
+  }
+  Ok(false)
 }

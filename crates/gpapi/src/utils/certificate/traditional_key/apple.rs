@@ -1,8 +1,8 @@
 use pkcs8::SecretDocument;
 
-use super::{identity_encoding::TraditionalKeyFormat, request::RequestIdentityError};
+use crate::utils::{identity_encoding::TraditionalKeyFormat, request::RequestIdentityError};
 
-pub(super) fn normalize(
+pub(in crate::utils) fn normalize(
   _bytes: &[u8],
   format: TraditionalKeyFormat,
   _passphrase: Option<&str>,

@@ -635,7 +635,7 @@ mod tests {
           vpnc_script: None,
           auth_executable: String::new(),
           host_info: HostInfo {
-            host_identity: HostIdentity::collect(),
+            host_identity: gpapi::os_profile::desktop::collect_identity(),
           },
         },
       };

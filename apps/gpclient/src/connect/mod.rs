@@ -19,8 +19,8 @@ use gpapi::{
   gateway::GatewaySelection,
   gp_params::GpParams,
   os_profile::OsProfile,
-  portal::{PreloginOptions, prelogin, retrieve_config},
-  session::GatewaySessions,
+  portal::{PreloginOptions, discovery::discover, prelogin},
+  session::desktop::GatewaySessions,
   utils::request::RequestIdentityError,
 };
 use inquire::{Password, PasswordDisplayMode, Select};
@@ -282,7 +282,7 @@ impl<'a> ConnectHandler<'a> {
 
     let cached = self.cached_portal_credential(portal);
     let cached_config = match cached {
-      Some(cred) => match retrieve_config(portal, &cred, &gp_params, &self.cancellation).await {
+      Some(cred) => match discover(portal, &cred, &gp_params, &self.cancellation).await {
         Ok(config) => Some((cred, config)),
         Err(error) => {
           self.check_cancelled()?;
@@ -301,7 +301,7 @@ impl<'a> ConnectHandler<'a> {
           .await?;
         prelogin = replacement;
         self.check_cancelled()?;
-        let config = retrieve_config(portal, &cred, &gp_params, &self.cancellation).await?;
+        let config = discover(portal, &cred, &gp_params, &self.cancellation).await?;
         (cred, config)
       }
     };

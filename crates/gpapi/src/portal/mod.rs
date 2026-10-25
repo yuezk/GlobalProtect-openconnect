@@ -4,3 +4,6 @@ mod prelogin;
 
 pub use config::*;
 pub use prelogin::*;
+
+#[cfg(feature = "desktop")]
+pub mod discovery;

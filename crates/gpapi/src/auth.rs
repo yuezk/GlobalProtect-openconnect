@@ -12,6 +12,16 @@ use crate::{error::AuthDataParseError, utils::base64::decode_to_string};
 
 pub type AuthDataParseResult = anyhow::Result<SamlAuthData, AuthDataParseError>;
 
+/// Validates an explicit GlobalProtect SAML completion status.
+/// A missing status means the page has not supplied an authentication result.
+pub fn validate_saml_auth_status(status: Option<&str>) -> Result<(), AuthDataParseError> {
+  match status {
+    Some("1") => Ok(()),
+    Some(status) => Err(AuthDataParseError::AuthenticationFailed(status.to_owned())),
+    None => Err(AuthDataParseError::NotFound),
+  }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum AuthWindowTheme {
@@ -121,21 +131,15 @@ impl SamlAuthData {
   }
 
   pub fn from_html(html: &str) -> AuthDataParseResult {
-    match parse_xml_tag(html, "saml-auth-status") {
-      Some(status) if status == "1" => {
-        let username = parse_xml_tag(html, "saml-username");
-        let prelogin_cookie = parse_xml_tag(html, "prelogin-cookie");
-        let portal_userauthcookie = parse_xml_tag(html, "portal-userauthcookie");
+    validate_saml_auth_status(parse_xml_tag(html, "saml-auth-status").as_deref())?;
+    let username = parse_xml_tag(html, "saml-username");
+    let prelogin_cookie = parse_xml_tag(html, "prelogin-cookie");
+    let portal_userauthcookie = parse_xml_tag(html, "portal-userauthcookie");
 
-        let auth_data =
-          SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie).map_err(AuthDataParseError::Invalid)?;
-        auth_data.log_summary("html");
-
-        Ok(auth_data)
-      }
-      Some(status) => Err(AuthDataParseError::AuthenticationFailed(status)),
-      None => Err(AuthDataParseError::NotFound),
-    }
+    let auth_data =
+      SamlAuthData::new(username, prelogin_cookie, portal_userauthcookie).map_err(AuthDataParseError::Invalid)?;
+    auth_data.log_summary("html");
+    Ok(auth_data)
   }
 
   pub fn from_gpcallback(data: &str) -> anyhow::Result<SamlAuthData, AuthDataParseError> {
@@ -216,6 +220,26 @@ fn parse_xml_tag(html: &str, tag: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn saml_status_distinguishes_rejection_from_an_unfinished_page() {
+    assert!(validate_saml_auth_status(Some("1")).is_ok());
+    assert!(matches!(
+      validate_saml_auth_status(None),
+      Err(AuthDataParseError::NotFound)
+    ));
+    for status in ["0", "2", "", "unknown"] {
+      assert!(matches!(
+        validate_saml_auth_status(Some(status)),
+        Err(AuthDataParseError::AuthenticationFailed(_))
+      ));
+      let html = format!("<saml-auth-status>{status}</saml-auth-status>");
+      assert!(matches!(
+        SamlAuthData::from_html(&html),
+        Err(AuthDataParseError::AuthenticationFailed(_))
+      ));
+    }
+  }
 
   #[test]
   fn auth_data_from_gpcallback_cas() {

@@ -39,6 +39,74 @@ impl GatewaySessions {
     }
   }
 
+  /// Register cleanup ownership before any fallible native network work.
+  pub fn register_login(
+    &mut self,
+    gateway: Gateway,
+    authentication: super::GatewayAuthentication,
+    client: &crate::gateway::GatewayLoginClient,
+  ) {
+    self.register(GatewaySession {
+      gateway,
+      transport: GatewayTransport::from_authenticated_login(
+        client.request_client().clone(),
+        client.origin().clone(),
+        authentication,
+        client.params().os_profile().clone(),
+      ),
+      addresses: ClientAddresses::default(),
+    });
+  }
+
+  pub async fn bind_non_tunnel(
+    &mut self,
+    gateway: &Gateway,
+    client: &crate::gateway::GatewayLoginClient,
+    disable_ipv6: bool,
+    detection: Option<&super::InternalHostDetection>,
+    cancellation: &tokio_util::sync::CancellationToken,
+  ) -> anyhow::Result<super::network::GatewayBinding> {
+    use super::{
+      network::PhysicalNetwork,
+      transport::binding::{bound_client, gateway_origin},
+    };
+    let member = self
+      .members
+      .iter()
+      .find(|member| member.gateway.server() == gateway.server())
+      .ok_or_else(|| anyhow::anyhow!("Gateway must be registered before network binding"))?;
+    let origin = gateway_origin(client.origin().as_str())?;
+    let response_url = client
+      .authenticated_url()
+      .ok_or_else(|| anyhow::anyhow!("Authenticated response endpoint is unavailable"))?;
+    anyhow::ensure!(
+      response_url.origin() == origin.origin(),
+      "Redirected non-tunnel authentication is unsupported"
+    );
+    let endpoint = client
+      .login_endpoint()
+      .ok_or_else(|| anyhow::anyhow!("Non-tunnel authentication has no direct peer address"))?;
+    let network = PhysicalNetwork::capture_controlled(cancellation).await?;
+    let binding = network
+      .bind_authenticated_endpoint(origin.as_str(), endpoint, disable_ipv6, cancellation)
+      .await?;
+    network
+      .validate_internal_binding(&binding, detection, cancellation)
+      .await?;
+    let maintenance = bound_client(origin.as_str(), client.params(), &binding)?;
+    self.update(GatewaySession {
+      gateway: gateway.clone(),
+      transport: GatewayTransport::from_authenticated_login(
+        maintenance,
+        client.origin().clone(),
+        member.transport.authentication().clone(),
+        client.params().os_profile().clone(),
+      ),
+      addresses: binding.addresses(),
+    });
+    Ok(binding)
+  }
+
   pub fn register(&mut self, session: GatewaySession) {
     self.members.push(Arc::new(session));
   }
@@ -101,3 +169,6 @@ async fn logout(session: Arc<GatewaySession>) {
     Err(_) => log::warn!("Gateway logout timed out"),
   }
 }
+
+#[cfg(test)]
+mod tests;

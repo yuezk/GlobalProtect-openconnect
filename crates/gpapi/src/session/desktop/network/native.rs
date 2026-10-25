@@ -14,7 +14,7 @@ pub fn detect_in_helper(address: std::net::IpAddr, hostname: &str) -> anyhow::Re
   Ok(dns_lookup::lookup_addr(&address).is_ok_and(|name| name.eq_ignore_ascii_case(hostname)))
 }
 
-pub(super) async fn detect(
+pub(in crate::session) async fn detect(
   address: std::net::IpAddr,
   hostname: &str,
   cancellation: &CancellationToken,

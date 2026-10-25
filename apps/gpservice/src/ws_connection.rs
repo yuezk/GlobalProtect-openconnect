@@ -41,7 +41,7 @@ pub(crate) struct ConnectionControl {
   connection_id: Uuid,
   tx: mpsc::Sender<ConnectionCommand>,
   close_tx: watch::Sender<Option<CloseReason>>,
-  statistics: watch::Sender<Option<gpapi::session::tunnel::TunnelStatisticsSnapshot>>,
+  statistics: watch::Sender<Option<gpapi::session::desktop::tunnel::TunnelStatisticsSnapshot>>,
   statistics_enabled: Arc<AtomicBool>,
   committed: Arc<AtomicBool>,
 }
@@ -102,13 +102,15 @@ impl ConnectionControl {
     self.statistics.send_replace(None);
   }
 
-  pub fn publish_statistics(&self, snapshot: gpapi::session::tunnel::TunnelStatisticsSnapshot) {
+  pub fn publish_statistics(&self, snapshot: gpapi::session::desktop::tunnel::TunnelStatisticsSnapshot) {
     if self.statistics_enabled() && !self.is_closed() {
       self.statistics.send_replace(Some(snapshot));
     }
   }
 
-  pub fn subscribe_statistics(&self) -> watch::Receiver<Option<gpapi::session::tunnel::TunnelStatisticsSnapshot>> {
+  pub fn subscribe_statistics(
+    &self,
+  ) -> watch::Receiver<Option<gpapi::session::desktop::tunnel::TunnelStatisticsSnapshot>> {
     self.statistics.subscribe()
   }
 
@@ -750,7 +752,7 @@ mod tests {
       .unwrap();
     assert!(matches!(reply, ServerMessage::Reply {
       id,
-      result: ServiceResult::TunnelStatisticsSnapshot(gpapi::session::tunnel::TunnelStatisticsSnapshot::Unavailable { reason: gpapi::session::tunnel::TunnelUnavailableReason::NoTunnel }),
+      result: ServiceResult::TunnelStatisticsSnapshot(gpapi::session::desktop::tunnel::TunnelStatisticsSnapshot::Unavailable { reason: gpapi::session::desktop::tunnel::TunnelUnavailableReason::NoTunnel }),
     } if id == statistics_id));
 
     let update_id = Uuid::new_v4();

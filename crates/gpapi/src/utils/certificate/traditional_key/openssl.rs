@@ -5,9 +5,9 @@ use openssl::{
 use pkcs8::SecretDocument;
 use zeroize::Zeroizing;
 
-use super::{identity_encoding::TraditionalKeyFormat, request::RequestIdentityError};
+use crate::utils::{identity_encoding::TraditionalKeyFormat, request::RequestIdentityError};
 
-pub(super) fn normalize(
+pub(in crate::utils) fn normalize(
   bytes: &[u8],
   format: TraditionalKeyFormat,
   passphrase: Option<&str>,

@@ -17,11 +17,7 @@ use crate::{
   gateway::GatewayLoginContext,
   gp_params::GpParams,
   params::gateway_login::{self, GatewayLoginInput},
-  session::{
-    GatewayAuthentication,
-    network::GatewayBinding,
-    transport::{bound_client, gateway_origin},
-  },
+  session::GatewayAuthentication,
   utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::ElementExt},
 };
 
@@ -41,29 +37,12 @@ pub struct GatewayLoginClient {
   origin: reqwest::Url,
   client: Client,
   params: GpParams,
-  binding: Option<GatewayBinding>,
   login_endpoint: Option<SocketAddr>,
   login_url: Option<reqwest::Url>,
-  maintenance_client: Option<Client>,
+  peer_certificate: Option<Vec<u8>>,
 }
 
 impl GatewayLoginClient {
-  pub fn register_session(
-    &self,
-    gateway: crate::gateway::Gateway,
-    authentication: GatewayAuthentication,
-    sessions: &mut crate::session::GatewaySessions,
-  ) {
-    sessions.register(crate::session::GatewaySession {
-      gateway,
-      transport: self.authenticated_transport(authentication),
-      addresses: self
-        .binding
-        .as_ref()
-        .map(|binding| binding.addresses())
-        .unwrap_or_default(),
-    });
-  }
   pub fn new(gateway: &str, params: GpParams) -> anyhow::Result<Self> {
     let origin = reqwest::Url::parse(&normalize_server(gateway)?)?;
     let client = Client::try_from(&params)?;
@@ -71,78 +50,19 @@ impl GatewayLoginClient {
       origin,
       client,
       params,
-      binding: None,
       login_endpoint: None,
       login_url: None,
-      maintenance_client: None,
+      peer_certificate: None,
     })
   }
 
-  /// Only called after an authenticated non-tunnel response and registration in
-  /// the caller's cleanup ledger. Tunnel login never inspects physical routing.
-  pub async fn bind_non_tunnel(
-    &mut self,
-    disable_ipv6: bool,
-    detection: Option<&crate::session::network::InternalHostDetection>,
-    cancellation: &tokio_util::sync::CancellationToken,
-  ) -> anyhow::Result<()> {
-    let origin = gateway_origin(self.origin.as_str())?;
-    let response_url = self
-      .login_url
-      .as_ref()
-      .ok_or_else(|| anyhow::anyhow!("Authenticated response endpoint is unavailable"))?;
-    anyhow::ensure!(
-      response_url.origin() == origin.origin(),
-      "Redirected non-tunnel authentication is unsupported"
-    );
-    let endpoint = self
-      .login_endpoint
-      .ok_or_else(|| anyhow::anyhow!("Non-tunnel authentication has no direct peer address"))?;
-    let network = crate::session::network::PhysicalNetwork::capture_controlled(cancellation).await?;
-    let binding = network
-      .bind_authenticated_endpoint(origin.as_str(), endpoint, disable_ipv6, cancellation)
-      .await?;
-    network
-      .validate_internal_binding(&binding, detection, cancellation)
-      .await?;
-    let client = bound_client(origin.as_str(), &self.params, &binding)?;
-    self.binding = Some(binding);
-    self.maintenance_client = Some(client);
-    Ok(())
+  pub(crate) fn login_endpoint(&self) -> Option<SocketAddr> {
+    self.login_endpoint
+  }
+  pub(crate) fn params(&self) -> &GpParams {
+    &self.params
   }
 
-  pub fn update_registered_session(
-    &self,
-    gateway: &crate::gateway::Gateway,
-    authentication: &GatewayAuthentication,
-    sessions: &mut crate::session::GatewaySessions,
-  ) {
-    sessions.update(crate::session::GatewaySession {
-      gateway: gateway.clone(),
-      transport: self.authenticated_transport(authentication.clone()),
-      addresses: self
-        .binding
-        .as_ref()
-        .map(|binding| binding.addresses())
-        .unwrap_or_default(),
-    });
-  }
-
-  pub fn authenticated_transport(
-    &self,
-    authentication: GatewayAuthentication,
-  ) -> crate::session::transport::GatewayTransport {
-    crate::session::transport::GatewayTransport::from_authenticated_login(
-      self.maintenance_client.as_ref().unwrap_or(&self.client).clone(),
-      self.origin.clone(),
-      authentication,
-      self.params.os_profile().clone(),
-    )
-  }
-
-  pub fn binding(&self) -> Option<&GatewayBinding> {
-    self.binding.as_ref()
-  }
   pub fn client_identity(&self) -> Option<&crate::utils::request::ClientIdentity> {
     self.params.client_identity()
   }
@@ -151,6 +71,16 @@ impl GatewayLoginClient {
   }
   pub(crate) fn origin(&self) -> &reqwest::Url {
     &self.origin
+  }
+
+  /// DER certificate from the TLS connection that returned the login response.
+  /// Callers must retain normal certificate verification when using it as a pin.
+  pub fn authenticated_url(&self) -> Option<&reqwest::Url> {
+    self.login_url.as_ref()
+  }
+
+  pub fn peer_certificate(&self) -> Option<&[u8]> {
+    self.peer_certificate.as_deref()
   }
 
   pub fn respond_mfa(&mut self, input: &str, otp: &str) {
@@ -190,6 +120,7 @@ impl GatewayLoginClient {
     // Once the full response is available, retain issued authentication or finish
     // cleanup-only logout before the caller observes cancellation.
     let response = parse_login_response(response, &self.client, &self.origin, &self.params).await?;
+    self.peer_certificate = response.peer_certificate;
     self.login_endpoint = response.endpoint;
     self.login_url = Some(response.url);
     Ok(response.login)
@@ -206,12 +137,14 @@ impl GatewayLoginClient {
 }
 
 struct LoginResponse {
+  peer_certificate: Option<Vec<u8>>,
   login: GatewayLogin,
   endpoint: Option<SocketAddr>,
   url: reqwest::Url,
 }
 
 struct ReceivedLogin {
+  peer_certificate: Option<Vec<u8>>,
   body: String,
   endpoint: Option<SocketAddr>,
   url: reqwest::Url,
@@ -260,17 +193,26 @@ async fn receive_gateway_login(
       }
     })?;
 
+  let peer_certificate = res
+    .extensions()
+    .get::<reqwest::tls::TlsInfo>()
+    .and_then(|info| info.peer_certificate())
+    .map(<[u8]>::to_vec);
   let endpoint = res.remote_addr();
   let url = res.url().clone();
   let res = parse_gp_response(res).await.map_err(|err| {
     if let Some(tls) = crate::error::ServerTlsError::from_request(origin, &err) {
       return anyhow::anyhow!(tls);
     }
+    if gp_params.os_profile().client_os() == crate::os_profile::ClientOs::Ios && err.is_authentication_rejection() {
+      return anyhow::anyhow!(crate::error::AuthenticationRejected);
+    }
     warn!("Gateway login response failed: {}", err.reason);
     anyhow::anyhow!("Gateway login error: {}", err.reason)
   })?;
 
   Ok(ReceivedLogin {
+    peer_certificate,
     body: res,
     endpoint,
     url,
@@ -284,6 +226,7 @@ async fn parse_login_response(
   gp_params: &GpParams,
 ) -> anyhow::Result<LoginResponse> {
   let ReceivedLogin {
+    peer_certificate,
     body: res,
     endpoint,
     url,
@@ -302,6 +245,7 @@ async fn parse_login_response(
     };
 
     return Ok(LoginResponse {
+      peer_certificate,
       login: GatewayLogin::Mfa(message, input_str),
       endpoint,
       url,
@@ -335,6 +279,7 @@ async fn parse_login_response(
   };
   debug!("Gateway login succeeded, mode: {:?}", authentication.mode());
   Ok(LoginResponse {
+    peer_certificate,
     login: GatewayLogin::Authenticated(authentication),
     endpoint,
     url,
@@ -477,7 +422,11 @@ mod tests {
   }
 
   fn test_params() -> GpParams {
-    GpParams::builder(crate::os_profile::OsProfile::builder(crate::os_profile::ClientOs::Linux).build()).build()
+    GpParams::builder(
+      crate::os_profile::OsProfile::builder(crate::os_profile::ClientOs::Linux)
+        .build(crate::os_profile::test_snapshot()),
+    )
+    .build()
   }
 
   #[tokio::test]
@@ -578,7 +527,6 @@ mod tests {
     assert!(
       matches!(client.login(&credential, None, &CancellationToken::new()).await.unwrap(), GatewayLogin::Authenticated(authentication) if authentication.mode() == crate::session::SessionMode::Tunnel)
     );
-    assert!(client.binding().is_none());
     assert!(matches!(
       client.extend_lifetime(&credential).await.unwrap(),
       GatewayLogin::Authenticated(_)
@@ -619,7 +567,6 @@ mod tests {
         .unwrap(),
       GatewayLogin::Authenticated(_)
     ));
-    assert!(client.binding().is_none());
     assert_eq!(server.await.unwrap().len(), 1);
   }
 
@@ -642,7 +589,6 @@ mod tests {
         .unwrap(),
       GatewayLogin::Authenticated(_)
     ));
-    assert!(client.binding().is_none());
     assert_eq!(
       server.await.unwrap()[0].0,
       "http://unresolvable.invalid/ssl-vpn/login.esp"
@@ -660,8 +606,11 @@ mod tests {
       response("<response status='success'/>"),
     ])
     .await;
-    let params =
-      GpParams::builder(crate::os_profile::OsProfile::builder(crate::os_profile::ClientOs::Linux).build()).build();
+    let params = GpParams::builder(
+      crate::os_profile::OsProfile::builder(crate::os_profile::ClientOs::Linux)
+        .build(crate::os_profile::test_snapshot()),
+    )
+    .build();
     let credential = crate::credential::PasswordCredential::new("alice", "password").into();
     let mut client = GatewayLoginClient {
       client,

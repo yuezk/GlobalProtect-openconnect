@@ -1,3 +1,6 @@
+use reqwest::redirect::Policy;
+use std::time::Duration;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 use super::*;
 use tokio::{
   io::{AsyncReadExt, AsyncWriteExt},
@@ -91,7 +94,7 @@ async fn gateway_fixture(
     .unwrap(),
     profile: OsProfile::builder(crate::os_profile::ClientOs::Linux)
       .computer_name_override("test")
-      .build(),
+      .build(crate::os_profile::test_snapshot()),
   };
   (transport, server)
 }

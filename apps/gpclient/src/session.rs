@@ -182,9 +182,10 @@ mod tests {
 
   #[test]
   fn builds_session_context_from_os_profile() {
-    let profile = OsProfile::builder(gpapi::os_profile::ClientOs::Mac)
-      .client_version("6.3.1-12".to_string())
-      .build();
+    let profile = gpapi::os_profile::desktop::collect_profile(
+      OsProfile::builder(gpapi::os_profile::ClientOs::Mac).client_version("6.3.1-12".to_string()),
+      None,
+    );
     let expected_user_agent = profile.user_agent().to_string();
 
     let ctx = build_session_context(SessionContextInput {

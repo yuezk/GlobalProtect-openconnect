@@ -3,8 +3,8 @@ use std::time::Duration;
 use clap::Args;
 use gpapi::{
   clap::args::Os,
+  collection::CollectionBudget,
   os_profile::{ClientOs, OsProfileBuilder},
-  process::collection::CollectionBudget,
 };
 use gphip::{ReportContext, ReportInput, generate_report_with_control};
 
@@ -51,11 +51,12 @@ impl<'a> HipHandler<'a> {
     if let Some(os_version) = self.args.os_version.as_deref() {
       builder = builder.os_version(os_version);
     }
-    if let Some(host_id) = self.args.host_id.as_deref() {
-      builder = builder.host_id_override(host_id);
-    }
     let input = ReportInput {
-      profile: builder.build_with_control(&budget)?,
+      profile: gpapi::os_profile::desktop::collect_profile_with_control(
+        builder,
+        self.args.host_id.as_deref(),
+        &budget,
+      )?,
       context: ReportContext::Connected {
         cookie: self.args.cookie.clone(),
         client_ip: self.args.client_ip.clone(),

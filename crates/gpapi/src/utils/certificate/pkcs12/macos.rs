@@ -1,8 +1,8 @@
 use security_framework::{import_export::Pkcs12ImportOptions, os::macos::keychain::CreateOptions};
 
-use super::request::RequestIdentityError;
+use crate::utils::request::RequestIdentityError;
 
-pub(super) fn ensure_complete(bytes: &[u8], password: &str) -> anyhow::Result<()> {
+pub(in crate::utils) fn ensure_complete(bytes: &[u8], password: &str) -> anyhow::Result<()> {
   // native-tls assumes a successful import has a last item with an identity.
   // Incomplete archives violate that assumption and panic. Inspect them first
   // in a private temporary keychain, never the user's default keychain.

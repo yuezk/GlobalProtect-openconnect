@@ -1,3 +1,4 @@
+use crate::session::{GatewaySessionSummary, MaintenanceState, SessionEndReason};
 use std::{
   future::Future,
   io,
@@ -10,12 +11,9 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::{gateway::Gateway, process::collection::CollectionControl};
+use crate::{collection::CollectionControl, gateway::Gateway};
 
-use super::{
-  GatewaySession, GatewaySessionSummary, GatewaySessions, InternalSessionPolicy, MaintenanceState, SessionEndReason,
-  SessionMode, transport::GatewayRequestError,
-};
+use super::{GatewaySession, GatewaySessions, InternalSessionPolicy, SessionMode, transport::GatewayRequestError};
 
 const COLLECTION_TIMEOUT: Duration = Duration::from_secs(60);
 

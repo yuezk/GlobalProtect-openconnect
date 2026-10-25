@@ -1,9 +1,11 @@
 mod login;
 mod parse_gateways;
+#[cfg(feature = "desktop")]
 pub mod session;
 
 pub use login::*;
 pub(crate) use parse_gateways::*;
+#[cfg(feature = "desktop")]
 pub use session::*;
 
 use serde::{Deserialize, Serialize};
@@ -24,7 +26,9 @@ pub struct Gateway {
   pub(crate) address: String,
   #[serde(default)]
   pub(crate) kind: GatewayKind,
+  #[serde(default)]
   pub(crate) priority: u32,
+  #[serde(default)]
   pub(crate) priority_rules: Vec<PriorityRule>,
 }
 

@@ -243,7 +243,7 @@ impl Cli {
       CliCommand::Hip(args) => HipHandler::new(args).handle().await,
       CliCommand::Diagnostics(_) => unreachable!("diagnostics is dispatched before VPN setup"),
       CliCommand::DetectInternalHost { address, hostname } => {
-        let internal = gpapi::session::network::native::detect_in_helper(*address, hostname)?;
+        let internal = gpapi::session::desktop::network::native::detect_in_helper(*address, hostname)?;
         println!("{}", serde_json::to_string(&internal)?);
         Ok(())
       }
@@ -252,7 +252,7 @@ impl Cli {
         port,
         disable_ipv6,
       } => {
-        let addresses = gpapi::session::network::native::lookup_in_helper(host, *port, *disable_ipv6)?;
+        let addresses = gpapi::session::desktop::network::native::lookup_in_helper(host, *port, *disable_ipv6)?;
         println!("{}", serde_json::to_string(&addresses)?);
         Ok(())
       }

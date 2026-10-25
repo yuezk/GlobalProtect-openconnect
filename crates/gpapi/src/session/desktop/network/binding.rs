@@ -130,7 +130,7 @@ impl GatewayBinding {
   }
 
   pub fn validate_server(&self, server: &str) -> anyhow::Result<()> {
-    let origin = super::super::transport::gateway_origin(server)?;
+    let origin = super::super::transport::binding::gateway_origin(server)?;
     ensure!(
       origin.port_or_known_default() == Some(self.endpoint.port()),
       "Gateway endpoint port differs"

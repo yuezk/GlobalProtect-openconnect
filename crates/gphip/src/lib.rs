@@ -5,7 +5,8 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::{io, time::Duration};
 
-use gpapi::process::collection::{CollectionBudget, CollectionControl, CollectorCommands};
+use gpapi::collection::{CollectionBudget, CollectionControl};
+use gpapi::process::collection::CollectorCommands;
 use xmltree::Element;
 
 #[cfg(target_os = "macos")]
@@ -506,7 +507,7 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
         ipv4: Some("127.0.0.1".to_string()),
         ipv6: Some("::1".to_string()),
       }],
-      ClientOs::Linux | ClientOs::Mac => vec![],
+      ClientOs::Linux | ClientOs::Mac | ClientOs::Ios => vec![],
     }
   }
 
@@ -515,7 +516,7 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
   fn domain_for_profile(&self) -> String {
     match self.profile.client_os() {
       ClientOs::Linux => String::new(),
-      ClientOs::Mac | ClientOs::Windows => self.get_domain(),
+      ClientOs::Mac | ClientOs::Windows | ClientOs::Ios => self.get_domain(),
     }
   }
 
@@ -657,6 +658,7 @@ fn parse_defender_info(json: &str) -> Option<DefenderInfo> {
 /// is a different OS (i.e. emulation).
 fn placeholder_interface_for(profile: &OsProfile, runtime: &NetworkInterface) -> (String, String) {
   match profile.client_os() {
+    ClientOs::Ios => (runtime.name.clone(), runtime.description.clone()),
     ClientOs::Linux => ("enp1s0f0".to_string(), "enp1s0f0".to_string()),
     ClientOs::Mac => ("en0".to_string(), "en0".to_string()),
     ClientOs::Windows => (
@@ -672,7 +674,7 @@ fn placeholder_interface_for(profile: &OsProfile, runtime: &NetworkInterface) ->
 fn format_mac_for(profile: &OsProfile, mac: Option<String>) -> Option<String> {
   match profile.client_os() {
     ClientOs::Windows => mac.map(|m| m.replace(':', "-")),
-    ClientOs::Linux | ClientOs::Mac => mac,
+    ClientOs::Linux | ClientOs::Mac | ClientOs::Ios => mac,
   }
 }
 
@@ -751,7 +753,7 @@ mod tests {
   }
 
   fn make_profile(client_os: ClientOs) -> OsProfile {
-    OsProfileBuilder::new(client_os).build()
+    gpapi::os_profile::desktop::collect_profile(OsProfileBuilder::new(client_os), None)
   }
 
   #[test]

@@ -11,7 +11,8 @@ use tokio::sync::Notify;
 use super::*;
 use crate::session::transport::GatewayTransport;
 use crate::session::{
-  ClientAddresses, GatewaySessions,
+  desktop::ClientAddresses,
+  desktop::GatewaySessions,
   transport::tests::{gateway, response},
 };
 

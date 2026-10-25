@@ -9,7 +9,7 @@ use gpapi::{
     vpn_env::{HostInfo, VpnEnv},
     vpn_state::VpnState,
   },
-  session::tunnel::{TunnelStatisticsSnapshot, TunnelUnavailableReason},
+  session::desktop::tunnel::{TunnelStatisticsSnapshot, TunnelUnavailableReason},
   utils::lock_file::LockFile,
 };
 use log::{info, warn};
@@ -397,7 +397,7 @@ fn build_snapshot(vpn_state: VpnState) -> VpnEnv {
     vpnc_script: find_vpnc_script(),
     auth_executable: binary_paths::gpauth().to_string_lossy().into_owned(),
     host_info: HostInfo {
-      host_identity: HostIdentity::collect(),
+      host_identity: gpapi::os_profile::desktop::collect_identity(),
     },
   }
 }
@@ -488,7 +488,7 @@ mod tests {
   #[tokio::test]
   async fn statistics_demand_is_per_attachment_and_does_not_consume_revisions() {
     use gpapi::service::transport::ServiceResult;
-    use gpapi::session::tunnel::TunnelStatisticsState;
+    use gpapi::session::desktop::tunnel::TunnelStatisticsState;
     let (context, registry) = context();
     let (a, a_session, a_generation, _a_rx) = attach(&context, &registry).await;
     let (b, b_session, b_generation, _b_rx) = attach(&context, &registry).await;
@@ -564,7 +564,7 @@ mod tests {
 
   #[test]
   fn snapshot_budget_trims_observation_without_changing_existing_metadata() {
-    use gpapi::session::tunnel::{TunnelConfiguration, TunnelPhase, TunnelState, TunnelTransport};
+    use gpapi::session::desktop::tunnel::{TunnelConfiguration, TunnelPhase, TunnelState, TunnelTransport};
     let mut snapshot = build_snapshot(VpnState::Disconnected);
     let mut configuration = TunnelConfiguration::default();
     configuration.included_routes.items = vec!["r".repeat(1000); 15];

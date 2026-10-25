@@ -75,6 +75,58 @@ int inspect_esp_packet(struct openconnect_info *vpninfo, struct pkt *pkt, uint8_
 	return 1;
 }
 
+/* Check the real request builder without a VPN server. Desktop payloads stay exact. */
+static void getconfig_profile_parameters(void)
+{
+	const char *platforms[] = { "linux", "mac-intel", "win", "apple-ios" };
+	const char *names[] = { "Linux", "Mac", "Windows", "iOS" };
+	int i;
+	for (i = 0; i < 4; i++) {
+		struct openconnect_info *vpninfo = openconnect_vpninfo_new("test", NULL, NULL, NULL, NULL, NULL);
+		struct oc_text_buf *body = buf_alloc();
+		char expected[2048];
+		assert(vpninfo && body);
+		assert(!openconnect_set_reported_os(vpninfo, platforms[i]));
+		assert(!openconnect_set_gp_app_version(vpninfo, "6.3.5-28"));
+		assert(!openconnect_set_gp_os_version(vpninfo, "test-os"));
+		assert(!openconnect_set_gp_host_id(vpninfo, "HOSTID"));
+		assert(!openconnect_set_cookie(vpninfo, "user=test&portal=portal&authcookie=fixture&computer=Phone&preferred-ip=192.0.2.5"));
+		assert(!gpst_build_getconfig_request(vpninfo, body));
+		if (i == 3) {
+			assert(strstr(body->data, "clientos=iOS"));
+			assert(strstr(body->data, "vpn-type=App%20Level%20VPN"));
+			assert(strstr(body->data, "client-ip=&client-ipv6=&serialno=&joined-domain="));
+			assert(strstr(body->data, "user=test") && strstr(body->data, "authcookie=fixture"));
+			assert(strstr(body->data, "preferred-ip=192.0.2.5"));
+			assert(!strstr(body->data, "host-id=") && !strstr(body->data, "clientgpversion=") && !strstr(body->data, "computer="));
+			buf_truncate(body);
+			vpninfo->ip_info.addr = strdup("192.0.2.6");
+			assert(!gpst_build_getconfig_request(vpninfo, body));
+			assert(strstr(body->data, "preferred-ip=192.0.2.6"));
+			assert(!strstr(body->data, "192.0.2.5"));
+			/* The connected HTTPS socket supplies the actual local client address. */
+			int fd = socket(AF_INET, SOCK_STREAM, 0);
+			struct sockaddr_in local = { .sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK) };
+			assert(fd >= 0 && !bind(fd, (struct sockaddr *)&local, sizeof(local)));
+			vpninfo->ssl_fd = fd;
+			buf_truncate(body);
+			assert(!gpst_build_getconfig_request(vpninfo, body));
+			assert(strstr(body->data, "client-ip=127.0.0.1&client-ipv6="));
+			vpninfo->ssl_fd = -1;
+			close(fd);
+		} else {
+			snprintf(expected, sizeof(expected),
+				"client-type=1&protocol-version=p1&internal=no&app-version=6.3.5-28&ipv6-support=yes"
+				"&clientos=%s&os-version=test-os&hmac-algo=sha1%%2c&enc-algo=aes-256-gcm%%2caes-128-gcm%%2caes-128-cbc%%2c"
+				"&clientgpversion=6.3.5-28&host-id=HOSTID&user=test&portal=portal&authcookie=fixture&computer=Phone&preferred-ip=192.0.2.5",
+				names[i]);
+			assert(!strcmp(body->data, expected));
+		}
+		buf_free(body);
+		openconnect_vpninfo_free(vpninfo);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	static const char key[] =
@@ -92,6 +144,7 @@ int main(int argc, char **argv)
 	int sockets[2], nlb, invalid, length;
 
 	assert(argc == 2);
+	getconfig_profile_parameters();
 	nlb = !strncmp(argv[1], "nlb-", 4);
 	invalid = !strcmp(argv[1], "regular-invalid") || !strcmp(argv[1], "regular-missing");
 	if (!strcmp(argv[1], "regular-address") || !strcmp(argv[1], "nlb-address"))

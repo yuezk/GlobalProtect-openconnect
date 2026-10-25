@@ -8,7 +8,7 @@ use pkcs8::{
 };
 use zeroize::Zeroizing;
 
-use super::{request::RequestIdentityError, traditional_key};
+use super::{certificate::traditional_key, request::RequestIdentityError};
 
 pub(super) enum TraditionalKeyFormat {
   Sec1Der,
@@ -174,7 +174,10 @@ fn decrypt(der: &[u8], passphrase: Option<&str>) -> anyhow::Result<SecretDocumen
     // PKCS#12 PBE-SHA1-3DES inside standalone PKCS#8 is not implemented by
     // RustCrypto. Only this known legacy scheme uses the optional executable.
     if algorithm == pkcs8::ObjectIdentifier::new_unwrap("1.2.840.113549.1.12.1.3") {
-      return super::legacy_pkcs8::decrypt(der, passphrase);
+      #[cfg(feature = "desktop")]
+      return super::certificate::legacy_pkcs8::decrypt(der, passphrase);
+      #[cfg(not(feature = "desktop"))]
+      return Err(RequestIdentityError::UnsupportedEncryption.into());
     }
     return Err(RequestIdentityError::UnsupportedEncryption.into());
   }

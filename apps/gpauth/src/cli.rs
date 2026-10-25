@@ -263,13 +263,10 @@ impl Cli {
 
   fn build_os_profile(&self) -> OsProfile {
     let mut builder = OsProfile::builder(ClientOs::from(self.os));
-    if let Some(host_id) = self.host_id.as_deref() {
-      builder = builder.host_id_override(host_id);
-    }
     if let Some(client_version) = self.client_version.as_deref() {
       builder = builder.client_version(client_version);
     }
-    builder.build()
+    gpapi::os_profile::desktop::collect_profile(builder, self.host_id.as_deref())
   }
 
   fn external_browser_requested(&self) -> bool {

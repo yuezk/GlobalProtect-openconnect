@@ -2,11 +2,13 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use gpapi::{
+  collection::{CollectionBudget, CollectionControl},
   gp_params::GpParams,
   os_profile::OsProfile,
-  process::collection::{CollectionBudget, CollectionControl},
   service::request::ConnectRequest,
-  session::{GatewaySession, GatewaySessions, network::PhysicalNetwork, transport::GatewayTransport},
+  session::{
+    desktop::GatewaySession, desktop::GatewaySessions, desktop::network::PhysicalNetwork, transport::GatewayTransport,
+  },
 };
 use tokio_util::sync::CancellationToken;
 
@@ -149,14 +151,17 @@ impl PreparedConnection {
   /// Lifecycle-only fixtures own no issued server sessions. Protocol ownership
   /// checks use actual gateway transports rather than this actor-state fixture.
   pub(crate) fn lifecycle_fixture(request: ConnectRequest) -> Self {
-    let profile = OsProfile::builder(gpapi::os_profile::ClientOs::Linux)
-      .host_identity(gpapi::os_profile::HostIdentity::from_parts(
-        "fixture".into(),
-        "fixture-host".into(),
-        "fixture-serial".into(),
-        "02:00:00:00:00:01".into(),
-      ))
-      .build();
+    let profile = gpapi::os_profile::desktop::collect_profile(
+      OsProfile::builder(gpapi::os_profile::ClientOs::Linux).host_identity(
+        gpapi::os_profile::desktop::identity_from_parts(
+          "fixture".into(),
+          "fixture-host".into(),
+          "fixture-serial".into(),
+          "02:00:00:00:00:01".into(),
+        ),
+      ),
+      None,
+    );
     Self {
       request,
       resources: Arc::new(ConnectionResources {
@@ -217,14 +222,17 @@ mod tests {
   #[tokio::test]
   async fn ordinary_tunnel_preparation_needs_no_physical_binding_or_resolver() {
     let gateway = Gateway::new("fixture".into(), "does-not-resolve.invalid".into());
-    let profile = OsProfile::builder(gpapi::os_profile::ClientOs::Linux)
-      .host_identity(gpapi::os_profile::HostIdentity::from_parts(
-        "fixture".into(),
-        "fixture-host".into(),
-        "fixture-serial".into(),
-        "02:00:00:00:00:01".into(),
-      ))
-      .build();
+    let profile = gpapi::os_profile::desktop::collect_profile(
+      OsProfile::builder(gpapi::os_profile::ClientOs::Linux).host_identity(
+        gpapi::os_profile::desktop::identity_from_parts(
+          "fixture".into(),
+          "fixture-host".into(),
+          "fixture-serial".into(),
+          "02:00:00:00:00:01".into(),
+        ),
+      ),
+      None,
+    );
     let request = super::super::test_connect_request(ConnectInfo::new("portal.example.com".into(), gateway, vec![]))
       .with_os_profile(&profile)
       .with_disable_ipv6(true);

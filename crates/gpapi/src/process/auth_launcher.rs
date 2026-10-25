@@ -431,7 +431,9 @@ mod tests {
 
   #[test]
   fn os_profile_sets_os_from_profile() {
-    let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
+    let profile = OsProfileBuilder::new(ClientOs::Linux)
+      .client_version("6.0.0")
+      .build(crate::os_profile::test_snapshot());
 
     let launcher = SamlAuthLauncher::new("portal.example.com").os_profile(&profile);
 
@@ -440,7 +442,9 @@ mod tests {
 
   #[test]
   fn os_profile_sets_host_id_from_profile_runtime_identity() {
-    let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
+    let profile = OsProfileBuilder::new(ClientOs::Linux)
+      .client_version("6.0.0")
+      .build(crate::os_profile::test_snapshot());
 
     let launcher = SamlAuthLauncher::new("portal.example.com").os_profile(&profile);
 
@@ -449,7 +453,9 @@ mod tests {
 
   #[test]
   fn os_profile_sets_client_version_from_profile() {
-    let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
+    let profile = OsProfileBuilder::new(ClientOs::Linux)
+      .client_version("6.0.0")
+      .build(crate::os_profile::test_snapshot());
 
     let launcher = SamlAuthLauncher::new("portal.example.com").os_profile(&profile);
 

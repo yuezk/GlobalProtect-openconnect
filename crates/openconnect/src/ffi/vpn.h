@@ -48,6 +48,7 @@ typedef struct vpn_options {
 	const char *interface;
 	const int script_tun;
 	const struct openconnect_script_tun_launch *script_tun_launch;
+	const int packet_fd;
 
 	const char *certificate;
 	const char *sslkey;

@@ -162,6 +162,7 @@ impl GpParams {
 
   pub(crate) fn client_builder(&self) -> anyhow::Result<ClientBuilder> {
     let mut builder = Client::builder()
+      .tls_info(true)
       .danger_accept_invalid_certs(self.ignore_tls_errors)
       .user_agent(self.user_agent());
     if let Some(identity) = &self.prepared_identity {
@@ -322,10 +323,9 @@ mod tests {
     assert!(params.client_identity().is_none());
     assert!(params.certificate.is_none());
   }
-  use crate::os_profile::runtime_client_os;
 
   fn profile(client_os: ClientOs) -> OsProfile {
-    OsProfile::builder(client_os).build()
+    OsProfile::builder(client_os).build(crate::os_profile::test_snapshot())
   }
 
   #[test]
@@ -346,7 +346,7 @@ mod tests {
   fn builder_keeps_explicit_client_version() {
     let profile = OsProfile::builder(ClientOs::Mac)
       .client_version("6.2.9-1".to_string())
-      .build();
+      .build(crate::os_profile::test_snapshot());
     let params = GpParams::builder(profile).build();
 
     assert_eq!(params.client_version(), Some("6.2.9-1"));
@@ -355,7 +355,7 @@ mod tests {
   #[test]
   fn builder_uses_os_profile_version_when_unspecified() {
     let params = GpParams::builder(profile(ClientOs::Mac)).build();
-    let default_os_version = ClientOs::Mac.default_os_version();
+    let default_os_version = crate::os_profile::defaults::os_version(ClientOs::Mac);
 
     assert_eq!(params.os_version(), Some(default_os_version.as_str()));
   }
@@ -370,13 +370,18 @@ mod tests {
 
   #[test]
   fn delegates_identity_to_os_profile() {
-    let identity = HostIdentity::new(
+    let identity = HostIdentity::from_parts(
       "test-computer".to_string(),
       "test-host-id".to_string(),
       "test-serial".to_string(),
       "aa:bb:cc:dd:ee:ff".to_string(),
     );
-    let params = GpParams::builder(OsProfile::builder(ClientOs::Linux).host_identity(identity).build()).build();
+    let params = GpParams::builder(
+      OsProfile::builder(ClientOs::Linux)
+        .host_identity(identity)
+        .build(crate::os_profile::test_snapshot()),
+    )
+    .build();
 
     assert!(!params.host_id().is_empty());
     assert_eq!(params.host_identity().host_id(), "test-host-id");
@@ -388,7 +393,7 @@ mod tests {
   fn builder_accepts_pre_built_os_profile() {
     let profile = OsProfile::builder(ClientOs::Mac)
       .computer_name_override("MyMac")
-      .build();
+      .build(crate::os_profile::test_snapshot());
     let expected_os_version = profile.os_version().to_string();
 
     let params = GpParams::builder(profile).build();
@@ -404,7 +409,7 @@ mod tests {
   fn delegates_computer_to_os_profile() {
     let profile = OsProfile::builder(ClientOs::Mac)
       .computer_name_override("MyComputer")
-      .build();
+      .build(crate::os_profile::test_snapshot());
     let params = GpParams::builder(profile).build();
 
     assert_eq!(params.computer(), "MyComputer");
@@ -421,7 +426,7 @@ mod tests {
 
   #[test]
   fn delegates_host_identity_to_os_profile() {
-    let identity = HostIdentity::new(
+    let identity = HostIdentity::from_parts(
       "delegated-computer".to_string(),
       "delegated-host".to_string(),
       "delegated-serial".to_string(),
@@ -430,7 +435,7 @@ mod tests {
     let params = GpParams::builder(
       OsProfile::builder(ClientOs::Linux)
         .host_identity(identity.clone())
-        .build(),
+        .build(crate::os_profile::test_snapshot()),
     )
     .build();
 
@@ -445,7 +450,7 @@ mod tests {
 
   #[test]
   fn builder_uses_provided_os_profile() {
-    let identity = HostIdentity::new(
+    let identity = HostIdentity::from_parts(
       "identity-host".to_string(),
       "host-7".to_string(),
       "serial-7".to_string(),
@@ -455,13 +460,16 @@ mod tests {
       .computer_name_override("linux-host")
       .client_version("6.0.0-1".to_string())
       .host_identity(identity)
-      .build();
+      .build(crate::os_profile::test_snapshot());
     let params = GpParams::builder(profile).build();
 
     let profile = params.os_profile();
     assert_eq!(profile.client_os(), ClientOs::Linux);
     assert_eq!(profile.computer(), "linux-host");
-    assert_eq!(profile.os_version(), ClientOs::Linux.default_os_version());
+    assert_eq!(
+      profile.os_version(),
+      crate::os_profile::defaults::os_version(ClientOs::Linux)
+    );
     assert_eq!(profile.client_version(), "6.0.0-1");
     assert_eq!(profile.host_identity().host_id(), "host-7");
     assert_eq!(profile.host_identity().serialno(), "serial-7");
@@ -475,7 +483,7 @@ mod tests {
 
   #[test]
   fn try_from_gp_params_constructs_reqwest_client() {
-    let params = GpParams::builder(profile(runtime_client_os())).build();
+    let params = GpParams::builder(profile(ClientOs::Mac)).build();
     let client = Client::try_from(&params);
 
     assert!(client.is_ok(), "Client construction should succeed with default params");
@@ -483,7 +491,7 @@ mod tests {
 
   #[test]
   fn try_from_gp_params_with_ignore_tls_errors() {
-    let params = GpParams::builder(profile(runtime_client_os()))
+    let params = GpParams::builder(profile(ClientOs::Mac))
       .ignore_tls_errors(true)
       .build();
     let client = Client::try_from(&params);
@@ -497,9 +505,9 @@ mod tests {
   #[test]
   fn try_from_gp_params_with_custom_user_agent() {
     let params = GpParams::builder(
-      OsProfile::builder(runtime_client_os())
+      OsProfile::builder(ClientOs::Mac)
         .user_agent("custom-agent/1.0")
-        .build(),
+        .build(crate::os_profile::test_snapshot()),
     )
     .build();
     let client = Client::try_from(&params);
@@ -511,7 +519,7 @@ mod tests {
   fn try_from_gp_params_with_invalid_certificate_returns_error() {
     // When a certificate path is provided but the file does not exist or is malformed,
     // Client construction should fail rather than silently succeed.
-    let params = GpParams::builder(profile(runtime_client_os()))
+    let params = GpParams::builder(profile(ClientOs::Mac))
       .certificate("/nonexistent/path/to/cert.pem".to_string())
       .build();
     let client = Client::try_from(&params);
@@ -526,7 +534,7 @@ mod tests {
 
   #[test]
   fn user_agent_delegates_to_os_profile_for_default_build() {
-    let params = GpParams::builder(profile(runtime_client_os())).build();
+    let params = GpParams::builder(profile(ClientOs::Mac)).build();
 
     assert_eq!(
       params.user_agent(),
@@ -537,14 +545,21 @@ mod tests {
 
   #[test]
   fn builder_uses_profile_user_agent() {
-    let params = GpParams::builder(OsProfile::builder(runtime_client_os()).user_agent("custom").build()).build();
+    let params = GpParams::builder(
+      OsProfile::builder(ClientOs::Mac)
+        .user_agent("custom")
+        .build(crate::os_profile::test_snapshot()),
+    )
+    .build();
 
     assert_eq!(params.user_agent(), "custom");
   }
 
   #[test]
   fn builder_os_profile_without_user_agent_delegates_to_profile() {
-    let profile = OsProfile::builder(ClientOs::Mac).client_version("6.1.0").build();
+    let profile = OsProfile::builder(ClientOs::Mac)
+      .client_version("6.1.0")
+      .build(crate::os_profile::test_snapshot());
     let expected_ua = profile.user_agent().to_string();
 
     let params = GpParams::builder(profile).build();
@@ -557,7 +572,7 @@ mod tests {
     let profile = OsProfile::builder(ClientOs::Mac)
       .client_version("6.1.0")
       .user_agent("override")
-      .build();
+      .build(crate::os_profile::test_snapshot());
     let params = GpParams::builder(profile).build();
 
     assert_eq!(params.user_agent(), "override");
@@ -566,9 +581,9 @@ mod tests {
   #[test]
   fn try_from_gp_params_succeeds_with_delegated_user_agent() {
     let params = GpParams::builder(
-      OsProfile::builder(runtime_client_os())
+      OsProfile::builder(ClientOs::Mac)
         .user_agent("delegated-agent/2.0")
-        .build(),
+        .build(crate::os_profile::test_snapshot()),
     )
     .build();
     let client = Client::try_from(&params);
@@ -602,7 +617,7 @@ mod tests {
         client_os in arb_client_os(),
         user_agent_override in proptest::option::of("[a-zA-Z0-9/_.-]{1,30}"),
       ) {
-        let identity = HostIdentity::new(
+        let identity = HostIdentity::from_parts(
           "prop-computer".to_string(),
           "prop-host".to_string(),
           "prop-serial".to_string(),
@@ -616,7 +631,7 @@ mod tests {
         if let Some(ref ua) = user_agent_override {
           profile_builder = profile_builder.user_agent(ua);
         }
-        let params = GpParams::builder(profile_builder.build()).build();
+        let params = GpParams::builder(profile_builder.build(crate::os_profile::test_snapshot())).build();
 
         prop_assert_eq!(
           params.user_agent(),
@@ -634,7 +649,7 @@ mod tests {
     proptest! {
       #[test]
       fn builder_uses_profile_user_agent(ua in "[^\\s]{1,50}") {
-        let profile = OsProfile::builder(runtime_client_os()).user_agent(&ua).build();
+        let profile = OsProfile::builder(ClientOs::Mac).user_agent(&ua).build(crate::os_profile::test_snapshot());
         let params = GpParams::builder(profile).build();
 
         prop_assert_eq!(params.user_agent(), ua.as_str());

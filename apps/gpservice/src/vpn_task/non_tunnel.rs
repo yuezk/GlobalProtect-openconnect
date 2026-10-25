@@ -1,10 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
-use gpapi::process::collection::CollectionControl;
+use gpapi::collection::CollectionControl;
 use gpapi::session::{
   GatewaySessionSummary, MaintenanceState, SessionEndReason,
-  non_tunnel::{SessionCallbacks, SessionExit, maintain_non_tunnel_sessions},
+  desktop::non_tunnel::{SessionCallbacks, SessionExit, maintain_non_tunnel_sessions},
 };
 use log::warn;
 use tokio::sync::{mpsc, watch};

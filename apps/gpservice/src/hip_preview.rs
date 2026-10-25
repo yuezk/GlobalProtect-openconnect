@@ -158,12 +158,12 @@ fn generate(
     request.host_id.as_ref().is_none_or(|id| id.len() <= 256),
     "Invalid HIP host ID"
   );
-  let budget = gpapi::process::collection::CollectionBudget::new(PREVIEW_TIMEOUT);
+  let budget = gpapi::collection::CollectionBudget::new(PREVIEW_TIMEOUT);
   let check = || {
     if cancellation.is_cancelled() {
       return Err(io::Error::new(io::ErrorKind::Interrupted, "HIP preview cancelled"));
     }
-    gpapi::process::collection::CollectionControl::check(&budget)
+    gpapi::collection::CollectionControl::check(&budget)
   };
   check()?;
   let profile = crate::hip_source::profile(
@@ -227,7 +227,7 @@ mod tests {
       },
       edited_report: None,
       desktop_uid: None,
-      identity: HostIdentity::from_parts(
+      identity: gpapi::os_profile::desktop::identity_from_parts(
         "device".into(),
         "host".into(),
         "serial".into(),

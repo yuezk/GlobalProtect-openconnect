@@ -52,9 +52,13 @@ static void observe_statistics(void *private_data, const struct oc_stats *stats)
 }
 
 /* Validate the peer certificate */
-static int validate_peer_cert(__attribute__((unused)) void *_vpninfo,
+static int validate_peer_cert(void *private_data,
 			      const char *reason)
 {
+	struct vpn_context *context = private_data;
+	if (context->options->servercert)
+		return openconnect_check_peer_cert_hash(context->vpninfo,
+			context->options->servercert);
 	INFO("Accepting the server certificate though %s", reason);
 	return 0;
 }
@@ -82,7 +86,10 @@ static void setup_tun_handler(void *private_data)
 	struct openconnect_info *_vpninfo = context->vpninfo;
 	const vpn_options *options = context->options;
 	int ret;
-	if (options->script_tun) {
+	if (options->packet_fd >= 0) {
+		int fd = dup(options->packet_fd);
+		ret = fd < 0 ? -errno : openconnect_setup_tun_fd_with_config(_vpninfo, fd);
+	} else if (options->script_tun) {
 		const struct openconnect_script_tun_launch *launch = options->script_tun_launch;
 		if (launch) {
 			ret = openconnect_setup_tun_script_exec(_vpninfo, launch);
@@ -156,6 +163,9 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	}
 
 	context.vpninfo = vpninfo;
+	/* A supplied pin is authoritative even when the system would trust a CA. */
+	if (options->servercert)
+		openconnect_set_system_trust(vpninfo, 0);
 	openconnect_set_tunnel_handler(vpninfo, observe_tunnel);
 	openconnect_set_reconnected_handler(vpninfo, observe_reconnected);
 	openconnect_set_stats_handler(vpninfo, observe_statistics);

@@ -307,6 +307,7 @@ fn pbes2_legacy_ciphers_remain_supported() {
 }
 
 #[test]
+#[cfg(feature = "desktop")]
 fn legacy_pkcs8_conversion_preserves_the_key_and_password_errors() {
   let identity = load("rsa-cert.pem", "rsa-pbes1-3des.pem", Some(PASSWORD)).unwrap();
   assert_eq!(
@@ -326,6 +327,7 @@ fn legacy_pkcs8_conversion_preserves_the_key_and_password_errors() {
 
 #[test]
 #[cfg(not(target_os = "macos"))]
+#[cfg(feature = "desktop")]
 fn legacy_pkcs8_matches_previous_linux_openssl_processing() {
   let encrypted = fs::read(fixture("rsa-pbes1-3des.pem")).unwrap();
   let previous = openssl::pkey::PKey::private_key_from_pem_passphrase(&encrypted, PASSWORD.as_bytes())
@@ -338,6 +340,7 @@ fn legacy_pkcs8_matches_previous_linux_openssl_processing() {
 }
 
 #[test]
+#[cfg(feature = "desktop")]
 fn legacy_pkcs8_converter_failures_are_terminal_and_modern_keys_need_no_executable() {
   use std::os::unix::fs::PermissionsExt;
 
@@ -407,6 +410,7 @@ fn legacy_pkcs8_converter_failures_are_terminal_and_modern_keys_need_no_executab
 }
 
 #[test]
+#[cfg(feature = "desktop")]
 fn legacy_converter_reports_its_password_length_limit_without_requesting_a_retry() {
   let password = "x".repeat(1024);
   let encrypted = fs::read(fixture("rsa-pbes1-3des-password-1024.pem")).unwrap();
@@ -435,6 +439,7 @@ fn legacy_converter_reports_its_password_length_limit_without_requesting_a_retry
 }
 
 #[test]
+#[cfg(feature = "desktop")]
 fn legacy_conversion_keeps_original_files_and_rejects_line_breaks_in_passwords() {
   let original = fs::read(fixture("rsa-pbes1-3des.pem")).unwrap();
   for password in [
@@ -705,4 +710,16 @@ fn mismatched_certificate_key_is_rejected_before_request_client_creation() {
       .to_string()
       .contains("Check that the private key matches the certificate")
   );
+}
+
+#[cfg(not(feature = "desktop"))]
+#[test]
+fn portable_legacy_pkcs8_is_explicitly_unsupported() {
+  for password in [None, Some(PASSWORD)] {
+    let error = load("rsa-cert.pem", "rsa-pbes1-3des.pem", password).unwrap_err();
+    assert!(matches!(
+      error.downcast_ref::<RequestIdentityError>(),
+      Some(RequestIdentityError::UnsupportedEncryption)
+    ));
+  }
 }
