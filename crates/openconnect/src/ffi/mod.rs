@@ -44,7 +44,6 @@ pub(crate) struct ConnectOptions {
   pub interface: *const c_char,
   pub script_tun: u32,
   pub script_tun_launch: *const ScriptTunLaunchRaw,
-  pub packet_fd: c_int,
 
   pub certificate: *const c_char,
   pub sslkey: *const c_char,

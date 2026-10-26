@@ -86,10 +86,7 @@ static void setup_tun_handler(void *private_data)
 	struct openconnect_info *_vpninfo = context->vpninfo;
 	const vpn_options *options = context->options;
 	int ret;
-	if (options->packet_fd >= 0) {
-		int fd = dup(options->packet_fd);
-		ret = fd < 0 ? -errno : openconnect_setup_tun_fd_with_config(_vpninfo, fd);
-	} else if (options->script_tun) {
+	if (options->script_tun) {
 		const struct openconnect_script_tun_launch *launch = options->script_tun_launch;
 		if (launch) {
 			ret = openconnect_setup_tun_script_exec(_vpninfo, launch);

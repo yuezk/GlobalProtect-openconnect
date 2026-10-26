@@ -151,7 +151,6 @@ pub struct Vpn {
   interface: Option<CString>,
   script_tun: bool,
   script_tun_launch: Option<ScriptTunLaunch>,
-  packet_endpoint: Option<OwnedFd>,
 
   certificate: Option<CString>,
   sslkey: Option<CString>,
@@ -315,7 +314,6 @@ impl Vpn {
       interface: Self::option_to_ptr(&self.interface),
       script_tun: self.script_tun as u32,
       script_tun_launch: std::ptr::null(),
-      packet_fd: self.packet_endpoint.as_ref().map_or(-1, AsRawFd::as_raw_fd),
 
       certificate: Self::option_to_ptr(&self.certificate),
       sslkey: Self::option_to_ptr(&self.sslkey),
@@ -384,7 +382,6 @@ pub struct VpnBuilder {
   interface: Option<String>,
   script_tun: bool,
   script_tun_launch: Option<ScriptTunLaunch>,
-  packet_endpoint: Option<OwnedFd>,
 
   user_agent: Option<String>,
   os: Option<String>,
@@ -396,7 +393,6 @@ pub struct VpnBuilder {
   certificate: Option<String>,
   sslkey: Option<String>,
   key_password: Option<String>,
-  servercert: Option<String>,
 
   hip_source: Arc<HipSource>,
 
@@ -421,7 +417,6 @@ impl VpnBuilder {
       interface: None,
       script_tun: false,
       script_tun_launch: None,
-      packet_endpoint: None,
 
       user_agent: None,
       os: None,
@@ -433,7 +428,6 @@ impl VpnBuilder {
       certificate: None,
       sslkey: None,
       key_password: None,
-      servercert: None,
 
       hip_source: Arc::new(HipSource::Disabled),
 
@@ -445,16 +439,6 @@ impl VpnBuilder {
       dpd_interval: 0,
       no_xmlpost: false,
     }
-  }
-
-  /// Use an application-owned packet descriptor. OpenConnect borrows a duplicate
-  /// during connect; this owner remains alive until the Vpn is dropped. Apple/BSD
-  /// endpoints use the native four-byte, network-order address-family prefix.
-  /// Requires callback configuration and a SHA-256 server public-key pin.
-  pub fn packet_endpoint(mut self, endpoint: OwnedFd, server_pin: String) -> Self {
-    self.packet_endpoint = Some(endpoint);
-    self.servercert = Some(server_pin);
-    self
   }
 
   pub fn script<T: Into<Option<String>>>(mut self, script: T) -> Self {
@@ -634,24 +618,6 @@ impl VpnBuilder {
   }
 
   pub fn build(self) -> Result<Vpn, VpnError> {
-    if self.packet_endpoint.is_some() {
-      let pin = self.servercert.as_deref().unwrap_or_default();
-      if self.network_configuration_handler.is_none()
-        || self.interface.is_some()
-        || self.script.is_some()
-        || self.script_tun
-        || self.script_tun_launch.is_some()
-      {
-        return Err(VpnError::new(
-          "Packet endpoint requires callback configuration and no device/script options".into(),
-        ));
-      }
-      if !pin.starts_with("pin-sha256:") || pin.len() != 55 || pin.contains('\0') {
-        return Err(VpnError::new(
-          "Packet endpoint requires a pin-sha256 server public-key fingerprint".into(),
-        ));
-      }
-    }
     if self.script_tun_launch.is_some() && !self.script_tun {
       return Err(VpnError::new("Child identity requires script-tun".into()));
     }
@@ -677,12 +643,11 @@ impl VpnBuilder {
       interface: self.interface.as_deref().map(Self::to_cstring),
       script_tun: self.script_tun,
       script_tun_launch: self.script_tun_launch,
-      packet_endpoint: self.packet_endpoint,
 
       certificate: self.certificate.as_deref().map(Self::to_cstring),
       sslkey: self.sslkey.as_deref().map(Self::to_cstring),
       key_password: self.key_password.as_deref().map(Self::to_cstring),
-      servercert: self.servercert.as_deref().map(Self::to_cstring),
+      servercert: None,
 
       hip_source: self.hip_source,
 
@@ -810,7 +775,6 @@ mod tests {
       interface: None,
       script_tun: false,
       script_tun_launch: None,
-      packet_endpoint: None,
       certificate: None,
       sslkey: None,
       key_password: None,
