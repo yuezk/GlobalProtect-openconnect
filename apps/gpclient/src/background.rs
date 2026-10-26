@@ -2,6 +2,7 @@
 //! No process is forked after authentication or OpenConnect has started its threads.
 
 use std::{
+  cell::RefCell,
   ffi::OsString,
   fs::{File, OpenOptions},
   io::{self, Write},
@@ -27,7 +28,8 @@ use tokio::{io::AsyncReadExt, process::Command};
 const READY: u8 = 1;
 
 pub(crate) struct BackgroundWorker {
-  ready: UnixStream,
+  // Consumed after detachment; later tunnels stay in the same background session.
+  ready: RefCell<Option<UnixStream>>,
   log: File,
   input: File,
 }
@@ -82,10 +84,17 @@ impl BackgroundWorker {
       "Background log must not be readable or writable by other users"
     );
     let input = File::open("/dev/null")?;
-    Ok(Self { ready, log, input })
+    Ok(Self {
+      ready: RefCell::new(Some(ready)),
+      log,
+      input,
+    })
   }
 
   pub(crate) fn redirect_stdio(&self) -> anyhow::Result<BackgroundStdio> {
+    if self.ready.borrow().is_none() {
+      return Ok(BackgroundStdio { saved: None });
+    }
     io::stdout().flush()?;
     io::stderr().flush()?;
     let save = |fd| -> anyhow::Result<OwnedFd> {
@@ -107,13 +116,18 @@ impl BackgroundWorker {
   }
 
   pub(crate) fn detach(&self, stdio: &mut BackgroundStdio) -> anyhow::Result<()> {
+    let mut ready = self.ready.borrow_mut();
+    let Some(socket) = ready.as_mut() else {
+      return Ok(());
+    };
     // The worker inherited the launcher's foreground group, so it can prompt normally.
     // It becomes a session leader only when sign-in and tunnel configuration are done.
     setsid().context("Cannot detach the VPN session from the terminal")?;
-    (&self.ready)
+    socket
       .write_all(&[READY])
       .context("Background launcher exited before tunnel setup")?;
     stdio.saved.take();
+    ready.take();
     Ok(())
   }
 }
@@ -205,12 +219,13 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn detached_worker_survives_launcher_and_disconnects_by_pid() {
+  async fn detached_worker_reconnects_after_launcher_exits() {
     let directory = tempfile::tempdir().unwrap();
     tokio::time::timeout(Duration::from_secs(5), launch(fixture(directory.path()), &[]))
       .await
       .unwrap()
       .unwrap();
+    std::fs::write(directory.path().join("reconnect"), "").unwrap();
     let pid = std::fs::read_to_string(directory.path().join("pid"))
       .unwrap()
       .parse::<i32>()
@@ -222,18 +237,19 @@ mod tests {
       "Worker must own a terminal-independent session"
     );
     kill(pid, None).unwrap();
-    tokio::time::timeout(Duration::from_secs(5), async {
+    let reconnected = tokio::time::timeout(Duration::from_secs(5), async {
       while !std::fs::read_to_string(directory.path().join("worker.log"))
         .unwrap()
-        .contains("helper-output")
+        .contains("reconnected-output")
       {
         tokio::time::sleep(Duration::from_millis(10)).await;
       }
     })
-    .await
-    .unwrap();
+    .await;
     let log = std::fs::read_to_string(directory.path().join("worker.log")).unwrap();
+    assert!(reconnected.is_ok(), "Worker did not reconnect:\n{log}");
     assert!(log.contains("failed-attempt-output"));
+    assert!(log.contains("helper-output"));
     assert!(!log.contains("restored-foreground-output"));
     #[derive(clap::Parser)]
     struct Disconnect {
@@ -295,8 +311,20 @@ mod tests {
     worker.detach(&mut stdio).unwrap();
     println!("detached-output");
     io::stdout().flush().unwrap();
-    interrupt.recv().await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+      while !directory.join("reconnect").exists() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+      }
+    })
+    .await
+    .unwrap();
     helper.wait().unwrap();
+    let mut stdio = worker.redirect_stdio().unwrap();
+    worker.detach(&mut stdio).unwrap();
+    assert_eq!(getsid(None).unwrap(), getpid());
+    println!("reconnected-output");
+    io::stdout().flush().unwrap();
+    interrupt.recv().await;
     std::fs::write(directory.join("stopped"), "stopped").unwrap();
   }
 }
