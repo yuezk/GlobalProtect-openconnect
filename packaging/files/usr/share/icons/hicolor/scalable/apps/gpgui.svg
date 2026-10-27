@@ -1,60 +1,55 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="ocean" x1="245" y1="170" x2="770" y2="770" gradientUnits="userSpaceOnUse">
+<defs>
+<linearGradient id="ocean" x1="210.49524" y1="190.80952" x2="802.16190" y2="867.00000" gradientUnits="userSpaceOnUse">
       <stop stop-color="#579bc1"/>
       <stop offset=".52" stop-color="#438fbd"/>
       <stop offset="1" stop-color="#2f719e"/>
     </linearGradient>
-    <linearGradient id="land" x1="260" y1="190" x2="750" y2="735" gradientUnits="userSpaceOnUse">
+<linearGradient id="land" x1="227.40000" y1="213.34921" x2="779.62222" y2="827.55556" gradientUnits="userSpaceOnUse">
       <stop stop-color="#56c78a"/>
       <stop offset=".55" stop-color="#3bbf78"/>
       <stop offset="1" stop-color="#279b5d"/>
     </linearGradient>
-    <linearGradient id="lock" x1="385" y1="400" x2="650" y2="700" gradientUnits="userSpaceOnUse">
+
+<filter id="globe-shadow" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="7" result="blur"/>
+  <feOffset in="blur" dy="6" result="offsetBlur"/>
+  <feFlood flood-color="#174D6F" flood-opacity="0.14" result="shadowColor"/>
+  <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
+  <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>
+
+
+<linearGradient id="shipped-lock" x1="385" y1="400" x2="650" y2="700" gradientUnits="userSpaceOnUse">
       <stop stop-color="#f3b84c"/>
       <stop offset=".55" stop-color="#e8a12f"/>
       <stop offset="1" stop-color="#d4871e"/>
     </linearGradient>
-    <clipPath id="globe-clip">
-      <circle cx="512" cy="455" r="315"/>
-    </clipPath>
-    <!-- Use SVG 1.1 primitives: feDropShadow needs librsvg >= 2.55.91. -->
-    <filter id="globe-shadow" x="150" y="90" width="730" height="760" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="12" result="blur"/>
-      <feOffset in="blur" dx="0" dy="8" result="offsetBlur"/>
-      <feFlood flood-color="#174d6f" flood-opacity=".14" result="shadowColor"/>
-      <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
-      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="lock-shadow" x="280" y="210" width="470" height="540" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<filter id="shipped-lock-shadow" x="280" y="210" width="470" height="540" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feGaussianBlur in="SourceAlpha" stdDeviation="18" result="blur"/>
       <feOffset in="blur" dx="0" dy="18" result="offsetBlur"/>
       <feFlood flood-color="#70430c" flood-opacity=".2" result="shadowColor"/>
       <feComposite in="shadowColor" in2="offsetBlur" operator="in" result="shadow"/>
       <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
+    </filter></defs>
+<g transform="translate(512 512) scale(1.1535211267605634) translate(-511.4 -512)">
+<g filter="url(#globe-shadow)">
+<circle cx="511.4" cy="512" r="355" fill="url(#ocean)"/>
+  <path d="m341.5 202.8c-83.71 44.8-148.5 123-170.9 210.4 10.88 28.67 32.13 48.77 54.14 63.49 13.18 8.96 18.94 19.84 17.15 31.87-3.84 26.5-46.85 37.89-50.3 71.3-2.688 27.78 17.54 52.74 46.46 67.71 21.76 11.39 35.2 25.73 41.34 44.29 13.44 39.17 32.64 82.56 68.99 105.5 30.08 18.94 46.85 12.67 41.09-1.92-6.144-15.36-26.37-32.13-26.24-53.63 0.128-27.39 26.5-41.98 31.49-62.72v-87.3c-18.69-0.896-30.59-9.216-40.19-19.71-16.51-17.41-37.76-29.44-55.68-36.86-10.37-4.352-12.67-12.8-13.7-22.66-0.896-11.39-6.144-20.74-15.1-28.16-12.8-10.62-19.97-22.53-18.3-34.82 1.92-15.62 17.28-26.5 36.74-29.44 37.25-6.144 70.53-34.69 74.11-63.49 1.792-14.46-5.504-24.32-2.816-33.66 4.864-21.12 34.18-38.14 65.02-51.71 24.83-10.88 45.7-20.61 45.95-39.81 0.256-20.22-20.74-32.9-60.03-33.41-22.53 0.128-46.08 2.56-69.25 4.736z" fill="url(#land)"/>
+  <path d="m663.7 191.5c-50.43 5.376-89.34 38.4-89.34 68.61 0 26.75 27.78 42.88 62.98 46.98 31.36 3.712 48.9 15.36 49.79 34.18 0.896 20.74-17.15 34.18-16.77 51.71 0.512 36.35 51.84 71.04 107.4 71.17 31.74 0.128 62.59-11.39 79.74-28.54-24.32-107.8-99.2-199.3-193.8-244.1z" fill="url(#land)"/>
+  <path d="m866.2 532c-19.46-9.216-42.62-13.7-66.18-13.7-57.47 0-102.1 34.05-102.1 60.8 0 11.9 6.144 19.97 13.06 26.75 11.52 11.52 17.66 25.73 17.66 42.24 0 29.18-22.53 45.06-22.53 73.34 0 26.88 18.69 47.36 39.04 57.73 71.42-61.31 117.6-154.6 121.1-247.2z" fill="url(#land)"/>
 
-  <g transform="translate(512 512) scale(1.3) translate(-512 -455)">
-    <g filter="url(#globe-shadow)">
-      <circle cx="512" cy="455" r="315" fill="url(#ocean)"/>
-      <g clip-path="url(#globe-clip)" fill="url(#land)">
-        <path d="M177 326c74-121 177-185 302-190-13 51-49 84-105 98-4 45-32 79-86 101-37 17-75 14-111-9Z"/>
-        <path d="M564 135c129 18 229 103 273 220-69-3-121 15-157 54-51-14-83-50-95-107-38-36-45-92-21-167Z"/>
-        <path d="M189 467c63-39 125-34 187 16 57 25 73 73 48 144-45 90-108 146-189 166-58-88-73-197-46-326Z"/>
-        <path d="M612 572c78-38 157-18 238 59-45 89-122 144-231 164-20-67-22-122-7-165-22-17-22-36 0-58Z"/>
-      </g>
-      <circle cx="512" cy="455" r="308" fill="none" stroke="#9ccde2" stroke-width="11" stroke-opacity=".24"/>
-    </g>
-
-    <g transform="translate(512 490) scale(.82) translate(-512 -490)" filter="url(#lock-shadow)">
+</g>
+</g>
+<g transform="translate(512 512) scale(1.3) translate(-512 -455)">
+<g transform="translate(512 490) scale(.82) translate(-512 -490)" filter="url(#shipped-lock-shadow)">
       <path d="M405 429v-75c0-142 214-142 214 0v75" fill="none" stroke="#eef1f2" stroke-width="58" stroke-linecap="round"/>
-      <rect x="340" y="403" width="344" height="278" rx="62" fill="url(#lock)"/>
+      <rect x="340" y="403" width="344" height="278" rx="62" fill="url(#shipped-lock)"/>
       <rect x="346" y="409" width="332" height="266" rx="56" fill="none" stroke="#f7cb75" stroke-width="10" stroke-opacity=".3"/>
-      <g fill="#85500f" opacity=".78">
+      <g fill="#85500f" opacity=".78" transform="translate(512 550.5) scale(1.2) translate(-512 -550.5)">
         <path d="M501 538h22l16 69h-54Z"/>
         <circle cx="512" cy="521" r="27"/>
       </g>
     </g>
-  </g>
+</g>
 </svg>
