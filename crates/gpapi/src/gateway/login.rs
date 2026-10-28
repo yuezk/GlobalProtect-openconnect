@@ -101,7 +101,7 @@ impl GatewayLoginClient {
       context
         .client_ip()
         .map(str::to_owned)
-        .or_else(|| detect_local_ipv4(context.host()))
+        .or_else(|| self.origin.host_str().and_then(detect_local_ipv4))
     });
     let request = receive_gateway_login(
       &self.origin,
