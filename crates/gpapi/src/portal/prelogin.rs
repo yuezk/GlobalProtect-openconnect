@@ -176,7 +176,7 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams, options: PreloginOptio
 
   debug!("Prelogin response XML: {}", res_xml);
 
-  let prelogin = parse_res_xml(&res_xml, is_gateway).map_err(|err| {
+  let prelogin = parse_prelogin_response(&res_xml, is_gateway).map_err(|err| {
     warn!("Parse response error, response: {}", res_xml);
     PortalError::PreloginError(err.to_string())
   })?;
@@ -192,7 +192,8 @@ fn request_param<'a>(params: &'a crate::params::RequestParams, name: &str) -> Op
     .find_map(|(key, value)| (key == name).then_some(value.as_str()))
 }
 
-fn parse_res_xml(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
+/// Parse server authentication metadata without performing a network request.
+pub fn parse_prelogin_response(res_xml: &str, is_gateway: bool) -> anyhow::Result<Prelogin> {
   let root = Element::parse(res_xml.as_bytes())?;
 
   let status = root
