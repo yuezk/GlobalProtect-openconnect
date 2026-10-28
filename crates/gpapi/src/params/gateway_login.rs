@@ -134,7 +134,9 @@ fn resolve_server(input: &GatewayLoginInput) -> String {
 
 /// Attempt DNS resolution of a hostname to its first IPv4 address.
 fn resolve_to_ipv4(host: &str) -> Option<String> {
-  (host, 443)
+  let server = crate::utils::normalize_server(host).ok()?;
+  let server = reqwest::Url::parse(&server).ok()?;
+  (server.host_str()?, server.port_or_known_default()?)
     .to_socket_addrs()
     .ok()?
     .find(|addr| addr.ip().is_ipv4())
