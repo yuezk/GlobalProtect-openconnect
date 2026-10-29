@@ -66,10 +66,11 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           WORKFLOW_COMMIT: ${{ steps.build.outputs.workflow_commit }}
           ARTIFACT_NAME: ${{ steps.build.outputs.artifact }}
+          EXPECTED_GUI: tauri
         run: |
           set -euo pipefail
           metadata="$(python3 scripts/validate-macos-release.py release-assets \
-            --release-tag "$RELEASE_TAG" --workflow-commit "$WORKFLOW_COMMIT")"
+            --release-tag "$RELEASE_TAG" --workflow-commit "$WORKFLOW_COMMIT" --gui "$EXPECTED_GUI")"
           [[ "$ARTIFACT_NAME" == "macos-release-$(jq -r '.request_id' <<<"$metadata")" ]]
           {
             echo "gp_ref=$(jq -r '.gp_ref' <<<"$metadata")"

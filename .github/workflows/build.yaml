@@ -563,6 +563,8 @@ jobs:
     runs-on: ${{ vars.MACOS_RUNNER || 'macos-15' }}
     environment: macos-release
     timeout-minutes: 120
+    env:
+      MACOS_GUI: tauri
     steps:
       - name: Verify runner architecture
         run: test "$(uname -m)" = arm64
@@ -752,7 +754,7 @@ jobs:
             if [[ "$CHANNEL" == "snapshot" ]]; then
               export GPGUI_RELEASE_DEVTOOLS=1
             fi
-            source/gpgui/scripts/build-macos.sh dmg release
+            source/gpgui/scripts/build-macos.sh dmg release --gui "$MACOS_GUI"
           ) 2>&1 | awk '
             /^MACOS_STAGE: (Native dependencies|Components|Frontend|Application|Bundle|Bundle icons|Bundle metadata|Bundle licenses|Bundle libraries|Bundle frameworks|Bundle optimization|Signing|Validation|App notarization|Update archive|Disk image|Disk image notarization|Complete)$/ {
               print "::notice::" $0
@@ -789,9 +791,15 @@ jobs:
           BUILD_VERSION: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
+          set -euo pipefail
           GP_REF="$(git -C source/gp rev-parse HEAD)"
           GPGUI_REF="$(git -C source/gpgui rev-parse HEAD)"
-          export GP_REF GPGUI_REF
+          GUI="$(plutil -extract GPDesktopShell raw 'source/gpgui/target/release/bundle/macos/GP Connect.app/Contents/Info.plist')"
+          if [[ "$GUI" != "$MACOS_GUI" ]]; then
+            echo "Built desktop shell does not match the selected GUI" >&2
+            exit 1
+          fi
+          export GP_REF GPGUI_REF GUI
           python3 - <<'PYTHON'
           import hashlib
           import json
@@ -799,7 +807,7 @@ jobs:
           from pathlib import Path
           directory = Path("release-assets")
           metadata = {key.lower(): os.environ[key] for key in (
-              "CHANNEL", "RELEASE_TAG", "GP_REF", "GPGUI_REF", "REQUEST_ID", "BUILD_VERSION", "WORKFLOW_SHA")}
+              "CHANNEL", "RELEASE_TAG", "GP_REF", "GPGUI_REF", "REQUEST_ID", "BUILD_VERSION", "WORKFLOW_SHA", "GUI")}
           metadata["artifact_version"] = os.environ["MACOS_ARTIFACT_VERSION"]
           metadata["assets"] = {
               file.name: hashlib.sha256(file.read_bytes()).hexdigest()

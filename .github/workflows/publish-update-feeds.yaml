@@ -88,6 +88,7 @@ jobs:
       REQUESTED_ARCHIVE: ${{ inputs.archive_name }}
       FEED_URL: ${{ vars.SPARKLE_FEED_URL }}
       EXPECTED_TEAM_ID: ${{ vars.MACOS_TEAM_ID }}
+      EXPECTED_GUI: tauri
       UPDATES_WORKER_NAME: ${{ vars.UPDATES_WORKER_NAME || 'gp-updates' }}
       SPARKLE_VERSION: 2.9.2
       UPDATE_HIGHLIGHTS: ${{ inputs.highlights }}
@@ -284,6 +285,12 @@ jobs:
             exit 1
           fi
           file "$app/Contents/MacOS/gpgui" | grep -q 'arm64'
+
+          desktop_shell="$(plutil -extract GPDesktopShell raw "$app/Contents/Info.plist")"
+          if [[ "$desktop_shell" != "$EXPECTED_GUI" ]]; then
+            echo "Update archive desktop shell does not match the selected GUI" >&2
+            exit 1
+          fi
 
           feed_url="$(plutil -extract SUFeedURL raw "$app/Contents/Info.plist")"
           if [[ "$feed_url" != "$FEED_URL" ]]; then

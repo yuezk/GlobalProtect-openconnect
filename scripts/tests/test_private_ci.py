@@ -1,5 +1,6 @@
 import json
 import os
+import plistlib
 from pathlib import Path
 import re
 import subprocess
@@ -27,6 +28,41 @@ def run_block(path, step=None):
 
 
 class PrivateOutputTests(unittest.TestCase):
+    def test_macos_metadata_records_the_bundled_shell_and_rejects_a_different_one(self):
+        for gui in ('tauri', 'nsh'):
+            with self.subTest(gui=gui), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                tools = root / 'bin'
+                tools.mkdir()
+                git = tools / 'git'
+                git.write_text('#!/bin/sh\nprintf "%040d\\n" 1\n')
+                git.chmod(0o755)
+                plutil = tools / 'plutil'
+                plutil.write_text(f'#!{sys.executable}\nimport plistlib,sys\n'
+                                  'with open(sys.argv[-1], "rb") as file:\n'
+                                  '    print(plistlib.load(file)[sys.argv[2]])\n')
+                plutil.chmod(0o755)
+                info = root / 'source/gpgui/target/release/bundle/macos/GP Connect.app/Contents/Info.plist'
+                info.parent.mkdir(parents=True)
+                info.write_bytes(plistlib.dumps({'GPDesktopShell': gui}))
+                artifacts = root / 'release-assets'
+                artifacts.mkdir()
+                (artifacts / 'fixture.dmg').write_bytes(b'signed fixture')
+                env = dict(os.environ, PATH=f'{tools}:{os.environ["PATH"]}', MACOS_GUI='tauri',
+                           CHANNEL='stable', RELEASE_TAG='v3.2.0', REQUEST_ID='42.1.macos',
+                           BUILD_VERSION='42.1', WORKFLOW_SHA='a' * 40, MACOS_ARTIFACT_VERSION='3.2.0')
+                result = subprocess.run(['bash', '-e', '-c', run_block(
+                    '.github/workflows/build.yaml', 'Record build identity')],
+                    cwd=root, env=env, text=True, capture_output=True)
+                metadata = artifacts / 'release-build.json'
+                if gui == 'tauri':
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(metadata.read_text())['gui'], 'tauri')
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('desktop shell', result.stderr)
+                    self.assertFalse(metadata.exists())
+
     def test_private_checkout_supports_branch_tag_and_sha_without_retaining_token(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -78,7 +114,7 @@ class PrivateOutputTests(unittest.TestCase):
                     (root / 'updates').mkdir()
                     (root / 'updates/appcast.xml').write_text('fixture')
                     env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}',
-                               TEST_STATUS=str(status), CHANNEL='snapshot', GPGUI_BUILDER='fixture',
+                               TEST_STATUS=str(status), CHANNEL='snapshot', MACOS_GUI='tauri', GPGUI_BUILDER='fixture',
                                RUNNER_TEMP=str(root), UPDATES_WORKER_NAME='fixture',
                                PRIVATE_TOKEN='test-token', PRIVATE_REF='test-ref', PRIVATE_PATH='private')
                     result = subprocess.run(['bash', '-e', '-c', run_block(path, step)],

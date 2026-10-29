@@ -8,8 +8,10 @@ from pathlib import Path
 import re
 
 
-def validate(directory, release_tag, workflow_commit):
+def validate(directory, release_tag, workflow_commit, gui):
     metadata = json.loads((directory / "release-build.json").read_text())
+    if gui not in ("tauri", "nsh") or metadata.get("gui") != gui:
+        raise ValueError("Artifact desktop shell does not match the selected GUI")
     for name in ("gp_ref", "gpgui_ref", "workflow_sha"):
         if not re.fullmatch(r"[0-9a-f]{40}", metadata[name]):
             raise ValueError(f"Invalid {name}")
@@ -59,9 +61,10 @@ if __name__ == "__main__":
     parser.add_argument("directory", type=Path)
     parser.add_argument("--release-tag", required=True)
     parser.add_argument("--workflow-commit", required=True)
+    parser.add_argument("--gui", choices=("tauri", "nsh"), required=True)
     args = parser.parse_args()
     try:
-        result = validate(args.directory, args.release_tag, args.workflow_commit)
+        result = validate(args.directory, args.release_tag, args.workflow_commit, args.gui)
     except (ValueError, KeyError, OSError) as error:
         parser.exit(1, f"{error}\n")
     print(json.dumps(result))
