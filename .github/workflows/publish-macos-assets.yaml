@@ -15,7 +15,7 @@ on:
       expected_gui:
         description: 'Expected macOS shell in the selected build artifact'
         required: true
-        default: tauri
+        default: nsh
         type: choice
         options: [tauri, nsh]
 

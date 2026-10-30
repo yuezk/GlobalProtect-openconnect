@@ -29,7 +29,7 @@ on:
       macos_gui:
         description: 'macOS shell to build; NSH also runs its separate macOS/Linux checks'
         required: true
-        default: tauri
+        default: nsh
         type: choice
         options: [tauri, nsh]
       build_bsd:
@@ -198,7 +198,7 @@ jobs:
 
   check-nsh:
     needs: validate-inputs
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_macos && inputs.macos_gui == 'nsh' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_macos && inputs.macos_gui == 'nsh') || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_MACOS_ON_TAG == 'true') }}
     uses: ./.github/workflows/check-nsh.yaml
     with:
       gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
@@ -586,7 +586,7 @@ jobs:
     environment: macos-release
     timeout-minutes: 120
     env:
-      MACOS_GUI: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_gui || 'tauri' }}
+      MACOS_GUI: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_gui || 'nsh' }}
     steps:
       - name: Verify runner architecture
         run: test "$(uname -m)" = arm64
