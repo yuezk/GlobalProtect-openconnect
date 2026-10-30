@@ -26,6 +26,12 @@ on:
         required: true
         default: false
         type: boolean
+      macos_gui:
+        description: 'macOS shell to build; NSH also runs its separate macOS/Linux checks'
+        required: true
+        default: tauri
+        type: choice
+        options: [tauri, nsh]
       build_bsd:
         description: 'Build FreeBSD/OpenBSD packages for this run'
         required: true
@@ -189,6 +195,16 @@ jobs:
     - name: Run frontend and Rust unit tests as an ordinary user
       timeout-minutes: 80
       run: bash .ci/scripts/test-private-desktop.sh "$PWD/source"
+
+  check-nsh:
+    needs: validate-inputs
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_macos && inputs.macos_gui == 'nsh' }}
+    uses: ./.github/workflows/check-nsh.yaml
+    with:
+      gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
+      gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
 
   tarball:
     needs: validate-inputs
@@ -553,8 +569,14 @@ jobs:
 
   build-macos:
     name: build-macos
-    needs: [validate-inputs, test-gp, test-gpgui]
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_macos) || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_MACOS_ON_TAG == 'true') }}
+    needs: [validate-inputs, test-gp, test-gpgui, check-nsh]
+    if: >-
+      ${{ !cancelled() &&
+          needs.validate-inputs.result == 'success' &&
+          needs.test-gp.result == 'success' && needs.test-gpgui.result == 'success' &&
+          (needs.check-nsh.result == 'success' || needs.check-nsh.result == 'skipped') &&
+          ((github.event_name == 'workflow_dispatch' && inputs.build_macos) ||
+           (startsWith(github.ref, 'refs/tags/') && vars.BUILD_MACOS_ON_TAG == 'true')) }}
     permissions:
       contents: read
     concurrency:
@@ -564,7 +586,7 @@ jobs:
     environment: macos-release
     timeout-minutes: 120
     env:
-      MACOS_GUI: tauri
+      MACOS_GUI: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_gui || 'tauri' }}
     steps:
       - name: Verify runner architecture
         run: test "$(uname -m)" = arm64
@@ -672,6 +694,9 @@ jobs:
             ninja \
             pkgconf \
             python
+          if [[ "$MACOS_GUI" == nsh ]]; then
+            rustup toolchain install 1.97.0 --profile minimal
+          fi
 
       - name: Import signing identity
         env:

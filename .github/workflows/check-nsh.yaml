@@ -1,0 +1,135 @@
+name: Check NSH
+
+on:
+  workflow_dispatch:
+    inputs:
+      gp_ref:
+        description: 'Full GlobalProtect-openconnect commit SHA'
+        required: true
+        type: string
+      gpgui_ref:
+        description: 'Full gpgui commit SHA'
+        required: true
+        type: string
+
+  workflow_call:
+    inputs:
+      gp_ref:
+        required: true
+        type: string
+      gpgui_ref:
+        required: true
+        type: string
+    secrets:
+      GH_PAT:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: NSH (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-24.04
+          - platform: macos
+            runner: ${{ vars.MACOS_RUNNER || 'macos-15' }}
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - name: Require immutable source refs
+        env:
+          GP_REF: ${{ inputs.gp_ref }}
+          GPGUI_REF: ${{ inputs.gpgui_ref }}
+        run: |
+          [[ "$GP_REF" =~ ^[0-9a-f]{40}$ && "$GPGUI_REF" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Both source refs must be full commit SHAs."
+            exit 1
+          }
+
+      - name: Checkout GlobalProtect-openconnect
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.gp_ref }}
+          path: source/gp
+          submodules: recursive
+          persist-credentials: false
+      - name: Checkout CI helpers
+        uses: actions/checkout@v6
+        with:
+          path: .ci
+          persist-credentials: false
+      - name: Checkout gpgui
+        uses: ./.ci/.github/actions/checkout-private
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ inputs.gpgui_ref }}
+          path: source/gpgui
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake gettext libtool pkg-config \
+            clang libclang-dev libgtk-4-dev libicu-dev libxml2-dev libssl-dev \
+            libgnutls28-dev liblz4-dev libwayland-dev libxkbcommon-dev
+      - name: Install macOS dependencies
+        if: matrix.platform == 'macos'
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+        run: |
+          xcodebuild -version
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          brew install autoconf automake gettext libtool pkgconf gnutls libxml2 lz4 openssl@3
+          echo "$(brew --prefix gettext)/bin" >> "$GITHUB_PATH"
+          echo "ACLOCAL_PATH=$(brew --prefix gettext)/share/aclocal" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$(brew --prefix libxml2)/lib/pkgconfig:$(brew --prefix gnutls)/lib/pkgconfig" >> "$GITHUB_ENV"
+      - name: Install the NSH compiler
+        run: rustup toolchain install 1.97.0 --profile minimal
+      - name: Cache public crate downloads
+        uses: actions/cache@v5
+        with:
+          # Private source and build outputs stay out of the public cache.
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+          key: nsh-crates-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('source/gpgui/apps/desktop-nsh/Cargo.lock') }}
+          restore-keys: nsh-crates-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Check demo-free NSH production
+        timeout-minutes: 30
+        run: |
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::NSH production check failed; diagnostics suppressed."; fi' EXIT
+          (
+            set -euo pipefail
+            cd source/gpgui
+            cargo +1.97.0 check --manifest-path apps/desktop-nsh/Cargo.toml --locked --bin gp-connect-nsh
+          ) >/dev/null 2>&1
+          echo "NSH production check passed."
+      - name: Compile NSH tests
+        timeout-minutes: 30
+        run: |
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::NSH test compilation failed; diagnostics suppressed."; fi' EXIT
+          (
+            set -euo pipefail
+            cd source/gpgui
+            cargo +1.97.0 test --manifest-path apps/desktop-nsh/Cargo.toml --locked --features demo --no-run
+          ) >/dev/null 2>&1
+          echo "NSH test compilation passed."
+      - name: Run NSH tests
+        timeout-minutes: 10
+        run: |
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::NSH tests failed; diagnostics suppressed."; fi' EXIT
+          (
+            set -euo pipefail
+            cd source/gpgui
+            cargo +1.97.0 test --manifest-path apps/desktop-nsh/Cargo.toml --locked --features demo -- --test-threads=1
+          ) >/dev/null 2>&1
+          echo "NSH tests passed."

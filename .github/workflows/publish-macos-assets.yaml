@@ -12,6 +12,13 @@ on:
         required: true
         type: string
 
+      expected_gui:
+        description: 'Expected macOS shell in the selected build artifact'
+        required: true
+        default: tauri
+        type: choice
+        options: [tauri, nsh]
+
 concurrency:
   group: publish-macos-assets
   cancel-in-progress: false
@@ -66,7 +73,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           WORKFLOW_COMMIT: ${{ steps.build.outputs.workflow_commit }}
           ARTIFACT_NAME: ${{ steps.build.outputs.artifact }}
-          EXPECTED_GUI: tauri
+          EXPECTED_GUI: ${{ inputs.expected_gui }}
         run: |
           set -euo pipefail
           metadata="$(python3 scripts/validate-macos-release.py release-assets \
