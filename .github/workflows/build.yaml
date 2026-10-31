@@ -779,6 +779,7 @@ jobs:
       - name: Build macOS release artifacts
         env:
           CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+          GPGUI_GIT_COMMIT: ${{ needs.validate-inputs.outputs.gpgui_sha }}
           SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
           GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
         run: |
