@@ -107,30 +107,33 @@ jobs:
       - name: Check demo-free NSH production
         timeout-minutes: 30
         run: |
-          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::NSH production check failed; diagnostics suppressed."; fi' EXIT
+          diagnostics="$(mktemp)"
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::NSH production check failed; diagnostics suppressed."; python3 .ci/scripts/private-ci-diagnostics.py compile "$diagnostics" || true; fi; rm -f "$diagnostics"' EXIT
           (
             set -euo pipefail
             cd source/gpgui
             cargo +1.97.0 check --manifest-path apps/desktop-nsh/Cargo.toml --locked --bin gpgui-nsh
-          ) >/dev/null 2>&1
+          ) >"$diagnostics" 2>&1
           echo "NSH production check passed."
       - name: Compile NSH tests
         timeout-minutes: 30
         run: |
-          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::NSH test compilation failed; diagnostics suppressed."; fi' EXIT
+          diagnostics="$(mktemp)"
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::NSH test compilation failed; diagnostics suppressed."; python3 .ci/scripts/private-ci-diagnostics.py compile "$diagnostics" || true; fi; rm -f "$diagnostics"' EXIT
           (
             set -euo pipefail
             cd source/gpgui
             cargo +1.97.0 test --manifest-path apps/desktop-nsh/Cargo.toml --locked --features demo --no-run
-          ) >/dev/null 2>&1
+          ) >"$diagnostics" 2>&1
           echo "NSH test compilation passed."
       - name: Run NSH tests
         timeout-minutes: 10
         run: |
-          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::NSH tests failed; diagnostics suppressed."; fi' EXIT
+          diagnostics="$(mktemp)"
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::NSH tests failed; diagnostics suppressed."; python3 .ci/scripts/private-ci-diagnostics.py tests "$diagnostics" || true; fi; rm -f "$diagnostics"' EXIT
           (
             set -euo pipefail
             cd source/gpgui
             cargo +1.97.0 test --manifest-path apps/desktop-nsh/Cargo.toml --locked --features demo -- --test-threads=1
-          ) >/dev/null 2>&1
+          ) >"$diagnostics" 2>&1
           echo "NSH tests passed."

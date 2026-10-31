@@ -1017,6 +1017,7 @@ jobs:
             gmake \
             pkgconf \
             libxml2 \
+            liblz4 \
             gnutls \
             p11-kit \
             nettle \
@@ -1025,6 +1026,7 @@ jobs:
             libayatana-appindicator \
             polkit \
             webkit2-gtk_41
+          pkgconf --exists libxml-2.0 liblz4 gnutls p11-kit-1 hogweed nettle gmp
         run: |
           set -eu
           (
