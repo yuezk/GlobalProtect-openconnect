@@ -1038,13 +1038,29 @@ jobs:
 
             cd "${{ matrix.workspace }}/gp"
             echo "BSD public components: started." >&3
-            cargo build --release --workspace
+            cargo build --release --workspace >&3 2>&3
             echo "BSD public components: passed." >&3
 
             cd ../gpgui/apps/desktop/src-tauri
             echo "BSD desktop: started." >&3
-            cargo build --release --workspace
-            echo "BSD desktop: passed." >&3
+            diagnostics="$(mktemp)"
+            trap 'rm -f "$diagnostics" || true' EXIT
+            if cargo build --release -p gpgui >"$diagnostics" 2>&1; then
+              echo "BSD desktop: passed." >&3
+            else
+              status=$?
+              sed -n 's/.*\(error\[E[0-9][0-9][0-9][0-9]\]\).*/::error::BSD Rust diagnostic: \1/p' "$diagnostics" | sort -u >&3 || true
+              if grep -q 'No space left on device' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: insufficient disk space." >&3
+              fi
+              if grep -Eq 'signal: 9, SIGKILL|ld terminated with signal 9|Killed signal terminated program' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: compiler or linker killed by SIGKILL." >&3
+              fi
+              if grep -Eq 'undefined reference to|undefined symbol:' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: unresolved linker symbols." >&3
+              fi
+              exit "$status"
+            fi
 
             cd ../../../../gp
             echo "BSD packaging: started." >&3
@@ -1106,13 +1122,29 @@ jobs:
 
             cd "${{ matrix.workspace }}/gp"
             echo "BSD public components: started." >&3
-            cargo build --release --workspace
+            cargo build --release --workspace >&3 2>&3
             echo "BSD public components: passed." >&3
 
             cd ../gpgui/apps/desktop/src-tauri
             echo "BSD desktop: started." >&3
-            cargo build --release --workspace
-            echo "BSD desktop: passed." >&3
+            diagnostics="$(mktemp)"
+            trap 'rm -f "$diagnostics" || true' EXIT
+            if cargo build --release -p gpgui >"$diagnostics" 2>&1; then
+              echo "BSD desktop: passed." >&3
+            else
+              status=$?
+              sed -n 's/.*\(error\[E[0-9][0-9][0-9][0-9]\]\).*/::error::BSD Rust diagnostic: \1/p' "$diagnostics" | sort -u >&3 || true
+              if grep -q 'No space left on device' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: insufficient disk space." >&3
+              fi
+              if grep -Eq 'signal: 9, SIGKILL|ld terminated with signal 9|Killed signal terminated program' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: compiler or linker killed by SIGKILL." >&3
+              fi
+              if grep -Eq 'undefined reference to|undefined symbol:' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: unresolved linker symbols." >&3
+              fi
+              exit "$status"
+            fi
 
             cd ../../../../gp
             echo "BSD packaging: started." >&3
