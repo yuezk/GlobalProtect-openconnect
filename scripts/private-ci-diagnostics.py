@@ -34,6 +34,17 @@ def report_tests(output):
                  for name, line, column in panics}
     for fingerprint, line, column in sorted(locations):
         print(f'::error::Rust test panic location: {fingerprint} {line}:{column}')
+    overdue = set(re.findall(r'^test (.+?) has been running for over 60 seconds\r?$',
+                             output, re.MULTILINE))
+    for fingerprint in sorted(hashlib.sha256(name.encode()).hexdigest() for name in overdue):
+        print(f'::error::Rust overdue test fingerprint: {fingerprint}')
+    running = re.findall(r'^\s+Running (.+?) \(([^\r\n]+)\)\r?$', output, re.MULTILINE)
+    if running:
+        source, executable = running[-1]
+        basename = re.sub(r'-[0-9a-f]{16}$', '', Path(executable).name)
+        identity = f'{" ".join(source.split())} ({basename})'
+        fingerprint = hashlib.sha256(identity.encode()).hexdigest()
+        print(f'::error::Rust last running target fingerprint: {fingerprint}')
 
 
 def main():

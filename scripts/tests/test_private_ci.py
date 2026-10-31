@@ -254,6 +254,38 @@ class PrivateTestStageTests(unittest.TestCase):
                                  f'::error::Rust test panic location: {digest} 321:9\n')
                 self.assertEqual(result.stderr, '')
 
+    def test_overdue_diagnostics_hash_names_without_exposing_messages(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / 'private.log'
+            log.write_text('test private::slow has been running for over 60 seconds\n'
+                           'PRIVATE_SOURCE_PATH: PRIVATE_PAYLOAD\n'
+                           'test private::slow has been running for over 60 seconds\n')
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/private-ci-diagnostics.py'),
+                                     'tests', str(log)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            digest = hashlib.sha256(b'private::slow').hexdigest()
+            self.assertEqual(result.stdout, f'::error::Rust overdue test fingerprint: {digest}\n')
+            self.assertEqual(result.stderr, '')
+
+    def test_last_running_target_hash_is_stable_without_paths_or_build_hashes(self):
+        for source, basename in [('unittests src/lib.rs', 'private_crate'),
+                                 ('tests/PRIVATE_HARNESS.rs', 'private_harness')]:
+            for prefix, build_hash in [('/PRIVATE_SOURCE_ONE', '0123456789abcdef'),
+                                       ('/PRIVATE_SOURCE_TWO', 'fedcba9876543210')]:
+                with self.subTest(source=source, prefix=prefix), tempfile.TemporaryDirectory() as temporary:
+                    log = Path(temporary) / 'private.log'
+                    log.write_text('     Running tests/previous.rs (/PRIVATE_SOURCE/previous-1111111111111111)\n'
+                                   f'     Running {source} ({prefix}/target/debug/deps/{basename}-{build_hash})\n'
+                                   'PRIVATE_PAYLOAD\n')
+                    result = subprocess.run([sys.executable, str(ROOT / 'scripts/private-ci-diagnostics.py'),
+                                             'tests', str(log)], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    identity = f'{source} ({basename})'
+                    digest = hashlib.sha256(identity.encode()).hexdigest()
+                    self.assertEqual(result.stdout,
+                                     f'::error::Rust last running target fingerprint: {digest}\n')
+                    self.assertEqual(result.stderr, '')
+
 
 class MacOSArtifactSelectionTests(unittest.TestCase):
     def select(self, jobs, artifacts=None):
