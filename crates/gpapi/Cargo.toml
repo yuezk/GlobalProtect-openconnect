@@ -8,7 +8,7 @@ license = "MIT"
 [dependencies]
 nix = { version = "0.31", features = ["fs", "signal", "process"], optional = true }
 common = { path = "../common" }
-directories.workspace = true
+directories = { workspace = true, optional = true }
 anyhow.workspace = true
 base64.workspace = true
 dns-lookup = { workspace = true, optional = true }
@@ -72,7 +72,7 @@ tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 default = ["desktop"]
-desktop = ["tokio/process", "tokio/signal", "dep:nix", "dep:uzers", "dep:netdev", "dep:os_info", "dep:whoami", "dep:dns-lookup", "dep:socket2"]
+desktop = ["tokio/process", "tokio/signal", "dep:directories", "dep:nix", "dep:uzers", "dep:netdev", "dep:os_info", "dep:whoami", "dep:dns-lookup", "dep:socket2"]
 tauri = ["desktop", "dep:tauri", "dep:gtk"]
 clap = ["desktop", "dep:clap", "dep:clap-verbosity-flag"]
 webview-auth = []
