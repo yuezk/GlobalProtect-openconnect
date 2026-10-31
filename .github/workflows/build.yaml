@@ -1029,6 +1029,7 @@ jobs:
           pkgconf --exists libxml-2.0 liblz4 gnutls p11-kit-1 hogweed nettle gmp
         run: |
           set -eu
+          exec 3>&1
           (
             set -eu
             export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
@@ -1036,12 +1037,17 @@ jobs:
             export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
             cd "${{ matrix.workspace }}/gp"
+            echo "BSD public components: started." >&3
             cargo build --release --workspace
+            echo "BSD public components: passed." >&3
 
             cd ../gpgui/apps/desktop/src-tauri
+            echo "BSD desktop: started." >&3
             cargo build --release --workspace
+            echo "BSD desktop: passed." >&3
 
             cd ../../../../gp
+            echo "BSD packaging: started." >&3
             gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
             pkg install -y ".build/${{ matrix.artifact_dir }}"/artifacts/*.pkg
             gpclient --version
@@ -1049,6 +1055,7 @@ jobs:
             gpgui --version
             rm -rf target ../gpgui/target
             find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+            echo "BSD packaging: passed." >&3
           ) >/dev/null 2>&1
           echo "BSD build passed."
     - name: Build on OpenBSD
@@ -1088,6 +1095,7 @@ jobs:
           ln -sf /usr/local/bin/automake-1.17 /usr/local/bin/automake
         run: |
           set -eu
+          exec 3>&1
           (
             set -eu
             export AUTOCONF_VERSION=2.72
@@ -1097,12 +1105,17 @@ jobs:
             export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
             cd "${{ matrix.workspace }}/gp"
+            echo "BSD public components: started." >&3
             cargo build --release --workspace
+            echo "BSD public components: passed." >&3
 
             cd ../gpgui/apps/desktop/src-tauri
+            echo "BSD desktop: started." >&3
             cargo build --release --workspace
+            echo "BSD desktop: passed." >&3
 
             cd ../../../../gp
+            echo "BSD packaging: started." >&3
             gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
             pkg_add -D unsigned ".build/${{ matrix.artifact_dir }}"/artifacts/*.tgz
             gpclient --version
@@ -1110,6 +1123,7 @@ jobs:
             gpgui --version
             rm -rf target ../gpgui/target
             find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+            echo "BSD packaging: passed." >&3
           ) >/dev/null 2>&1
           echo "BSD build passed."
     - name: Upload BSD package
