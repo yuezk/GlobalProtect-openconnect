@@ -442,6 +442,8 @@ pub enum WsRequest {
 pub struct UpdateGuiRequest {
   pub path: String,
   pub checksum: String,
+  #[serde(default)]
+  pub variant: crate::gui::GuiVariant,
 }
 
 #[cfg(test)]

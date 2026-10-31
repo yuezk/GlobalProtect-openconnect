@@ -41,8 +41,18 @@ const GUI_LIBC_SUFFIX: &str = "-musl";
 #[cfg(not(target_env = "musl"))]
 const GUI_LIBC_SUFFIX: &str = "";
 
-fn gui_asset_name() -> Option<String> {
+fn gui_asset_name(variant: gpapi::gui::GuiVariant) -> Option<String> {
+  if variant == gpapi::gui::GuiVariant::Nsh {
+    return nsh_asset_name_for(std::env::consts::OS, std::env::consts::ARCH);
+  }
   gui_asset_name_for(std::env::consts::OS, std::env::consts::ARCH, GUI_LIBC_SUFFIX)
+}
+
+fn nsh_asset_name_for(os: &str, arch: &str) -> Option<String> {
+  match (os, arch) {
+    ("linux", "x86_64" | "aarch64") => Some(format!("gpgui-nsh_{arch}.bin.tar.xz")),
+    _ => None,
+  }
 }
 
 fn gui_asset_name_for(os: &str, arch: &str, libc_suffix: &str) -> Option<String> {
@@ -97,10 +107,11 @@ impl Installer {
     Self { command_tx }
   }
 
-  async fn install(&self, path: &str, checksum: &str) -> anyhow::Result<()> {
+  async fn install(&self, path: &str, checksum: &str, variant: gpapi::gui::GuiVariant) -> anyhow::Result<()> {
     let request = UpdateGuiRequest {
       path: path.to_string(),
       checksum: checksum.to_string(),
+      variant,
     };
     let (reply, result) = oneshot::channel();
     self
@@ -363,6 +374,7 @@ async fn receive_binary(socket: &mut Socket) -> anyhow::Result<Vec<u8>> {
 
 pub struct GuiUpdater {
   version: String,
+  variant: gpapi::gui::GuiVariant,
   notifier: Arc<ProgressNotifier>,
   installer: Installer,
   in_progress: RwLock<bool>,
@@ -370,9 +382,15 @@ pub struct GuiUpdater {
 }
 
 impl GuiUpdater {
-  pub fn new(version: String, notifier: ProgressNotifier, installer: Installer) -> Self {
+  pub fn new(
+    version: String,
+    notifier: ProgressNotifier,
+    installer: Installer,
+    variant: gpapi::gui::GuiVariant,
+  ) -> Self {
     Self {
       version,
+      variant,
       notifier: Arc::new(notifier),
       installer,
       in_progress: Default::default(),
@@ -381,7 +399,7 @@ impl GuiUpdater {
   }
 
   pub async fn update(&self) {
-    let Some(asset_name) = gui_asset_name() else {
+    let Some(asset_name) = gui_asset_name(self.variant) else {
       info!("GUI updates are not supported on this platform.");
       return;
     };
@@ -438,7 +456,7 @@ impl GuiUpdater {
 
     info!("Checksum success");
 
-    if let Err(err) = self.installer.install(&file_path, &checksum).await {
+    if let Err(err) = self.installer.install(&file_path, &checksum, self.variant).await {
       warn!("Install error: {}", err);
       self.notify_error();
     } else {
@@ -488,13 +506,10 @@ impl GuiUpdater {
 
 #[cfg(test)]
 mod tests {
-  use gpapi::{
-    os_profile::HostIdentity,
-    service::{
-      transport::{ClientPrelude, NoiseResponder},
-      vpn_env::{HostInfo, VpnEnv},
-      vpn_state::VpnState,
-    },
+  use gpapi::service::{
+    transport::{ClientPrelude, NoiseResponder},
+    vpn_env::{HostInfo, VpnEnv},
+    vpn_state::VpnState,
   };
   use tokio::net::TcpListener;
   use tokio_tungstenite::accept_async;
@@ -522,6 +537,21 @@ mod tests {
     assert_eq!(gui_asset_name_for("macos", "aarch64", ""), None);
   }
 
+  #[test]
+  fn nsh_assets_are_linux_only_and_use_the_nsh_binary_archive() {
+    assert_eq!(
+      nsh_asset_name_for("linux", "x86_64"),
+      Some("gpgui-nsh_x86_64.bin.tar.xz".into())
+    );
+    assert_eq!(
+      nsh_asset_name_for("linux", "aarch64"),
+      Some("gpgui-nsh_aarch64.bin.tar.xz".into())
+    );
+    for os in ["freebsd", "openbsd", "macos"] {
+      assert_eq!(nsh_asset_name_for(os, "x86_64"), None);
+    }
+  }
+
   #[tokio::test]
   async fn pending_install_reconnects_with_a_fresh_handshake() {
     let credential = Arc::new(SessionCredential::generate(Uuid::new_v4(), env!("CARGO_PKG_VERSION")).unwrap());
@@ -532,6 +562,7 @@ mod tests {
         request: UpdateGuiRequest {
           path: "/tmp/gpgui-update".to_owned(),
           checksum: "checksum".to_owned(),
+          variant: gpapi::gui::GuiVariant::Tauri,
         },
         reply: reply_tx,
       })

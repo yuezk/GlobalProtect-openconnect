@@ -12,6 +12,7 @@ pub struct GuiHelperLauncher<'a> {
   envs: Option<&'a HashMap<String, String>>,
   credential: &'a SessionCredential,
   gui_version: Option<&'a str>,
+  variant: crate::gui::GuiVariant,
 }
 
 impl<'a> GuiHelperLauncher<'a> {
@@ -21,6 +22,7 @@ impl<'a> GuiHelperLauncher<'a> {
       envs: None,
       credential,
       gui_version: None,
+      variant: crate::gui::GuiVariant::Tauri,
     }
   }
 
@@ -34,6 +36,11 @@ impl<'a> GuiHelperLauncher<'a> {
     self
   }
 
+  pub fn variant(mut self, variant: crate::gui::GuiVariant) -> Self {
+    self.variant = variant;
+    self
+  }
+
   pub async fn launch(&self, cancellation: &CancellationToken) -> anyhow::Result<()> {
     let mut cmd = Command::new(&self.program);
 
@@ -43,6 +50,9 @@ impl<'a> GuiHelperLauncher<'a> {
     }
 
     cmd.arg("--service-credential-on-stdin");
+    if self.variant == crate::gui::GuiVariant::Nsh {
+      cmd.arg("--gui-variant").arg("nsh");
+    }
 
     if let Some(gui_version) = self.gui_version {
       cmd.arg("--gui-version").arg(gui_version);
@@ -96,6 +106,7 @@ mod tests {
       envs: Some(&envs),
       credential: &credential,
       gui_version: None,
+      variant: crate::gui::GuiVariant::Tauri,
     };
     let error = launcher.launch(&CancellationToken::new()).await.unwrap_err();
     assert!(error.to_string().contains("gpgui-helper exited with"), "{error:#}");
@@ -122,6 +133,7 @@ mod tests {
         envs: Some(&envs),
         credential: &credential,
         gui_version: None,
+        variant: crate::gui::GuiVariant::Tauri,
       };
       let error = launcher.launch(&CancellationToken::new()).await.unwrap_err();
       let eligible =
@@ -143,6 +155,7 @@ mod tests {
       envs: Some(&envs),
       credential: &credential,
       gui_version: None,
+      variant: crate::gui::GuiVariant::Tauri,
     };
     let cancellation = CancellationToken::new();
     let attempt = launcher.launch(&cancellation);

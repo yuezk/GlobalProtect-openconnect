@@ -9,6 +9,8 @@ pub mod error;
 pub mod gateway;
 pub mod gp_params;
 #[cfg(feature = "desktop")]
+pub mod gui;
+#[cfg(feature = "desktop")]
 pub mod hip;
 pub mod log_format;
 pub mod os_profile;

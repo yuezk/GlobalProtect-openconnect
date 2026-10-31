@@ -29,6 +29,8 @@ struct Cli {
 
   #[arg(long, default_value = env!("CARGO_PKG_VERSION"), help = "The version of the GUI")]
   gui_version: String,
+  #[arg(long, default_value = "tauri", value_parser = ["tauri", "nsh"])]
+  gui_variant: String,
 
   #[command(flatten)]
   verbose: InfoLevelVerbosity,
@@ -38,7 +40,16 @@ impl Cli {
   fn run(&self) -> anyhow::Result<()> {
     let credential = self.read_credential()?;
     let credential_lease = monitor_credential_lease().context("Failed to monitor service credential lifetime")?;
-    let app = App::new(Arc::new(credential), credential_lease, &self.gui_version);
+    let variant = if self.gui_variant == "nsh" {
+      gpapi::gui::GuiVariant::Nsh
+    } else {
+      gpapi::gui::GuiVariant::Tauri
+    };
+    anyhow::ensure!(
+      variant != gpapi::gui::GuiVariant::Nsh || cfg!(target_os = "linux"),
+      "Native Shell is available only on Linux"
+    );
+    let app = App::new(Arc::new(credential), credential_lease, &self.gui_version, variant);
 
     env_utils::patch_gui_runtime_env(false);
 

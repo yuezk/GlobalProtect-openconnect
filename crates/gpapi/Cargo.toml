@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 nix = { version = "0.31", features = ["fs", "signal", "process"], optional = true }
 common = { path = "../common" }
+directories.workspace = true
 anyhow.workspace = true
 base64.workspace = true
 dns-lookup = { workspace = true, optional = true }

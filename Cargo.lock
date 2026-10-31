@@ -2059,6 +2059,7 @@ dependencies = [
  "clap",
  "clap-verbosity-flag",
  "common",
+ "directories",
  "dns-lookup",
  "env_logger",
  "getrandom 0.4.3",

@@ -21,3 +21,6 @@ pub const MAX_SERVICE_MESSAGE: usize = 256;
 /// Private desktop control messages; never carry credentials.
 pub const DESKTOP_GUI_EXITED: u8 = 0;
 pub const DESKTOP_RENDERING_RETRY: u8 = 1;
+pub const DESKTOP_SWITCH_BEGIN: u8 = 2;
+pub const DESKTOP_SWITCH_COMMIT: u8 = 3;
+pub const DESKTOP_SWITCH_CANCEL: u8 = 4;

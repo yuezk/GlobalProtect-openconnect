@@ -11,19 +11,27 @@ pub struct App {
   credential: Arc<SessionCredential>,
   credential_lease: watch::Receiver<bool>,
   gui_version: String,
+  variant: gpapi::gui::GuiVariant,
 }
 
 impl App {
-  pub fn new(credential: Arc<SessionCredential>, credential_lease: watch::Receiver<bool>, gui_version: &str) -> Self {
+  pub fn new(
+    credential: Arc<SessionCredential>,
+    credential_lease: watch::Receiver<bool>,
+    gui_version: &str,
+    variant: gpapi::gui::GuiVariant,
+  ) -> Self {
     Self {
       credential,
       credential_lease,
       gui_version: gui_version.to_string(),
+      variant,
     }
   }
 
   pub fn run(&self) -> anyhow::Result<()> {
     let gui_version = self.gui_version.clone();
+    let variant = self.variant;
     let credential = Arc::clone(&self.credential);
     let credential_lease = self.credential_lease.clone();
 
@@ -34,7 +42,7 @@ impl App {
 
         let notifier = ProgressNotifier::new(win.clone());
         let installer = Installer::new(credential, credential_lease.clone());
-        let updater = Arc::new(GuiUpdater::new(gui_version, notifier, installer));
+        let updater = Arc::new(GuiUpdater::new(gui_version, notifier, installer, variant));
 
         let app_handle = app.handle().clone();
         let mut app_credential_lease = credential_lease;

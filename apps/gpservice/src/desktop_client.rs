@@ -17,7 +17,9 @@ use tokio::io::unix::AsyncFd;
 use tokio_util::sync::CancellationToken;
 
 use crate::session_registry::SessionRegistry;
-use gpapi::service::transport::{DESKTOP_GUI_EXITED, DESKTOP_RENDERING_RETRY};
+use gpapi::service::transport::{
+  DESKTOP_GUI_EXITED, DESKTOP_RENDERING_RETRY, DESKTOP_SWITCH_BEGIN, DESKTOP_SWITCH_CANCEL, DESKTOP_SWITCH_COMMIT,
+};
 
 /// Private parent/service pipes; credentials never pass through argv, environment or files.
 pub(crate) struct DesktopClient {
@@ -62,15 +64,38 @@ impl DesktopClient {
     let mut rendering_renewed = false;
     loop {
       let credential = registry.issue(env!("CARGO_PKG_VERSION"), Some(uid))?;
-      let session_id = credential.session_id();
+      let mut session_id = credential.session_id();
+      let mut pending = None;
       let result = tokio::select! {
         _ = cancel.cancelled() => Ok(None),
         result = async {
           self.write_frame(&credential.encode_frame()?).await?;
-          self.gui_exited().await
+          loop {
+            match self.gui_exited().await? {
+              Some(DESKTOP_SWITCH_BEGIN) => {
+                ensure!(pending.is_none(), "A GUI switch is already pending");
+                let credential = registry.issue(env!("CARGO_PKG_VERSION"), Some(uid))?;
+                pending = Some(credential.session_id());
+                self.write_frame(&credential.encode_frame()?).await?;
+              }
+              Some(DESKTOP_SWITCH_COMMIT) => {
+                let replacement = pending.take().context("No GUI switch is pending")?;
+                registry.revoke(session_id);
+                session_id = replacement;
+              }
+              Some(DESKTOP_SWITCH_CANCEL) => {
+                let replacement = pending.take().context("No GUI switch is pending")?;
+                registry.revoke(replacement);
+              }
+              message => break Ok(message),
+            }
+          }
         } => result,
       };
       registry.revoke(session_id);
+      if let Some(session_id) = pending {
+        registry.revoke(session_id);
+      }
       let requested = restart.swap(false, Ordering::SeqCst);
       match result? {
         None => return Ok(()),
@@ -251,6 +276,39 @@ mod tests {
       .unwrap()
       .unwrap();
     assert!(registry.last_successful_hip_report(issued.session_id()).is_err());
+  }
+
+  #[tokio::test]
+  async fn switch_cancel_preserves_current_session_and_commit_replaces_it() {
+    let (channel, control, reader) = pipes();
+    let registry = Arc::new(SessionRegistry::for_tests(uuid::Uuid::new_v4()));
+    let task = tokio::spawn(channel.serve(
+      registry.clone(),
+      1000,
+      Arc::new(AtomicBool::new(false)),
+      CancellationToken::new(),
+    ));
+    let (reader, first) = credential(reader).await;
+    write(&control, &[DESKTOP_SWITCH_BEGIN]).unwrap();
+    let (reader, cancelled) = credential(reader).await;
+    assert_ne!(first.session_id(), cancelled.session_id());
+    assert!(registry.last_successful_hip_report(first.session_id()).is_ok());
+    write(&control, &[DESKTOP_SWITCH_CANCEL, DESKTOP_SWITCH_BEGIN]).unwrap();
+    let (reader, replacement) = credential(reader).await;
+    assert!(registry.last_successful_hip_report(cancelled.session_id()).is_err());
+    assert!(registry.last_successful_hip_report(first.session_id()).is_ok());
+    write(&control, &[DESKTOP_SWITCH_COMMIT, DESKTOP_SWITCH_BEGIN]).unwrap();
+    let (_, pending) = credential(reader).await;
+    assert!(registry.last_successful_hip_report(first.session_id()).is_err());
+    assert!(registry.last_successful_hip_report(replacement.session_id()).is_ok());
+    drop(control);
+    tokio::time::timeout(Duration::from_secs(1), task)
+      .await
+      .unwrap()
+      .unwrap()
+      .unwrap();
+    assert!(registry.last_successful_hip_report(replacement.session_id()).is_err());
+    assert!(registry.last_successful_hip_report(pending.session_id()).is_err());
   }
 
   #[tokio::test]

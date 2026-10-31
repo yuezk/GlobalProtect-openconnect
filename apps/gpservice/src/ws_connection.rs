@@ -763,6 +763,7 @@ mod tests {
       request: WsRequest::UpdateGui(UpdateGuiRequest {
         path: update_file.path().to_string_lossy().into_owned(),
         checksum: "invalid".to_owned(),
+        variant: gpapi::gui::GuiVariant::Tauri,
       }),
     };
     socket
