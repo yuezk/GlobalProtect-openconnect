@@ -238,6 +238,22 @@ class PrivateTestStageTests(unittest.TestCase):
             self.assertEqual(result.stdout, f'::error::Rust test failure fingerprint: {digest}\n')
             self.assertEqual(result.stderr, '')
 
+    def test_panic_diagnostics_hide_filename_and_payload(self):
+        for thread_id in ('', ' (1234)'):
+            with self.subTest(thread_id=thread_id), tempfile.TemporaryDirectory() as temporary:
+                log = Path(temporary) / 'private.log'
+                log.write_text('test private::one ... FAILED\n'
+                               f"thread 'private::one'{thread_id} panicked at PRIVATE_FILENAME.rs:321:9:\n"
+                               'PRIVATE_PANIC_PAYLOAD\n')
+                result = subprocess.run([sys.executable, str(ROOT / 'scripts/private-ci-diagnostics.py'),
+                                         'tests', str(log)], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                digest = hashlib.sha256(b'private::one').hexdigest()
+                self.assertEqual(result.stdout,
+                                 f'::error::Rust test failure fingerprint: {digest}\n'
+                                 f'::error::Rust test panic location: {digest} 321:9\n')
+                self.assertEqual(result.stderr, '')
+
 
 class MacOSArtifactSelectionTests(unittest.TestCase):
     def select(self, jobs, artifacts=None):

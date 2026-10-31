@@ -27,6 +27,13 @@ def report_tests(output):
     names = set(re.findall(r'^test (.+?) \.\.\. FAILED\r?$', output, re.MULTILINE))
     for fingerprint in sorted(hashlib.sha256(name.encode()).hexdigest() for name in names):
         print(f'::error::Rust test failure fingerprint: {fingerprint}')
+    panics = re.findall(
+        r"^thread '([^'\r\n]+)'(?: \([0-9]+\))? panicked at [^\r\n]+:([0-9]+):([0-9]+):\r?$",
+        output, re.MULTILINE)
+    locations = {(hashlib.sha256(name.encode()).hexdigest(), int(line), int(column))
+                 for name, line, column in panics}
+    for fingerprint, line, column in sorted(locations):
+        print(f'::error::Rust test panic location: {fingerprint} {line}:{column}')
 
 
 def main():
