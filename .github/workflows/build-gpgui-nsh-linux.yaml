@@ -1,0 +1,102 @@
+name: Build Linux Native Shell
+
+on:
+  workflow_call:
+    inputs:
+      gp_ref:
+        required: true
+        type: string
+      gpgui_ref:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+    secrets:
+      GH_PAT:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    name: build (${{ matrix.arch }})
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      GPGUI_BUILD_VERSION: ${{ github.run_number }}.${{ github.run_attempt }}
+      GPGUI_UPDATE_CHANNEL: ${{ inputs.channel }}
+      GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
+    steps:
+      - name: Checkout GlobalProtect-openconnect
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.gp_ref }}
+          path: source/gp
+          submodules: recursive
+          persist-credentials: false
+      - name: Checkout CI helpers
+        uses: actions/checkout@v6
+        with:
+          path: .ci
+          persist-credentials: false
+      - name: Checkout gpgui
+        uses: ./.ci/.github/actions/checkout-private
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ inputs.gpgui_ref }}
+          path: source/gpgui
+      - name: Install Ubuntu 24.04 dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake gettext libtool pkg-config \
+            clang libclang-dev libgtk-4-dev libicu-dev libxml2-dev libssl-dev \
+            libgnutls28-dev liblz4-dev libwayland-dev libxkbcommon-dev
+      - name: Install the NSH compiler
+        run: rustup toolchain install 1.97.0 --profile minimal
+      - name: Cache public crate downloads
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+          key: nsh-crates-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('source/gpgui/apps/desktop-nsh/Cargo.lock') }}
+          restore-keys: nsh-crates-${{ runner.os }}-${{ runner.arch }}-
+      - name: Build and package Native Shell
+        run: |
+          trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::Native Shell build failed; diagnostics suppressed."; fi' EXIT
+          (
+            set -euo pipefail
+            cd source/gpgui
+            cargo +1.97.0 build --manifest-path apps/desktop-nsh/Cargo.toml --locked \
+              --release --bin gpgui-nsh --target-dir target
+            target/release/gpgui-nsh --version
+            version="$(cargo +1.97.0 metadata --manifest-path apps/desktop-nsh/Cargo.toml --no-deps --format-version 1 \
+              | jq -r '.packages[] | select(.name == "gp-connect-nsh") | .version')"
+            directory="gpgui-nsh_$version"
+            archive="gpgui-nsh_$(uname -m).bin.tar.xz"
+            mkdir -p ".build/package/$directory"
+            cp target/release/gpgui-nsh ".build/package/$directory/"
+            tar -cJf ".build/package/$archive" -C .build/package "$directory"
+            sha256sum ".build/package/$archive" | cut -d ' ' -f 1 > ".build/package/$archive.sha256"
+          ) >/dev/null 2>&1
+          echo "Native Shell build and version check passed."
+      - name: Upload Native Shell
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifact-gpgui-nsh-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            source/gpgui/.build/package/*.bin.tar.xz
+            source/gpgui/.build/package/*.bin.tar.xz.sha256

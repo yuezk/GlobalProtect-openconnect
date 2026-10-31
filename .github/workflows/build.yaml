@@ -455,6 +455,16 @@ jobs:
     secrets:
       GH_PAT: ${{ secrets.GH_PAT }}
 
+  build-gpgui-nsh:
+    needs: validate-inputs
+    uses: ./.github/workflows/build-gpgui-nsh-linux.yaml
+    with:
+      gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
+      gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
+      channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
+
   nix-source:
     needs: [validate-inputs, build-gpgui-glibc]
     strategy:
@@ -1128,6 +1138,7 @@ jobs:
       - build-docker-image
       - build-gpgui-glibc
       - build-gpgui-musl
+      - build-gpgui-nsh
       - setup-bsd-matrix
       - build-gpgui-frontend
       - build-bsd

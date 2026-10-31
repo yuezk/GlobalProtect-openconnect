@@ -110,7 +110,7 @@ jobs:
           (
             set -euo pipefail
             cd source/gpgui
-            cargo +1.97.0 check --manifest-path apps/desktop-nsh/Cargo.toml --locked --bin gp-connect-nsh
+            cargo +1.97.0 check --manifest-path apps/desktop-nsh/Cargo.toml --locked --bin gpgui-nsh
           ) >/dev/null 2>&1
           echo "NSH production check passed."
       - name: Compile NSH tests
