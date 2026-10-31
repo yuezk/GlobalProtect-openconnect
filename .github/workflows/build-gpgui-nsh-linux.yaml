@@ -88,6 +88,11 @@ jobs:
             archive="gpgui-nsh_$(uname -m).bin.tar.xz"
             mkdir -p ".build/package/$directory"
             cp target/release/gpgui-nsh ".build/package/$directory/"
+            cp /usr/share/doc/libicu-dev/copyright ".build/package/$directory/ICU-LICENSE.txt"
+            if ldd target/release/gpgui-nsh | grep -q 'libicu'; then
+              echo "The release executable must not depend on a distro-specific ICU library." >&2
+              exit 1
+            fi
             tar -cJf ".build/package/$archive" -C .build/package "$directory"
             sha256sum ".build/package/$archive" | cut -d ' ' -f 1 > ".build/package/$archive.sha256"
           ) >/dev/null 2>&1
