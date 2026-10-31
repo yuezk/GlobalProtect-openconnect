@@ -65,7 +65,7 @@ for icon in \
   gpgui-connecting-3-symbolic.svg \
   gpgui-connecting-4-symbolic.svg; do
   verify_same_file \
-    "$GPGUI_APP_DIR/src-tauri/icons/tray/theme/$icon" \
+    "$GPGUI_DIR/crates/desktop-tray/assets/theme/$icon" \
     "$GP_DIR/packaging/files/usr/share/icons/hicolor/scalable/status/$icon"
 done
 verify_same_file \
