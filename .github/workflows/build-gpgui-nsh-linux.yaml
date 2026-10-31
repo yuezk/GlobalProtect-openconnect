@@ -62,7 +62,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y autoconf automake gettext libtool pkg-config \
             clang libclang-dev libgtk-4-dev libicu-dev libxml2-dev libssl-dev \
-            libgnutls28-dev liblz4-dev libwayland-dev libxkbcommon-dev
+            libgnutls28-dev liblz4-dev libwayland-dev libxkbcommon-dev libdbus-1-dev
+          pkg-config --exists gtk4 icu-i18n icu-uc openssl dbus-1 wayland-client xkbcommon
       - name: Install the NSH compiler
         run: rustup toolchain install 1.97.0 --profile minimal
       - name: Cache public crate downloads
