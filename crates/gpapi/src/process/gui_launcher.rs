@@ -100,7 +100,7 @@ impl<'a> GuiLauncher<'a> {
     if self.minimized {
       cmd.arg("--minimized");
     }
-    info!("Launching gpgui");
+    info!("Launching {}", program.display());
     super::desktop_child::launch_desktop_child(
       "gpgui",
       cmd.into_std(),
