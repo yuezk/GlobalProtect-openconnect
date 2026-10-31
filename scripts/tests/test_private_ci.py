@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import plistlib
@@ -140,10 +141,23 @@ class PrivateTestStageTests(unittest.TestCase):
                     output.write(json.dumps(sys.argv[1:]) + '\\n')
                 print('PRIVATE_STDOUT')
                 print('PRIVATE_STDERR', file=sys.stderr)
+                if 'cargo' in sys.argv and '--no-run' in sys.argv:
+                    diagnostics = {
+                        'compile-type': 'error[E0061]: PRIVATE_SOURCE\\nerror[E0308]: PRIVATE_SOURCE\\nerror[E0061]: PRIVATE_SOURCE',
+                        'compile-disk': 'PRIVATE_PATH: No space left on device',
+                        'compile-killed': 'PRIVATE_SOURCE (signal: 9, SIGKILL: kill)',
+                        'compile-link': 'PRIVATE_PATH: undefined reference to PRIVATE_SYMBOL',
+                        'compile-macro': 'error: proc macro panicked\\nPRIVATE_SOURCE',
+                    }
+                    diagnostic = diagnostics.get(os.environ['MODE'])
+                    if diagnostic:
+                        print(diagnostic, file=sys.stderr)
+                        sys.exit(101)
                 if 'cargo' in sys.argv and '--no-run' not in sys.argv:
                     if os.environ['MODE'] == 'hang':
                         time.sleep(60)
                     if os.environ['MODE'] == 'fail':
+                        print('test private::test_function ... FAILED')
                         sys.exit(19)
                 '''))
             timeout = root / 'timeout'
@@ -162,10 +176,14 @@ class PrivateTestStageTests(unittest.TestCase):
                 executable.write_text(executable.read_text().replace("#!/usr/bin/env python3", f"#!{sys.executable}"))
                 executable.chmod(0o755)
             calls = root / 'calls.jsonl'
-            env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}', MODE=mode, CALLS=str(calls))
+            env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}', MODE=mode, CALLS=str(calls), TMPDIR=str(root))
             result = subprocess.run(['bash', str(ROOT / 'scripts/test-private-desktop.sh'), str(root)],
                                     env=env, text=True, capture_output=True, timeout=10)
             self.assertNotIn('PRIVATE_STD', result.stdout + result.stderr)
+            self.assertNotIn('PRIVATE_SOURCE', result.stdout + result.stderr)
+            self.assertNotIn('PRIVATE_PATH', result.stdout + result.stderr)
+            self.assertNotIn('PRIVATE_SYMBOL', result.stdout + result.stderr)
+            self.assertFalse(list(root.glob('tmp.*')), 'Private command output must be deleted')
             recorded = [json.loads(line) for line in calls.read_text().splitlines()]
             self.assertEqual(recorded[-1][:2], ['rm', '--force'])
             return result
@@ -182,6 +200,8 @@ class PrivateTestStageTests(unittest.TestCase):
         result = self.run_stages('fail')
         self.assertEqual(result.returncode, 19)
         self.assertIn('Rust tests: failed', result.stdout)
+        self.assertIn(hashlib.sha256(b'private::test_function').hexdigest(), result.stdout)
+        self.assertNotIn('private::test_function', result.stdout + result.stderr)
         self.assertNotRegex(result.stdout, r'(?m)^Rust tests: passed')
 
     def test_hung_tests_report_timeout_and_cleanup(self):
@@ -189,6 +209,34 @@ class PrivateTestStageTests(unittest.TestCase):
         self.assertEqual(result.returncode, 124)
         self.assertIn('Rust tests: timed out', result.stdout)
         self.assertNotRegex(result.stdout, r'(?m)^Rust tests: passed')
+
+    def test_compile_failure_reports_only_allowlisted_diagnostics(self):
+        cases = {
+            'compile-type': 'Rust diagnostic codes: error[E0061] error[E0308]',
+            'compile-disk': 'insufficient disk space',
+            'compile-killed': 'compiler or linker killed by SIGKILL',
+            'compile-link': 'unresolved linker symbols',
+            'compile-macro': 'procedural macro failed',
+        }
+        for mode, expected in cases.items():
+            with self.subTest(mode=mode):
+                result = self.run_stages(mode)
+                self.assertEqual(result.returncode, 101, result.stdout + result.stderr)
+                self.assertIn(expected, result.stdout)
+                self.assertNotRegex(result.stdout, r'(?m)^Rust tests: started')
+
+    def test_test_diagnostics_hash_names_without_exposing_private_details(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / 'private.log'
+            log.write_text('test private::one ... FAILED\nPRIVATE_SOURCE\n'
+                           'test private::one ... FAILED\n'
+                           'test private::two ... ok\n')
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/private-ci-diagnostics.py'),
+                                     'tests', str(log)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            digest = hashlib.sha256(b'private::one').hexdigest()
+            self.assertEqual(result.stdout, f'::error::Rust test failure fingerprint: {digest}\n')
+            self.assertEqual(result.stderr, '')
 
 
 class MacOSArtifactSelectionTests(unittest.TestCase):

@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
-# Emit only host-owned stage names; never forward private command output.
+# Never forward private command output; report stages and allowlisted diagnostics.
 set -euo pipefail
 
 source_directory=$1
 container="gp-private-tests-$$"
-trap 'timeout --kill-after=5s 30s docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
+private_output=$(mktemp)
+script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+trap 'timeout --kill-after=5s 30s docker rm --force "$container" >/dev/null 2>&1 || true; unlink "$private_output"' EXIT
 
 run_stage() {
   local name=$1 limit=$2 status started=$SECONDS
   shift 2
   echo "$name: started (limit $limit)."
-  if timeout --kill-after=30s "$limit" "$@" >/dev/null 2>&1; then
+  if timeout --kill-after=30s "$limit" "$@" >"$private_output" 2>&1; then
     echo "$name: passed ($((SECONDS - started))s)."
   else
     status=$?
+    if [[ "$name" == 'Compile Rust tests' ]]; then
+      python3 "$script_directory/private-ci-diagnostics.py" compile "$private_output" || true
+    elif [[ "$name" == 'Rust tests' ]]; then
+      python3 "$script_directory/private-ci-diagnostics.py" tests "$private_output" || true
+    fi
     if [[ "$status" == 124 ]]; then
       echo "::error::$name: timed out after $((SECONDS - started))s (limit $limit); diagnostics suppressed."
     elif [[ "$status" == 137 ]]; then
