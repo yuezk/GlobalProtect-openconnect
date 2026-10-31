@@ -37,6 +37,10 @@ run_stage 'Start test container' 5m docker run --detach --rm \
   --user vscode \
   -e HOME=/home/vscode \
   -e CARGO_TARGET_DIR=/tmp/gpgui-test-target \
+  -e CARGO_BUILD_JOBS=2 \
+  -e CARGO_INCREMENTAL=0 \
+  -e CARGO_PROFILE_DEV_DEBUG=0 \
+  -e CARGO_PROFILE_TEST_DEBUG=0 \
   -e COREPACK_INTEGRITY_KEYS=0 \
   -e LIBXML2_STATIC=1 \
   -v "$source_directory:/source:ro" \
