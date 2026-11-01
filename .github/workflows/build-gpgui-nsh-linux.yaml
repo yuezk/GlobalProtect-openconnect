@@ -91,6 +91,7 @@ jobs:
             mkdir -p ".build/package/$directory"
             cp target/release/gpgui-nsh ".build/package/$directory/"
             cp apps/desktop-nsh/ICU4X-LICENSE.txt ".build/package/$directory/ICU4X-LICENSE.txt"
+            cp apps/desktop-nsh/assets/fonts/NotoSans-OFL.txt ".build/package/$directory/NotoSans-OFL.txt"
             if ldd target/release/gpgui-nsh | grep -q 'libicu'; then
               echo "The release executable must not depend on ICU4C." >&2
               exit 1
