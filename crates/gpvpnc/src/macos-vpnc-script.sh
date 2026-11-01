@@ -259,6 +259,10 @@ do_ifconfig() {
 
 # =========== route handling ====================================
 
+is_ipv4_default_route() {
+	[ "$1" = "0.0.0.0" ] && [ "$2" = "0" ]
+}
+
 if [ -n "$IPROUTE" ]; then
 	fix_ip_get_output () {
 		sed -e 's/ /\n/g' | \
@@ -641,7 +645,7 @@ macos_dns_source_service() {
 }
 
 configure_macos_dns() {
-	local search_domains ipv4
+	local search_domains ipv4 default_route i network prefix
 	if [ -z "$INTERNAL_IP4_DNS" ]; then
 		remove_macos_dns
 		return $?
@@ -650,7 +654,22 @@ configure_macos_dns() {
 	if [ -n "$CISCO_DEF_DOMAIN" ]; then
 		search_domains="d.add SearchDomains * $CISCO_DEF_DOMAIN"
 	fi
+	# Match do_connect: an include list can itself contain the default route.
+	default_route=1
 	if [ -n "$CISCO_SPLIT_INC" ]; then
+		default_route=0
+		i=0
+		while [ "$i" -lt "$CISCO_SPLIT_INC" ]; do
+			eval network="\${CISCO_SPLIT_INC_${i}_ADDR}"
+			eval prefix="\${CISCO_SPLIT_INC_${i}_MASKLEN}"
+			if is_ipv4_default_route "$network" "$prefix"; then
+				default_route=1
+				break
+			fi
+			i=$((i + 1))
+		done
+	fi
+	if [ "$default_route" -eq 0 ]; then
 		local source
 		source=$(macos_dns_source_service) || return 1
 		# A split tunnel has no default router. Like GlobalProtect, register
@@ -1004,7 +1023,7 @@ do_connect() {
 			eval NETWORK="\${CISCO_SPLIT_INC_${i}_ADDR}"
 			eval NETMASK="\${CISCO_SPLIT_INC_${i}_MASK}"
 			eval NETMASKLEN="\${CISCO_SPLIT_INC_${i}_MASKLEN}"
-			if [ "$NETWORK" != "0.0.0.0" ]; then
+			if ! is_ipv4_default_route "$NETWORK" "$NETMASKLEN"; then
 				set_network_route "$NETWORK" "$NETMASK" "$NETMASKLEN" "$TUNDEV"
 			else
 				set_default_route
@@ -1043,7 +1062,7 @@ do_disconnect() {
 			eval NETWORK="\${CISCO_SPLIT_INC_${i}_ADDR}"
 			eval NETMASK="\${CISCO_SPLIT_INC_${i}_MASK}"
 			eval NETMASKLEN="\${CISCO_SPLIT_INC_${i}_MASKLEN}"
-			if [ "$NETWORK" != "0.0.0.0" ]; then
+			if ! is_ipv4_default_route "$NETWORK" "$NETMASKLEN"; then
 				# FIXME: This doesn't restore previously overwritten
 				#        routes.
 				del_network_route "$NETWORK" "$NETMASK" "$NETMASKLEN" "$TUNDEV"
