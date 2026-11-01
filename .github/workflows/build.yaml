@@ -704,9 +704,7 @@ jobs:
             ninja \
             pkgconf \
             python
-          if [[ "$MACOS_GUI" == nsh ]]; then
-            rustup toolchain install 1.97.0 --profile minimal
-          fi
+          rustup toolchain install 1.97.0 --profile minimal
 
       - name: Prepare cached native dependencies
         uses: ./.ci/.github/actions/macos-native-deps

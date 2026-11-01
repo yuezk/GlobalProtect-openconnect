@@ -43,6 +43,7 @@ sysinfo = { version = "0.38.4", default-features = false, features = ["system"] 
 tempfile = "3.8"
 tokio = { version = "1" }
 tokio-util = "0.7"
+tokio-tungstenite = "0.30"
 url = "2.4"
 urlencoding = "2.1.3"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
@@ -68,10 +69,10 @@ specta = "=2.0.0-rc.20"
 proptest = "1"
 
 [patch.crates-io]
-# Restore BSD GTK resize hit testing until https://github.com/tauri-apps/tao/pull/1356 is released.
-tao = { git = "https://github.com/yuezk/tao", rev = "1452ae7a42c9f134296ba199f91f514fc9077f61" }
+# Restore BSD GTK resize hit testing and apply fixed-size windows before first configure.
+tao = { git = "https://github.com/yuezk/tao", rev = "bba0f1c4e86d697b173c75280d1651f408b8023c" }
 # Use one macro source for Tao and Wry so Cargo can vendor the workspace.
-tao-macros = { git = "https://github.com/yuezk/tao", rev = "1452ae7a42c9f134296ba199f91f514fc9077f61" }
+tao-macros = { git = "https://github.com/yuezk/tao", rev = "bba0f1c4e86d697b173c75280d1651f408b8023c" }
 
 [profile.release]
 opt-level = 'z'   # Optimize for size

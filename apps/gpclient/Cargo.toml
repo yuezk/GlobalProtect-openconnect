@@ -28,7 +28,6 @@ sysinfo.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 whoami.workspace = true
-reqwest.workspace = true
 directories.workspace = true
 compile-time.workspace = true
 uzers.workspace = true

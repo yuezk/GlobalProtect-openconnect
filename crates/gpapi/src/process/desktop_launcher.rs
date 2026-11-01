@@ -29,6 +29,18 @@ pub struct DesktopLauncher<'a> {
 }
 
 impl<'a> DesktopLauncher<'a> {
+  /// Bring an already-running GUI to the foreground through its service.
+  pub async fn activate_existing() -> anyhow::Result<()> {
+    let endpoint = crate::utils::endpoint::http_endpoint().await?;
+    crate::utils::request::client_builder()
+      .build()?
+      .post(format!("{endpoint}/active-gui"))
+      .send()
+      .await?
+      .error_for_status()?;
+    Ok(())
+  }
+
   pub fn new(version: &'a str) -> Self {
     Self {
       version,
