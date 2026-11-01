@@ -129,6 +129,55 @@ class PrivateOutputTests(unittest.TestCase):
                     self.assertIn('passed' if status == 0 else 'failed', result.stdout)
 
 
+class NativeDependencyCacheTests(unittest.TestCase):
+    def run_step(self, step, metadata, status=0):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            helper = root / 'private/scripts/build-macos-native-deps.sh'
+            helper.parent.mkdir(parents=True)
+            helper.write_text('#!/bin/sh\nprintf "%s\\n" "$TEST_METADATA"\n'
+                              'echo PRIVATE_STDERR >&2\nexit "$TEST_STATUS"\n')
+            helper.chmod(0o755)
+            key = 'a' * 64
+            prefix = root / f'tools/gpgui-macos-native-deps/macos-13.0-arm64-{key}'
+            output = root / 'output'
+            env = dict(os.environ, GPGUI_DIRECTORY=str(root / 'private'),
+                       RUNNER_TOOL_CACHE=str(root / 'tools'), GITHUB_OUTPUT=str(output),
+                       TEST_METADATA=metadata.format(key=key, prefix=prefix, private=root / 'private'),
+                       TEST_STATUS=str(status))
+            result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', run_block(
+                '.github/actions/macos-native-deps/action.yaml', step)],
+                cwd=root, env=env, text=True, capture_output=True)
+            return result, output.read_text() if output.exists() else ''
+
+    def test_identity_emits_only_an_opaque_key_and_native_dependency_prefix(self):
+        result, output = self.run_step('Identify native dependency cache', 'key={key}\npath={prefix}')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('key=macos-native-deps-' + 'a' * 64, output)
+        self.assertNotIn('PRIVATE_', result.stdout + result.stderr)
+
+    def test_private_output_and_checkout_paths_cannot_become_cache_metadata(self):
+        for metadata, status in [('PRIVATE_SOURCE_CODE', 0),
+                                 ('key={key}\npath={private}', 0),
+                                 ('PRIVATE_SOURCE_CODE', 19)]:
+            with self.subTest(metadata=metadata, status=status):
+                result, output = self.run_step('Identify native dependency cache', metadata, status)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.returncode, status or 1)
+                self.assertEqual(output, '')
+                self.assertNotIn('PRIVATE_', result.stdout + result.stderr)
+                self.assertIn('diagnostics suppressed', result.stdout)
+
+    def test_preparation_hides_private_command_output_and_preserves_failure(self):
+        for status in (0, 19):
+            with self.subTest(status=status):
+                result, output = self.run_step('Build or validate native libraries', 'PRIVATE_SOURCE_CODE', status)
+                self.assertEqual(result.returncode, status)
+                self.assertEqual(output, '')
+                self.assertNotIn('PRIVATE_', result.stdout + result.stderr)
+                self.assertIn('passed' if status == 0 else 'failed', result.stdout)
+
+
 class PrivateTestStageTests(unittest.TestCase):
     def run_stages(self, mode):
         with tempfile.TemporaryDirectory() as temporary:

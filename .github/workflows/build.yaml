@@ -708,6 +708,11 @@ jobs:
             rustup toolchain install 1.97.0 --profile minimal
           fi
 
+      - name: Prepare cached native dependencies
+        uses: ./.ci/.github/actions/macos-native-deps
+        with:
+          gpgui-directory: source/gpgui
+
       - name: Import signing identity
         env:
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
