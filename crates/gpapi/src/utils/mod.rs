@@ -11,8 +11,6 @@ pub mod env_utils;
 mod identity_encoding;
 #[cfg(feature = "desktop")]
 pub mod lock_file;
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-pub mod openssl;
 pub mod redact;
 pub mod request;
 #[cfg(feature = "tauri")]

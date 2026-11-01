@@ -138,9 +138,6 @@ impl ConnectHandler<'_> {
           .log_format(self.shared_args.log_format)
           .verbose(verbose);
 
-        #[cfg(not(target_os = "macos"))]
-        let auth_launcher = auth_launcher.fix_openssl(self.shared_args.fix_openssl);
-
         #[cfg(feature = "webview-auth")]
         let use_default_browser = external_browser_supported && self.args.default_browser;
         #[cfg(feature = "webview-auth")]

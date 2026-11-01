@@ -4,7 +4,7 @@ use anyhow::{Context, ensure};
 use reqwest::Identity;
 use zeroize::Zeroizing;
 
-use super::{certificate::pkcs12_identity, identity_encoding};
+use super::{certificate::pkcs12, identity_encoding};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RequestIdentityError {
@@ -18,10 +18,6 @@ pub enum RequestIdentityError {
     "Unsupported private key encryption. Convert the key to modern PKCS#8 using PBES2 with AES before importing it"
   )]
   UnsupportedEncryption,
-  #[error(
-    "Could not convert the legacy private key with OpenSSL: {0}. Convert the key to modern PKCS#8 using PBES2 with AES before importing it"
-  )]
-  LegacyKeyConversion(&'static str),
   #[error("Unsupported private key format. Convert the key to PKCS#8 before importing it")]
   UnsupportedKeyFormat,
   #[error("Invalid private key")]
@@ -31,7 +27,9 @@ pub enum RequestIdentityError {
   #[error("The PKCS#12 file must contain both a client certificate and its private key")]
   IncompletePkcs12,
   #[error("Could not open the PKCS#12 certificate. Check the password and certificate file")]
-  InvalidPkcs12(#[source] reqwest::Error),
+  InvalidPkcs12(#[source] p12_keystore::error::Error),
+  #[error("The PKCS#12 file must contain one matching client identity")]
+  AmbiguousPkcs12,
 }
 
 /// Loaded once by the authentication owner. PEM keys are decrypted once; PKCS#12
@@ -91,16 +89,7 @@ impl ClientIdentity {
     let (identity, passphrase) = match &key {
       Some(key) => (pem_request_identity(&certificate, key)?, None),
       None => {
-        pkcs12_identity::ensure_complete(&certificate, passphrase.unwrap_or_default())?;
-        // A blank settings field is stored as None. Try the empty password so
-        // passwordless archives work, but keep prompting for protected ones.
-        let identity = Identity::from_pkcs12_der(&certificate, passphrase.unwrap_or_default()).map_err(|error| {
-          if passphrase.is_none() {
-            RequestIdentityError::NoPassphrase("PKCS#12")
-          } else {
-            RequestIdentityError::InvalidPkcs12(error)
-          }
-        })?;
+        let identity = pkcs12::identity(&certificate, passphrase)?;
         (
           identity,
           Some(Zeroizing::new(passphrase.unwrap_or_default().to_owned())),
@@ -160,13 +149,22 @@ impl ClientIdentityFiles {
   }
 }
 
-fn pem_request_identity(certificate: &[u8], key: &[u8]) -> anyhow::Result<Identity> {
+pub(super) fn pem_request_identity(certificate: &[u8], key: &[u8]) -> anyhow::Result<Identity> {
   let error_context =
     "Client certificate and private key cannot be used together. Check that the private key matches the certificate";
-  let identity = Identity::from_pkcs8_pem(certificate, key).context(error_context)?;
-  // Native TLS may defer the certificate/key match check until connector creation.
-  // Build the same client used for requests without making a network connection.
-  reqwest::Client::builder()
+  let mut combined = Zeroizing::new(certificate.to_vec());
+  combined.push(b'\n');
+  combined.extend_from_slice(key);
+  let identity = Identity::from_pem(&combined).context(error_context)?;
+  let certificates = rustls_pemfile::certs(&mut std::io::Cursor::new(certificate))
+    .collect::<Result<Vec<_>, _>>()
+    .context(error_context)?;
+  let private_key = rustls_pemfile::private_key(&mut std::io::Cursor::new(key))
+    .context(error_context)?
+    .context(error_context)?;
+  rustls::sign::CertifiedKey::from_der(certificates, private_key, &rustls::crypto::ring::default_provider())
+    .context(error_context)?;
+  client_builder()
     .no_proxy()
     .identity(identity.clone())
     .build()
@@ -200,6 +198,14 @@ fn write_identity_file(
   file.write_all(bytes)?;
   file.flush()?;
   Ok(file)
+}
+
+/// Ordinary Reqwest construction with the shared rustls provider initialized.
+pub fn client_builder() -> reqwest::ClientBuilder {
+  if rustls::crypto::CryptoProvider::get_default().is_none() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+  }
+  reqwest::Client::builder().tls_backend_rustls()
 }
 
 /// General request clients may load an identity directly. Session owners call
@@ -241,7 +247,7 @@ mod tests {
   }
 
   #[test]
-  fn create_identity_preserves_password_errors_and_builds_a_native_request_client() {
+  fn create_identity_preserves_password_errors_and_builds_a_request_client() {
     let mut source = tempfile::NamedTempFile::new().unwrap();
     source.write_all(CERTIFICATE).unwrap();
     source.write_all(ENCRYPTED_KEY).unwrap();
@@ -255,7 +261,7 @@ mod tests {
     }
     let identity = create_identity(source.path().to_str().unwrap(), None, Some("fixture-password")).unwrap();
     drop(source);
-    reqwest::Client::builder().identity(identity).build().unwrap();
+    client_builder().identity(identity).build().unwrap();
   }
 
   #[test]
@@ -277,10 +283,7 @@ mod tests {
     assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
     drop(files);
     assert!(!Path::new(&path).exists());
-    reqwest::Client::builder()
-      .identity(identity.request_identity())
-      .build()
-      .unwrap();
+    client_builder().identity(identity.request_identity()).build().unwrap();
   }
 }
 

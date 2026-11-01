@@ -16,7 +16,6 @@ BuildRequires:  gettext
 BuildRequires:  gcc-c++
 BuildRequires:  cargo
 BuildRequires:  pkg-config
-BuildRequires:  (openssl-devel or libopenssl-devel)
 BuildRequires:  libxml2-devel
 BuildRequires:  zlib-devel
 BuildRequires:  (lz4-devel or liblz4-devel)

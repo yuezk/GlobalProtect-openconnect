@@ -63,7 +63,6 @@ jobs:
             make \
             namcap \
             nettle \
-            openssl \
             patch \
             pkgconf \
             librsvg \

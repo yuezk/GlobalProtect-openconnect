@@ -80,7 +80,7 @@ async fn gateway_fixture(
     requests
   });
   let transport = GatewayTransport {
-    client: Client::builder()
+    client: crate::utils::request::client_builder()
       .redirect(Policy::none())
       .no_proxy()
       .timeout(REQUEST_TIMEOUT)

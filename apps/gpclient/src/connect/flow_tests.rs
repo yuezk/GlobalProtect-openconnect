@@ -98,8 +98,6 @@ async fn cached_tunnel_authentication_does_not_require_portal_discovery() {
   let lock = directory.path().join("client.pid");
   let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
   let shared = SharedArgs {
-    #[cfg(not(target_os = "macos"))]
-    fix_openssl: false,
     ignore_tls_errors: true,
     lock_file: &lock,
     verbose: &verbose,
@@ -144,8 +142,6 @@ async fn internal_tunnel_keeps_gateway_authentication_after_portal_cookie_reject
   let lock = directory.path().join("client.pid");
   let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
   let shared = SharedArgs {
-    #[cfg(not(target_os = "macos"))]
-    fix_openssl: false,
     ignore_tls_errors: true,
     lock_file: &lock,
     verbose: &verbose,
@@ -192,8 +188,6 @@ async fn rendering_recovery_fetches_new_prelogin_metadata_and_preserves_gateway_
   let lock = directory.path().join("client.pid");
   let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
   let shared = SharedArgs {
-    #[cfg(not(target_os = "macos"))]
-    fix_openssl: false,
     ignore_tls_errors: true,
     lock_file: &lock,
     verbose: &verbose,
@@ -227,8 +221,6 @@ async fn cancellation_during_recovery_prelogin_stops_request() {
   let lock = directory.path().join("client.pid");
   let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
   let shared = SharedArgs {
-    #[cfg(not(target_os = "macos"))]
-    fix_openssl: false,
     ignore_tls_errors: true,
     lock_file: &lock,
     verbose: &verbose,
@@ -295,8 +287,6 @@ async fn auth_crash_uses_fresh_saml_and_clean_once_with_shared_budget() {
   let lock = directory.path().join("client.pid");
   let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
   let shared = SharedArgs {
-    #[cfg(not(target_os = "macos"))]
-    fix_openssl: false,
     ignore_tls_errors: true,
     lock_file: &lock,
     verbose: &verbose,
@@ -355,8 +345,6 @@ async fn exhausted_auth_recovery_is_terminal_before_portal_gateway_fallback() {
   let lock = directory.path().join("client.pid");
   let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
   let shared = SharedArgs {
-    #[cfg(not(target_os = "macos"))]
-    fix_openssl: false,
     ignore_tls_errors: true,
     lock_file: &lock,
     verbose: &verbose,
@@ -503,8 +491,6 @@ printf '%s\n' '{"success":{"username":"alice","preloginCookie":"new-cookie"}}'
     let lock = directory.join("client.pid");
     let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
     let shared = SharedArgs {
-      #[cfg(not(target_os = "macos"))]
-      fix_openssl: false,
       ignore_tls_errors: true,
       lock_file: &lock,
       verbose: &verbose,

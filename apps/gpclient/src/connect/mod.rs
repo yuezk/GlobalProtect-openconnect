@@ -185,11 +185,11 @@ impl<'a> ConnectHandler<'a> {
 
       match identity_error {
         RequestIdentityError::UnsupportedEncryption
-        | RequestIdentityError::LegacyKeyConversion(_)
         | RequestIdentityError::UnsupportedKeyFormat
         | RequestIdentityError::InvalidKey
         | RequestIdentityError::InvalidCertificate
         | RequestIdentityError::IncompletePkcs12
+        | RequestIdentityError::AmbiguousPkcs12
         | RequestIdentityError::InvalidPkcs12(_) => return Err(err),
         RequestIdentityError::NoKey => {
           let format = self.shared_args.log_format;

@@ -33,7 +33,12 @@ impl<'a> FileDownloader<'a> {
   }
 
   pub async fn download(&self) -> anyhow::Result<NamedTempFile> {
-    let res = reqwest::get(self.url).await?.error_for_status()?;
+    let res = gpapi::utils::request::client_builder()
+      .build()?
+      .get(self.url)
+      .send()
+      .await?
+      .error_for_status()?;
     let content_length = res.content_length().unwrap_or(0);
 
     info!("Content length: {}", content_length);
@@ -79,7 +84,12 @@ impl<'a> ChecksumFetcher<'a> {
   }
 
   pub async fn fetch(&self) -> anyhow::Result<String> {
-    let res = reqwest::get(self.url).await?.error_for_status()?;
+    let res = gpapi::utils::request::client_builder()
+      .build()?
+      .get(self.url)
+      .send()
+      .await?
+      .error_for_status()?;
     let checksum = res.text().await?.trim().to_string();
 
     Ok(checksum)

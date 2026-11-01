@@ -67,7 +67,6 @@ Commands:
   help        Print this message or the help of the given subcommand(s)
 
 Options:
-      --fix-openssl              Uses extended compatibility mode for OpenSSL operations to support a broader range of systems and formats.
       --ignore-tls-errors        Ignore the TLS errors
       --lock-file <LOCK_FILE>    Path to the gpclient PID lock file
       --log-format <LOG_FORMAT>  Log output format. JSON is intended for non-interactive consumers; interactive prompts remain text. [default: text] [possible values: text, json]
@@ -77,7 +76,6 @@ Options:
   -V, --version                  Print version
 ```
 
-The `--fix-openssl` option is available on Linux, FreeBSD, and OpenBSD. macOS uses native TLS and GnuTLS and does not accept this option.
 
 > **Tip:** Use `gpclient help <command>` for detailed information on a specific command.
 

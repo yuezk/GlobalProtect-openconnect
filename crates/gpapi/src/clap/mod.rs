@@ -11,8 +11,6 @@ use crate::{
 pub mod args;
 
 pub trait Args {
-  #[cfg(not(target_os = "macos"))]
-  fn fix_openssl(&self) -> bool;
   fn ignore_tls_errors(&self) -> bool;
 
   /// How this program renders its logs.
@@ -42,14 +40,6 @@ fn retry_hints(err: &anyhow::Error, args: &impl Args) -> Vec<String> {
   // The blank line between the sentence and the command is part of the output
   // users already see; keep it exactly.
   let mut hints = Vec::new();
-
-  #[cfg(not(target_os = "macos"))]
-  if kind == ServerTlsErrorKind::LegacyRenegotiation && !args.fix_openssl() {
-    let (program, rest) = command_line();
-    hints.push(format!(
-      "Re-run it with the `--fix-openssl` option to work around this issue, e.g.:\n\n{program} --fix-openssl {rest}"
-    ));
-  }
 
   if kind == ServerTlsErrorKind::Certificate && !args.ignore_tls_errors() {
     let (program, rest) = command_line();
@@ -204,18 +194,11 @@ mod tests {
 
   #[derive(Default)]
   struct TestArgs {
-    #[cfg(not(target_os = "macos"))]
-    fix_openssl: bool,
     ignore_tls_errors: bool,
     log_format: LogFormat,
   }
 
   impl Args for TestArgs {
-    #[cfg(not(target_os = "macos"))]
-    fn fix_openssl(&self) -> bool {
-      self.fix_openssl
-    }
-
     fn ignore_tls_errors(&self) -> bool {
       self.ignore_tls_errors
     }
@@ -260,31 +243,12 @@ mod tests {
   }
 
   #[test]
-  fn hints_distinguish_legacy_and_unknown_tls_and_respect_both_flags() {
-    let legacy = ServerTlsError {
-      server: "https://vpn.example.com".into(),
-      kind: ServerTlsErrorKind::LegacyRenegotiation,
-    };
-    let hints = retry_hints(&anyhow!(legacy.clone()), &TestArgs::default());
-    if cfg!(target_os = "macos") {
-      assert!(hints.is_empty());
-    } else {
-      assert_eq!(hints.len(), 1);
-      assert!(hints[0].contains("--fix-openssl"));
-    }
-    let args = TestArgs {
-      #[cfg(not(target_os = "macos"))]
-      fix_openssl: true,
-      ignore_tls_errors: true,
-      ..Default::default()
-    };
-    assert!(retry_hints(&anyhow!(legacy), &args).is_empty());
-    assert!(retry_hints(&anyhow!(certificate_error()), &args).is_empty());
-    let other = ServerTlsError {
+  fn unknown_tls_failure_does_not_suggest_bypassing_certificate_validation() {
+    let error = ServerTlsError {
       server: "https://vpn.example.com".into(),
       kind: ServerTlsErrorKind::Other,
     };
-    assert!(retry_hints(&anyhow!(other), &TestArgs::default()).is_empty());
+    assert!(retry_hints(&anyhow!(error), &TestArgs::default()).is_empty());
   }
 
   /// Suggesting an option the user already passed is noise, and in JSON mode it

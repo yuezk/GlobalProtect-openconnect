@@ -4,13 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use super::PortalError;
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-#[path = "server_tls/apple.rs"]
-mod backend;
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-#[path = "server_tls/openssl.rs"]
-mod backend;
-
 /// A VPN HTTP TLS failure. The server identifies the configured VPN origin,
 /// not necessarily the peer that failed after an HTTP redirect.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,7 +18,6 @@ pub struct ServerTlsError {
 pub enum ServerTlsErrorKind {
   Certificate,
   ClientCertificateRequired,
-  LegacyRenegotiation,
   Other,
 }
 
@@ -43,7 +35,6 @@ impl fmt::Display for ServerTlsError {
     let message = match self.kind {
       ServerTlsErrorKind::Certificate => "The server's certificate could not be verified",
       ServerTlsErrorKind::ClientCertificateRequired => "The server requires a client certificate",
-      ServerTlsErrorKind::LegacyRenegotiation => "The server requires unsafe legacy TLS renegotiation",
       ServerTlsErrorKind::Other => "A secure connection to the server could not be established",
     };
     write!(f, "{message}: {}", self.server)
@@ -70,122 +61,25 @@ impl ServerTlsErrorKind {
 
 pub(super) fn classify(error: &(dyn Error + 'static)) -> Option<ServerTlsErrorKind> {
   let mut source = Some(error);
-  let mut fallback = None;
   while let Some(error) = source {
     if let Some(tls) = error.downcast_ref::<ServerTlsError>() {
       return Some(tls.kind);
     }
-    if let Some(kind) = backend::classify(error) {
-      return Some(kind);
-    }
-    if let Some(tls) = error.downcast_ref::<native_tls::Error>() {
-      let kind = classify_native(tls);
-      if kind != ServerTlsErrorKind::Other {
-        return Some(kind);
-      }
-      fallback = Some(kind);
+    if let Some(tls) = error.downcast_ref::<rustls::Error>() {
+      return Some(match tls {
+        rustls::Error::InvalidCertificate(_) => ServerTlsErrorKind::Certificate,
+        rustls::Error::AlertReceived(rustls::AlertDescription::CertificateRequired) => {
+          ServerTlsErrorKind::ClientCertificateRequired
+        }
+        _ => ServerTlsErrorKind::Other,
+      });
     }
     source = error
       .downcast_ref::<std::io::Error>()
       .and_then(|error| error.get_ref().map(|inner| inner as &(dyn Error + 'static)))
       .or_else(|| error.source());
   }
-  fallback
-}
-
-fn classify_native(error: &native_tls::Error) -> ServerTlsErrorKind {
-  // native-tls hides some backend reason codes and verification results. Keep
-  // backend text matching here, scoped to a confirmed native TLS error.
-  let detail = format!("{error:?}").to_ascii_lowercase();
-  classify_native_detail(&detail)
-}
-
-fn classify_native_detail(detail: &str) -> ServerTlsErrorKind {
-  // native-tls forwards Security.framework's Debug representation, but hides
-  // its OSStatus from the public error chain. Prefer that status to localized
-  // text, including for peer alerts that can mention a rejected client cert.
-  if let Some(code) = detail
-    .strip_prefix("error { code: ")
-    .and_then(|detail| detail.split_once(','))
-    .and_then(|(code, _)| code.parse::<i32>().ok())
-  {
-    return classify_macos_status(code);
-  }
-  if detail.contains("unsafe legacy renegotiation") {
-    return ServerTlsErrorKind::LegacyRenegotiation;
-  }
-  if detail.contains("alert certificate required") {
-    return ServerTlsErrorKind::ClientCertificateRequired;
-  }
-  let certificate = [
-    "certificate verify failed",
-    "certificate verification failed",
-    "certificate was not trusted",
-    "certificate is not trusted",
-    "self signed certificate",
-    "hostname mismatch",
-    "certificate has expired",
-    "certificate is not yet valid",
-    "certificate has been revoked",
-  ]
-  .iter()
-  .any(|reason| detail.contains(reason));
-  if certificate {
-    ServerTlsErrorKind::Certificate
-  } else {
-    ServerTlsErrorKind::Other
-  }
-}
-
-fn classify_macos_status(code: i32) -> ServerTlsErrorKind {
-  if code == -9863 {
-    return ServerTlsErrorKind::ClientCertificateRequired;
-  }
-  // Local server-certificate validation failures from Security/SecBase.h.
-  // Peer alerts (errSSLPeer*) reject our client certificate; protocol/cipher,
-  // keychain, and internal errors also cannot be fixed by skipping server trust.
-  let certificate = matches!(
-    code,
-    -9807  // errSSLXCertChainInvalid
-      | -9812 // errSSLUnknownRootCert
-      | -9813 // errSSLNoRootCert
-      | -9814 // errSSLCertExpired
-      | -9815 // errSSLCertNotYetValid
-      | -9843 // errSSLHostNameMismatch
-      | -9884 // errSSLATSLeafCertificateHashAlgorithmViolation
-      | -9885 // errSSLATSCertificateHashAlgorithmViolation
-      | -9886 // errSSLATSCertificateTrustViolation
-      | -67602 // errSecHostNameMismatch
-      | -67603 // errSecUnknownCriticalExtensionFlag
-      | -67604 // errSecNoBasicConstraints
-      | -67605 // errSecNoBasicConstraintsCA
-      | -67606 // errSecInvalidAuthorityKeyID
-      | -67607 // errSecInvalidSubjectKeyID
-      | -67608 // errSecInvalidKeyUsageForPolicy
-      | -67609 // errSecInvalidExtendedKeyUsage
-      | -67610 // errSecInvalidIDLinkage
-      | -67611 // errSecPathLengthConstraintExceeded
-      | -67612 // errSecInvalidRoot
-      | -67629 // errSecSSLBadExtendedKeyUsage
-      | -67654 // errSecTrustSettingDeny
-      | -67818 // errSecCertificateExpired
-      | -67819 // errSecCertificateNotValidYet
-      | -67820 // errSecCertificateRevoked
-      | -67821 // errSecCertificateSuspended
-      | -67826 // errSecInvalidCertAuthority
-      | -67843 // errSecNotTrusted
-      | -67899 // errSecCertificatePolicyNotAllowed
-      | -67900 // errSecCertificateNameNotAllowed
-      | -67901 // errSecCertificateValidityPeriodTooLong
-      | -67902 // errSecCertificateIsCA
-      | -67903 // errSecCertificateDuplicateExtension
-      | -67904 // errSecMissingQualifiedCertStatement
-  );
-  if certificate {
-    ServerTlsErrorKind::Certificate
-  } else {
-    ServerTlsErrorKind::Other
-  }
+  None
 }
 
 #[cfg(test)]
@@ -207,39 +101,26 @@ mod tests {
   };
 
   #[test]
-  fn explicit_client_certificate_requirement_has_a_distinct_kind() {
-    let kind = classify_native_detail("error { code: -9863, message: \"localized message\" }");
-    assert_eq!(serde_json::to_value(kind).unwrap(), "clientCertificateRequired");
-    assert_eq!(
-      classify_native_detail("error { code: -9842, message: \"client cert requested\" }"),
-      ServerTlsErrorKind::Other
-    );
-  }
-
-  #[test]
-  fn macos_certificate_statuses_do_not_depend_on_the_error_message() {
-    for code in [-67818, -67819, -67820, -67843, -67602, -67629, -67899, -67901] {
-      let detail = format!("error {{ code: {code}, message: \"localized message\" }}");
+  fn typed_tls_causes_distinguish_local_trust_from_peer_alerts() {
+    for reason in [
+      rustls::CertificateError::Expired,
+      rustls::CertificateError::UnknownIssuer,
+    ] {
+      let error = std::io::Error::other(std::io::Error::other(rustls::Error::InvalidCertificate(reason)));
+      assert_eq!(classify(&error), Some(ServerTlsErrorKind::Certificate));
+    }
+    for alert in [
+      rustls::AlertDescription::UnknownCA,
+      rustls::AlertDescription::BadCertificate,
+    ] {
       assert_eq!(
-        classify_native_detail(&detail),
-        ServerTlsErrorKind::Certificate,
-        "{code}"
+        classify(&rustls::Error::AlertReceived(alert)),
+        Some(ServerTlsErrorKind::Other)
       );
     }
-  }
-
-  #[test]
-  fn macos_peer_alerts_and_handshake_errors_are_not_certificate_validation_failures() {
-    for (code, message) in [
-      (-9800, "SSL protocol error"),
-      (-9801, "Cipher Suite negotiation failure"),
-      (-9828, "peer certificate has expired"),
-      (-9831, "unknown certificate authority"),
-      (-9850, "weak ephemeral DH key"),
-    ] {
-      let detail = format!("error {{ code: {code}, message: \"{message}\" }}").to_ascii_lowercase();
-      assert_eq!(classify_native_detail(&detail), ServerTlsErrorKind::Other, "{code}");
-    }
+    let required = rustls::Error::AlertReceived(rustls::AlertDescription::CertificateRequired);
+    assert_eq!(classify(&required), Some(ServerTlsErrorKind::ClientCertificateRequired));
+    assert_eq!(classify(&std::io::Error::other("certificate verify failed")), None);
   }
 
   fn server(tls: bool) -> (String, thread::JoinHandle<()>) {
@@ -335,7 +216,7 @@ mod tests {
   #[tokio::test]
   async fn incompatible_tls_is_not_a_certificate_error_even_with_bypass() {
     let (address, worker) = server(false);
-    let error = reqwest::Client::builder()
+    let error = crate::utils::request::client_builder()
       .no_proxy()
       .danger_accept_invalid_certs(true)
       .build()
@@ -354,7 +235,7 @@ mod tests {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = format!("https://{}", listener.local_addr().unwrap());
     drop(listener);
-    let error = reqwest::Client::builder()
+    let error = crate::utils::request::client_builder()
       .no_proxy()
       .build()
       .unwrap()
@@ -363,17 +244,6 @@ mod tests {
       .await
       .unwrap_err();
     assert_eq!(classify(&error), None);
-  }
-
-  #[cfg(any(target_os = "macos", target_os = "ios"))]
-  #[test]
-  fn wrapped_macos_io_status_retains_the_client_certificate_requirement() {
-    let error = std::io::Error::other(std::io::Error::other(security_framework::base::Error::from(-9863)));
-    let server = url::Url::parse("https://vpn.example.com/login?token=secret").unwrap();
-    let tls = ServerTlsError::from_request(&server, &error).unwrap();
-    assert_eq!(tls.kind, ServerTlsErrorKind::ClientCertificateRequired);
-    assert_eq!(tls.server, "https://vpn.example.com");
-    assert_eq!(classify(&std::io::Error::other("alert certificate required")), None);
   }
 
   #[cfg(feature = "desktop")]
@@ -436,19 +306,11 @@ mod tests {
       worker.join().unwrap();
       let kind =
         ServerTlsErrorKind::from_error(&error).unwrap_or_else(|| panic!("{operation}: unclassified: {error:?}"));
-      // Secure Transport's TLS 1.2 handshake can return only a generic peer alert.
-      if cfg!(target_os = "macos") {
-        assert!(matches!(
-          kind,
-          ServerTlsErrorKind::ClientCertificateRequired | ServerTlsErrorKind::Other
-        ));
-      } else {
-        assert_eq!(
-          kind,
-          ServerTlsErrorKind::ClientCertificateRequired,
-          "{operation}: {error:?}"
-        );
-      }
+      assert_eq!(
+        kind,
+        ServerTlsErrorKind::ClientCertificateRequired,
+        "{operation}: {error:?}"
+      );
     }
   }
 
@@ -485,6 +347,78 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn imported_identity_formats_complete_mutual_tls_prelogin() {
+    use crate::{
+      gp_params::GpParams,
+      os_profile::{ClientOs, OsProfile},
+      portal::{PreloginOptions, prelogin},
+    };
+    let fixture = |name: &str| format!("{}/tests/files/client-identity/{name}", env!("CARGO_MANIFEST_DIR"));
+    for (certificate, key, password) in [
+      (
+        "rsa-cert.pem",
+        Some("rsa-traditional-aes256.pem"),
+        Some("fixture-password"),
+      ),
+      ("ec-cert.pem", Some("ec-traditional-des3.pem"), Some("fixture-password")),
+      ("rsa-cert.pem", Some("rsa-pbes1-3des.pem"), Some("fixture-password")),
+      ("rsa-cert.pem", Some("rsa-pbes2-scrypt.pem"), Some("fixture-password")),
+      ("ec-cert.pem", Some("ec-sec1.pem"), None),
+      ("modern.p12", None, Some("fixture-password")),
+      ("legacy-rc2.p12", None, Some("fixture-password")),
+      ("empty-password.p12", None, None),
+      ("no-bag-ids.p12", None, None),
+    ] {
+      let (address, worker) = server_with_client_auth(true, SslVerifyMode::PEER | SslVerifyMode::FAIL_IF_NO_PEER_CERT);
+      let mut builder =
+        GpParams::builder(OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot()));
+      builder
+        .ignore_tls_errors(true)
+        .certificate(Some(fixture(certificate)))
+        .sslkey(key.map(fixture))
+        .key_password(password.map(str::to_owned));
+      let mut params = builder.build();
+      params
+        .prepare_client_identity()
+        .unwrap_or_else(|error| panic!("{certificate}/{key:?}: {error:?}"));
+      let result = prelogin(&address, &params, PreloginOptions::default()).await;
+      worker.join().unwrap();
+      assert!(matches!(
+        result.unwrap_or_else(|error| panic!("{certificate}/{key:?}: {error:?}")),
+        crate::portal::Prelogin::Saml(_)
+      ));
+    }
+  }
+
+  /// Point at the GnuTLS fixture configured without RFC 5746, with a trusted test root.
+  #[tokio::test]
+  #[ignore = "requires GP_TLS_TEST_SERVER and GP_TLS_TEST_CA for the external GnuTLS fixture"]
+  async fn tls12_peer_without_renegotiation_extension_uses_default_policy() {
+    let server = std::env::var("GP_TLS_TEST_SERVER").unwrap();
+    let root = std::fs::read(std::env::var("GP_TLS_TEST_CA").unwrap()).unwrap();
+    let client = crate::utils::request::client_builder()
+      .no_proxy()
+      .add_root_certificate(reqwest::Certificate::from_pem(&root).unwrap())
+      .build()
+      .unwrap();
+    assert!(client.get(&server).send().await.unwrap().status().is_success());
+    let error = crate::utils::request::client_builder()
+      .no_proxy()
+      .build()
+      .unwrap()
+      .get(&server)
+      .send()
+      .await
+      .unwrap_err();
+    assert_eq!(
+      ServerTlsError::from_request(&url::Url::parse(&server).unwrap(), &error)
+        .unwrap()
+        .kind,
+      ServerTlsErrorKind::Certificate
+    );
+  }
+
+  #[tokio::test]
   async fn failed_response_reads_preserve_the_transport_cause() {
     for status in [200, 403] {
       let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -500,7 +434,7 @@ mod tests {
         )
         .unwrap();
       });
-      let response = reqwest::Client::builder()
+      let response = crate::utils::request::client_builder()
         .no_proxy()
         .build()
         .unwrap()

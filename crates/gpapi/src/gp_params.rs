@@ -161,7 +161,7 @@ impl GpParams {
   }
 
   pub(crate) fn client_builder(&self) -> anyhow::Result<ClientBuilder> {
-    let mut builder = Client::builder()
+    let mut builder = crate::utils::request::client_builder()
       .tls_info(true)
       .danger_accept_invalid_certs(self.ignore_tls_errors)
       .user_agent(self.user_agent());

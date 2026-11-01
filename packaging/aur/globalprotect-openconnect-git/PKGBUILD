@@ -10,7 +10,7 @@ url="https://github.com/yuezk/GlobalProtect-openconnect"
 license=('GPL3')
 
 makedepends=(git pkg-config make autoconf automake gettext libtool patch curl wget file appmenu-gtk-module librsvg cargo)
-depends=(openssl webkit2gtk-4.1 libappindicator-gtk3 libsecret libxml2 zlib lz4 gnutls libp11-kit nettle gmp shared-mime-info desktop-file-utils xdg-utils)
+depends=(webkit2gtk-4.1 libappindicator-gtk3 libsecret libxml2 zlib lz4 gnutls libp11-kit nettle gmp shared-mime-info desktop-file-utils xdg-utils)
 optdepends=('wmctrl: for window management')
 
 conflicts=('globalprotect-openconnect')
@@ -38,9 +38,6 @@ prepare() {
 }
 
 build() {
-  # Must unset the CFLAGS, otherwise the build fails on linking openssl, don't know why
-  unset CFLAGS
-
   cd "${_pkgname_prefix}"
   cargo build --frozen --release
 }

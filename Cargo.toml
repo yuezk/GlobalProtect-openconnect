@@ -32,7 +32,7 @@ is_executable = "1.0"
 log = "0.4"
 # RUST_LOG accepts user-supplied Unicode property filters through env_logger.
 regex = { version = "1", default-features = false, features = ["std", "perf", "unicode"] }
-reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "system-proxy", "json", "form", "query"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "charset", "http2", "system-proxy", "json", "form", "query"] }
 openssl = "0.10"
 pem = "4"
 xmltree = { version = "0.12", features = ["attribute-order"] }

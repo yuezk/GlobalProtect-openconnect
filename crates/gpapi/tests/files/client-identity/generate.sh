@@ -75,3 +75,6 @@ done
   -name fixture -passout pass:fixture-password -out certificate-only.pfx
 "$openssl_bin" pkcs12 -export -nocerts -inkey rsa-pkcs8.pem \
   -name fixture -passout pass:fixture-password -out key-only.pfx
+
+# Plain PKCS#12 bags let the import tests omit optional IDs and reorder bags.
+python3 "$(dirname "$0")/generate-plain-pfx.py"

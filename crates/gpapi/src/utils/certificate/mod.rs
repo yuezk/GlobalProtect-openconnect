@@ -1,18 +1,20 @@
-#[cfg(target_os = "macos")]
-#[path = "pkcs12/macos.rs"]
-pub(super) mod pkcs12_identity;
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-#[path = "pkcs12/openssl.rs"]
-pub(super) mod pkcs12_identity;
-#[cfg(target_os = "ios")]
-#[path = "pkcs12/ios.rs"]
-pub(super) mod pkcs12_identity;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-#[path = "traditional_key/apple.rs"]
-pub(super) mod traditional_key;
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-#[path = "traditional_key/openssl.rs"]
-pub(super) mod traditional_key;
+pub(super) mod pkcs12;
 
-#[cfg(feature = "desktop")]
-pub(super) mod legacy_pkcs8;
+#[cfg(any(
+  target_os = "macos",
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd"
+))]
+#[path = "gnutls.rs"]
+mod legacy_key;
+#[cfg(not(any(
+  target_os = "macos",
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd"
+)))]
+#[path = "unsupported.rs"]
+mod legacy_key;
+
+pub(super) use legacy_key::decrypt as decrypt_key;

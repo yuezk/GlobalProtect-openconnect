@@ -1,4 +1,4 @@
-//! Public identity compatibility and native import behavior.
+//! Public identity compatibility and owned material lifecycle.
 use std::{fs, path::PathBuf};
 
 use gpapi::utils::request::{ClientIdentity, RequestIdentityError};
@@ -31,23 +31,9 @@ fn rsa_pkcs8_loads_without_a_password() {
 }
 
 #[test]
-fn ec_pkcs8_records_native_import_compatibility() {
-  let result = load("ec-cert.pem", "ec-pkcs8.pem", None);
-  if cfg!(target_os = "macos") {
-    // Apple native-tls import currently rejects this P-256 PKCS#8 fixture.
-    assert!(
-      result
-        .unwrap_err()
-        .downcast_ref::<reqwest::Error>()
-        .unwrap()
-        .is_builder()
-    );
-  } else {
-    assert_eq!(
-      result.unwrap().key_data().unwrap(),
-      fs::read(fixture("ec-pkcs8.pem")).unwrap()
-    );
-  }
+fn ec_pkcs8_loads_on_every_platform() {
+  let identity = load("ec-cert.pem", "ec-pkcs8.pem", None).unwrap();
+  assert_eq!(identity.key_data().unwrap(), fs::read(fixture("ec-pkcs8.pem")).unwrap());
 }
 
 #[test]
@@ -63,23 +49,13 @@ fn encrypted_pkcs8_keys_normalize_to_the_same_private_key() {
     ("ec-pbes2.pem", "ec-pkcs8.pem", "ec-cert.pem"),
   ] {
     let result = load(certificate, key, Some(PASSWORD));
-    if cfg!(target_os = "macos") && certificate == "ec-cert.pem" {
-      assert!(
-        result
-          .unwrap_err()
-          .downcast_ref::<reqwest::Error>()
-          .unwrap()
-          .is_builder()
-      );
-    } else {
-      let identity = result.unwrap_or_else(|error| panic!("{key}: {error}"));
-      assert_eq!(
-        identity.key_data().unwrap(),
-        fs::read(fixture(expected)).unwrap(),
-        "{key}"
-      );
-      assert!(identity.key_password().is_none());
-    }
+    let identity = result.unwrap_or_else(|error| panic!("{key}: {error}"));
+    assert_eq!(
+      identity.key_data().unwrap(),
+      fs::read(fixture(expected)).unwrap(),
+      "{key}"
+    );
+    assert!(identity.key_password().is_none());
     for (password, missing) in [(None, true), (Some("incorrect"), false)] {
       let error = load(certificate, key, password).unwrap_err();
       match error.downcast_ref::<RequestIdentityError>() {
@@ -128,7 +104,7 @@ fn rsa_pkcs1_normalizes_to_pkcs8_in_separate_and_combined_files() {
 }
 
 #[test]
-fn malformed_rsa_pkcs1_is_rejected_by_native_import() {
+fn malformed_rsa_pkcs1_is_rejected_before_connection() {
   let directory = tempfile::tempdir().unwrap();
   let source = directory.path().join("invalid-key.pem");
   fs::write(&source, pem::encode(&pem::Pem::new("RSA PRIVATE KEY", vec![0x30, 0]))).unwrap();
@@ -138,7 +114,11 @@ fn malformed_rsa_pkcs1_is_rejected_by_native_import() {
     None,
   )
   .unwrap_err();
-  assert!(error.downcast_ref::<reqwest::Error>().is_some());
+  assert!(
+    error
+      .to_string()
+      .contains("Check that the private key matches the certificate")
+  );
 }
 
 fn check_archive(name: &str, password: &str) {
@@ -211,15 +191,12 @@ fn pkcs12_password_errors_explain_how_to_recover() {
       assert!(message.contains("PKCS#12"), "{message}");
       assert!(message.contains("password") && message.contains("file"), "{message}");
       assert!(!format!("{error:?}").contains("incorrect"));
-      assert!(error.chain().any(|cause| cause.is::<reqwest::Error>()));
+      assert!(error.chain().any(|cause| cause.is::<p12_keystore::error::Error>()));
     }
   }
 }
 
 #[test]
-// Apple's native importer rejects this empty-password fixture; its native
-// compatibility decision is covered by archive_snapshot_and_pfx_preserve_native_import_contract.
-#[cfg(not(target_os = "macos"))]
 fn empty_pkcs12_password_survives_loading_and_transport() {
   let archive = fs::read(fixture("empty-password.p12")).unwrap();
   for password in [None, Some("")] {
@@ -239,26 +216,6 @@ fn pkcs12_accepts_non_ascii_passwords() {
 
 #[test]
 fn legacy_rc2_pkcs12_checks_password_and_archive_integrity() {
-  #[cfg(not(target_os = "macos"))]
-  if std::env::var_os("GP_IDENTITY_LEGACY_TEST_CHILD").is_none() {
-    // OpenSSL providers are process-global. Exercise the existing legacy-mode
-    // configuration in an isolated process, without affecting parallel tests.
-    let directory = tempfile::tempdir().unwrap();
-    let config = directory.path().join("openssl.cnf");
-    fs::write(&config, gpapi::utils::openssl::openssl_conf()).unwrap();
-    let status = std::process::Command::new(std::env::current_exe().unwrap())
-      .args([
-        "--exact",
-        "legacy_rc2_pkcs12_checks_password_and_archive_integrity",
-        "--nocapture",
-      ])
-      .env("OPENSSL_CONF", config)
-      .env("GP_IDENTITY_LEGACY_TEST_CHILD", "1")
-      .status()
-      .unwrap();
-    assert!(status.success());
-    return;
-  }
   check_archive("legacy-rc2.p12", PASSWORD);
 }
 
@@ -307,7 +264,12 @@ fn pbes2_legacy_ciphers_remain_supported() {
 }
 
 #[test]
-#[cfg(feature = "desktop")]
+#[cfg(any(
+  target_os = "macos",
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd"
+))]
 fn legacy_pkcs8_conversion_preserves_the_key_and_password_errors() {
   let identity = load("rsa-cert.pem", "rsa-pbes1-3des.pem", Some(PASSWORD)).unwrap();
   assert_eq!(
@@ -326,121 +288,65 @@ fn legacy_pkcs8_conversion_preserves_the_key_and_password_errors() {
 }
 
 #[test]
-#[cfg(not(target_os = "macos"))]
-#[cfg(feature = "desktop")]
-fn legacy_pkcs8_matches_previous_linux_openssl_processing() {
-  let encrypted = fs::read(fixture("rsa-pbes1-3des.pem")).unwrap();
-  let previous = openssl::pkey::PKey::private_key_from_pem_passphrase(&encrypted, PASSWORD.as_bytes())
-    .unwrap()
-    .private_key_to_pem_pkcs8()
-    .unwrap();
-  let identity = load("rsa-cert.pem", "rsa-pbes1-3des.pem", Some(PASSWORD)).unwrap();
-  assert_eq!(identity.key_data().unwrap(), previous);
-  assert!(openssl::pkey::PKey::private_key_from_pem_passphrase(&encrypted, b"incorrect").is_err());
-}
-
-#[test]
-#[cfg(feature = "desktop")]
-fn legacy_pkcs8_converter_failures_are_terminal_and_modern_keys_need_no_executable() {
-  use std::os::unix::fs::PermissionsExt;
-
-  const CHILD: &str = "GP_LEGACY_CONVERTER_TEST";
-  if let Ok(case) = std::env::var(CHILD) {
-    let started = std::time::Instant::now();
-    let error = load("rsa-cert.pem", "rsa-pbes1-3des.pem", Some(PASSWORD)).unwrap_err();
-    assert!(
-      started.elapsed() < std::time::Duration::from_secs(12),
-      "conversion exceeded its deadline"
-    );
-    assert!(
-      matches!(
-        error.downcast_ref::<RequestIdentityError>(),
-        Some(RequestIdentityError::LegacyKeyConversion(_))
-      ),
-      "{error:?}"
-    );
-    let message = format!("{error:?}");
-    assert!(message.contains("Convert the key to modern PKCS#8"));
-    assert!(!message.contains(PASSWORD));
-    assert!(!message.contains("PRIVATE KEY"));
-    if case == "missing" {
-      assert!(message.contains("unavailable"));
-    } else if case.starts_with("timeout") {
-      assert!(message.contains("timed out"));
-    }
-    for key in ["rsa-pkcs8.pem", "rsa-pbes2-sha256.pem"] {
-      let identity = load("rsa-cert.pem", key, Some(PASSWORD)).unwrap();
-      assert_eq!(
-        identity.key_data().unwrap(),
-        fs::read(fixture("rsa-pkcs8.pem")).unwrap()
-      );
-    }
-    return;
-  }
-
-  // PATH is process-global; isolate executable discovery from parallel tests.
-  for (case, script) in [
-    ("missing", None),
-    (
-      "unsupported",
-      Some("#!/bin/sh\nprintf 'unsupported: fixture-password PRIVATE KEY' >&2\nexit 1\n"),
-    ),
-    ("invalid-output", Some("#!/bin/sh\nprintf 'invalid converted key'\n")),
-    ("timeout-wrapper", Some("#!/bin/sh\n/bin/sleep 14\n")),
-    ("timeout-exited-wrapper", Some("#!/bin/sh\n/bin/sleep 14 &\nexit 0\n")),
-  ] {
+#[cfg(any(
+  target_os = "macos",
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd"
+))]
+fn identity_import_does_not_use_converter_executables() {
+  const CHILD: &str = "GP_IDENTITY_NO_COMMANDS";
+  if std::env::var_os(CHILD).is_none() {
     let directory = tempfile::tempdir().unwrap();
-    if let Some(script) = script {
-      let executable = directory.path().join("openssl");
-      fs::write(&executable, script).unwrap();
-      fs::set_permissions(executable, fs::Permissions::from_mode(0o700)).unwrap();
-    }
     let status = std::process::Command::new(std::env::current_exe().unwrap())
-      .args([
-        "--exact",
-        "legacy_pkcs8_converter_failures_are_terminal_and_modern_keys_need_no_executable",
-        "--nocapture",
-      ])
+      .args(["--exact", "identity_import_does_not_use_converter_executables"])
+      .env(CHILD, "1")
       .env("PATH", directory.path())
-      .env(CHILD, case)
       .status()
       .unwrap();
-    assert!(status.success(), "converter case: {case}");
+    assert!(status.success());
+    return;
+  }
+  for key in ["rsa-pkcs8.pem", "rsa-traditional-aes256.pem", "rsa-pbes1-3des.pem"] {
+    let identity = load("rsa-cert.pem", key, Some(PASSWORD)).unwrap();
+    assert_eq!(
+      identity.key_data().unwrap(),
+      fs::read(fixture("rsa-pkcs8.pem")).unwrap()
+    );
+  }
+  check_archive("legacy-rc2.p12", PASSWORD);
+}
+
+#[test]
+#[cfg(any(
+  target_os = "macos",
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd"
+))]
+fn encrypted_key_import_accepts_long_passwords() {
+  for length in [1023, 1024] {
+    let identity = load(
+      "rsa-cert.pem",
+      &format!("rsa-pbes1-3des-password-{length}.pem"),
+      Some(&"x".repeat(length)),
+    )
+    .unwrap();
+    assert_eq!(
+      identity.key_data().unwrap(),
+      fs::read(fixture("rsa-pkcs8.pem")).unwrap()
+    );
   }
 }
 
 #[test]
-#[cfg(feature = "desktop")]
-fn legacy_converter_reports_its_password_length_limit_without_requesting_a_retry() {
-  let password = "x".repeat(1024);
-  let encrypted = fs::read(fixture("rsa-pbes1-3des-password-1024.pem")).unwrap();
-  // The previous linked API accepted this boundary. The CLI cannot carry it;
-  // report that limitation rather than calling the correct password wrong.
-  openssl::pkey::PKey::private_key_from_pem_passphrase(&encrypted, password.as_bytes()).unwrap();
-  let error = load("rsa-cert.pem", "rsa-pbes1-3des-password-1024.pem", Some(&password)).unwrap_err();
-  assert!(
-    matches!(
-      error.downcast_ref::<RequestIdentityError>(),
-      Some(RequestIdentityError::LegacyKeyConversion(_))
-    ),
-    "{error:?}"
-  );
-  assert!(error.to_string().contains("1023-byte"));
-  let accepted = load(
-    "rsa-cert.pem",
-    "rsa-pbes1-3des-password-1023.pem",
-    Some(&"x".repeat(1023)),
-  )
-  .unwrap();
-  assert_eq!(
-    accepted.key_data().unwrap(),
-    fs::read(fixture("rsa-pkcs8.pem")).unwrap()
-  );
-}
-
-#[test]
-#[cfg(feature = "desktop")]
-fn legacy_conversion_keeps_original_files_and_rejects_line_breaks_in_passwords() {
+#[cfg(any(
+  target_os = "macos",
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd"
+))]
+fn encrypted_key_import_keeps_original_files_and_redacts_passwords() {
   let original = fs::read(fixture("rsa-pbes1-3des.pem")).unwrap();
   for password in [
     PASSWORD,
@@ -452,16 +358,15 @@ fn legacy_conversion_keeps_original_files_and_rejects_line_breaks_in_passwords()
     let result = load("rsa-cert.pem", "rsa-pbes1-3des.pem", Some(password));
     if password == PASSWORD {
       result.unwrap();
-    } else if password != "incorrect" {
-      assert!(matches!(
-        result.unwrap_err().downcast_ref::<RequestIdentityError>(),
-        Some(RequestIdentityError::LegacyKeyConversion(_))
-      ));
     } else {
-      assert!(matches!(
-        result.unwrap_err().downcast_ref::<RequestIdentityError>(),
-        Some(RequestIdentityError::DecryptError("PEM"))
-      ));
+      let error = result.unwrap_err();
+      assert!(!format!("{error:?}").contains(password));
+      if !password.contains('\0') {
+        assert!(matches!(
+          error.downcast_ref::<RequestIdentityError>(),
+          Some(RequestIdentityError::DecryptError("PEM"))
+        ));
+      }
     }
     assert_eq!(fs::read(fixture("rsa-pbes1-3des.pem")).unwrap(), original);
   }
@@ -535,7 +440,7 @@ fn prepared_pem_round_trip_retains_snapshot_and_private_file_lifecycle() {
 }
 
 #[test]
-fn archive_snapshot_and_pfx_preserve_native_import_contract() {
+fn archive_snapshot_and_pfx_preserve_prepared_identity() {
   use zeroize::Zeroizing;
   let directory = tempfile::tempdir().unwrap();
   let path = directory.path().join("identity.pfx");
@@ -554,12 +459,7 @@ fn archive_snapshot_and_pfx_preserve_native_import_contract() {
   assert!(restored.key_data().is_none());
   assert!(!format!("{restored:?}").contains(PASSWORD));
   let empty = fs::read(fixture("empty-password.p12")).unwrap();
-  // Preserve the native backend's existing empty-password decision.
-  let expected = reqwest::Identity::from_pkcs12_der(&empty, "").is_ok();
-  assert_eq!(
-    ClientIdentity::from_data(Zeroizing::new(empty), None, Some("")).is_ok(),
-    expected
-  );
+  assert!(ClientIdentity::from_data(Zeroizing::new(empty), None, Some("")).is_ok());
 }
 
 #[test]
@@ -712,11 +612,62 @@ fn mismatched_certificate_key_is_rejected_before_request_client_creation() {
   );
 }
 
-#[cfg(not(feature = "desktop"))]
 #[test]
-fn portable_legacy_pkcs8_is_explicitly_unsupported() {
-  for password in [None, Some(PASSWORD)] {
-    let error = load("rsa-cert.pem", "rsa-pbes1-3des.pem", password).unwrap_err();
+fn pkcs12_without_bag_ids_or_mac_matches_the_key_instead_of_bag_order() {
+  let data = fs::read(fixture("no-bag-ids.p12")).unwrap();
+  let archive = p12_keystore::Pkcs12Archive::from_pkcs12(&data, "").unwrap();
+  assert!(archive.keys[0].local_key_id.is_none());
+  assert!(archive.certs.iter().all(|bag| bag.local_key_id.is_none()));
+  assert_eq!(
+    archive.certs[0].cert.as_der(),
+    pem::parse(fs::read(fixture("root.pem")).unwrap()).unwrap().contents()
+  );
+  for password in [None, Some("")] {
+    let identity = ClientIdentity::from_data(data.clone().into(), None, password).unwrap();
+    assert_eq!(identity.certificate_data(), data);
+    assert!(identity.key_data().is_none());
+  }
+}
+
+#[test]
+fn pkcs12_rejects_mismatched_and_multiple_identities() {
+  for (name, ambiguous) in [("mismatched.p12", false), ("multiple-identities.p12", true)] {
+    let error = ClientIdentity::load(fixture(name).to_str().unwrap(), None, None).unwrap_err();
+    match error.downcast_ref::<RequestIdentityError>() {
+      Some(RequestIdentityError::AmbiguousPkcs12) => assert!(ambiguous),
+      Some(RequestIdentityError::InvalidCertificate) => assert!(!ambiguous),
+      other => panic!("{name}: unexpected archive error: {other:?}"),
+    }
+  }
+}
+
+#[test]
+fn owned_identity_accepts_certificate_pem_without_a_final_newline() {
+  let certificate = fs::read(fixture("rsa-cert.pem")).unwrap();
+  let certificate = certificate.trim_ascii_end().to_vec();
+  let key = fs::read(fixture("rsa-pkcs8.pem")).unwrap();
+  let identity = ClientIdentity::from_data(
+    zeroize::Zeroizing::new(certificate.clone()),
+    Some(zeroize::Zeroizing::new(key)),
+    None,
+  )
+  .unwrap();
+  assert_eq!(identity.certificate_data(), certificate);
+}
+
+#[test]
+fn retained_pkcs12_password_rejects_nul_before_native_tunnel_setup() {
+  let password = "private\0password";
+  let error = ClientIdentity::load(fixture("no-bag-ids.p12").to_str().unwrap(), None, Some(password)).unwrap_err();
+  assert!(error.to_string().contains("NUL"));
+  assert!(!format!("{error:?}").contains(password));
+}
+
+#[cfg(target_os = "ios")]
+#[test]
+fn ios_reports_unsupported_legacy_encryption_without_a_native_importer() {
+  for key in ["rsa-pbes1-3des.pem", "rsa-traditional-aes256.pem"] {
+    let error = load("rsa-cert.pem", key, Some(PASSWORD)).unwrap_err();
     assert!(matches!(
       error.downcast_ref::<RequestIdentityError>(),
       Some(RequestIdentityError::UnsupportedEncryption)

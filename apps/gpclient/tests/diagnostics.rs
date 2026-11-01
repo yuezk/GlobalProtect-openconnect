@@ -73,5 +73,11 @@ async fn embedded_collector_reports_missing_helpers_without_recursing_or_exposin
     report["fields"]["env.XDG_CURRENT_DESKTOP"]["value"],
     "TestDesktop Injected: secret"
   );
-  assert!(!String::from_utf8_lossy(&output.stderr).contains("Using 'UnsafeLegacyServerConnect'"));
+  #[cfg(not(target_os = "macos"))]
+  assert_eq!(
+    String::from_utf8_lossy(&output.stderr)
+      .matches("--fix-openssl is deprecated and has no effect. It will be removed in a future release.")
+      .count(),
+    1
+  );
 }

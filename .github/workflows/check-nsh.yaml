@@ -80,7 +80,7 @@ jobs:
           sudo apt-get install -y autoconf automake gettext libtool pkg-config \
             clang libclang-dev libgtk-4-dev libxml2-dev libssl-dev \
             libgnutls28-dev liblz4-dev libwayland-dev libxkbcommon-dev libdbus-1-dev
-          pkg-config --exists gtk4 openssl dbus-1 wayland-client xkbcommon
+          pkg-config --exists gtk4 gnutls dbus-1 wayland-client xkbcommon
       - name: Install macOS dependencies
         if: matrix.platform == 'macos'
         env:

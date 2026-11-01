@@ -1,4 +1,4 @@
-//! PEM/DER normalization; usable key and certificate imports stay with native TLS.
+//! PEM/DER normalization before rustls validates usable keys and identities.
 use pkcs8::{
   AlgorithmIdentifierRef, EncryptedPrivateKeyInfoRef, ObjectIdentifier, PrivateKeyInfoRef, SecretDocument,
   der::{
@@ -8,13 +8,7 @@ use pkcs8::{
 };
 use zeroize::Zeroizing;
 
-use super::{certificate::traditional_key, request::RequestIdentityError};
-
-pub(super) enum TraditionalKeyFormat {
-  Sec1Der,
-  PlainPem,
-  EncryptedPem,
-}
+use super::{certificate, request::RequestIdentityError};
 
 struct PemBlock {
   tag: String,
@@ -26,7 +20,9 @@ impl PemBlock {
   fn encoded(&self) -> Zeroizing<Vec<u8>> {
     let mut block = pem::Pem::new(&self.tag, self.contents.as_slice());
     *block.headers_mut() = self.headers.clone();
-    let encoded = Zeroizing::new(pem::encode(&block).into_bytes());
+    let encoded = Zeroizing::new(
+      pem::encode_config(&block, pem::EncodeConfig::new().set_line_ending(pem::LineEnding::LF)).into_bytes(),
+    );
     // The PEM crate owns a copy of the decoded private key as well.
     drop(Zeroizing::new(block.into_contents()));
     encoded
@@ -77,13 +73,13 @@ pub(super) fn private_key(bytes: &[u8], passphrase: Option<&str>) -> anyhow::Res
     if !matches!(block.tag.as_str(), "RSA PRIVATE KEY" | "EC PRIVATE KEY") {
       return Err(RequestIdentityError::InvalidKey.into());
     }
-    traditional_key::normalize(&block.encoded(), TraditionalKeyFormat::EncryptedPem, passphrase)?
+    certificate::decrypt_key(&block.encoded(), true, passphrase)?
   } else {
     match block.tag.as_str() {
       "PRIVATE KEY" => SecretDocument::try_from(der.as_slice()).map_err(|_| RequestIdentityError::InvalidKey)?,
       "RSA PRIVATE KEY" => {
         // PKCS#8 stores the original PKCS#1 bytes inside an RSA algorithm envelope.
-        // Native TLS validates the RSA key, as it does for existing PKCS#8 input.
+        // Rustls validates the RSA key along with the certificate.
         let algorithm = AlgorithmIdentifierRef {
           oid: ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.1"),
           parameters: Some(AnyRef::NULL),
@@ -94,11 +90,8 @@ pub(super) fn private_key(bytes: &[u8], passphrase: Option<&str>) -> anyhow::Res
       }
       "ENCRYPTED PRIVATE KEY" => decrypt(der, passphrase)?,
       "EC PRIVATE KEY" => {
-        if pem_input {
-          traditional_key::normalize(&block.encoded(), TraditionalKeyFormat::PlainPem, passphrase)?
-        } else {
-          traditional_key::normalize(der, TraditionalKeyFormat::Sec1Der, passphrase)?
-        }
+        sec1::EcPrivateKey::from_der(der).map_err(|_| RequestIdentityError::InvalidKey)?;
+        return Ok(block.encoded());
       }
       _ => return Err(RequestIdentityError::UnsupportedKeyFormat.into()),
     }
@@ -172,12 +165,9 @@ fn decrypt(der: &[u8], passphrase: Option<&str>) -> anyhow::Result<SecretDocumen
     .map_err(|_| RequestIdentityError::InvalidKey)?;
   if algorithm != pkcs8::pkcs5::pbes2::PBES2_OID {
     // PKCS#12 PBE-SHA1-3DES inside standalone PKCS#8 is not implemented by
-    // RustCrypto. Only this known legacy scheme uses the optional executable.
+    // RustCrypto. Only this known legacy scheme uses the native importer.
     if algorithm == pkcs8::ObjectIdentifier::new_unwrap("1.2.840.113549.1.12.1.3") {
-      #[cfg(feature = "desktop")]
-      return super::certificate::legacy_pkcs8::decrypt(der, passphrase);
-      #[cfg(not(feature = "desktop"))]
-      return Err(RequestIdentityError::UnsupportedEncryption.into());
+      return certificate::decrypt_key(der, false, passphrase);
     }
     return Err(RequestIdentityError::UnsupportedEncryption.into());
   }

@@ -21,7 +21,6 @@ pkgbase = globalprotect-openconnect-git
 	makedepends = appmenu-gtk-module
 	makedepends = librsvg
 	makedepends = cargo
-	depends = openssl
 	depends = webkit2gtk-4.1
 	depends = libappindicator-gtk3
 	depends = libsecret

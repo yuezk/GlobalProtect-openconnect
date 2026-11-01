@@ -112,15 +112,13 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
     .without("libpcsclite", None)
     .without("libpskc", None)
     .without("gssapi", None)
+    .with("gnutls", None)
+    .without("openssl", None)
     .with("gnutls-tss2", Some("no"))
     .with("vpnc-script", Some("/etc/vpnc/vpnc-script")); // Specify vpnc-script, otherwise it will fail on macOS
 
   if target_os() == "macos" {
-    config
-      .disable_static()
-      .enable_shared()
-      .with("gnutls", None)
-      .without("openssl", None);
+    config.disable_static().enable_shared();
     config.ldflag("-liconv");
     config.env("LIBS", "-liconv");
   }
@@ -140,7 +138,7 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
   let lib_dir = dst.join("lib");
   let include_dir = dst.join("include");
 
-  if target_os() == "macos" {
+  {
     let configuration = std::fs::read_to_string(dst.join("build/config.h"))
       .expect("Failed to read the OpenConnect TLS backend configuration");
     assert!(
@@ -148,8 +146,11 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
         && !configuration
           .lines()
           .any(|line| line == "#define OPENCONNECT_OPENSSL 1"),
-      "macOS OpenConnect must use GnuTLS"
+      "OpenConnect must use GnuTLS"
     );
+  }
+
+  if target_os() == "macos" {
     // Do not embed Cargo's temporary build directory in consumers of this library.
     let library = std::fs::canonicalize(lib_dir.join("libopenconnect.dylib")).unwrap();
     let library_name = library.file_name().unwrap().to_str().unwrap();

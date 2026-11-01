@@ -28,7 +28,6 @@ sysinfo.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 whoami.workspace = true
-tempfile.workspace = true
 reqwest.workspace = true
 directories.workspace = true
 compile-time.workspace = true
@@ -40,3 +39,6 @@ webview-auth = ["gpapi/webview-auth"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpvpnc = { path = "../../crates/gpvpnc" }
+
+[dev-dependencies]
+tempfile.workspace = true
