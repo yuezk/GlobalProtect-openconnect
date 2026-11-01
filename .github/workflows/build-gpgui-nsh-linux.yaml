@@ -62,9 +62,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y autoconf automake gettext libtool pkg-config \
-            clang libclang-dev libgtk-4-dev libicu-dev libxml2-dev libssl-dev \
+            clang libclang-dev libgtk-4-dev libxml2-dev libssl-dev \
             libgnutls28-dev liblz4-dev libwayland-dev libxkbcommon-dev libdbus-1-dev
-          pkg-config --exists gtk4 icu-i18n icu-uc openssl dbus-1 wayland-client xkbcommon
+          pkg-config --exists gtk4 openssl dbus-1 wayland-client xkbcommon
       - name: Install the NSH compiler
         run: rustup toolchain install 1.97.0 --profile minimal
       - name: Cache public crate downloads
@@ -90,9 +90,9 @@ jobs:
             archive="gpgui-nsh_$(uname -m).bin.tar.xz"
             mkdir -p ".build/package/$directory"
             cp target/release/gpgui-nsh ".build/package/$directory/"
-            cp /usr/share/doc/libicu-dev/copyright ".build/package/$directory/ICU-LICENSE.txt"
+            cp apps/desktop-nsh/ICU4X-LICENSE.txt ".build/package/$directory/ICU4X-LICENSE.txt"
             if ldd target/release/gpgui-nsh | grep -q 'libicu'; then
-              echo "The release executable must not depend on a distro-specific ICU library." >&2
+              echo "The release executable must not depend on ICU4C." >&2
               exit 1
             fi
             tar -cJf ".build/package/$archive" -C .build/package "$directory"
