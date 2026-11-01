@@ -326,6 +326,7 @@ uninstall-linux: uninstall-unix
 	rm -f "$(DESTDIR)$(PREFIX)/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down" \
 		"$(DESTDIR)$(PREFIX)/lib/NetworkManager/dispatcher.d/gpclient-nm-hook"
 	rm -f "$(DESTDIR)/var/lib/gpclient/gpgui" \
+		"$(DESTDIR)/var/lib/gpclient/gpgui-nsh" \
 		"$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script" \
 		"$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata"
 	rmdir "$(DESTDIR)/var/lib/gpclient/scripts" "$(DESTDIR)/var/lib/gpclient" 2>/dev/null || true

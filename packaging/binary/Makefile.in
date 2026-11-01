@@ -64,6 +64,7 @@ uninstall:
 
 	rm -f $(DESTDIR)/var/lib/gpclient/scripts/vpnc-script \
 		$(DESTDIR)/var/lib/gpclient/gpgui \
+		$(DESTDIR)/var/lib/gpclient/gpgui-nsh \
 		$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata || \
 		echo "Warning: failed to remove gpclient runtime files" >&2
 	rmdir $(DESTDIR)/var/lib/gpclient/scripts 2>/dev/null || true

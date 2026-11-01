@@ -5,6 +5,7 @@ case "$1" in
     purge|remove)
         rm -f \
             /var/lib/gpclient/gpgui \
+            /var/lib/gpclient/gpgui-nsh \
             /var/lib/gpclient/scripts/vpnc-script \
             /var/lib/gpclient/scripts/vpnc-script.metadata ||
             echo "Warning: failed to remove gpclient runtime files" >&2
