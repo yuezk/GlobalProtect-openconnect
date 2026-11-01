@@ -11,6 +11,21 @@ pub enum GuiVariant {
   Nsh,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GuiSwitchRequest {
+  pub variant: GuiVariant,
+  /// Permit a download only after the user accepts the confirmation dialog.
+  pub allow_download: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum GuiSwitchOutcome {
+  Switched,
+  DownloadRequired,
+}
+
 impl GuiVariant {
   pub fn binary_name(self) -> &'static str {
     match self {

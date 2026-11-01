@@ -56,11 +56,7 @@ impl<'a> GuiLauncher<'a> {
       uzers::get_effective_uid() != 0,
       "The desktop GUI must not be launched by root"
     );
-    if let Some(program) = tokio::select! {
-      biased;
-      _ = cancellation.cancelled() => anyhow::bail!("GUI resolution cancelled"),
-      result = self.find_compatible_program() => result,
-    } {
+    if let Some(program) = self.find_compatible_program(cancellation).await? {
       return Ok(program);
     }
     self.download_program(cancellation).await?;
@@ -73,10 +69,15 @@ impl<'a> GuiLauncher<'a> {
     Ok(program)
   }
 
-  async fn find_compatible_program(&self) -> Option<PathBuf> {
+  async fn find_compatible_program(&self, cancellation: &CancellationToken) -> anyhow::Result<Option<PathBuf>> {
     for program in &self.programs {
-      match self.check_version(program).await {
-        Ok(()) => return Some(program.clone()),
+      let result = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => anyhow::bail!("GUI resolution cancelled"),
+        result = self.check_version(program) => result,
+      };
+      match result {
+        Ok(()) => return Ok(Some(program.clone())),
         Err(err) => info!(
           "GUI candidate {} is unavailable or incompatible: {err}",
           program.display()
@@ -84,7 +85,7 @@ impl<'a> GuiLauncher<'a> {
       }
     }
 
-    None
+    Ok(None)
   }
 
   pub(crate) async fn launch_program(
@@ -159,6 +160,7 @@ impl<'a> GuiLauncher<'a> {
     service_output: &mut (impl tokio::io::AsyncRead + Unpin),
   ) -> anyhow::Result<ExitStatus> {
     use super::gui_switch;
+    use crate::gui::GuiSwitchOutcome;
     use crate::service::transport::{DESKTOP_SWITCH_BEGIN, DESKTOP_SWITCH_CANCEL, DESKTOP_SWITCH_COMMIT};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let mut current = Some(self.start_owned(program.to_owned(), cancellation.child_token()));
@@ -175,7 +177,14 @@ impl<'a> GuiLauncher<'a> {
           let (mut socket, _) = accepted?;
           let mut pending = false;
           let replacement = async {
-            let variant = gui_switch::receive(&mut socket).await?;
+            let selection = gui_switch::receive(&mut socket).await?;
+            let variant = selection.variant;
+            let candidate = Self::new(self.version, self.credential.clone(), variant).envs(self.envs.clone());
+            let program = candidate.find_compatible_program(cancellation).await?;
+            if program.is_none() && !selection.allow_download {
+              gui_switch::reply(&mut socket, Ok(GuiSwitchOutcome::DownloadRequired)).await?;
+              return Ok(None);
+            }
             service_input.write_all(&[DESKTOP_SWITCH_BEGIN]).await?;
             pending = true;
             let credential = super::desktop_launcher::read_credential(service_output).await?
@@ -187,7 +196,10 @@ impl<'a> GuiLauncher<'a> {
             let launcher = Self::new(self.version, Arc::new(credential), variant)
               .envs(envs)
               .minimized(false);
-            let program = launcher.resolve_program(cancellation).await?;
+            let program = match program {
+              Some(program) => program,
+              None => launcher.resolve_program(cancellation).await?,
+            };
             let mut child = launcher.start_owned(program, cancellation.child_token());
             let start_result = tokio::select! {
               result = tokio::time::timeout(std::time::Duration::from_secs(30), ready.ready()) => {
@@ -205,7 +217,7 @@ impl<'a> GuiLauncher<'a> {
               let _ = child.task.await;
               return Err(error);
             }
-            if let Err(error) = gui_switch::reply(&mut socket, Ok(())).await {
+            if let Err(error) = gui_switch::reply(&mut socket, Ok(GuiSwitchOutcome::Switched)).await {
               child.cancel.cancel();
               let _ = child.task.await;
               return Err(error);
@@ -216,10 +228,11 @@ impl<'a> GuiLauncher<'a> {
               return Err(error.into());
             }
             pending = false;
-            Ok(child)
+            Ok(Some(child))
           }.await;
           match replacement {
-            Ok(child) => retired.push(current.replace(child).unwrap()),
+            Ok(Some(child)) => retired.push(current.replace(child).unwrap()),
+            Ok(None) => {},
             Err(error) => {
               if pending {
                 service_input.write_all(&[DESKTOP_SWITCH_CANCEL]).await?;
@@ -406,7 +419,13 @@ mod tests {
     let downloaded = executable(&dir, "downloaded", "gpgui test-version", 0);
     let launcher = launcher(VERSION, vec![packaged.clone(), downloaded]);
 
-    assert_eq!(launcher.find_compatible_program().await, Some(packaged));
+    assert_eq!(
+      launcher
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap(),
+      Some(packaged)
+    );
   }
 
   #[tokio::test]
@@ -416,7 +435,13 @@ mod tests {
     let downloaded = executable(&dir, "downloaded", "gpgui test-version", 0);
     let launcher = launcher(VERSION, vec![packaged, downloaded.clone()]);
 
-    assert_eq!(launcher.find_compatible_program().await, Some(downloaded));
+    assert_eq!(
+      launcher
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap(),
+      Some(downloaded)
+    );
   }
 
   #[tokio::test]
@@ -425,7 +450,13 @@ mod tests {
     let program = executable(&dir, "broken", "gpgui test-version", 1);
     let launcher = launcher(VERSION, vec![program]);
 
-    assert_eq!(launcher.find_compatible_program().await, None);
+    assert_eq!(
+      launcher
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap(),
+      None
+    );
   }
 
   #[tokio::test]
@@ -435,21 +466,41 @@ mod tests {
     let nsh = executable(&dir, "gpgui-nsh", "gpgui-nsh old-version", 0);
     let mut selected = launcher(VERSION, vec![nsh.clone()]);
     selected.variant = crate::gui::GuiVariant::Nsh;
-    assert!(selected.find_compatible_program().await.is_none());
+    assert!(
+      selected
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap()
+        .is_none()
+    );
     executable(&dir, "gpgui-nsh", "gpgui-nsh test-version", 0);
-    assert_eq!(selected.find_compatible_program().await, Some(nsh));
+    assert_eq!(
+      selected
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap(),
+      Some(nsh)
+    );
   }
 
   #[test]
   #[cfg(target_os = "linux")]
   fn supervisor_switch_success_and_failure_preserve_child_ownership() {
-    for scenario in ["success", "failure"] {
+    for scenario in ["success", "failure", "missing", "incompatible"] {
       let directory = TempDir::new().unwrap();
       let executable = std::env::current_exe().unwrap();
       for name in ["gpgui", "gpgui-nsh"] {
+        if scenario == "missing" && name == "gpgui-nsh" {
+          continue;
+        }
+        let version = if scenario == "incompatible" && name == "gpgui-nsh" {
+          "old-version"
+        } else {
+          VERSION
+        };
         let path = directory.path().join(name);
         fs::write(&path, format!(
-          "#!/bin/sh\nif [ \"$1\" = --version ]; then echo '{name} {VERSION}'; exit 0; fi\nGP_SWITCH_GUI_VARIANT={name} exec '{}' --exact process::gui_launcher::tests::gui_process_fixture --ignored --nocapture\n",
+          "#!/bin/sh\nif [ \"$1\" = --version ]; then echo '{name} {version}'; exit 0; fi\nGP_SWITCH_GUI_VARIANT={name} exec '{}' --exact process::gui_launcher::tests::gui_process_fixture --ignored --nocapture\n",
           executable.display()
         )).unwrap();
         fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
@@ -581,15 +632,19 @@ mod tests {
     use crate::service::transport::{DESKTOP_SWITCH_BEGIN, DESKTOP_SWITCH_CANCEL, DESKTOP_SWITCH_COMMIT};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let directory = PathBuf::from(std::env::var_os("GP_SWITCH_DIRECTORY").unwrap());
-    let success = std::env::var("GP_SWITCH_SCENARIO").unwrap() == "success";
+    let scenario = std::env::var("GP_SWITCH_SCENARIO").unwrap();
+    let success = scenario == "success";
+    let download_required = matches!(scenario.as_str(), "missing" | "incompatible");
     let listener = super::super::gui_switch::SwitchListener::new().unwrap();
     let (mut service_input, mut control) = tokio::io::duplex(64);
     let (mut service_output, mut credentials) = tokio::io::duplex(2048);
+    let service_marker = directory.join("service-switch-started");
     let service = tokio::spawn(async move {
       loop {
         let message = control.read_u8().await.unwrap();
         match message {
           DESKTOP_SWITCH_BEGIN => {
+            fs::write(&service_marker, "").unwrap();
             let credential = SessionCredential::generate(Uuid::new_v4(), VERSION).unwrap();
             credentials
               .write_all(&credential.encode_frame().unwrap())
@@ -617,8 +672,36 @@ mod tests {
       while !directory.join("gpgui-started").exists() {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
       }
-      let result = super::super::gui_switch::request_at(&listener.path(), crate::gui::GuiVariant::Nsh).await;
-      anyhow::ensure!(result.is_ok() == success, "Unexpected switch result: {result:?}");
+      let result = super::super::gui_switch::request_at(
+        &listener.path(),
+        crate::gui::GuiSwitchRequest {
+          variant: crate::gui::GuiVariant::Nsh,
+          allow_download: false,
+        },
+      )
+      .await;
+      if download_required {
+        anyhow::ensure!(
+          result? == crate::gui::GuiSwitchOutcome::DownloadRequired,
+          "Missing download confirmation"
+        );
+        anyhow::ensure!(
+          !directory.join("service-switch-started").exists(),
+          "Download check changed the service session"
+        );
+        anyhow::ensure!(
+          !directory.join("gpgui-nsh-started").exists(),
+          "Download check launched the replacement"
+        );
+      } else {
+        anyhow::ensure!(result.is_ok() == success, "Unexpected switch result: {result:?}");
+        if success {
+          anyhow::ensure!(
+            result? == crate::gui::GuiSwitchOutcome::Switched,
+            "Compatible GUI did not switch directly"
+          );
+        }
+      }
       anyhow::ensure!(
         !directory.join("gpgui-exited").exists(),
         "Current GUI exited before acknowledgement"
