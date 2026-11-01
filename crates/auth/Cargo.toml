@@ -18,6 +18,7 @@ tokio = { workspace = true, features = ["io-util", "net", "time"] }
 # Browser auth dependencies
 browser-launcher = { path = "../browser-launcher", default-features = false, features = ["launcher"], optional = true }
 tiny_http = { version = "0.12", optional = true }
+tempfile = { workspace = true, optional = true }
 uuid = { version = "1", optional = true, features = ["v4"] }
 uzers = { workspace = true, optional = true }
 
@@ -43,6 +44,7 @@ objc2-security = { version = "0.3", default-features = false, features = ["std",
 [features]
 browser-auth = [
   "dep:browser-launcher",
+  "dep:tempfile",
   "dep:tiny_http",
   "dep:uuid",
   "dep:uzers",

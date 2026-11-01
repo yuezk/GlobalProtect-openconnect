@@ -14,13 +14,6 @@ use tokio::{
   time::timeout,
 };
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-use log::warn;
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
-use std::ffi::OsStr;
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-use std::process::{Command, Output};
-
 const CALLBACK_SCHEME: &str = "globalprotectcallback";
 const PROTOCOL_MAGIC: &[u8; 4] = b"GPAC";
 const PROTOCOL_VERSION: u8 = 1;
@@ -34,6 +27,9 @@ const STATUS_UNSUPPORTED_VERSION: u8 = 2;
 
 #[cfg(target_os = "macos")]
 mod macos;
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
+mod xdg;
 
 pub struct AuthCallbackReceiver {
   listener: UnixListener,
@@ -107,82 +103,7 @@ pub async fn forward_auth_callback(callback: &str) -> anyhow::Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
-  const MIME_TYPE: &str = "x-scheme-handler/globalprotectcallback";
-  const HANDLER: &str = "gpgui.desktop";
-
-  ensure_lxqt_mime_tool()?;
-
-  let current_handler = query_callback_handler(MIME_TYPE)?;
-  if !should_register_handler(&current_handler) {
-    return Ok(());
-  }
-
-  let output = Command::new("xdg-mime")
-    .args(["default", HANDLER, MIME_TYPE])
-    .output()
-    .context("xdg-mime is required for external-browser authentication")?;
-  if !output.status.success() {
-    log_command_failure("register callback handler", &output);
-    bail!("Failed to register the globalprotectcallback URL handler");
-  }
-  if query_callback_handler(MIME_TYPE)? != HANDLER {
-    bail!("The globalprotectcallback URL handler registration did not take effect");
-  }
-
-  Ok(())
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-fn query_callback_handler(mime_type: &str) -> anyhow::Result<String> {
-  let output = Command::new("xdg-mime")
-    .args(["query", "default", mime_type])
-    .output()
-    .context("xdg-mime is required for external-browser authentication")?;
-  if !output.status.success() {
-    log_command_failure("query callback handler", &output);
-    bail!("Failed to query the globalprotectcallback URL handler");
-  }
-  Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-fn ensure_lxqt_mime_tool() -> anyhow::Result<()> {
-  if !is_lxqt_desktop(std::env::var_os("XDG_CURRENT_DESKTOP").as_deref()) {
-    return Ok(());
-  }
-
-  let result = Command::new("qtxdg-mat").args(["defapp", "--help"]).output();
-  match result {
-    Ok(output) if output.status.success() => Ok(()),
-    Ok(output) => {
-      let stderr = String::from_utf8_lossy(&output.stderr);
-      warn!(
-        "qtxdg-mat readiness check failed with {}: {}",
-        output.status,
-        stderr.trim()
-      );
-      bail!("Install qtxdg-tools for browser SSO.")
-    }
-    Err(err) => {
-      warn!("Failed to run qtxdg-mat readiness check: {err}");
-      bail!("Install qtxdg-tools for browser SSO.")
-    }
-  }
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
-fn is_lxqt_desktop(current_desktop: Option<&OsStr>) -> bool {
-  current_desktop
-    .and_then(OsStr::to_str)
-    .is_some_and(|desktop| desktop.split(':').any(|name| name.eq_ignore_ascii_case("lxqt")))
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-fn log_command_failure(action: &str, output: &Output) {
-  let stderr = String::from_utf8_lossy(&output.stderr);
-  warn!("xdg-mime failed to {action} with {}: {}", output.status, stderr.trim());
-}
+pub use xdg::ensure_auth_callback_handler;
 
 #[cfg(target_os = "macos")]
 pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
@@ -197,11 +118,6 @@ pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
 )))]
 pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
   Ok(())
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
-fn should_register_handler(current_handler: &str) -> bool {
-  current_handler != "gpgui.desktop"
 }
 
 async fn forward_auth_callback_to(callback: &str, socket_path: &Path) -> anyhow::Result<()> {
@@ -384,23 +300,6 @@ mod tests {
     assert!(validate_callback("https://example.com").is_err());
     assert!(validate_callback("globalprotectcallback:").is_err());
     assert!(validate_callback(&format!("globalprotectcallback:{}", "x".repeat(MAX_CALLBACK_SIZE))).is_err());
-  }
-
-  #[test]
-  fn replaces_any_other_callback_handler() {
-    assert!(!should_register_handler("gpgui.desktop"));
-    assert!(should_register_handler(""));
-    assert!(should_register_handler("gpauth.desktop"));
-    assert!(should_register_handler("other-vpn.desktop"));
-  }
-
-  #[test]
-  fn detects_lxqt_desktop_session() {
-    assert!(is_lxqt_desktop(Some(OsStr::new("LXQt"))));
-    assert!(is_lxqt_desktop(Some(OsStr::new("LXQt:KDE"))));
-    assert!(is_lxqt_desktop(Some(OsStr::new("lxqt"))));
-    assert!(!is_lxqt_desktop(Some(OsStr::new("LXDE"))));
-    assert!(!is_lxqt_desktop(None));
   }
 
   #[tokio::test]
