@@ -117,11 +117,17 @@ verify_contains \
   "$GPGUI_APP_DIR/gpgui.desktop.in" \
   "MimeType=x-scheme-handler/globalprotectcallback;"
 verify_contains \
+  "$GPGUI_APP_DIR/gpgui.desktop.in" \
+  "StartupWMClass=com.yuezk.gpgui"
+verify_contains \
   "$GP_DIR/packaging/files/usr/share/applications/gpgui.desktop" \
   "Exec=/usr/bin/gpclient launch-gui %u"
 verify_contains \
   "$GP_DIR/packaging/files/usr/share/applications/gpgui.desktop" \
   "MimeType=x-scheme-handler/globalprotectcallback;"
+verify_contains \
+  "$GP_DIR/packaging/files/usr/share/applications/gpgui.desktop" \
+  "StartupWMClass=com.yuezk.gpgui"
 verify_contains \
   "$GP_DIR/packaging/bsd/gpgui.desktop" \
   "Exec=/usr/local/bin/gpclient launch-gui %u"
