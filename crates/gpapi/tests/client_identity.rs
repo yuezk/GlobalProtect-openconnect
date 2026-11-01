@@ -324,19 +324,24 @@ fn identity_import_does_not_use_converter_executables() {
   target_os = "freebsd",
   target_os = "openbsd"
 ))]
-fn encrypted_key_import_accepts_long_passwords() {
-  for length in [1023, 1024] {
-    let identity = load(
-      "rsa-cert.pem",
-      &format!("rsa-pbes1-3des-password-{length}.pem"),
-      Some(&"x".repeat(length)),
-    )
-    .unwrap();
-    assert_eq!(
-      identity.key_data().unwrap(),
-      fs::read(fixture("rsa-pkcs8.pem")).unwrap()
-    );
-  }
+fn legacy_key_import_handles_the_supported_password_boundary() {
+  let identity = load(
+    "rsa-cert.pem",
+    "rsa-pbes1-3des-password-127.pem",
+    Some(&"x".repeat(127)),
+  )
+  .unwrap();
+  assert_eq!(
+    identity.key_data().unwrap(),
+    fs::read(fixture("rsa-pkcs8.pem")).unwrap()
+  );
+  let password = "x".repeat(128);
+  let error = load("rsa-cert.pem", "rsa-pbes1-3des-password-128.pem", Some(&password)).unwrap_err();
+  assert_eq!(
+    error.to_string(),
+    "Password is too long for this legacy key format. Re-export the key with modern encryption"
+  );
+  assert!(!format!("{error:?}").contains(&password));
 }
 
 #[test]

@@ -49,7 +49,7 @@ done
   -passout pass:fixture-password -out rsa-pbes2-scrypt.pem
 "$openssl_bin" pkcs8 -topk8 -in rsa-pkcs8.pem -v1 PBE-SHA1-3DES \
   -passout pass:fixture-password -out rsa-pbes1-3des.pem
-for length in 1023 1024; do
+for length in 127 128; do
   printf -v password '%*s' "$length" ''
   password=${password// /x}
   "$openssl_bin" pkcs8 -topk8 -in rsa-pkcs8.pem -v1 PBE-SHA1-3DES \

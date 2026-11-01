@@ -167,6 +167,13 @@ fn decrypt(der: &[u8], passphrase: Option<&str>) -> anyhow::Result<SecretDocumen
     // PKCS#12 PBE-SHA1-3DES inside standalone PKCS#8 is not implemented by
     // RustCrypto. Only this known legacy scheme uses the native importer.
     if algorithm == pkcs8::ObjectIdentifier::new_unwrap("1.2.840.113549.1.12.1.3") {
+      // Older supported GnuTLS releases allow 256 UTF-16 bytes including the terminator.
+      if let Some(passphrase) = passphrase {
+        anyhow::ensure!(
+          passphrase.encode_utf16().count() <= 127,
+          "Password is too long for this legacy key format. Re-export the key with modern encryption"
+        );
+      }
       return certificate::decrypt_key(der, false, passphrase);
     }
     return Err(RequestIdentityError::UnsupportedEncryption.into());

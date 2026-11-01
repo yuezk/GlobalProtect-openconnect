@@ -2,7 +2,7 @@
 
 These generated keys and certificates are **public test data**, never production
 credentials. Passwords are `fixture-password`, except `unicode-password.p12`,
-which uses `pässword-密码`, and the `rsa-pbes1-3des-password-{1023,1024}.pem`
+which uses `pässword-密码`, and the `rsa-pbes1-3des-password-{127,128}.pem`
 fixtures, which use `x` repeated the indicated number of bytes.
 
 Regenerate intentionally with OpenSSL 3:
@@ -27,7 +27,7 @@ optional fixture-generation script, not identity import.
 | `rsa-pbes2-des3-{sha1,sha256}.pem` | PBES2 3DES-CBC with PBKDF2 SHA1/SHA256; distinct from the PKCS#12 PBE scheme handled by GnuTLS |
 | `rsa-pbes2-des.pem` | PBES2 DES-CBC/PBKDF2-SHA256; Rust processing requires no native legacy provider |
 | `rsa-pbes2-scrypt.pem` | PBES2 AES256-CBC with scrypt |
-| `rsa-pbes1-3des-password-{1023,1024}.pem` | Same encryption with 1023- and 1024-byte passwords; both import without executable line limits |
+| `rsa-pbes1-3des-password-{127,128}.pem` | Legacy password boundary: 127 ASCII characters import; 128 report the supported limit |
 | `rsa-pbes1-3des.pem` | Legacy PKCS#12 SHA1/3DES scheme inside standalone encrypted PKCS#8; private GnuTLS import case |
 | `empty-password.p12` | RSA leaf/key/root with an empty password, accepted with omitted or empty password |
 | `ec-pbes2.pem` | Encrypted EC PKCS#8, AES256-CBC/PBKDF2-SHA256 |
@@ -41,8 +41,12 @@ permissions and cleanup. `tests/identity_encoding.rs` covers PEM/DER, RSA PKCS#1
 EC SEC1, traditional encrypted PEM, first-key selection, malformed encryption
 headers and archive extension capitalization. Rustls validates RSA and EC keys
 on all supported targets; desktop legacy encrypted-key imports use GnuTLS.
-PBES2, including scrypt, stays in Rust. The no-executable child test runs with an
-empty PATH and imports both legacy key families and RC2 PKCS#12.
+Legacy PKCS#12 SHA1/3DES keys use a consistent limit of 127 UTF-16 code units
+(256 bytes including the terminator), matching older supported GnuTLS releases.
+Longer passwords report a clear error without exposing the password.
+PBES2, including scrypt, stays in Rust and does not use this limit. The
+no-executable child test runs with an empty PATH and imports both legacy key
+families and RC2 PKCS#12.
 
 Archive integrity checks change the UTF-16 friendly name without changing the
 MAC. Decrypted output is compared with independent plaintext fixture keys.
