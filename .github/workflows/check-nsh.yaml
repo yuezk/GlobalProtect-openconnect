@@ -78,7 +78,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y autoconf automake gettext libtool pkg-config \
-            clang libclang-dev libgtk-4-dev libxml2-dev libssl-dev \
+            clang libclang-dev libgtk-4-dev libxml2-dev \
             libgnutls28-dev liblz4-dev libwayland-dev libxkbcommon-dev libdbus-1-dev
           pkg-config --exists gtk4 gnutls dbus-1 wayland-client xkbcommon
       - name: Install macOS dependencies
@@ -88,7 +88,7 @@ jobs:
         run: |
           xcodebuild -version
           echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
-          brew install autoconf automake gettext libtool pkgconf gnutls libxml2 lz4 openssl@3
+          brew install autoconf automake gettext libtool pkgconf gnutls libxml2 lz4
           echo "$(brew --prefix gettext)/bin" >> "$GITHUB_PATH"
           echo "ACLOCAL_PATH=$(brew --prefix gettext)/share/aclocal" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_PATH=$(brew --prefix libxml2)/lib/pkgconfig:$(brew --prefix gnutls)/lib/pkgconfig" >> "$GITHUB_ENV"

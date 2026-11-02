@@ -118,7 +118,6 @@
           [
             libxml2
             zlib
-            openssl
             lz4
             gnutls
             p11-kit
