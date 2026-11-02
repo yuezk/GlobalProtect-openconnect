@@ -85,7 +85,7 @@ jobs:
               --release --bin gpgui-nsh --target-dir target
             target/release/gpgui-nsh --version
             version="$(cargo +1.97.0 metadata --manifest-path apps/desktop-nsh/Cargo.toml --no-deps --format-version 1 \
-              | jq -r '.packages[] | select(.name == "gp-connect-nsh") | .version')"
+              | jq -r '.packages[] | select(.name == "gpgui-nsh") | .version')"
             directory="gpgui-nsh_$version"
             archive="gpgui-nsh_$(uname -m).bin.tar.xz"
             mkdir -p ".build/package/$directory"

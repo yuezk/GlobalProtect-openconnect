@@ -47,7 +47,8 @@ impl DesktopClient {
       fcntl(&fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC))?;
       let flags = OFlag::from_bits_truncate(fcntl(&fd, FcntlArg::F_GETFL)?);
       fcntl(&fd, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK))?;
-      Ok(AsyncFd::new(fd)?)
+      // SAFETY: OwnedFd keeps this descriptor open and unchanged until AsyncFd drops it.
+      Ok(unsafe { AsyncFd::register(fd) }?)
     }
     Ok(Self {
       input: pipe(input)?,
