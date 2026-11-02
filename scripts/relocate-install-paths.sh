@@ -21,6 +21,8 @@ xml_replacement=$(escape_replacement "$xml_prefix")
 temporary=$(mktemp)
 trap 'rm -f "$temporary"' EXIT HUP INT TERM
 for file in share/applications/gpgui.desktop \
+    share/applications/gpgui-helper.desktop \
+    share/applications/gpauth.desktop \
     share/polkit-1/actions/com.yuezk.gpgui.policy \
     lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
     lib/NetworkManager/dispatcher.d/gpclient-nm-hook; do

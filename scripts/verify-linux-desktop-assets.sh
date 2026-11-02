@@ -135,7 +135,19 @@ verify_contains \
   "$GP_DIR/packaging/bsd/gpgui.desktop" \
   "MimeType=x-scheme-handler/globalprotectcallback;"
 verify_absent "$GPGUI_APP_DIR/gpauth.desktop"
-verify_absent "$GP_DIR/packaging/files/usr/share/applications/gpauth.desktop"
-verify_absent "$GP_DIR/packaging/bsd/gpauth.desktop"
+for app in gpgui-helper gpauth; do
+  for directory in "$GP_DIR/packaging/files/usr/share/applications" "$GP_DIR/packaging/bsd"; do
+    desktop_file="$directory/$app.desktop"
+    verify_contains "$desktop_file" "Icon=gpgui"
+    verify_contains "$desktop_file" "NoDisplay=true"
+    verify_contains "$desktop_file" "StartupWMClass=$app"
+    if grep -q '^MimeType=' "$desktop_file"; then
+      echo "Hidden desktop identity must not register a URL handler: $desktop_file" >&2
+      exit 1
+    fi
+  done
+  verify_contains "$GP_DIR/packaging/files/usr/share/applications/$app.desktop" "Exec=/usr/bin/gpclient launch-gui"
+  verify_contains "$GP_DIR/packaging/bsd/$app.desktop" "Exec=/usr/local/bin/gpclient launch-gui"
+done
 
 echo "Linux desktop and tray assets are synchronized"

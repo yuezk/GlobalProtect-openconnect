@@ -200,6 +200,8 @@ install-unix: install-gpclient-unix
 install-linux: install-unix
 	@echo "Installing Linux integration under $(PREFIX)..."
 	set -e; for file in share/applications/gpgui.desktop \
+		share/applications/gpgui-helper.desktop \
+		share/applications/gpauth.desktop \
 		share/polkit-1/actions/com.yuezk.gpgui.policy \
 		lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
 		lib/NetworkManager/dispatcher.d/gpclient-nm-hook; do \
@@ -213,7 +215,7 @@ install-linux: install-unix
 install-bsd: install-unix
 	@echo "Installing BSD integration under $(PREFIX)..."
 	install -d "$(DESTDIR)$(PREFIX)/share/applications" "$(DESTDIR)$(PREFIX)/share/polkit-1/actions"
-	install -m 644 packaging/bsd/gpgui.desktop "$(DESTDIR)$(PREFIX)/share/applications/"
+	install -m 644 packaging/bsd/gpgui.desktop packaging/bsd/gpgui-helper.desktop packaging/bsd/gpauth.desktop "$(DESTDIR)$(PREFIX)/share/applications/"
 	install -m 644 packaging/bsd/com.yuezk.gpgui.policy "$(DESTDIR)$(PREFIX)/share/polkit-1/actions/"
 	sh scripts/relocate-install-paths.sh "$(PREFIX)" /usr/local "$(DESTDIR)$(PREFIX)"
 
@@ -319,6 +321,8 @@ uninstall-unix:
 		rm -f "$(DESTDIR)$(PREFIX)/$${file#packaging/files/usr/}"; \
 	done
 	rm -f "$(DESTDIR)$(PREFIX)/share/applications/gpgui.desktop" \
+		"$(DESTDIR)$(PREFIX)/share/applications/gpgui-helper.desktop" \
+		"$(DESTDIR)$(PREFIX)/share/applications/gpauth.desktop" \
 		"$(DESTDIR)$(PREFIX)/share/polkit-1/actions/com.yuezk.gpgui.policy"
 	rmdir "$(DESTDIR)$(PREFIX)/libexec/gpclient" 2>/dev/null || true
 
