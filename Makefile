@@ -261,7 +261,9 @@ package-openbsd: clean-bsd-package
 	$(MAKE) install-bsd DESTDIR=$(CURDIR)/.build/openbsd/pkgroot PREFIX=$(PREFIX) GPGUI_BINARY="$(GPGUI_BINARY)"
 	cp packaging/bsd/openbsd/COMMENT .build/openbsd/+COMMENT
 	cp packaging/bsd/openbsd/DESC .build/openbsd/+DESC
+	sh scripts/openbsd-library-dependencies.sh .build/openbsd/pkgroot > .build/openbsd/WANTLIB
 	{ \
+		cat .build/openbsd/WANTLIB; \
 		echo '@unexec-delete /bin/rm -f /usr/local/libexec/gpclient/gpgui /var/db/gpclient/scripts/vpnc-script /var/db/gpclient/scripts/vpnc-script.metadata || echo "Warning: failed to remove gpclient runtime files" >&2'; \
 		echo '@unexec-delete /bin/rmdir /usr/local/libexec/gpclient 2>/dev/null || true'; \
 		echo '@unexec-delete /bin/rmdir /var/db/gpclient/scripts 2>/dev/null || true'; \

@@ -224,7 +224,7 @@ fn main() {
     pkg_config::probe_library("liblz4").unwrap();
     pkg_config::probe_library("gnutls").unwrap();
 
-    // Below are required by gnutls
+    // OpenConnect also uses Hogweed/GMP directly for its GnuTLS backend.
     pkg_config::probe_library("p11-kit-1").unwrap();
     pkg_config::probe_library("hogweed").unwrap();
     pkg_config::probe_library("nettle").unwrap();

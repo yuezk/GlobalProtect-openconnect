@@ -31,6 +31,8 @@ build() {
 }
 
 package() {
+  # Record the Hogweed ABI used by OpenConnect.
+  depends+=('libhogweed.so')
   cd "$pkgname-$pkgver"
 
   make install DESTDIR="$pkgdir"
