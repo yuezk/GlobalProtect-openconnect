@@ -127,7 +127,8 @@ GP Connect provides a desktop interface for managing VPN connections. On macOS, 
 gpclient launch-gui
 ```
 
-On Linux, switching to Native Shell checks for GTK 4.14 or later, GnuTLS 3, and D-Bus before offering a download. If a required runtime is missing or too old, the current interface stays open. Nix packages with the GUI installer supply these dependencies during installation instead.
+> [!TIP]
+> **On Linux, try Native Shell for lower memory usage.** Switch to it in **Settings → General → Interface**.
 
 > [!Note]
 >
