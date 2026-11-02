@@ -181,6 +181,18 @@ impl<'a> GuiLauncher<'a> {
             let variant = selection.variant;
             let candidate = Self::new(self.version, self.credential.clone(), variant).envs(self.envs.clone());
             let program = candidate.find_compatible_program(cancellation).await?;
+            if program.is_none() && variant == crate::gui::GuiVariant::Nsh {
+              use crate::service::transport::DESKTOP_GUI_INSTALLER;
+              service_input.write_all(&[DESKTOP_GUI_INSTALLER]).await?;
+              let supplies_runtime = match service_output.read_u8().await? {
+                0 => false,
+                1 => true,
+                _ => anyhow::bail!("Invalid GUI installer capability response"),
+              };
+              if !supplies_runtime {
+                super::nsh_runtime::check()?;
+              }
+            }
             if program.is_none() && !selection.allow_download {
               gui_switch::reply(&mut socket, Ok(GuiSwitchOutcome::DownloadRequired)).await?;
               return Ok(None);
@@ -486,11 +498,21 @@ mod tests {
   #[test]
   #[cfg(target_os = "linux")]
   fn supervisor_switch_success_and_failure_preserve_child_ownership() {
-    for scenario in ["success", "failure", "missing", "incompatible"] {
+    for scenario in [
+      "success",
+      "failure",
+      "missing",
+      "incompatible",
+      "runtime-too-old",
+      "runtime-too-old-confirmed",
+    ] {
       let directory = TempDir::new().unwrap();
       let executable = std::env::current_exe().unwrap();
+      // An old host GTK must block generic downloads, but not package-managed downloads.
+      let gtk = super::super::nsh_runtime::tests::gtk_fixture(directory.path(), 12);
+      fs::rename(gtk, directory.path().join("libgtk-4.so.1")).unwrap();
       for name in ["gpgui", "gpgui-nsh"] {
-        if scenario == "missing" && name == "gpgui-nsh" {
+        if (scenario == "missing" || scenario.starts_with("runtime-too-old")) && name == "gpgui-nsh" {
           continue;
         }
         let version = if scenario == "incompatible" && name == "gpgui-nsh" {
@@ -515,6 +537,7 @@ mod tests {
         .env("GP_SWITCH_SCENARIO", scenario)
         .env("GP_SWITCH_DIRECTORY", directory.path())
         .env("GP_GUI_BINARY", directory.path().join("gpgui"))
+        .env("LD_LIBRARY_PATH", directory.path())
         .env("XDG_CONFIG_HOME", directory.path().join("config"))
         .output()
         .unwrap();
@@ -629,12 +652,15 @@ mod tests {
   #[ignore = "subprocess supervisor fixture with isolated GUI paths and preferences"]
   #[cfg(target_os = "linux")]
   async fn supervisor_fixture() {
-    use crate::service::transport::{DESKTOP_SWITCH_BEGIN, DESKTOP_SWITCH_CANCEL, DESKTOP_SWITCH_COMMIT};
+    use crate::service::transport::{
+      DESKTOP_GUI_INSTALLER, DESKTOP_SWITCH_BEGIN, DESKTOP_SWITCH_CANCEL, DESKTOP_SWITCH_COMMIT,
+    };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let directory = PathBuf::from(std::env::var_os("GP_SWITCH_DIRECTORY").unwrap());
     let scenario = std::env::var("GP_SWITCH_SCENARIO").unwrap();
     let success = scenario == "success";
     let download_required = matches!(scenario.as_str(), "missing" | "incompatible");
+    let runtime_too_old = scenario.starts_with("runtime-too-old");
     let listener = super::super::gui_switch::SwitchListener::new().unwrap();
     let (mut service_input, mut control) = tokio::io::duplex(64);
     let (mut service_output, mut credentials) = tokio::io::duplex(2048);
@@ -643,6 +669,9 @@ mod tests {
       loop {
         let message = control.read_u8().await.unwrap();
         match message {
+          DESKTOP_GUI_INSTALLER => {
+            credentials.write_all(&[u8::from(!runtime_too_old)]).await.unwrap();
+          }
           DESKTOP_SWITCH_BEGIN => {
             fs::write(&service_marker, "").unwrap();
             let credential = SessionCredential::generate(Uuid::new_v4(), VERSION).unwrap();
@@ -676,22 +705,20 @@ mod tests {
         &listener.path(),
         crate::gui::GuiSwitchRequest {
           variant: crate::gui::GuiVariant::Nsh,
-          allow_download: false,
+          allow_download: scenario == "runtime-too-old-confirmed",
         },
       )
       .await;
-      if download_required {
+      if runtime_too_old {
+        let error = result.unwrap_err().to_string();
+        anyhow::ensure!(
+          error.contains("4.14") && error.contains("4.12.1"),
+          "Unexpected runtime error: {error}"
+        );
+      } else if download_required {
         anyhow::ensure!(
           result? == crate::gui::GuiSwitchOutcome::DownloadRequired,
           "Missing download confirmation"
-        );
-        anyhow::ensure!(
-          !directory.join("service-switch-started").exists(),
-          "Download check changed the service session"
-        );
-        anyhow::ensure!(
-          !directory.join("gpgui-nsh-started").exists(),
-          "Download check launched the replacement"
         );
       } else {
         anyhow::ensure!(result.is_ok() == success, "Unexpected switch result: {result:?}");
@@ -701,6 +728,16 @@ mod tests {
             "Compatible GUI did not switch directly"
           );
         }
+      }
+      if download_required || runtime_too_old {
+        anyhow::ensure!(
+          !directory.join("service-switch-started").exists(),
+          "Download check changed the service session"
+        );
+        anyhow::ensure!(
+          !directory.join("gpgui-nsh-started").exists(),
+          "Download check launched the replacement"
+        );
       }
       anyhow::ensure!(
         !directory.join("gpgui-exited").exists(),

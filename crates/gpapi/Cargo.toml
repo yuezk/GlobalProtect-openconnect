@@ -63,18 +63,22 @@ oslog = { version = "0.2", default-features = false, optional = true }
 [target.'cfg(not(any(target_os="macos", target_os="windows")))'.dependencies]
 gtk = { version = "0.18", optional = true }
 
+[target.'cfg(target_os="linux")'.dependencies]
+libloading = { version = "0.9", optional = true }
+
 [build-dependencies]
 cc = "1"
 pkg-config = "0.3"
 
 [dev-dependencies]
 openssl.workspace = true
+libloading = "0.9"
 proptest.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 default = ["desktop"]
-desktop = ["tokio/process", "tokio/signal", "dep:directories", "dep:nix", "dep:uzers", "dep:netdev", "dep:os_info", "dep:whoami", "dep:dns-lookup", "dep:socket2"]
+desktop = ["tokio/process", "tokio/signal", "dep:directories", "dep:nix", "dep:uzers", "dep:netdev", "dep:os_info", "dep:whoami", "dep:dns-lookup", "dep:socket2", "dep:libloading"]
 tauri = ["desktop", "dep:tauri", "dep:gtk"]
 clap = ["desktop", "dep:clap", "dep:clap-verbosity-flag"]
 webview-auth = []

@@ -11,6 +11,8 @@ pub mod desktop_launcher;
 pub mod gui_launcher;
 #[cfg(target_os = "linux")]
 pub mod gui_switch;
+#[cfg(any(target_os = "linux", test))]
+mod nsh_runtime;
 pub mod users;
 
 pub mod collection;

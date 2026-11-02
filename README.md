@@ -127,6 +127,8 @@ GP Connect provides a desktop interface for managing VPN connections. On macOS, 
 gpclient launch-gui
 ```
 
+On Linux, switching to Native Shell checks for GTK 4.14 or later, GnuTLS 3, and D-Bus before offering a download. If a required runtime is missing or too old, the current interface stays open. Nix packages with the GUI installer supply these dependencies during installation instead.
+
 > [!Note]
 >
 > The GUI version is partially open source. The background service ([gpservice](./apps/gpservice/)) is open source, while the GUI wrapper is proprietary.
@@ -351,6 +353,14 @@ nix build "git+file://$PWD?submodules=1#fromSource"
 ```
 
 Local source builds require initialized Git submodules and a flake URL with `submodules=1`, as shown above. For a remote source flake, use a Git URL with submodules enabled, such as `git+https://github.com/yuezk/GlobalProtect-openconnect?submodules=1#fromSource`. The `prebuilt` package and NixOS module do not require Git submodules. Build output (`target`, `.build`, and `node_modules`) is excluded from the source input. Updating release asset hashes changes the prebuilt package, independently of source builds.
+
+Source builds also support downloading either desktop interface on NixOS. The
+downloader packages the verified Tauri or Native Shell archive with Nix, including
+its runtime libraries. Each installed interface has a garbage-collection root
+under `/var/lib/gpclient/nix-gui`, so its dependencies remain available after
+system upgrades. No Rust compilation or NixOS rebuild is needed for GUI downloads.
+Prebuilt packages gain this support when their release includes the updated
+service; adding the flake installer alone does not change older service binaries.
 
 ### Official Docker Image
 

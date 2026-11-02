@@ -18,7 +18,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::session_registry::SessionRegistry;
 use gpapi::service::transport::{
-  DESKTOP_GUI_EXITED, DESKTOP_RENDERING_RETRY, DESKTOP_SWITCH_BEGIN, DESKTOP_SWITCH_CANCEL, DESKTOP_SWITCH_COMMIT,
+  DESKTOP_GUI_EXITED, DESKTOP_GUI_INSTALLER, DESKTOP_RENDERING_RETRY, DESKTOP_SWITCH_BEGIN, DESKTOP_SWITCH_CANCEL,
+  DESKTOP_SWITCH_COMMIT,
 };
 
 /// Private parent/service pipes; credentials never pass through argv, environment or files.
@@ -69,14 +70,17 @@ impl DesktopClient {
       let result = tokio::select! {
         _ = cancel.cancelled() => Ok(None),
         result = async {
-          self.write_frame(&credential.encode_frame()?).await?;
+          self.write_all(&credential.encode_frame()?).await?;
           loop {
-            match self.gui_exited().await? {
+            match self.read_control().await? {
+              Some(DESKTOP_GUI_INSTALLER) => {
+                self.write_all(&[u8::from(crate::request_dispatcher::gui_installer().is_some())]).await?;
+              }
               Some(DESKTOP_SWITCH_BEGIN) => {
                 ensure!(pending.is_none(), "A GUI switch is already pending");
                 let credential = registry.issue(env!("CARGO_PKG_VERSION"), Some(uid))?;
                 pending = Some(credential.session_id());
-                self.write_frame(&credential.encode_frame()?).await?;
+                self.write_all(&credential.encode_frame()?).await?;
               }
               Some(DESKTOP_SWITCH_COMMIT) => {
                 let replacement = pending.take().context("No GUI switch is pending")?;
@@ -110,7 +114,7 @@ impl DesktopClient {
     }
   }
 
-  async fn write_frame(&self, mut bytes: &[u8]) -> anyhow::Result<()> {
+  async fn write_all(&self, mut bytes: &[u8]) -> anyhow::Result<()> {
     while !bytes.is_empty() {
       let mut ready = self.output.writable().await?;
       match ready.try_io(|fd| write(fd.get_ref(), bytes).map_err(io::Error::from)) {
@@ -125,7 +129,7 @@ impl DesktopClient {
     Ok(())
   }
 
-  async fn gui_exited(&self) -> anyhow::Result<Option<u8>> {
+  async fn read_control(&self) -> anyhow::Result<Option<u8>> {
     loop {
       let mut ready = self.input.readable().await?;
       let mut byte = [0];
@@ -170,7 +174,7 @@ mod tests {
         .unwrap()
         .success()
     );
-    channel.write_frame(b"PRIVATE_FRAME").await.unwrap();
+    channel.write_all(b"PRIVATE_FRAME").await.unwrap();
   }
   use gpapi::service::transport::SessionCredential;
   use nix::unistd::pipe;
@@ -289,6 +293,21 @@ mod tests {
       CancellationToken::new(),
     ));
     let (reader, first) = credential(reader).await;
+    write(&control, &[DESKTOP_GUI_INSTALLER]).unwrap();
+    let reader = tokio::task::spawn_blocking(move || {
+      let mut reader = reader;
+      let mut capability = [0];
+      reader.read_exact(&mut capability).unwrap();
+      assert_eq!(
+        capability[0],
+        u8::from(crate::request_dispatcher::gui_installer().is_some())
+      );
+      reader
+    })
+    .await
+    .unwrap();
+    // A capability query leaves the current session intact and the next frame readable.
+    assert!(registry.last_successful_hip_report(first.session_id()).is_ok());
     write(&control, &[DESKTOP_SWITCH_BEGIN]).unwrap();
     let (reader, cancelled) = credential(reader).await;
     assert_ne!(first.session_id(), cancelled.session_id());

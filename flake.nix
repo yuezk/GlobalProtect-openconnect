@@ -92,6 +92,49 @@
 
         runtimeTools = with pkgs; [ coreutils iproute2 systemd procps util-linux nettools xdg-utils ];
 
+        guiRecipe = pkgs.writeText "gp-downloaded-gui.nix" ''
+          { archive, checksum, binaryName }:
+          import ${./nix/gui-package.nix} {
+            pkgs = import ${pkgs.path} {
+              system = "${pkgs.stdenv.hostPlatform.system}";
+              config = {};
+              overlays = [];
+            };
+            inherit archive checksum binaryName;
+            version = "${version}";
+          }
+        '';
+
+        guiInstaller = pkgs.writeShellApplication {
+          name = "gp-gui-installer";
+          runtimeInputs = [ pkgs.nix pkgs.coreutils ];
+          text = ''
+            archive=$1
+            checksum=$2
+            target=$3
+            binary_name=$(basename "$target")
+            case "$binary_name" in
+              gpgui|gpgui-nsh) ;;
+              *) echo "Unsupported GUI executable" >&2; exit 1 ;;
+            esac
+            directory=$(dirname "$target")
+            root="$directory/nix-gui/$binary_name"
+            mkdir -p "$directory/nix-gui"
+            nix-build ${guiRecipe} --out-link "$root" --no-build-output \
+              --argstr archive "$archive" --argstr checksum "$checksum" \
+              --argstr binaryName "$binary_name"
+            temporary=$(mktemp -d "$directory/.gui-link.XXXXXX")
+            trap 'rm -rf "$temporary"' EXIT
+            ln -s "$root/bin/$binary_name" "$temporary/$binary_name"
+            mv -Tf "$temporary/$binary_name" "$target"
+          '';
+        };
+
+        installGuiInstaller = lib.optionalString pkgs.stdenv.isLinux ''
+          install -Dm755 ${guiInstaller}/bin/gp-gui-installer \
+            "$out/libexec/gpclient/gp-gui-installer"
+        '';
+
         nativeRuntimeWrapping = lib.optionalString pkgs.stdenv.isLinux ''
           gappsWrapperArgs+=(
             --prefix PATH : "/run/wrappers/bin:${lib.makeBinPath runtimeTools}"
@@ -152,6 +195,7 @@
 
         fromSource = lib.makeOverridable ({ gui ? gpgui }: naersk'.buildPackage {
           inherit pname version;
+          SNAPSHOT = lib.boolToString (releaseTag == "snapshot");
           src = assert lib.assertMsg
             (builtins.pathExists (src + "/crates/openconnect/deps/openconnect/configure.ac")
               && builtins.pathExists (src + "/crates/openconnect/deps/libxml2/configure.ac"))
@@ -202,6 +246,7 @@
           ''
           + lib.optionalString pkgs.stdenv.isLinux ''
             ${installNixosPolkitRule}
+            ${installGuiInstaller}
           ''
           + ''
             ${rewriteVpncScriptToolPaths}
@@ -244,6 +289,7 @@
             ${rewriteVpncScriptToolPaths}
             sh ${./scripts/relocate-install-paths.sh} "$out" /usr "$out"
             ${installNixosPolkitRule}
+            ${installGuiInstaller}
 
             runHook postInstall
           '';

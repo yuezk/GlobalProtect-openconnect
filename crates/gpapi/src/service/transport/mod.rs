@@ -24,3 +24,5 @@ pub const DESKTOP_RENDERING_RETRY: u8 = 1;
 pub const DESKTOP_SWITCH_BEGIN: u8 = 2;
 pub const DESKTOP_SWITCH_COMMIT: u8 = 3;
 pub const DESKTOP_SWITCH_CANCEL: u8 = 4;
+/// Query whether the service package can install GUI runtime dependencies; replies with 0 or 1.
+pub const DESKTOP_GUI_INSTALLER: u8 = 5;
