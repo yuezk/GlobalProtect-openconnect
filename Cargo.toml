@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 
 members = [
   "crates/*",
@@ -58,7 +58,7 @@ md5 = "0.8"
 sha2 = { version = "0.11", default-features = false }
 which = "8"
 uuid = "1"
-netdev = "0.46.3"
+netdev = "0.47"
 humantime = "2"
 snow = { version = "0.10", default-features = false, features = ["use-getrandom", "use-curve25519", "use-chacha20poly1305", "use-sha2"] }
 zeroize = "1"
