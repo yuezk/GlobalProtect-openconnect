@@ -10,7 +10,7 @@ url="https://github.com/yuezk/GlobalProtect-openconnect"
 license=('GPL3')
 makedepends=('make' 'pkg-config' 'cargo' 'file' 'autoconf' 'automake' 'gettext' 'libtool' 'patch')
 depends=('webkit2gtk-4.1' 'libappindicator-gtk3' 'librsvg' 'libsecret' 'appmenu-gtk-module'
-         'gnutls' 'libxml2' 'zlib' 'lz4' 'libp11-kit' 'nettle' 'gmp' 'xdg-utils')
+         'gnutls' 'libxml2' 'zlib' 'lz4' 'libp11-kit' 'nettle' 'libhogweed.so' 'gmp' 'xdg-utils')
 optdepends=('wmctrl: for window management')
 
 provides=('globalprotect-openconnect' 'gpclient' 'gpservice' 'gpauth' 'gpgui')
@@ -31,8 +31,6 @@ build() {
 }
 
 package() {
-  # Record the Hogweed ABI used by OpenConnect.
-  depends+=('libhogweed.so')
   cd "$pkgname-$pkgver"
 
   make install DESTDIR="$pkgdir"
