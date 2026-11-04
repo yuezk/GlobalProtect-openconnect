@@ -685,10 +685,20 @@ search $DOMAINS"
 						close
 					EOF
 				fi
-				# For newer MacOS versions it is needed to set DNS
-				ACTIVE_INTERFACE=`route -n get default | grep interface | awk '{print $2}'`
-				ACTIVE_NETWORK_SERVICE=`networksetup -listnetworkserviceorder | grep -B 1 "$ACTIVE_INTERFACE" | head -n 1 | awk '/\([0-9]+\)/{ print }'|cut -d " " -f2-`
-				networksetup -setdnsservers "$ACTIVE_NETWORK_SERVICE" $INTERNAL_IP4_DNS
+				# For newer macOS versions DNS must be set on the primary physical
+				# service. Resolve it via the interface that reaches the real VPN
+				# gateway (stable in connect and disconnect, unlike the default route,
+				# which points at the tunnel here) and save the user's current servers
+				# so disconnect can restore them.
+				PHYS_IF=`route -n get "$VPNGATEWAY" 2>/dev/null | awk '/interface:/{print $2}'`
+				PHYS_NAME=""
+				if [ -n "$PHYS_IF" ]; then
+					PHYS_NAME=`networksetup -listnetworkserviceorder | grep -B 1 "Device: $PHYS_IF)" | head -n 1 | sed -E 's/^\([0-9]+\) //'`
+				fi
+				if [ -n "$PHYS_NAME" ]; then
+					networksetup -getdnsservers "$PHYS_NAME" > "/var/run/vpnc/physdns.$PHYS_IF" 2>/dev/null
+					networksetup -setdnsservers "$PHYS_NAME" $INTERNAL_IP4_DNS
+				fi
 				;;
 		esac
 	fi
@@ -730,10 +740,24 @@ restore_resolvconf_generic() {
 						EOF
 					fi
 				fi
-				# For newer MacOS versions it is needed to unset DNS
-				ACTIVE_INTERFACE=`route -n get default | grep interface | awk '{print $2}'`
-				ACTIVE_NETWORK_SERVICE=`networksetup -listnetworkserviceorder | grep -B 1 "$ACTIVE_INTERFACE" | head -n 1 | awk '/\([0-9]+\)/{ print }'|cut -d " " -f2-`
-				networksetup -setdnsservers "$ACTIVE_NETWORK_SERVICE" Empty
+				# For newer macOS versions DNS must be restored on the primary
+				# physical service. Reinstate the servers saved at connect time
+				# instead of clearing them unconditionally (which wipes a user's
+				# static DNS).
+				PHYS_IF=`route -n get "$VPNGATEWAY" 2>/dev/null | awk '/interface:/{print $2}'`
+				PHYS_NAME=""
+				if [ -n "$PHYS_IF" ]; then
+					PHYS_NAME=`networksetup -listnetworkserviceorder | grep -B 1 "Device: $PHYS_IF)" | head -n 1 | sed -E 's/^\([0-9]+\) //'`
+				fi
+				PHYS_DNS_BACKUP="/var/run/vpnc/physdns.$PHYS_IF"
+				if [ -n "$PHYS_NAME" ]; then
+					if [ -s "$PHYS_DNS_BACKUP" ] && ! grep -qi "there aren." "$PHYS_DNS_BACKUP"; then
+						networksetup -setdnsservers "$PHYS_NAME" `cat "$PHYS_DNS_BACKUP"`
+					else
+						networksetup -setdnsservers "$PHYS_NAME" Empty
+					fi
+				fi
+				rm -f -- "$PHYS_DNS_BACKUP"
 				;;
 		esac
 	fi
