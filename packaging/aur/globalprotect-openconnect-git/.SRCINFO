@@ -30,6 +30,7 @@ pkgbase = globalprotect-openconnect-git
 	depends = gnutls
 	depends = libp11-kit
 	depends = nettle
+	depends = libhogweed.so
 	depends = gmp
 	depends = shared-mime-info
 	depends = desktop-file-utils
