@@ -18,7 +18,7 @@ class MacOSReleaseTests(unittest.TestCase):
         self.commit = "a" * 40
         self.metadata = {"gp_ref": "b" * 40, "gpgui_ref": "d" * 40, "workflow_sha": self.commit, "channel": "stable",
                          "release_tag": "v3.0.1", "artifact_version": "3.0.1",
-                         "request_id": "42.1.macos", "build_version": "903.1", "assets": {}}
+                         "request_id": "42.1.macos", "build_version": "903.1", "gui": "tauri", "assets": {}}
         for extension in ("dmg", "zip"):
             name = f"GPConnect_3.0.1_arm64.{extension}"
             content = b"signed artifact"
@@ -34,48 +34,63 @@ class MacOSReleaseTests(unittest.TestCase):
         (self.directory / "release-build.json").write_text(json.dumps(self.metadata))
 
     def test_matching_build_passes(self):
-        self.assertEqual(release.validate(self.directory, "v3.0.1", self.commit), self.metadata)
+        self.assertEqual(release.validate(self.directory, "v3.0.1", self.commit, "tauri"), self.metadata)
+
+    def test_another_gui_cannot_use_this_build(self):
+        with self.assertRaisesRegex(ValueError, "desktop shell"):
+            release.validate(self.directory, "v3.0.1", self.commit, "nsh")
+
+    def test_shell_metadata_is_required(self):
+        del self.metadata["gui"]
+        self.save()
+        with self.assertRaisesRegex(ValueError, "desktop shell"):
+            release.validate(self.directory, "v3.0.1", self.commit, "tauri")
+
+    def test_nsh_metadata_is_accepted_only_when_requested(self):
+        self.metadata["gui"] = "nsh"
+        self.save()
+        self.assertEqual(release.validate(self.directory, "v3.0.1", self.commit, "nsh"), self.metadata)
 
     def test_another_release_cannot_use_this_build(self):
         with self.assertRaisesRegex(ValueError, "release tag"):
-            release.validate(self.directory, "v3.0.2", self.commit)
+            release.validate(self.directory, "v3.0.2", self.commit, "tauri")
 
     def test_another_run_commit_cannot_use_this_build(self):
         with self.assertRaisesRegex(ValueError, "public workflow"):
-            release.validate(self.directory, "v3.0.1", "c" * 40)
+            release.validate(self.directory, "v3.0.1", "c" * 40, "tauri")
 
     def test_source_commit_cannot_replace_workflow_identity(self):
         with self.assertRaisesRegex(ValueError, "public workflow"):
-            release.validate(self.directory, "v3.0.1", self.metadata["gp_ref"])
+            release.validate(self.directory, "v3.0.1", self.metadata["gp_ref"], "tauri")
 
     def test_invalid_workflow_commit_is_rejected(self):
         self.metadata["workflow_sha"] = "short"
         self.save()
         with self.assertRaisesRegex(ValueError, "Invalid workflow_sha"):
-            release.validate(self.directory, "v3.0.1", "short")
+            release.validate(self.directory, "v3.0.1", "short", "tauri")
 
     def test_corrupt_download_is_rejected(self):
         (self.directory / "GPConnect_3.0.1_arm64.zip").write_bytes(b"changed")
         with self.assertRaisesRegex(ValueError, "checksum mismatch"):
-            release.validate(self.directory, "v3.0.1", self.commit)
+            release.validate(self.directory, "v3.0.1", self.commit, "tauri")
 
     def test_unexpected_file_is_rejected(self):
         (self.directory / "unexpected.dmg").write_bytes(b"extra")
         with self.assertRaisesRegex(ValueError, "Unexpected"):
-            release.validate(self.directory, "v3.0.1", self.commit)
+            release.validate(self.directory, "v3.0.1", self.commit, "tauri")
 
     def test_missing_checksum_is_rejected(self):
         self.metadata["assets"].pop("GPConnect_3.0.1_arm64.zip.sha256")
         self.save()
         with self.assertRaisesRegex(ValueError, "exactly"):
-            release.validate(self.directory, "v3.0.1", self.commit)
+            release.validate(self.directory, "v3.0.1", self.commit, "tauri")
 
     def test_snapshot_requires_matching_build_identity(self):
         self.metadata.update(channel="snapshot", release_tag="snapshot",
                              artifact_version="3.0.1-snapshot.903.2")
         self.save()
         with self.assertRaisesRegex(ValueError, "snapshot artifact version"):
-            release.validate(self.directory, "snapshot", self.commit)
+            release.validate(self.directory, "snapshot", self.commit, "tauri")
 
     def test_matching_snapshot_passes(self):
         version = "3.0.1-snapshot.903.1"
@@ -92,7 +107,7 @@ class MacOSReleaseTests(unittest.TestCase):
         self.metadata.update(channel="snapshot", release_tag="snapshot",
                              artifact_version=version, assets=assets)
         self.save()
-        self.assertEqual(release.validate(self.directory, "snapshot", self.commit), self.metadata)
+        self.assertEqual(release.validate(self.directory, "snapshot", self.commit, "tauri"), self.metadata)
 
 
 if __name__ == "__main__":

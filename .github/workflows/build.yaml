@@ -26,6 +26,12 @@ on:
         required: true
         default: false
         type: boolean
+      macos_gui:
+        description: 'macOS shell to build; NSH also runs its separate macOS/Linux checks'
+        required: true
+        default: nsh
+        type: choice
+        options: [tauri, nsh]
       build_bsd:
         description: 'Build FreeBSD/OpenBSD packages for this run'
         required: true
@@ -189,6 +195,16 @@ jobs:
     - name: Run frontend and Rust unit tests as an ordinary user
       timeout-minutes: 80
       run: bash .ci/scripts/test-private-desktop.sh "$PWD/source"
+
+  check-nsh:
+    needs: validate-inputs
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_macos && inputs.macos_gui == 'nsh') || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_MACOS_ON_TAG == 'true') }}
+    uses: ./.github/workflows/check-nsh.yaml
+    with:
+      gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
+      gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
 
   tarball:
     needs: validate-inputs
@@ -439,6 +455,16 @@ jobs:
     secrets:
       GH_PAT: ${{ secrets.GH_PAT }}
 
+  build-gpgui-nsh:
+    needs: validate-inputs
+    uses: ./.github/workflows/build-gpgui-nsh-linux.yaml
+    with:
+      gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
+      gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
+      channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
+
   nix-source:
     needs: [validate-inputs, build-gpgui-glibc]
     strategy:
@@ -553,8 +579,14 @@ jobs:
 
   build-macos:
     name: build-macos
-    needs: [validate-inputs, test-gp, test-gpgui]
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_macos) || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_MACOS_ON_TAG == 'true') }}
+    needs: [validate-inputs, test-gp, test-gpgui, check-nsh]
+    if: >-
+      ${{ !cancelled() &&
+          needs.validate-inputs.result == 'success' &&
+          needs.test-gp.result == 'success' && needs.test-gpgui.result == 'success' &&
+          (needs.check-nsh.result == 'success' || needs.check-nsh.result == 'skipped') &&
+          ((github.event_name == 'workflow_dispatch' && inputs.build_macos) ||
+           (startsWith(github.ref, 'refs/tags/') && vars.BUILD_MACOS_ON_TAG == 'true')) }}
     permissions:
       contents: read
     concurrency:
@@ -563,6 +595,8 @@ jobs:
     runs-on: ${{ vars.MACOS_RUNNER || 'macos-15' }}
     environment: macos-release
     timeout-minutes: 120
+    env:
+      MACOS_GUI: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_gui || 'nsh' }}
     steps:
       - name: Verify runner architecture
         run: test "$(uname -m)" = arm64
@@ -670,6 +704,12 @@ jobs:
             ninja \
             pkgconf \
             python
+          rustup toolchain install 1.97.0 --profile minimal
+
+      - name: Prepare cached native dependencies
+        uses: ./.ci/.github/actions/macos-native-deps
+        with:
+          gpgui-directory: source/gpgui
 
       - name: Import signing identity
         env:
@@ -742,6 +782,7 @@ jobs:
       - name: Build macOS release artifacts
         env:
           CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+          GPGUI_GIT_COMMIT: ${{ needs.validate-inputs.outputs.gpgui_sha }}
           SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
           GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
         run: |
@@ -752,7 +793,7 @@ jobs:
             if [[ "$CHANNEL" == "snapshot" ]]; then
               export GPGUI_RELEASE_DEVTOOLS=1
             fi
-            source/gpgui/scripts/build-macos.sh dmg release
+            source/gpgui/scripts/build-macos.sh dmg release --gui "$MACOS_GUI"
           ) 2>&1 | awk '
             /^MACOS_STAGE: (Native dependencies|Components|Frontend|Application|Bundle|Bundle icons|Bundle metadata|Bundle licenses|Bundle libraries|Bundle frameworks|Bundle optimization|Signing|Validation|App notarization|Update archive|Disk image|Disk image notarization|Complete)$/ {
               print "::notice::" $0
@@ -789,9 +830,15 @@ jobs:
           BUILD_VERSION: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
+          set -euo pipefail
           GP_REF="$(git -C source/gp rev-parse HEAD)"
           GPGUI_REF="$(git -C source/gpgui rev-parse HEAD)"
-          export GP_REF GPGUI_REF
+          GUI="$(plutil -extract GPDesktopShell raw 'source/gpgui/target/release/bundle/macos/GP Connect.app/Contents/Info.plist')"
+          if [[ "$GUI" != "$MACOS_GUI" ]]; then
+            echo "Built desktop shell does not match the selected GUI" >&2
+            exit 1
+          fi
+          export GP_REF GPGUI_REF GUI
           python3 - <<'PYTHON'
           import hashlib
           import json
@@ -799,7 +846,7 @@ jobs:
           from pathlib import Path
           directory = Path("release-assets")
           metadata = {key.lower(): os.environ[key] for key in (
-              "CHANNEL", "RELEASE_TAG", "GP_REF", "GPGUI_REF", "REQUEST_ID", "BUILD_VERSION", "WORKFLOW_SHA")}
+              "CHANNEL", "RELEASE_TAG", "GP_REF", "GPGUI_REF", "REQUEST_ID", "BUILD_VERSION", "WORKFLOW_SHA", "GUI")}
           metadata["artifact_version"] = os.environ["MACOS_ARTIFACT_VERSION"]
           metadata["assets"] = {
               file.name: hashlib.sha256(file.read_bytes()).hexdigest()
@@ -973,6 +1020,7 @@ jobs:
             gmake \
             pkgconf \
             libxml2 \
+            liblz4 \
             gnutls \
             p11-kit \
             nettle \
@@ -981,8 +1029,10 @@ jobs:
             libayatana-appindicator \
             polkit \
             webkit2-gtk_41
+          pkgconf --exists libxml-2.0 liblz4 gnutls p11-kit-1 hogweed nettle gmp
         run: |
           set -eu
+          exec 3>&1
           (
             set -eu
             export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
@@ -990,12 +1040,33 @@ jobs:
             export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
             cd "${{ matrix.workspace }}/gp"
-            cargo build --release --workspace
+            echo "BSD public components: started." >&3
+            cargo build --release --workspace >&3 2>&3
+            echo "BSD public components: passed." >&3
 
             cd ../gpgui/apps/desktop/src-tauri
-            cargo build --release --workspace
+            echo "BSD desktop: started." >&3
+            diagnostics="$(mktemp)"
+            trap 'rm -f "$diagnostics" || true' EXIT
+            if cargo build --release -p gpgui >"$diagnostics" 2>&1; then
+              echo "BSD desktop: passed." >&3
+            else
+              status=$?
+              sed -n 's/.*\(error\[E[0-9][0-9][0-9][0-9]\]\).*/::error::BSD Rust diagnostic: \1/p' "$diagnostics" | sort -u >&3 || true
+              if grep -q 'No space left on device' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: insufficient disk space." >&3
+              fi
+              if grep -Eq 'signal: 9, SIGKILL|ld terminated with signal 9|Killed signal terminated program' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: compiler or linker killed by SIGKILL." >&3
+              fi
+              if grep -Eq 'undefined reference to|undefined symbol:' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: unresolved linker symbols." >&3
+              fi
+              exit "$status"
+            fi
 
             cd ../../../../gp
+            echo "BSD packaging: started." >&3
             gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
             pkg install -y ".build/${{ matrix.artifact_dir }}"/artifacts/*.pkg
             gpclient --version
@@ -1003,6 +1074,7 @@ jobs:
             gpgui --version
             rm -rf target ../gpgui/target
             find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+            echo "BSD packaging: passed." >&3
           ) >/dev/null 2>&1
           echo "BSD build passed."
     - name: Build on OpenBSD
@@ -1042,6 +1114,7 @@ jobs:
           ln -sf /usr/local/bin/automake-1.17 /usr/local/bin/automake
         run: |
           set -eu
+          exec 3>&1
           (
             set -eu
             export AUTOCONF_VERSION=2.72
@@ -1051,12 +1124,33 @@ jobs:
             export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
             cd "${{ matrix.workspace }}/gp"
-            cargo build --release --workspace
+            echo "BSD public components: started." >&3
+            cargo build --release --workspace >&3 2>&3
+            echo "BSD public components: passed." >&3
 
             cd ../gpgui/apps/desktop/src-tauri
-            cargo build --release --workspace
+            echo "BSD desktop: started." >&3
+            diagnostics="$(mktemp)"
+            trap 'rm -f "$diagnostics" || true' EXIT
+            if cargo build --release -p gpgui >"$diagnostics" 2>&1; then
+              echo "BSD desktop: passed." >&3
+            else
+              status=$?
+              sed -n 's/.*\(error\[E[0-9][0-9][0-9][0-9]\]\).*/::error::BSD Rust diagnostic: \1/p' "$diagnostics" | sort -u >&3 || true
+              if grep -q 'No space left on device' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: insufficient disk space." >&3
+              fi
+              if grep -Eq 'signal: 9, SIGKILL|ld terminated with signal 9|Killed signal terminated program' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: compiler or linker killed by SIGKILL." >&3
+              fi
+              if grep -Eq 'undefined reference to|undefined symbol:' "$diagnostics"; then
+                echo "::error::BSD desktop compilation: unresolved linker symbols." >&3
+              fi
+              exit "$status"
+            fi
 
             cd ../../../../gp
+            echo "BSD packaging: started." >&3
             gmake "${{ matrix.package_target }}" GPGUI_BINARY=../gpgui/target/release/gpgui
             pkg_add -D unsigned ".build/${{ matrix.artifact_dir }}"/artifacts/*.tgz
             gpclient --version
@@ -1064,6 +1158,7 @@ jobs:
             gpgui --version
             rm -rf target ../gpgui/target
             find ".build/${{ matrix.artifact_dir }}" -mindepth 1 -maxdepth 1 ! -name artifacts -exec rm -rf {} +
+            echo "BSD packaging: passed." >&3
           ) >/dev/null 2>&1
           echo "BSD build passed."
     - name: Upload BSD package
@@ -1095,6 +1190,7 @@ jobs:
       - build-docker-image
       - build-gpgui-glibc
       - build-gpgui-musl
+      - build-gpgui-nsh
       - setup-bsd-matrix
       - build-gpgui-frontend
       - build-bsd
