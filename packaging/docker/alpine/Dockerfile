@@ -21,7 +21,6 @@ RUN apk add --no-cache \
     lz4-dev \
     make \
     nettle-dev \
-    openssl-dev \
     p11-kit-dev \
     patch \
     pkgconf \
@@ -55,7 +54,6 @@ RUN apk add --no-cache \
     libxml2 \
     lz4-libs \
     nettle \
-    openssl \
     p11-kit \
     zlib \
     && addgroup -g 1000 gp \

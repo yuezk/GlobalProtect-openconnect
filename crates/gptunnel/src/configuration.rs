@@ -1,6 +1,8 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 
-use gpapi::session::tunnel::{MAX_CONFIGURATION_BYTES, TunnelAddress, TunnelConfiguration, TunnelList, TunnelState};
+use gpapi::session::desktop::tunnel::{
+  MAX_CONFIGURATION_BYTES, TunnelAddress, TunnelConfiguration, TunnelList, TunnelState,
+};
 use log::{debug, info};
 use openconnect::tunnel::{Configuration, NativeList};
 

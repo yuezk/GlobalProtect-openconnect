@@ -1,3 +1,33 @@
+:root {
+  color-scheme: light;
+  --background: #f6f5f4;
+  --foreground: #2e3436;
+  --muted-foreground: #5e5c64;
+  --progress-label: #3d3846;
+  --progress-track: #d5d3d1;
+  --progress-fill: #3584e4;
+  --error: #9c2f2f;
+  --button: #1c71d8;
+  --button-hover: #1a5fb4;
+  --button-active: #174a8b;
+  --focus-ring: #1a5fb4;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #242424;
+  --foreground: #ffffff;
+  --muted-foreground: #c0bfbc;
+  --progress-label: #deddda;
+  --progress-track: #454545;
+  --progress-fill: #78aeed;
+  --error: #ffb4ab;
+  --button: #1c71d8;
+  --button-hover: #3584e4;
+  --button-active: #1a5fb4;
+  --focus-ring: #78aeed;
+}
+
 html,
 body,
 #root {
@@ -12,8 +42,8 @@ body,
 }
 
 body {
-  background: #f6f5f4;
-  color: #2e3436;
+  background: var(--background);
+  color: var(--foreground);
   font-family:
     Inter,
     ui-sans-serif,
@@ -35,7 +65,7 @@ button {
   height: 100%;
   padding: 16px 18px;
   gap: 15px;
-  background: #f6f5f4;
+  background: var(--background);
 }
 
 .update-logo {
@@ -52,7 +82,7 @@ button {
 
 .update-title {
   margin: 0;
-  color: #2e3436;
+  color: var(--foreground);
   font-size: 16px;
   font-weight: 600;
   line-height: 1.25;
@@ -61,7 +91,7 @@ button {
 
 .update-description {
   margin: 3px 0 0;
-  color: #5e5c64;
+  color: var(--muted-foreground);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -85,13 +115,13 @@ button {
   margin-top: 9px;
   overflow: hidden;
   border-radius: 3px;
-  background-color: #d5d3d1;
+  background-color: var(--progress-track);
 }
 
 .progress-fill {
   height: 100%;
   border-radius: 3px;
-  background: #3584e4;
+  background: var(--progress-fill);
   transition: width 180ms ease-out;
 }
 
@@ -123,7 +153,7 @@ button {
 
 .progress-label {
   flex: 0 0 auto;
-  color: #3d3846;
+  color: var(--progress-label);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
@@ -139,7 +169,7 @@ button {
 }
 
 .error-status .update-title {
-  color: #9c2f2f;
+  color: var(--error);
 }
 
 .error-copy {
@@ -151,23 +181,23 @@ button {
   padding: 4px 14px;
   border: 0;
   border-radius: 8px;
-  background: #1c71d8;
+  background: var(--button);
   color: #ffffff;
-  cursor: pointer;
+  cursor: default;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
 }
 
 .retry-button:hover {
-  background: #1a5fb4;
+  background: var(--button-hover);
 }
 
 .retry-button:active {
-  background: #174a8b;
+  background: var(--button-active);
 }
 
 .retry-button:focus-visible {
-  outline: 2px solid #1a5fb4;
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

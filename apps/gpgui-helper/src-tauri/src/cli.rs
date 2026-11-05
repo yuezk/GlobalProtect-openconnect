@@ -4,6 +4,7 @@ use std::{io::Read, sync::Arc};
 use anyhow::{Context, bail};
 use gpapi::{
   clap::InfoLevelVerbosity,
+  gui::GuiTheme,
   service::transport::{MAX_CREDENTIAL_FRAME, SessionCredential},
   utils::env_utils,
 };
@@ -29,6 +30,11 @@ struct Cli {
 
   #[arg(long, default_value = env!("CARGO_PKG_VERSION"), help = "The version of the GUI")]
   gui_version: String,
+  #[arg(long, default_value = "tauri", value_parser = ["tauri", "nsh"])]
+  gui_variant: String,
+
+  #[arg(long, value_enum, default_value = "system", help = "Window appearance")]
+  theme: GuiTheme,
 
   #[command(flatten)]
   verbose: InfoLevelVerbosity,
@@ -38,7 +44,22 @@ impl Cli {
   fn run(&self) -> anyhow::Result<()> {
     let credential = self.read_credential()?;
     let credential_lease = monitor_credential_lease().context("Failed to monitor service credential lifetime")?;
-    let app = App::new(Arc::new(credential), credential_lease, &self.gui_version);
+    let variant = if self.gui_variant == "nsh" {
+      gpapi::gui::GuiVariant::Nsh
+    } else {
+      gpapi::gui::GuiVariant::Tauri
+    };
+    anyhow::ensure!(
+      variant != gpapi::gui::GuiVariant::Nsh || cfg!(target_os = "linux"),
+      "Native Shell is available only on Linux"
+    );
+    let app = App::new(
+      Arc::new(credential),
+      credential_lease,
+      &self.gui_version,
+      variant,
+      self.theme,
+    );
 
     env_utils::patch_gui_runtime_env(false);
 
@@ -109,6 +130,22 @@ mod tests {
   use std::io::Cursor;
 
   use super::*;
+
+  #[test]
+  fn theme_defaults_to_system_and_accepts_explicit_modes() {
+    assert_eq!(Cli::try_parse_from(["gpgui-helper"]).unwrap().theme, GuiTheme::System);
+    for (value, expected) in [
+      ("system", GuiTheme::System),
+      ("light", GuiTheme::Light),
+      ("dark", GuiTheme::Dark),
+    ] {
+      assert_eq!(
+        Cli::try_parse_from(["gpgui-helper", "--theme", value]).unwrap().theme,
+        expected
+      );
+    }
+    assert!(Cli::try_parse_from(["gpgui-helper", "--theme", "invalid"]).is_err());
+  }
 
   #[test]
   fn credential_lease_closes_at_eof() {

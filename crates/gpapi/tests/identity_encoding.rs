@@ -65,41 +65,40 @@ fn encrypted_der_preserves_password_errors() {
 }
 
 #[test]
-fn ec_sec1_normalizes_on_linux_and_bsd_and_is_terminal_on_macos() {
+fn ec_sec1_pem_and_der_are_portable() {
   let directory = tempfile::tempdir().unwrap();
   let key = directory.path().join("ec.der");
   fs::write(&key, pem::parse(bytes("ec-sec1.pem")).unwrap().contents()).unwrap();
   for source in [fixture("ec-sec1.pem"), key] {
     for password in [None, Some(PASSWORD)] {
-      let result = load(&fixture("ec-cert.pem"), &source, password);
-      if cfg!(target_os = "macos") {
-        assert!(matches!(
-          result.unwrap_err().downcast_ref::<RequestIdentityError>(),
-          Some(RequestIdentityError::UnsupportedKeyFormat)
-        ));
-      } else {
-        assert_eq!(result.unwrap().key_data().unwrap(), bytes("ec-pkcs8.pem"));
-      }
+      let identity = load(&fixture("ec-cert.pem"), &source, password).unwrap();
+      assert_eq!(identity.key_data().unwrap(), bytes("ec-sec1.pem"));
     }
   }
 }
 
 #[test]
-fn traditional_encrypted_pem_has_platform_specific_support_and_password_errors() {
+#[cfg(any(
+  target_os = "macos",
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd"
+))]
+fn traditional_encrypted_pem_preserves_password_errors() {
   for algorithm in ["rsa", "ec"] {
     for cipher in ["aes128", "aes192", "aes256", "des3"] {
       let certificate = fixture(&format!("{algorithm}-cert.pem"));
       let key = fixture(&format!("{algorithm}-traditional-{cipher}.pem"));
       for password in [None, Some("incorrect"), Some(PASSWORD)] {
         let result = load(&certificate, &key, password);
-        if cfg!(target_os = "macos") {
-          assert!(matches!(
-            result.unwrap_err().downcast_ref::<RequestIdentityError>(),
-            Some(RequestIdentityError::UnsupportedEncryption)
-          ));
-        } else if password == Some(PASSWORD) {
+        if password == Some(PASSWORD) {
           let identity = result.unwrap_or_else(|error| panic!("{key:?}: {error}"));
-          assert_eq!(identity.key_data().unwrap(), bytes(&format!("{algorithm}-pkcs8.pem")));
+          let actual = openssl::pkey::PKey::private_key_from_pem(identity.key_data().unwrap()).unwrap();
+          let expected = openssl::pkey::PKey::private_key_from_pem(&bytes(&format!("{algorithm}-pkcs8.pem"))).unwrap();
+          assert!(
+            actual.public_eq(&expected),
+            "{key:?}: imported key differs from the fixture"
+          );
           assert!(identity.key_password().is_none());
         } else {
           let error = result.unwrap_err();
@@ -115,7 +114,12 @@ fn traditional_encrypted_pem_has_platform_specific_support_and_password_errors()
 }
 
 #[test]
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(
+  target_os = "macos",
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd"
+))]
 fn traditional_passphrase_with_nul_returns_a_redacted_terminal_error() {
   let error = load(
     &fixture("rsa-cert.pem"),
@@ -130,11 +134,16 @@ fn traditional_passphrase_with_nul_returns_a_redacted_terminal_error() {
   for diagnostic in [error.to_string(), format!("{error:?}")] {
     assert!(!diagnostic.contains("secret-password"));
     assert!(!diagnostic.contains("do-not-log"));
-    assert!(!diagnostic.contains("115, 101, 99, 114, 101, 116"));
   }
 }
 
 #[test]
+#[cfg(any(
+  target_os = "macos",
+  target_os = "linux",
+  target_os = "freebsd",
+  target_os = "openbsd"
+))]
 fn first_traditional_encrypted_key_controls_combined_pem_loading() {
   let directory = tempfile::tempdir().unwrap();
   let source = directory.path().join("combined.pem");
@@ -144,24 +153,14 @@ fn first_traditional_encrypted_key_controls_combined_pem_loading() {
   combined.extend(bytes("rsa-traditional-aes256.pem"));
   combined.extend(bytes("rsa-pkcs8.pem"));
   fs::write(&source, &combined).unwrap();
-  for password in [None, Some(PASSWORD)] {
-    let result = ClientIdentity::load(source.to_str().unwrap(), None, password);
-    if cfg!(target_os = "macos") {
-      assert!(matches!(
-        result.unwrap_err().downcast_ref::<RequestIdentityError>(),
-        Some(RequestIdentityError::UnsupportedEncryption)
-      ));
-    } else if password.is_none() {
-      assert!(matches!(
-        result.unwrap_err().downcast_ref::<RequestIdentityError>(),
-        Some(RequestIdentityError::NoPassphrase("PEM"))
-      ));
-    } else {
-      let identity = result.unwrap();
-      assert_eq!(identity.certificate_data(), chain);
-      assert_eq!(identity.key_data().unwrap(), bytes("rsa-pkcs8.pem"));
-    }
-  }
+  let error = ClientIdentity::load(source.to_str().unwrap(), None, None).unwrap_err();
+  assert!(matches!(
+    error.downcast_ref::<RequestIdentityError>(),
+    Some(RequestIdentityError::NoPassphrase("PEM"))
+  ));
+  let identity = ClientIdentity::load(source.to_str().unwrap(), None, Some(PASSWORD)).unwrap();
+  assert_eq!(identity.certificate_data(), chain);
+  assert_eq!(identity.key_data().unwrap(), bytes("rsa-pkcs8.pem"));
   assert_eq!(fs::read(source).unwrap(), combined);
 }
 

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=GP Connect
+Comment=Download the GP Connect interface
+Exec=/usr/local/bin/gpclient launch-gui
+Icon=gpgui
+NoDisplay=true
+StartupWMClass=gpgui-helper

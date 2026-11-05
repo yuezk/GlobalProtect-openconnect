@@ -7,7 +7,7 @@ use zeroize::Zeroize;
 use crate::{
   hip::HipSource,
   os_profile::{ClientOs, HostIdentity, OsProfile},
-  session::ConnectionPlan,
+  session::desktop::ConnectionPlan,
 };
 
 use super::vpn_state::ConnectInfo;
@@ -442,6 +442,8 @@ pub enum WsRequest {
 pub struct UpdateGuiRequest {
   pub path: String,
   pub checksum: String,
+  #[serde(default)]
+  pub variant: crate::gui::GuiVariant,
 }
 
 #[cfg(test)]
@@ -452,14 +454,14 @@ mod tests {
   use crate::os_profile::OsProfileBuilder;
   use crate::{
     gateway::Gateway,
-    session::{AuthenticatedGateway, GatewayAuthentication, InternalSessionPolicy},
+    session::{GatewayAuthentication, InternalSessionPolicy, desktop::AuthenticatedGateway},
   };
 
   fn test_request(info: ConnectInfo) -> ConnectRequest {
     let plan = ConnectionPlan::new(
       vec![AuthenticatedGateway {
         gateway: info.gateway().clone(),
-        binding: Some(crate::session::network::test_binding()),
+        binding: Some(crate::session::desktop::network::test_binding()),
         authentication: GatewayAuthentication::new("authcookie=secret-cookie&user=user".into(), "tunnel".into())
           .unwrap(),
       }],
@@ -527,7 +529,9 @@ mod tests {
 
   #[test]
   fn with_os_profile_sets_user_agent_from_profile() {
-    let profile = OsProfileBuilder::new(ClientOs::Linux).client_version("6.0.0").build();
+    let profile = OsProfileBuilder::new(ClientOs::Linux)
+      .client_version("6.0.0")
+      .build(crate::os_profile::test_snapshot());
 
     let req = test_request(test_connect_info()).with_os_profile(&profile);
 
@@ -536,7 +540,7 @@ mod tests {
 
   #[test]
   fn with_os_profile_sets_host_id_from_profile_runtime_identity() {
-    let profile = OsProfileBuilder::new(ClientOs::Linux).build();
+    let profile = OsProfileBuilder::new(ClientOs::Linux).build(crate::os_profile::test_snapshot());
 
     let req = test_request(test_connect_info()).with_os_profile(&profile);
 

@@ -21,6 +21,19 @@ mod recovery_row;
 #[path = "gtk_tls.rs"]
 mod tls;
 
+pub(super) fn open_okta_verify(url: &tauri::Url) -> bool {
+  if url.scheme() != "com-okta-authenticator" {
+    return true;
+  }
+
+  // FastPass loads this URI in a hidden iframe. Hand it to the desktop instead of WebKitGTK.
+  info!("Opening Okta Verify");
+  if let Err(error) = gtk::gio::AppInfo::launch_default_for_uri(url.as_str(), None::<&gtk::gio::AppLaunchContext>) {
+    warn!("Failed to open Okta Verify: {error}");
+  }
+  false
+}
+
 fn action_button(label: &str) -> anyhow::Result<gtk::Button> {
   let button = gtk::Button::with_label(label);
   let spacing = gtk::CssProvider::new();

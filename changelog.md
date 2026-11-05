@@ -1,5 +1,35 @@
 # Changelog
 
+## 3.3.0
+
+### Added
+
+- Added Native Shell, a new desktop interface for macOS and Linux. macOS builds now use it by default.
+- Added an Interface setting on Linux to switch between Tauri and Native Shell.
+- Added tray icon appearance options for light and dark desktop panels on Linux, FreeBSD, and OpenBSD.
+- Added in-app feature highlights, with a setting to turn them off.
+
+### Improved
+
+- Made System VPN and Local Proxy modes selectable directly from the main window.
+- Refined connection details, saved-server selection, keyboard navigation, and dialog appearance.
+- Removed the need for OpenSSL compatibility configuration and external OpenSSL conversion tools.
+
+### Fixed
+
+- Fixed macOS VPN DNS configuration and cleanup, including split-tunnel connections.
+- Fixed background CLI reconnections failing after the initial connection.
+- Fixed server addresses losing custom ports when pasted as URLs.
+- Fixed gateway login address handling for servers with explicit ports.
+- Fixed browser sign-in registration when desktop-specific settings override the callback handler on Linux, FreeBSD, or OpenBSD.
+- Fixed Okta FastPass failing to open Okta Verify from the embedded sign-in window on Linux, FreeBSD, and OpenBSD.
+- Fixed supplied server certificate pins not being enforced during tunnel setup.
+- Fixed delayed clicks activating a different control after a Native Shell view changed.
+
+### Command-line notes
+
+- Deprecated `--fix-openssl` on Linux, FreeBSD, and OpenBSD. Existing commands still accept it, but it has no effect.
+
 ## 3.2.0
 
 ### Added

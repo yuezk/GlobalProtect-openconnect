@@ -1,6 +1,8 @@
 //! Dashboard presentation only; connection ownership and sampling stay outside this module.
 use crossterm::event::KeyCode;
-use gpapi::session::tunnel::{TunnelList, TunnelPhase, TunnelState, TunnelStatisticsSnapshot, TunnelStatisticsState};
+use gpapi::session::desktop::tunnel::{
+  TunnelList, TunnelPhase, TunnelState, TunnelStatisticsSnapshot, TunnelStatisticsState,
+};
 use ratatui::{
   Frame,
   buffer::Buffer,
@@ -338,7 +340,7 @@ pub(super) fn render_tunnel(
 
 #[cfg(test)]
 mod tests {
-  use gpapi::session::tunnel::{TunnelStatistics, TunnelStatisticsView, TunnelTransport};
+  use gpapi::session::desktop::tunnel::{TunnelStatistics, TunnelStatisticsView, TunnelTransport};
   use ratatui::{Terminal, backend::TestBackend};
 
   use super::*;

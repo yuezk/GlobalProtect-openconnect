@@ -125,7 +125,7 @@ pub(crate) fn generate(
   profile: &OsProfile,
   edited: Option<&str>,
   request: &HipRequest,
-  control: &dyn gpapi::process::collection::CollectionControl,
+  control: &dyn gpapi::collection::CollectionControl,
   preview: bool,
 ) -> anyhow::Result<String> {
   control.check()?;
@@ -177,9 +177,9 @@ pub(crate) fn profile(
   os_version: Option<String>,
   host_id: Option<String>,
   hostname: Option<String>,
-  control: &dyn gpapi::process::collection::CollectionControl,
+  control: &dyn gpapi::collection::CollectionControl,
 ) -> io::Result<OsProfile> {
-  let identity = HostIdentity::from_parts(
+  let identity = gpapi::os_profile::desktop::identity_from_parts(
     hostname.unwrap_or_else(|| identity.computer().into()),
     host_id.unwrap_or_else(|| identity.host_id().into()),
     identity.serialno().into(),
@@ -192,7 +192,7 @@ pub(crate) fn profile(
   if let Some(os_version) = os_version {
     builder = builder.os_version(os_version);
   }
-  builder.build_with_control(control)
+  gpapi::os_profile::desktop::collect_profile_with_control(builder, None, control)
 }
 
 fn generation_error(error: anyhow::Error) -> io::Error {
@@ -209,7 +209,7 @@ mod tests {
 
   fn fixture_profile() -> OsProfile {
     profile(
-      &HostIdentity::from_parts(
+      &gpapi::os_profile::desktop::identity_from_parts(
         "device".into(),
         "host".into(),
         "serial".into(),
@@ -220,7 +220,7 @@ mod tests {
       Some("negotiated-version".into()),
       None,
       None,
-      &gpapi::process::collection::CollectionBudget::new(std::time::Duration::from_secs(60)),
+      &gpapi::collection::CollectionBudget::new(std::time::Duration::from_secs(60)),
     )
     .unwrap()
   }
@@ -235,7 +235,7 @@ mod tests {
 
   #[test]
   fn profile_retains_negotiated_identity_and_os_version() {
-    let identity = HostIdentity::from_parts(
+    let identity = gpapi::os_profile::desktop::identity_from_parts(
       "original".into(),
       "original-id".into(),
       "serial".into(),
@@ -248,7 +248,7 @@ mod tests {
       Some("negotiated-os".into()),
       Some("negotiated-host".into()),
       Some("negotiated-name".into()),
-      &gpapi::process::collection::CollectionBudget::new(std::time::Duration::from_secs(60)),
+      &gpapi::collection::CollectionBudget::new(std::time::Duration::from_secs(60)),
     )
     .unwrap();
     assert_eq!(profile.os_version(), "negotiated-os");
