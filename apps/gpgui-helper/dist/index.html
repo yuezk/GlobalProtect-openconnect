@@ -2,11 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      const theme = window.__GP_HELPER_THEME__ || "system";
+      const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+      const applyTheme = () => {
+        document.documentElement.dataset.theme =
+          theme === "system" ? (systemTheme.matches ? "dark" : "light") : theme;
+      };
+      applyTheme();
+      if (theme === "system") systemTheme.addEventListener("change", applyTheme);
+    </script>
     <link rel="icon" type="image/svg+xml" href="/assets/icon-small-DFuJkDph.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GPGUI Downloader</title>
-    <script type="module" crossorigin src="/assets/main-DZdDLhQH.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/main-DiWGniCh.css">
+    <script type="module" crossorigin src="/assets/main-BJvLW_Ih.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/main-CVTp2z3I.css">
   </head>
   <body>
     <script>

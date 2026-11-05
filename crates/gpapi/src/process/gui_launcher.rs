@@ -51,7 +51,11 @@ impl<'a> GuiLauncher<'a> {
     self
   }
 
-  pub(crate) async fn resolve_program(&self, cancellation: &CancellationToken) -> anyhow::Result<PathBuf> {
+  pub(crate) async fn resolve_program(
+    &self,
+    cancellation: &CancellationToken,
+    helper_theme: crate::gui::GuiTheme,
+  ) -> anyhow::Result<PathBuf> {
     anyhow::ensure!(
       uzers::get_effective_uid() != 0,
       "The desktop GUI must not be launched by root"
@@ -59,7 +63,7 @@ impl<'a> GuiLauncher<'a> {
     if let Some(program) = self.find_compatible_program(cancellation).await? {
       return Ok(program);
     }
-    self.download_program(cancellation).await?;
+    self.download_program(cancellation, helper_theme).await?;
     let program = self.variant.update_target();
     tokio::select! {
       biased;
@@ -139,13 +143,18 @@ impl<'a> GuiLauncher<'a> {
     Ok(())
   }
 
-  async fn download_program(&self, cancellation: &CancellationToken) -> anyhow::Result<()> {
+  async fn download_program(
+    &self,
+    cancellation: &CancellationToken,
+    theme: crate::gui::GuiTheme,
+  ) -> anyhow::Result<()> {
     let gui_helper = GuiHelperLauncher::new(&self.credential);
 
     gui_helper
       .envs(self.envs.as_ref())
       .gui_version(Some(self.version))
       .variant(self.variant)
+      .theme(theme)
       .launch(cancellation)
       .await
   }
@@ -177,7 +186,8 @@ impl<'a> GuiLauncher<'a> {
           let (mut socket, _) = accepted?;
           let mut pending = false;
           let replacement = async {
-            let selection = gui_switch::receive(&mut socket).await?;
+            let command = gui_switch::receive(&mut socket).await?;
+            let selection = command.selection;
             let variant = selection.variant;
             let candidate = Self::new(self.version, self.credential.clone(), variant).envs(self.envs.clone());
             let program = candidate.find_compatible_program(cancellation).await?;
@@ -210,7 +220,7 @@ impl<'a> GuiLauncher<'a> {
               .minimized(false);
             let program = match program {
               Some(program) => program,
-              None => launcher.resolve_program(cancellation).await?,
+              None => launcher.resolve_program(cancellation, command.theme).await?,
             };
             let mut child = launcher.start_owned(program, cancellation.child_token());
             let start_result = tokio::select! {
@@ -401,7 +411,7 @@ mod tests {
     }
     let launcher = launcher(VERSION, vec![first, second]);
     let cancellation = CancellationToken::new();
-    let attempt = launcher.resolve_program(&cancellation);
+    let attempt = launcher.resolve_program(&cancellation, crate::gui::GuiTheme::System);
     tokio::pin!(attempt);
     tokio::select! {
       result = &mut attempt => panic!("version probe exited early: {result:?}"),
@@ -602,7 +612,10 @@ mod tests {
     crate::gui::save_preference(crate::gui::GuiVariant::Nsh).unwrap();
     let credential = Arc::new(SessionCredential::generate(Uuid::new_v4(), VERSION).unwrap());
     let selected = GuiLauncher::new(VERSION, credential, crate::gui::preferred().unwrap());
-    let program = selected.resolve_program(&CancellationToken::new()).await.unwrap();
+    let program = selected
+      .resolve_program(&CancellationToken::new(), crate::gui::GuiTheme::System)
+      .await
+      .unwrap();
     assert_eq!(program.file_name().unwrap(), "gpgui-nsh");
   }
 
@@ -707,6 +720,7 @@ mod tests {
           variant: crate::gui::GuiVariant::Nsh,
           allow_download: scenario == "runtime-too-old-confirmed",
         },
+        crate::gui::GuiTheme::System,
       )
       .await;
       if runtime_too_old {

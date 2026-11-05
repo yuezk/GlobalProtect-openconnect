@@ -128,7 +128,9 @@ impl<'a> DesktopLauncher<'a> {
           // the same cancellation, service ownership and recovery budget as gpgui.
           let outcome = {
             let attempt = async {
-              let program = launcher.resolve_program(&cancellation).await?;
+              let program = launcher
+                .resolve_program(&cancellation, crate::gui::GuiTheme::System)
+                .await?;
               #[cfg(target_os = "linux")]
               return launcher
                 .launch_with_switches(

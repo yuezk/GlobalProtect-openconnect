@@ -11,6 +11,26 @@ pub enum GuiVariant {
   Nsh,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[serde(rename_all = "kebab-case")]
+pub enum GuiTheme {
+  #[default]
+  System,
+  Light,
+  Dark,
+}
+
+impl GuiTheme {
+  pub fn as_str(self) -> &'static str {
+    match self {
+      Self::System => "system",
+      Self::Light => "light",
+      Self::Dark => "dark",
+    }
+  }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct GuiSwitchRequest {

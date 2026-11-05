@@ -2,6 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      const theme = window.__GP_HELPER_THEME__ || "system";
+      const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+      const applyTheme = () => {
+        document.documentElement.dataset.theme =
+          theme === "system" ? (systemTheme.matches ? "dark" : "light") : theme;
+      };
+      applyTheme();
+      if (theme === "system") systemTheme.addEventListener("change", applyTheme);
+    </script>
     <link rel="icon" type="image/svg+xml" href="/src/assets/icon-small.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GPGUI Downloader</title>

@@ -6,7 +6,15 @@ use tokio::{
   net::{UnixListener, UnixStream},
 };
 
-use crate::gui::{GuiSwitchOutcome, GuiSwitchRequest};
+use crate::gui::{GuiSwitchOutcome, GuiSwitchRequest, GuiTheme};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct SwitchCommand {
+  #[serde(flatten)]
+  pub selection: GuiSwitchRequest,
+  #[serde(default)]
+  pub theme: GuiTheme,
+}
 
 pub(crate) const SOCKET_ENV: &str = "GP_DESKTOP_CONTROL_SOCKET";
 pub(crate) const READY_ENV: &str = "GP_DESKTOP_READY_SOCKET";
@@ -22,19 +30,22 @@ pub fn notify_ready() -> anyhow::Result<()> {
   Ok(())
 }
 
-pub async fn request(selection: GuiSwitchRequest) -> anyhow::Result<GuiSwitchOutcome> {
+pub async fn request(selection: GuiSwitchRequest, theme: GuiTheme) -> anyhow::Result<GuiSwitchOutcome> {
   let path = std::env::var_os(SOCKET_ENV).context("GUI switching requires a desktop supervisor")?;
-  request_at(std::path::Path::new(&path), selection).await
+  request_at(std::path::Path::new(&path), selection, theme).await
 }
 
 pub(super) async fn request_at(
   path: &std::path::Path,
   selection: GuiSwitchRequest,
+  theme: GuiTheme,
 ) -> anyhow::Result<GuiSwitchOutcome> {
   let mut socket = UnixStream::connect(path)
     .await
     .context("Could not contact the desktop supervisor")?;
-  socket.write_all(&serde_json::to_vec(&selection)?).await?;
+  socket
+    .write_all(&serde_json::to_vec(&SwitchCommand { selection, theme })?)
+    .await?;
   socket.shutdown().await?;
   let mut reply = Vec::new();
   socket.take(4096).read_to_end(&mut reply).await?;
@@ -74,7 +85,7 @@ impl SwitchListener {
   }
 }
 
-pub(crate) async fn receive(socket: &mut UnixStream) -> anyhow::Result<GuiSwitchRequest> {
+pub(crate) async fn receive(socket: &mut UnixStream) -> anyhow::Result<SwitchCommand> {
   anyhow::ensure!(
     socket.peer_cred()?.uid() == uzers::get_effective_uid(),
     "Desktop supervisor user mismatch"
@@ -107,22 +118,21 @@ mod tests {
     let control = SwitchListener::new().unwrap();
     let path = control.path();
     assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
-    let client = tokio::spawn(async move {
-      let mut socket = UnixStream::connect(path).await.unwrap();
-      socket
-        .write_all(&serde_json::to_vec(&selection).unwrap())
-        .await
-        .unwrap();
-      socket.shutdown().await.unwrap();
-      let mut reply = Vec::new();
-      socket.read_to_end(&mut reply).await.unwrap();
-      serde_json::from_slice::<Result<GuiSwitchOutcome, String>>(&reply).unwrap()
-    });
+    let client = tokio::spawn(async move { request_at(&path, selection, GuiTheme::Dark).await });
     let (mut socket, _) = control.listener.accept().await.unwrap();
-    assert_eq!(receive(&mut socket).await.unwrap(), selection);
+    assert_eq!(
+      receive(&mut socket).await.unwrap(),
+      SwitchCommand {
+        selection,
+        theme: GuiTheme::Dark
+      }
+    );
     reply(&mut socket, Err("Selected GUI could not start".into()))
       .await
       .unwrap();
-    assert_eq!(client.await.unwrap().unwrap_err(), "Selected GUI could not start");
+    assert_eq!(
+      client.await.unwrap().unwrap_err().to_string(),
+      "Selected GUI could not start"
+    );
   }
 }
