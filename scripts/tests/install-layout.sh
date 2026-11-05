@@ -23,6 +23,11 @@ for platform in linux bsd; do
         CARGO_RELEASE_DIR="$temp/release" GPGUI_BINARY="$temp/release/gpgui" > "$temp/$platform.log"
     installed="$stage/custom/gp"
     test -x "$installed/bin/gpclient"
+    for app in gpgui-helper gpauth; do
+        grep -Fxq 'Exec=/custom/gp/bin/gpclient launch-gui' "$installed/share/applications/$app.desktop"
+        grep -Fxq 'Icon=gpgui' "$installed/share/applications/$app.desktop"
+        grep -Fxq 'NoDisplay=true' "$installed/share/applications/$app.desktop"
+    done
     test -x "$installed/libexec/gpclient/gp-vpnc-script-installer"
     grep -Fxq 'Exec=/custom/gp/bin/gpclient launch-gui %u' "$installed/share/applications/gpgui.desktop"
     grep -q '>/custom/gp/bin/gpservice<' "$installed/share/polkit-1/actions/com.yuezk.gpgui.policy"

@@ -190,8 +190,7 @@ install-unix: install-gpclient-unix
 	set -e; if [ -f "$(GPGUI_BINARY)" ]; then \
 		install -m 755 "$(GPGUI_BINARY)" "$(DESTDIR)$(PREFIX)/bin/gpgui"; \
 	fi
-	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.* \
-		packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-*.svg; do \
+	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.*; do \
 		destination="$(DESTDIR)$(PREFIX)/$${file#packaging/files/usr/}"; \
 		install -d "$$(dirname "$$destination")"; \
 		install -m 644 "$$file" "$$destination"; \
@@ -200,6 +199,8 @@ install-unix: install-gpclient-unix
 install-linux: install-unix
 	@echo "Installing Linux integration under $(PREFIX)..."
 	set -e; for file in share/applications/gpgui.desktop \
+		share/applications/gpgui-helper.desktop \
+		share/applications/gpauth.desktop \
 		share/polkit-1/actions/com.yuezk.gpgui.policy \
 		lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down \
 		lib/NetworkManager/dispatcher.d/gpclient-nm-hook; do \
@@ -213,7 +214,7 @@ install-linux: install-unix
 install-bsd: install-unix
 	@echo "Installing BSD integration under $(PREFIX)..."
 	install -d "$(DESTDIR)$(PREFIX)/share/applications" "$(DESTDIR)$(PREFIX)/share/polkit-1/actions"
-	install -m 644 packaging/bsd/gpgui.desktop "$(DESTDIR)$(PREFIX)/share/applications/"
+	install -m 644 packaging/bsd/gpgui.desktop packaging/bsd/gpgui-helper.desktop packaging/bsd/gpauth.desktop "$(DESTDIR)$(PREFIX)/share/applications/"
 	install -m 644 packaging/bsd/com.yuezk.gpgui.policy "$(DESTDIR)$(PREFIX)/share/polkit-1/actions/"
 	sh scripts/relocate-install-paths.sh "$(PREFIX)" /usr/local "$(DESTDIR)$(PREFIX)"
 
@@ -259,7 +260,9 @@ package-openbsd: clean-bsd-package
 	$(MAKE) install-bsd DESTDIR=$(CURDIR)/.build/openbsd/pkgroot PREFIX=$(PREFIX) GPGUI_BINARY="$(GPGUI_BINARY)"
 	cp packaging/bsd/openbsd/COMMENT .build/openbsd/+COMMENT
 	cp packaging/bsd/openbsd/DESC .build/openbsd/+DESC
+	sh scripts/openbsd-library-dependencies.sh .build/openbsd/pkgroot > .build/openbsd/WANTLIB
 	{ \
+		cat .build/openbsd/WANTLIB; \
 		echo '@unexec-delete /bin/rm -f /usr/local/libexec/gpclient/gpgui /var/db/gpclient/scripts/vpnc-script /var/db/gpclient/scripts/vpnc-script.metadata || echo "Warning: failed to remove gpclient runtime files" >&2'; \
 		echo '@unexec-delete /bin/rmdir /usr/local/libexec/gpclient 2>/dev/null || true'; \
 		echo '@unexec-delete /bin/rmdir /var/db/gpclient/scripts 2>/dev/null || true'; \
@@ -314,11 +317,12 @@ uninstall-unix:
 	set -e; for file in gp-hip-script-installer gp-vpnc-script-installer vpnc-script; do \
 		rm -f "$(DESTDIR)$(PREFIX)/libexec/gpclient/$$file"; \
 	done
-	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.* \
-		packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-*.svg; do \
+	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.*; do \
 		rm -f "$(DESTDIR)$(PREFIX)/$${file#packaging/files/usr/}"; \
 	done
 	rm -f "$(DESTDIR)$(PREFIX)/share/applications/gpgui.desktop" \
+		"$(DESTDIR)$(PREFIX)/share/applications/gpgui-helper.desktop" \
+		"$(DESTDIR)$(PREFIX)/share/applications/gpauth.desktop" \
 		"$(DESTDIR)$(PREFIX)/share/polkit-1/actions/com.yuezk.gpgui.policy"
 	rmdir "$(DESTDIR)$(PREFIX)/libexec/gpclient" 2>/dev/null || true
 
@@ -326,6 +330,7 @@ uninstall-linux: uninstall-unix
 	rm -f "$(DESTDIR)$(PREFIX)/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down" \
 		"$(DESTDIR)$(PREFIX)/lib/NetworkManager/dispatcher.d/gpclient-nm-hook"
 	rm -f "$(DESTDIR)/var/lib/gpclient/gpgui" \
+		"$(DESTDIR)/var/lib/gpclient/gpgui-nsh" \
 		"$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script" \
 		"$(DESTDIR)/var/lib/gpclient/scripts/vpnc-script.metadata"
 	rmdir "$(DESTDIR)/var/lib/gpclient/scripts" "$(DESTDIR)/var/lib/gpclient" 2>/dev/null || true

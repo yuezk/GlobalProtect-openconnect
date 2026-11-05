@@ -15,7 +15,7 @@ use crossterm::{
   execute,
   terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use gpapi::session::tunnel::TunnelPhase;
+use gpapi::session::desktop::tunnel::TunnelPhase;
 use log::Level;
 use nix::unistd::{getpgrp, tcgetpgrp};
 use ratatui::{
@@ -317,7 +317,7 @@ fn footer_text(logs: bool, ending: &str, scrollable: bool, width: u16) -> Paragr
 fn notice_for_status(
   notice: Option<Notice>,
   phase: TunnelPhase,
-  transport: gpapi::session::tunnel::TunnelTransport,
+  transport: gpapi::session::desktop::tunnel::TunnelTransport,
 ) -> Notice {
   notice.unwrap_or_else(|| Notice {
     level: Level::Info,
@@ -345,7 +345,7 @@ mod tests {
 
   #[test]
   fn status_transitions_cannot_overwrite_an_existing_warning() {
-    use gpapi::session::tunnel::TunnelTransport;
+    use gpapi::session::desktop::tunnel::TunnelTransport;
     let warning = Notice {
       level: Level::Warn,
       message: "ESP unavailable; using SSL".into(),

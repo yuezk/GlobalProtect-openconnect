@@ -2,6 +2,7 @@
 name = "gpservice"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
@@ -36,7 +37,7 @@ nix = { version = "0.31", features = ["fs", "socket", "user"] }
 
 [dev-dependencies]
 openssl.workspace = true
-tokio-tungstenite = "0.29"
+tokio-tungstenite.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 gpvpnc = { path = "../../crates/gpvpnc" }

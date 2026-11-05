@@ -21,17 +21,26 @@ const EXTEND_SESSION_COMMENT: &str = "User extends the login lifetime";
 pub struct SessionExtensionAuth {
   credential: Credential,
   client: GatewayLoginClient,
+  binding: Option<crate::session::desktop::network::GatewayBinding>,
 }
 
 impl SessionExtensionAuth {
   pub fn new(credential: Credential, client: GatewayLoginClient) -> Self {
-    Self { credential, client }
+    Self {
+      credential,
+      client,
+      binding: None,
+    }
+  }
+  pub fn with_binding(mut self, binding: Option<crate::session::desktop::network::GatewayBinding>) -> Self {
+    self.binding = binding;
+    self
   }
   pub fn client_identity(&self) -> Option<&crate::utils::request::ClientIdentity> {
     self.client.client_identity()
   }
-  pub fn binding(&self) -> Option<&crate::session::network::GatewayBinding> {
-    self.client.binding()
+  pub fn binding(&self) -> Option<&crate::session::desktop::network::GatewayBinding> {
+    self.binding.as_ref()
   }
 }
 
@@ -170,14 +179,14 @@ mod tests {
 
   fn build_session_args() -> SessionRequestArgs {
     let profile = OsProfile::builder(ClientOs::Mac)
-      .host_identity(HostIdentity::new(
+      .host_identity(HostIdentity::from_parts(
         "test-mac".to_string(),
         "host-id".to_string(),
         "serial".to_string(),
         "aa:bb:cc:dd:ee:ff".to_string(),
       ))
       .client_version("6.3.1-12".to_string())
-      .build();
+      .build(crate::os_profile::test_snapshot());
     SessionRequestArgs::new("authcookie=AUTH&portal=vpn.example.com&user=alice&preferred-ip=10.0.0.10".to_string())
       .with_user_agent(profile.user_agent().to_string())
       .with_disable_ipv6(true)

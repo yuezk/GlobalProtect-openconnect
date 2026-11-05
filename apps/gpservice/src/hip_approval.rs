@@ -87,14 +87,14 @@ pub fn install(request: InstallRequest, approving_uid: u32) -> anyhow::Result<Ap
 }
 
 pub fn resolve(approval_id: &str, desktop_uid: u32) -> anyhow::Result<ApprovedScript> {
-  let budget = gpapi::process::collection::CollectionBudget::new(std::time::Duration::from_secs(60));
+  let budget = gpapi::collection::CollectionBudget::new(std::time::Duration::from_secs(60));
   resolve_with_control(approval_id, desktop_uid, &budget)
 }
 
 pub fn resolve_with_control(
   approval_id: &str,
   desktop_uid: u32,
-  control: &dyn gpapi::process::collection::CollectionControl,
+  control: &dyn gpapi::collection::CollectionControl,
 ) -> anyhow::Result<ApprovedScript> {
   control.check()?;
   ensure!(desktop_uid != 0, "Root is not a desktop HIP approval owner");
@@ -199,7 +199,7 @@ fn install_at(
 }
 
 fn resolve_at(base: &Path, approval_id: &str, desktop_uid: u32, file_owner: u32) -> anyhow::Result<ApprovedScript> {
-  let budget = gpapi::process::collection::CollectionBudget::new(std::time::Duration::from_secs(60));
+  let budget = gpapi::collection::CollectionBudget::new(std::time::Duration::from_secs(60));
   resolve_at_with_control(base, approval_id, desktop_uid, file_owner, &budget)
 }
 
@@ -208,7 +208,7 @@ fn resolve_at_with_control(
   approval_id: &str,
   desktop_uid: u32,
   file_owner: u32,
-  control: &dyn gpapi::process::collection::CollectionControl,
+  control: &dyn gpapi::collection::CollectionControl,
 ) -> anyhow::Result<ApprovedScript> {
   control.check()?;
   let info = read_metadata_at(base, approval_id, desktop_uid, file_owner)?;

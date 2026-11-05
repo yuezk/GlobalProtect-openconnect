@@ -203,10 +203,7 @@ pub(super) fn build_os_profile_with_host_id(args: &ConnectArgs, host_id: Option<
   if let Some(local_hostname) = args.local_hostname.as_deref() {
     builder = builder.computer_name_override(local_hostname.to_string());
   }
-  if let Some(host_id) = host_id {
-    builder = builder.host_id_override(host_id);
-  }
-  builder.build()
+  gpapi::os_profile::desktop::collect_profile(builder, host_id)
 }
 
 pub(super) fn cookie_cache_path(args: &ConnectArgs) -> Option<PathBuf> {
@@ -489,14 +486,9 @@ mod tests {
       ("ipv4", GatewayIpPreference::Ipv4),
       ("ipv6", GatewayIpPreference::Ipv6),
     ] {
-      let cli = ConnectArgsTestCli::try_parse_from([
-        "test",
-        "portal.example.com",
-        "--ip-preference",
-        value,
-        "--disable-ipv6",
-      ])
-      .unwrap();
+      let cli =
+        ConnectArgsTestCli::try_parse_from(["test", "portal.example.com", "--ip-preference", value, "--disable-ipv6"])
+          .unwrap();
       assert_eq!(cli.args.ip_preference, expected);
       assert!(cli.args.disable_ipv6);
     }

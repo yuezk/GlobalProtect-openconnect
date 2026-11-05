@@ -16,3 +16,6 @@ gen
 
 # Nix files
 result
+
+# Packages & test assets
+*.ipa

@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 
 members = [
   "crates/*",
@@ -11,7 +11,7 @@ members = [
 
 [workspace.package]
 rust-version = "1.91"
-version = "3.2.0"
+version = "3.3.0"
 authors = ["Kevin Yue <k3vinyue@gmail.com>"]
 homepage = "https://github.com/yuezk/GlobalProtect-openconnect"
 edition = "2024"
@@ -32,7 +32,7 @@ is_executable = "1.0"
 log = "0.4"
 # RUST_LOG accepts user-supplied Unicode property filters through env_logger.
 regex = { version = "1", default-features = false, features = ["std", "perf", "unicode"] }
-reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "system-proxy", "json", "form", "query"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "charset", "http2", "system-proxy", "json", "form", "query"] }
 openssl = "0.10"
 pem = "4"
 xmltree = { version = "0.12", features = ["attribute-order"] }
@@ -43,6 +43,7 @@ sysinfo = { version = "0.38.4", default-features = false, features = ["system"] 
 tempfile = "3.8"
 tokio = { version = "1" }
 tokio-util = "0.7"
+tokio-tungstenite = "0.30"
 url = "2.4"
 urlencoding = "2.1.3"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
@@ -57,7 +58,7 @@ md5 = "0.8"
 sha2 = { version = "0.11", default-features = false }
 which = "8"
 uuid = "1"
-netdev = "0.46.3"
+netdev = "0.47"
 humantime = "2"
 snow = { version = "0.10", default-features = false, features = ["use-getrandom", "use-curve25519", "use-chacha20poly1305", "use-sha2"] }
 zeroize = "1"
@@ -68,10 +69,10 @@ specta = "=2.0.0-rc.20"
 proptest = "1"
 
 [patch.crates-io]
-# Restore BSD GTK resize hit testing until https://github.com/tauri-apps/tao/pull/1356 is released.
-tao = { git = "https://github.com/yuezk/tao", rev = "1452ae7a42c9f134296ba199f91f514fc9077f61" }
+# Restore BSD GTK resize hit testing and apply fixed-size windows before first configure.
+tao = { git = "https://github.com/yuezk/tao", rev = "bba0f1c4e86d697b173c75280d1651f408b8023c" }
 # Use one macro source for Tao and Wry so Cargo can vendor the workspace.
-tao-macros = { git = "https://github.com/yuezk/tao", rev = "1452ae7a42c9f134296ba199f91f514fc9077f61" }
+tao-macros = { git = "https://github.com/yuezk/tao", rev = "bba0f1c4e86d697b173c75280d1651f408b8023c" }
 
 [profile.release]
 opt-level = 'z'   # Optimize for size

@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use anyhow::{Context, bail, ensure};
 use gpapi::{
+  collection::CollectionControl,
   credential::AuthCookieCredential,
   gateway::{Gateway, GatewayLoginContext, GatewaySelection},
   portal::PortalConfig,
-  process::collection::CollectionControl,
   session::{
     MaintenanceState, SessionEndReason, SessionMode,
-    network::PhysicalNetwork,
-    non_tunnel::{SessionCallbacks, SessionExit, maintain_non_tunnel_sessions},
+    desktop::network::PhysicalNetwork,
+    desktop::non_tunnel::{SessionCallbacks, SessionExit, maintain_non_tunnel_sessions},
   },
 };
 use log::{info, warn};

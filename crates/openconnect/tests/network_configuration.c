@@ -160,6 +160,59 @@ static void reconnect_refusal_propagates(void)
 	openconnect_vpninfo_free(vpninfo);
 }
 
+static void external_packets_and_configuration(void)
+{
+	struct state state = { .parent = getpid(), .reason = "connect" };
+	struct openconnect_info *vpninfo = new_vpn(&state);
+	int fds[2], families[] = { AF_INET, AF_INET6 };
+	int creations = device_creations;
+	assert(!socketpair(AF_UNIX, SOCK_DGRAM, 0, fds));
+	assert(!openconnect_setup_tun_fd_with_config(vpninfo, fds[0]));
+	assert(device_creations == creations);
+	assert(state.calls == 1);
+	for (int i = 0; i < 2; i++) {
+		unsigned char frame[1504] = {0}, received[1504];
+		struct pkt *packet = alloc_pkt(vpninfo, 1500);
+		int prefix = 0, length = i ? 40 : 20;
+#if defined(__APPLE__) || defined(__OpenBSD__) || defined(__FreeBSD__)
+		uint32_t family = htonl(families[i]);
+		memcpy(frame, &family, 4);
+		prefix = 4;
+#endif
+		frame[prefix] = i ? 0x60 : 0x45;
+		assert(write(fds[1], frame, length + prefix) == length + prefix);
+		packet->len = 1500;
+		assert(!os_read_tun(vpninfo, packet));
+		assert(packet->len == length);
+		assert(!memcmp(packet->data, frame + prefix, length));
+		assert(!os_write_tun(vpninfo, packet));
+		assert(read(fds[1], received, sizeof(received)) == length + prefix);
+		assert(!memcmp(received, frame, length + prefix));
+		free_pkt(vpninfo, packet);
+	}
+	state.reason = "disconnect";
+	openconnect_vpninfo_free(vpninfo);
+	assert(state.calls == 2);
+	assert(fcntl(fds[0], F_GETFD) == -1 && errno == EBADF);
+	close(fds[1]);
+
+	state.calls = 0;
+	state.reason = "connect";
+	state.failure_reason = "connect";
+	state.result = -EPERM;
+	const char *reasons[] = { "connect", "disconnect" };
+	state.expected_reasons = reasons;
+	state.expected_count = 2;
+	vpninfo = new_vpn(&state);
+	assert(!socketpair(AF_UNIX, SOCK_DGRAM, 0, fds));
+	assert(openconnect_setup_tun_fd_with_config(vpninfo, fds[0]) == -EPERM);
+	assert(vpninfo->tun_fd == -1);
+	assert(fcntl(fds[0], F_GETFD) == -1 && errno == EBADF);
+	openconnect_vpninfo_free(vpninfo);
+	assert(state.calls == 2);
+	close(fds[1]);
+}
+
 int main(void)
 {
 	const char *reasons[] = { "pre-init", "connect", "attempt-reconnect", "reconnect", "disconnect" };
@@ -199,5 +252,6 @@ int main(void)
 	openconnect_vpninfo_free(vpninfo);
 	connect_failure_rolls_back();
 	reconnect_refusal_propagates();
+	external_packets_and_configuration();
 	return 0;
 }

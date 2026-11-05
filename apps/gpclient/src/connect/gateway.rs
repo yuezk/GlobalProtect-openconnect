@@ -360,22 +360,26 @@ impl ConnectHandler<'_> {
       match login {
         GatewayLogin::Authenticated(authentication) => {
           let descriptor = Gateway::new(gateway.to_string(), gateway.to_string());
-          client.register_session(
-            descriptor.clone(),
-            authentication.clone(),
-            &mut self.sessions.borrow_mut(),
-          );
+          self
+            .sessions
+            .borrow_mut()
+            .register_login(descriptor.clone(), authentication.clone(), &client);
           self.check_cancelled()?;
-          if internal && authentication.mode() == SessionMode::NonTunnel && !self.args.cookie_only {
-            client
-              .bind_non_tunnel(self.args.disable_ipv6, None, &cancellation)
-              .await
-              .map_err(|error| error.context(gpapi::gateway::GatewayLoginProtocolError))?;
-            client.update_registered_session(&descriptor, &authentication, &mut self.sessions.borrow_mut());
-          }
+          let binding = if internal && authentication.mode() == SessionMode::NonTunnel && !self.args.cookie_only {
+            Some(
+              self
+                .sessions
+                .borrow_mut()
+                .bind_non_tunnel(&descriptor, &client, self.args.disable_ipv6, None, &cancellation)
+                .await
+                .map_err(|error| error.context(gpapi::gateway::GatewayLoginProtocolError))?,
+            )
+          } else {
+            None
+          };
           return Ok(GatewayLoginSession {
             authentication,
-            extension_auth: SessionExtensionAuth::new(cred.clone(), client),
+            extension_auth: SessionExtensionAuth::new(cred.clone(), client).with_binding(binding),
           });
         }
         GatewayLogin::Mfa(message, input_str) => {

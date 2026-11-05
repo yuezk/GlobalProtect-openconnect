@@ -6,7 +6,6 @@ use std::{
   sync::{Arc, atomic::AtomicBool},
 };
 
-use common::binary_paths;
 use gpapi::{
   service::{
     request::{UpdateGuiRequest, UpdateLogLevelRequest, WsRequest},
@@ -299,10 +298,17 @@ impl RequestDispatcher {
   }
 
   async fn update_gui(&self, request: UpdateGuiRequest) -> ServiceResult {
+    if request.variant == gpapi::gui::GuiVariant::Nsh && !cfg!(target_os = "linux") {
+      return ServiceResult::rejected(
+        ServiceErrorCode::InvalidRequest,
+        "Native Shell is available only on Linux",
+      );
+    }
     let _install = self.install_lock.lock().await;
     let path = request.path;
     let checksum = request.checksum;
-    let installed = tokio::task::spawn_blocking(move || install_gui(&path, &checksum)).await;
+    let target = request.variant.update_target();
+    let installed = tokio::task::spawn_blocking(move || install_gui_at(Path::new(&path), &checksum, &target)).await;
     match installed {
       Ok(Ok(())) => ServiceResult::Accepted,
       Ok(Err(GuiInstallError::Checksum(err))) => {
@@ -327,11 +333,29 @@ enum GuiInstallError {
   Install(anyhow::Error),
 }
 
-fn install_gui(src: &str, checksum: &str) -> Result<(), GuiInstallError> {
-  install_gui_at(Path::new(src), checksum, &binary_paths::gpgui_update_target())
+pub(crate) fn gui_installer() -> Option<std::path::PathBuf> {
+  std::env::current_exe()
+    .ok()
+    .and_then(|executable| {
+      executable
+        .parent()?
+        .parent()
+        .map(|prefix| prefix.join("libexec/gpclient/gp-gui-installer"))
+    })
+    .filter(|path| path.is_file())
 }
 
 fn install_gui_at(src: &Path, checksum: &str, target: &Path) -> Result<(), GuiInstallError> {
+  let installer = gui_installer();
+  install_gui_with_installer(src, checksum, target, installer.as_deref())
+}
+
+fn install_gui_with_installer(
+  src: &Path,
+  checksum: &str,
+  target: &Path,
+  installer: Option<&Path>,
+) -> Result<(), GuiInstallError> {
   let Some(dir) = target.parent() else {
     return Err(GuiInstallError::Install(anyhow::anyhow!(
       "Failed to get parent directory of GUI binary"
@@ -343,6 +367,26 @@ fn install_gui_at(src: &Path, checksum: &str, target: &Path) -> Result<(), GuiIn
   let archive_path = staged_archive.path().to_string_lossy();
   verify_checksum(&archive_path, checksum).map_err(GuiInstallError::Checksum)?;
 
+  // A package may need to prepare downloaded executables for its runtime.
+  // Resolve this helper beside the running service, never from the request or PATH.
+  if let Some(installer) = installer {
+    let status = std::process::Command::new(installer)
+      .arg(staged_archive.path())
+      .arg(checksum)
+      .arg(target)
+      .stdin(std::process::Stdio::null())
+      .stdout(std::process::Stdio::null())
+      .status()
+      .map_err(|err| GuiInstallError::Install(err.into()))?;
+    return if status.success() {
+      Ok(())
+    } else {
+      Err(GuiInstallError::Install(anyhow::anyhow!(
+        "GUI package installation failed: {status}"
+      )))
+    };
+  }
+
   let tar = XzDecoder::new(BufReader::new(
     staged_archive
       .reopen()
@@ -350,7 +394,8 @@ fn install_gui_at(src: &Path, checksum: &str, target: &Path) -> Result<(), GuiIn
   ))
   .take(MAX_GUI_ARCHIVE_CONTENT_SIZE);
   let mut archive = Archive::new(tar);
-  let file = extract_gui_binary(&mut archive, dir)?;
+  let binary_name = target.file_name().and_then(|name| name.to_str()).unwrap_or("gpgui");
+  let file = extract_gui_binary(&mut archive, dir, binary_name)?;
   file
     .as_file()
     .set_permissions(Permissions::from_mode(0o755))
@@ -398,14 +443,18 @@ fn stage_gui_archive(src: &Path, dir: &Path) -> Result<NamedTempFile, GuiInstall
   Ok(staged)
 }
 
-fn extract_gui_binary<R: Read>(archive: &mut Archive<R>, dir: &Path) -> Result<NamedTempFile, GuiInstallError> {
+fn extract_gui_binary<R: Read>(
+  archive: &mut Archive<R>,
+  dir: &Path,
+  binary_name: &str,
+) -> Result<NamedTempFile, GuiInstallError> {
   for entry in archive.entries().map_err(|err| GuiInstallError::Install(err.into()))? {
     let mut entry = entry.map_err(|err| GuiInstallError::Install(err.into()))?;
     let is_gui = entry
       .path()
       .map_err(|err| GuiInstallError::Install(err.into()))?
       .file_name()
-      .is_some_and(|name| name == "gpgui");
+      .is_some_and(|name| name == binary_name);
     if is_gui && entry.header().entry_type().is_file() {
       let declared_size = entry.size();
       if declared_size == 0 || declared_size > MAX_GUI_BINARY_SIZE {
@@ -425,7 +474,7 @@ fn extract_gui_binary<R: Read>(archive: &mut Archive<R>, dir: &Path) -> Result<N
     }
   }
   Err(GuiInstallError::Install(anyhow::anyhow!(
-    "GUI update archive does not contain a non-empty regular gpgui file"
+    "GUI update archive does not contain a non-empty regular {binary_name} file"
   )))
 }
 
@@ -475,7 +524,7 @@ mod tests {
     for (entry_type, contents) in [(EntryType::Directory, &[][..]), (EntryType::Regular, &[][..])] {
       let data = archive_with_entry(entry_type, contents);
       let mut archive = Archive::new(Cursor::new(data));
-      assert!(extract_gui_binary(&mut archive, output.path()).is_err());
+      assert!(extract_gui_binary(&mut archive, output.path(), "gpgui").is_err());
     }
   }
 
@@ -484,7 +533,7 @@ mod tests {
     let output = tempfile::tempdir().unwrap();
     let data = archive_with_entry(EntryType::Regular, b"gui binary");
     let mut archive = Archive::new(Cursor::new(data));
-    let extracted = extract_gui_binary(&mut archive, output.path()).unwrap();
+    let extracted = extract_gui_binary(&mut archive, output.path(), "gpgui").unwrap();
     let contents = std::fs::read(extracted.path()).unwrap();
     assert_eq!(contents, b"gui binary");
   }
@@ -515,7 +564,7 @@ mod tests {
     data.resize(512 * 3, 0);
 
     let mut archive = Archive::new(Cursor::new(data));
-    assert!(extract_gui_binary(&mut archive, output.path()).is_err());
+    assert!(extract_gui_binary(&mut archive, output.path(), "gpgui").is_err());
   }
 
   #[test]
@@ -532,6 +581,33 @@ mod tests {
   }
 
   #[test]
+  fn installs_nsh_beside_tauri_without_replacing_it() {
+    let output = tempfile::tempdir().unwrap();
+    let tauri = output.path().join("gpgui");
+    std::fs::write(&tauri, b"tauri").unwrap();
+    let mut encoder = XzEncoder::new(Vec::new(), 1);
+    {
+      let mut archive = Builder::new(&mut encoder);
+      let mut header = Header::new_gnu();
+      header.set_size(3);
+      header.set_mode(0o755);
+      header.set_cksum();
+      archive
+        .append_data(&mut header, "gpgui-nsh_3.2.0/gpgui-nsh", &b"nsh"[..])
+        .unwrap();
+      archive.finish().unwrap();
+    }
+    let mut archive = NamedTempFile::new().unwrap();
+    archive.write_all(&encoder.finish().unwrap()).unwrap();
+    archive.flush().unwrap();
+    let checksum = gpapi::utils::checksum::file_sha256(archive.path()).unwrap();
+    let nsh = output.path().join("gpgui-nsh");
+    install_gui_at(archive.path(), &checksum, &nsh).unwrap();
+    assert_eq!(std::fs::read(nsh).unwrap(), b"nsh");
+    assert_eq!(std::fs::read(tauri).unwrap(), b"tauri");
+  }
+
+  #[test]
   fn checksum_failure_preserves_the_existing_gui() {
     let archive = compressed_gui_archive(b"replacement");
     let output = tempfile::tempdir().unwrap();
@@ -540,6 +616,41 @@ mod tests {
     std::fs::write(&target, b"existing").unwrap();
 
     assert!(install_gui_at(archive.path(), "invalid", &target).is_err());
+    assert_eq!(std::fs::read(target).unwrap(), b"existing");
+  }
+
+  #[test]
+  fn package_installer_receives_a_verified_staged_archive() {
+    let archive = compressed_gui_archive(b"gui binary");
+    let checksum = gpapi::utils::checksum::file_sha256(archive.path()).unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let target = output.path().join("gpgui-nsh");
+    let installer = output.path().join("installer");
+    std::fs::write(
+      &installer,
+      "#!/bin/sh\nset -eu\ntest -f \"$1\"\nprintf '%s' \"$2\" > \"$3\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&installer, Permissions::from_mode(0o755)).unwrap();
+
+    assert!(install_gui_with_installer(archive.path(), "invalid", &target, Some(&installer)).is_err());
+    assert!(!target.exists());
+    install_gui_with_installer(archive.path(), &checksum, &target, Some(&installer)).unwrap();
+    assert_eq!(std::fs::read_to_string(target).unwrap(), checksum);
+  }
+
+  #[test]
+  fn package_installation_failure_preserves_the_existing_gui() {
+    let archive = compressed_gui_archive(b"replacement");
+    let checksum = gpapi::utils::checksum::file_sha256(archive.path()).unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let target = output.path().join("gpgui");
+    std::fs::write(&target, b"existing").unwrap();
+    let installer = output.path().join("installer");
+    std::fs::write(&installer, "#!/bin/sh\nexit 1\n").unwrap();
+    std::fs::set_permissions(&installer, Permissions::from_mode(0o755)).unwrap();
+
+    assert!(install_gui_with_installer(archive.path(), &checksum, &target, Some(&installer)).is_err());
     assert_eq!(std::fs::read(target).unwrap(), b"existing");
   }
 

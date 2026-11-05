@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, ensure};
 use gpapi::{
-  process::collection::{CollectionBudget, CollectionControl},
+  collection::{CollectionBudget, CollectionControl},
   service::request::ConnectRequest,
   session::SessionMode,
 };
@@ -77,8 +77,8 @@ pub(super) fn spawn(
             .all(|member| member.authentication.mode() == SessionMode::NonTunnel)
           {
             match super::non_tunnel::run(&mut input, source, guard, cancellation.clone(), events.clone()).await {
-              Ok(gpapi::session::non_tunnel::SessionExit::Disconnected) => {}
-              Ok(gpapi::session::non_tunnel::SessionExit::Failed(reason)) => {
+              Ok(gpapi::session::desktop::non_tunnel::SessionExit::Disconnected) => {}
+              Ok(gpapi::session::desktop::non_tunnel::SessionExit::Failed(reason)) => {
                 let message = match reason {
                   gpapi::session::SessionEndReason::InvalidCookie => {
                     "Internal gateway authentication expired; connect again"
@@ -312,7 +312,7 @@ async fn run_tunnel(
   prepared: &PreparedTunnel,
   approval: &crate::hip_source::HipApproval,
   lifecycle: &LifecycleHandle,
-  sessions: &mut gpapi::session::GatewaySessions,
+  sessions: &mut gpapi::session::desktop::GatewaySessions,
   cancellation: CancellationToken,
   events: mpsc::Sender<LifecycleEvent>,
 ) {

@@ -11,7 +11,7 @@ use crate::{credential::Credential, gp_params::GpParams, os_profile::ClientOs, p
 /// and left empty on macOS/Windows, matching official client behavior.
 pub(crate) fn build(cred: &Credential, gp_params: &GpParams, server: &str) -> RequestParams {
   let profile = gp_params.os_profile();
-  let nonce = if profile.client_os() == ClientOs::Linux {
+  let nonce = if matches!(profile.client_os(), ClientOs::Linux | ClientOs::Ios) {
     "0".to_string()
   } else {
     swg_nonce()
@@ -58,17 +58,37 @@ mod tests {
     os_profile::{ClientOs, HostIdentity, OsProfile},
   };
 
+  #[test]
+  fn ios_uses_zero_swg_nonce_without_changing_desktop_profiles() {
+    for os in [ClientOs::Ios, ClientOs::Linux, ClientOs::Mac, ClientOs::Windows] {
+      let params = GpParams::builder(test_profile(os)).build();
+      let result = build(&password_cred(), &params, "vpn.example.com");
+      let nonce = result
+        .body
+        .iter()
+        .find(|(key, _)| key == "swg-nonce")
+        .unwrap()
+        .1
+        .as_str();
+      if matches!(os, ClientOs::Ios | ClientOs::Linux) {
+        assert_eq!(nonce, "0");
+      } else {
+        assert_ne!(nonce, "0");
+      }
+    }
+  }
+
   fn test_profile(os: ClientOs) -> OsProfile {
     OsProfile::builder(os)
       .computer_name_override("test-computer")
       .client_version("6.3.3-100")
-      .host_identity(HostIdentity::new(
+      .host_identity(HostIdentity::from_parts(
         "test-computer".into(),
         "test-host-id".into(),
         "test-serial".into(),
         "aa:bb:cc:dd:ee:ff".into(),
       ))
-      .build()
+      .build(crate::os_profile::test_snapshot())
   }
 
   fn password_cred() -> Credential {

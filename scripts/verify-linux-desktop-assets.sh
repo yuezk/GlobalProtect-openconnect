@@ -57,17 +57,6 @@ verify_same_file \
 verify_same_file \
   "$GPGUI_APP_DIR/src-tauri/icons/icon.svg" \
   "$GP_DIR/packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg"
-for icon in \
-  gpgui-connected-symbolic.svg \
-  gpgui-disconnected-symbolic.svg \
-  gpgui-connecting-1-symbolic.svg \
-  gpgui-connecting-2-symbolic.svg \
-  gpgui-connecting-3-symbolic.svg \
-  gpgui-connecting-4-symbolic.svg; do
-  verify_same_file \
-    "$GPGUI_APP_DIR/src-tauri/icons/tray/theme/$icon" \
-    "$GP_DIR/packaging/files/usr/share/icons/hicolor/scalable/status/$icon"
-done
 verify_same_file \
   "$GPGUI_APP_DIR/src-tauri/icons/32x32.png" \
   "$GP_DIR/apps/gpauth/icons/32x32.png"
@@ -117,11 +106,17 @@ verify_contains \
   "$GPGUI_APP_DIR/gpgui.desktop.in" \
   "MimeType=x-scheme-handler/globalprotectcallback;"
 verify_contains \
+  "$GPGUI_APP_DIR/gpgui.desktop.in" \
+  "StartupWMClass=com.yuezk.gpgui"
+verify_contains \
   "$GP_DIR/packaging/files/usr/share/applications/gpgui.desktop" \
   "Exec=/usr/bin/gpclient launch-gui %u"
 verify_contains \
   "$GP_DIR/packaging/files/usr/share/applications/gpgui.desktop" \
   "MimeType=x-scheme-handler/globalprotectcallback;"
+verify_contains \
+  "$GP_DIR/packaging/files/usr/share/applications/gpgui.desktop" \
+  "StartupWMClass=com.yuezk.gpgui"
 verify_contains \
   "$GP_DIR/packaging/bsd/gpgui.desktop" \
   "Exec=/usr/local/bin/gpclient launch-gui %u"
@@ -129,7 +124,19 @@ verify_contains \
   "$GP_DIR/packaging/bsd/gpgui.desktop" \
   "MimeType=x-scheme-handler/globalprotectcallback;"
 verify_absent "$GPGUI_APP_DIR/gpauth.desktop"
-verify_absent "$GP_DIR/packaging/files/usr/share/applications/gpauth.desktop"
-verify_absent "$GP_DIR/packaging/bsd/gpauth.desktop"
+for app in gpgui-helper gpauth; do
+  for directory in "$GP_DIR/packaging/files/usr/share/applications" "$GP_DIR/packaging/bsd"; do
+    desktop_file="$directory/$app.desktop"
+    verify_contains "$desktop_file" "Icon=gpgui"
+    verify_contains "$desktop_file" "NoDisplay=true"
+    verify_contains "$desktop_file" "StartupWMClass=$app"
+    if grep -q '^MimeType=' "$desktop_file"; then
+      echo "Hidden desktop identity must not register a URL handler: $desktop_file" >&2
+      exit 1
+    fi
+  done
+  verify_contains "$GP_DIR/packaging/files/usr/share/applications/$app.desktop" "Exec=/usr/bin/gpclient launch-gui"
+  verify_contains "$GP_DIR/packaging/bsd/$app.desktop" "Exec=/usr/local/bin/gpclient launch-gui"
+done
 
-echo "Linux desktop and tray assets are synchronized"
+echo "Linux desktop assets are synchronized"

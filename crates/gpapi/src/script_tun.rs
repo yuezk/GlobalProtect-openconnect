@@ -1,4 +1,4 @@
-use crate::session::tunnel::NegotiatedNetwork;
+use crate::session::desktop::tunnel::NegotiatedNetwork;
 use serde::{Deserialize, Serialize};
 use std::{io, path::PathBuf};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -8,7 +8,7 @@ const MAX_MESSAGE: usize = 60 * 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct Identity {
   pub service_instance: Uuid,
-  #[serde(with = "crate::session::tunnel::decimal")]
+  #[serde(with = "crate::session::desktop::tunnel::decimal")]
   #[specta(type = String)]
   pub attempt: u64,
   pub launch_id: Uuid,

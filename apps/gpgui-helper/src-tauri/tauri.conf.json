@@ -25,6 +25,7 @@
         "maxWidth": 460,
         "maxHeight": 104,
         "label": "main",
+        "create": false,
         "decorations": false
       }
     ]

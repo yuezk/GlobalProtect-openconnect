@@ -229,3 +229,7 @@ mod tests {
     assert!(run_script("exit 23", "connect", &environment).is_err());
   }
 }
+
+#[cfg(test)]
+#[path = "macos_dns_tests.rs"]
+mod dns_tests;

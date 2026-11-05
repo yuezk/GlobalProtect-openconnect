@@ -1,11 +1,5 @@
 use auth::{WebviewAuthenticator, apply_auth_theme};
 use gpapi::{auth::AuthWindowTheme, gp_params::GpParams};
-#[cfg(not(target_os = "macos"))]
-use log::info;
-#[cfg(not(target_os = "macos"))]
-use tauri::RunEvent;
-#[cfg(not(target_os = "macos"))]
-use tempfile::NamedTempFile;
 
 use crate::cli::print_auth_result;
 
@@ -16,7 +10,6 @@ pub async fn authenticate(
   clean: bool,
   window_title: Option<String>,
   window_theme: AuthWindowTheme,
-  #[cfg(not(target_os = "macos"))] mut openssl_conf: Option<NamedTempFile>,
 ) -> anyhow::Result<()> {
   let auth_host_id = gp_params.os_profile().host_identity().host_id().to_string();
 
@@ -46,16 +39,7 @@ pub async fn authenticate(
       Ok(())
     })
     .build(crate::tauri_context::get())?
-    .run(move |_app_handle, _event| {
-      #[cfg(not(target_os = "macos"))]
-      if let RunEvent::Exit = _event {
-        if let Some(file) = openssl_conf.take() {
-          if let Err(err) = file.close() {
-            info!("Error closing OpenSSL config file: {}", err);
-          }
-        }
-      }
-    });
+    .run(|_, _| {});
 
   Ok(())
 }
