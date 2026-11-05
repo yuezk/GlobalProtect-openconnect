@@ -22,6 +22,7 @@
 - Fixed server addresses losing custom ports when pasted as URLs.
 - Fixed gateway login address handling for servers with explicit ports.
 - Fixed browser sign-in registration when desktop-specific settings override the callback handler on Linux, FreeBSD, or OpenBSD.
+- Fixed Okta FastPass failing to open Okta Verify from the embedded sign-in window on Linux, FreeBSD, and OpenBSD.
 - Fixed supplied server certificate pins not being enforced during tunnel setup.
 - Fixed delayed clicks activating a different control after a Native Shell view changed.
 
