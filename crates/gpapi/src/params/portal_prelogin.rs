@@ -44,7 +44,7 @@ mod tests {
 
   #[test]
   fn linux_places_params_in_body() {
-    let profile = OsProfile::builder(ClientOs::Linux).build();
+    let profile = OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot());
     let result = build(&profile, PreloginBrowserMode::Embedded);
 
     assert!(!result.body.is_empty());
@@ -53,7 +53,7 @@ mod tests {
 
   #[test]
   fn mac_places_params_in_body_with_kerberos_query() {
-    let profile = OsProfile::builder(ClientOs::Mac).build();
+    let profile = OsProfile::builder(ClientOs::Mac).build(crate::os_profile::test_snapshot());
     let result = build(&profile, PreloginBrowserMode::Embedded);
 
     assert!(!result.body.is_empty());
@@ -63,7 +63,7 @@ mod tests {
 
   #[test]
   fn windows_places_all_params_in_query() {
-    let profile = OsProfile::builder(ClientOs::Windows).build();
+    let profile = OsProfile::builder(ClientOs::Windows).build(crate::os_profile::test_snapshot());
     let result = build(&profile, PreloginBrowserMode::Embedded);
 
     assert!(result.body.is_empty());
@@ -73,7 +73,7 @@ mod tests {
 
   #[test]
   fn uses_embedded_portal_default_browser_value() {
-    let profile = OsProfile::builder(ClientOs::Linux).build();
+    let profile = OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot());
     let result = build(&profile, PreloginBrowserMode::Embedded);
 
     let browser_param = result
@@ -86,7 +86,7 @@ mod tests {
 
   #[test]
   fn uses_target_value_when_external_browser_is_requested() {
-    let profile = OsProfile::builder(ClientOs::Linux).build();
+    let profile = OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot());
     let result = build(&profile, PreloginBrowserMode::External);
 
     let browser_param = result
@@ -99,7 +99,7 @@ mod tests {
 
   #[test]
   fn includes_all_required_params() {
-    let profile = OsProfile::builder(ClientOs::Linux).build();
+    let profile = OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot());
     let result = build(&profile, PreloginBrowserMode::Embedded);
 
     let keys: Vec<&str> = result.body.iter().map(|(k, _)| k.as_str()).collect();
@@ -116,7 +116,7 @@ mod tests {
 
   #[test]
   fn data_param_is_cas_embedded_browser_base64() {
-    let profile = OsProfile::builder(ClientOs::Linux).build();
+    let profile = OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot());
     let result = build(&profile, PreloginBrowserMode::Embedded);
 
     let data_param = result
@@ -129,7 +129,7 @@ mod tests {
 
   #[test]
   fn kerberos_not_in_query_for_linux() {
-    let profile = OsProfile::builder(ClientOs::Linux).build();
+    let profile = OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot());
     let result = build(&profile, PreloginBrowserMode::Embedded);
 
     let has_kerberos = result.query.iter().any(|(k, _)| k == "kerberos-support");
@@ -138,7 +138,7 @@ mod tests {
 
   #[test]
   fn kerberos_in_query_for_windows() {
-    let profile = OsProfile::builder(ClientOs::Windows).build();
+    let profile = OsProfile::builder(ClientOs::Windows).build(crate::os_profile::test_snapshot());
     let result = build(&profile, PreloginBrowserMode::Embedded);
 
     let has_kerberos = result.query.iter().any(|(k, _)| k == "kerberos-support");

@@ -14,7 +14,7 @@ use crate::{
   gateway::{Gateway, parse_gateways},
   gp_params::GpParams,
   params,
-  session::{InternalSessionPolicy, network::InternalHostDetection},
+  session::{InternalHostDetection, InternalSessionPolicy},
   utils::{normalize_server, parse_gp_response, redact::redact_form_params, remove_url_scheme, xml::ElementExt},
 };
 
@@ -50,6 +50,37 @@ pub struct PortalConfig {
    */
   default_browser: Option<bool>,
   internal_session_policy: Option<InternalSessionPolicy>,
+}
+
+/// Parsed portal policy before a caller chooses network-location candidates.
+pub struct PortalPolicy {
+  config: PortalConfig,
+  internal_gateways: Vec<Gateway>,
+  external_gateways: Vec<Gateway>,
+}
+
+impl PortalPolicy {
+  pub fn external_gateways(self) -> PortalConfig {
+    self.select_gateways(false, None)
+  }
+
+  pub(super) fn detection(&self) -> Option<&InternalHostDetection> {
+    self.config.internal_detection.as_ref()
+  }
+
+  pub(super) fn select_gateways(mut self, prefer_internal: bool, detected: Option<bool>) -> PortalConfig {
+    let mut gateways = if prefer_internal {
+      self.internal_gateways
+    } else {
+      self.external_gateways
+    };
+    if gateways.is_empty() {
+      gateways.push(Gateway::new(self.config.portal.clone(), self.config.portal.clone()));
+    }
+    self.config.gateways = gateways;
+    self.config.internal_host_detection = detected;
+    self.config
+  }
 }
 
 impl PortalConfig {
@@ -140,14 +171,13 @@ impl PortalConfig {
   }
 }
 
-/// Cancellation is handled inside the request so a running native detection
-/// helper is always cancelled and joined. Do not drop this future on disconnect.
+/// Retrieve server policy without inspecting local network location.
 pub async fn retrieve_config(
   portal: &str,
   cred: &Credential,
   gp_params: &GpParams,
   cancellation: &CancellationToken,
-) -> anyhow::Result<PortalConfig> {
+) -> anyhow::Result<PortalPolicy> {
   let portal = normalize_server(portal)?;
   let server_url = url::Url::parse(&portal)?;
   let server = remove_url_scheme(&portal);
@@ -180,6 +210,9 @@ pub async fn retrieve_config(
       parse_gp_response(res).await.or_else(|err| {
         if let Some(tls) = ServerTlsError::from_request(&server_url, &err) {
           return Err(anyhow::anyhow!(tls));
+        }
+        if gp_params.os_profile().client_os() == crate::os_profile::ClientOs::Ios && err.is_authentication_rejection() {
+          return Err(anyhow::anyhow!(crate::error::AuthenticationRejected));
         }
         if err.status == StatusCode::NOT_FOUND {
           bail!(PortalError::ConfigError("Config endpoint not found".to_string()));
@@ -216,11 +249,11 @@ pub async fn retrieve_config(
     };
     debug!("Portal CSC config response received: {} bytes", csc_xml.len());
     let root = Element::parse(csc_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
-    return parse_portal_config(&server, cred, root, cancellation).await;
+    return parse_portal_policy(&server, cred, root, cancellation).await;
   }
 
   info!("Portal did not return CSC criteria");
-  parse_portal_config(&server, cred, root, cancellation).await
+  parse_portal_policy(&server, cred, root, cancellation).await
 }
 
 async fn retrieve_csc_config(
@@ -287,12 +320,12 @@ fn present(value: Option<&str>) -> &'static str {
   }
 }
 
-async fn parse_portal_config(
+async fn parse_portal_policy(
   server: &str,
   cred: &Credential,
   root: Element,
   cancellation: &CancellationToken,
-) -> anyhow::Result<PortalConfig> {
+) -> anyhow::Result<PortalPolicy> {
   let internal_detection = root
     .descendant("internal-host-detection")
     .map(parse_internal_detection)
@@ -302,22 +335,11 @@ async fn parse_portal_config(
       None
     })
     .flatten();
-  let prefer_internal = match &internal_detection {
-    Some(detection) => detection.detect(cancellation).await.unwrap_or_else(|error| {
-      warn!("Internal host detection failed: {error}");
-      false
-    }),
-    None => false,
-  };
-
   if cancellation.is_cancelled() {
     bail!("Portal configuration cancelled");
   }
-
-  let mut gateways = parse_gateways(&root, prefer_internal).unwrap_or_else(|| {
-    info!("No gateways found in portal config");
-    vec![]
-  });
+  let internal_gateways = parse_gateways(&root, true).unwrap_or_default();
+  let external_gateways = parse_gateways(&root, false).unwrap_or_default();
 
   let user_auth_cookie = root.descendant_text("portal-userauthcookie").unwrap_or_default();
   let prelogon_user_auth_cookie = root
@@ -326,31 +348,29 @@ async fn parse_portal_config(
   let config_digest = root.descendant_text("config-digest");
   let connect_method = parse_connect_method(&root);
 
-  if gateways.is_empty() {
-    gateways.push(Gateway::new(server.to_string(), server.to_string()));
-  } else {
-    info!("Found {} gateways in portal config", gateways.len());
-  }
-
   let version = root.descendant_text("version").map(|s| s.to_string());
   info!("Detected portal version: {:?}", version);
   let allow_extend_session = parse_allow_extend_session(&root);
   let default_browser = parse_default_browser(&root);
   let internal_session_policy = parse_internal_session_policy(&root).ok();
 
-  Ok(PortalConfig {
-    portal: server.to_string(),
-    auth_cookie: AuthCookieCredential::new(cred.username(), &user_auth_cookie, &prelogon_user_auth_cookie),
-    config_cred: cred.clone(),
-    gateways,
-    connect_method,
-    config_digest: config_digest.map(|s| s.to_string()),
-    internal_host_detection: internal_detection.as_ref().map(|_| prefer_internal),
-    internal_detection,
-    version,
-    allow_extend_session,
-    default_browser,
-    internal_session_policy,
+  Ok(PortalPolicy {
+    internal_gateways,
+    external_gateways,
+    config: PortalConfig {
+      portal: server.to_string(),
+      auth_cookie: AuthCookieCredential::new(cred.username(), &user_auth_cookie, &prelogon_user_auth_cookie),
+      config_cred: cred.clone(),
+      gateways: Vec::new(),
+      connect_method,
+      config_digest: config_digest.map(|s| s.to_string()),
+      internal_host_detection: None,
+      internal_detection,
+      version,
+      allow_extend_session,
+      default_browser,
+      internal_session_policy,
+    },
   })
 }
 
@@ -432,14 +452,53 @@ mod tests {
   use super::*;
 
   #[tokio::test]
+  async fn parsed_policy_keeps_location_selection_explicit() {
+    let xml = "<policy><internal-host-detection><ip-address>192.0.2.1</ip-address><host>inside.example</host></internal-host-detection><gateways><internal><list><entry name='internal.example'/></list></internal><external><list><entry name='external.example'/></list></external></gateways></policy>";
+    let credential = crate::credential::PasswordCredential::new("alice", "password").into();
+    let policy = parse_portal_policy("portal.example", &credential, parse_xml(xml), &CancellationToken::new())
+      .await
+      .unwrap();
+    assert!(policy.detection().is_some());
+    let external = policy.external_gateways();
+    assert_eq!(external.gateways()[0].server(), "external.example");
+    assert_eq!(external.internal_host_detection(), None);
+    let policy = parse_portal_policy("portal.example", &credential, parse_xml(xml), &CancellationToken::new())
+      .await
+      .unwrap();
+    let internal = policy.select_gateways(true, Some(true));
+    assert_eq!(internal.gateways()[0].server(), "internal.example");
+    assert_eq!(internal.internal_host_detection(), Some(true));
+  }
+
+  #[tokio::test]
+  async fn empty_candidates_preserve_portal_gateway_fallback() {
+    let credential = crate::credential::PasswordCredential::new("alice", "password").into();
+    for detected in [None, Some(false), Some(true)] {
+      let policy = parse_portal_policy(
+        "portal.example",
+        &credential,
+        parse_xml("<policy/>"),
+        &CancellationToken::new(),
+      )
+      .await
+      .unwrap();
+      let config = policy.select_gateways(detected.unwrap_or(false), detected);
+      assert_eq!(config.gateways().len(), 1);
+      assert_eq!(config.gateways()[0].server(), "portal.example");
+      assert_eq!(config.internal_host_detection(), detected);
+    }
+  }
+
+  #[tokio::test]
   async fn invalid_non_tunnel_policy_does_not_reject_tunnel_candidates() {
     let root = parse_xml(
       "<policy><hip-collection><hip-report-interval>invalid</hip-report-interval></hip-collection><internal-host-detection><ip-address>invalid</ip-address><host>internal.example</host></internal-host-detection><gateways><external><list><entry name='vpn.example'/></list></external></gateways></policy>",
     );
     let credential = crate::credential::PasswordCredential::new("alice", "password").into();
-    let config = parse_portal_config("portal.example", &credential, root, &CancellationToken::new())
+    let config = parse_portal_policy("portal.example", &credential, root, &CancellationToken::new())
       .await
-      .unwrap();
+      .unwrap()
+      .external_gateways();
     assert!(config.internal_session_policy().is_none());
     assert_eq!(config.gateways()[0].server(), "vpn.example");
     assert_eq!(config.gateways()[0].kind(), crate::gateway::GatewayKind::External);
@@ -482,9 +541,10 @@ mod tests {
       "fixture-user",
       "fixture-password",
     ));
-    let config = parse_portal_config("vpn.example.com", &cred, root, &CancellationToken::new())
+    let config = parse_portal_policy("vpn.example.com", &cred, root, &CancellationToken::new())
       .await
-      .unwrap();
+      .unwrap()
+      .external_gateways();
     assert_eq!(
       config.internal_session_policy().unwrap().hip_interval(),
       std::time::Duration::from_secs(3600)
@@ -567,9 +627,10 @@ mod tests {
     );
     let cred = Credential::from(crate::credential::PasswordCredential::new("alice", "secret"));
 
-    let config = parse_portal_config("vpn.example.com", &cred, root, &CancellationToken::new())
+    let config = parse_portal_policy("vpn.example.com", &cred, root, &CancellationToken::new())
       .await
-      .unwrap();
+      .unwrap()
+      .external_gateways();
 
     assert_eq!(config.auth_cookie().user_auth_cookie(), "user-cookie");
     assert_eq!(config.auth_cookie().prelogon_user_auth_cookie(), "prelogon-cookie");

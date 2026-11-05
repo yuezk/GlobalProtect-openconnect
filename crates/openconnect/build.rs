@@ -112,25 +112,22 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
     .without("libpcsclite", None)
     .without("libpskc", None)
     .without("gssapi", None)
+    .with("gnutls", None)
+    .without("openssl", None)
     .with("gnutls-tss2", Some("no"))
     .with("vpnc-script", Some("/etc/vpnc/vpnc-script")); // Specify vpnc-script, otherwise it will fail on macOS
 
-  #[cfg(target_os = "macos")]
-  {
-    config
-      .disable_static()
-      .enable_shared()
-      .with("gnutls", None)
-      .without("openssl", None);
+  if target_os() == "macos" {
+    config.disable_static().enable_shared();
     config.ldflag("-liconv");
     config.env("LIBS", "-liconv");
   }
 
-  #[cfg(not(target_os = "macos"))]
-  config.enable_static().disable_shared();
+  if target_os() != "macos" {
+    config.enable_static().disable_shared();
+  }
 
-  #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-  {
+  if matches!(target_os().as_str(), "freebsd" | "openbsd") {
     config.ldflag("-L/usr/local/lib");
     config.ldflag("-liconv");
     config.env("LIBS", "-liconv");
@@ -141,7 +138,6 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
   let lib_dir = dst.join("lib");
   let include_dir = dst.join("include");
 
-  #[cfg(target_os = "macos")]
   {
     let configuration = std::fs::read_to_string(dst.join("build/config.h"))
       .expect("Failed to read the OpenConnect TLS backend configuration");
@@ -150,8 +146,11 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
         && !configuration
           .lines()
           .any(|line| line == "#define OPENCONNECT_OPENSSL 1"),
-      "macOS OpenConnect must use GnuTLS"
+      "OpenConnect must use GnuTLS"
     );
+  }
+
+  if target_os() == "macos" {
     // Do not embed Cargo's temporary build directory in consumers of this library.
     let library = std::fs::canonicalize(lib_dir.join("libopenconnect.dylib")).unwrap();
     let library_name = library.file_name().unwrap().to_str().unwrap();
@@ -173,11 +172,13 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
 
   println!("cargo:rustc-link-search=native={}", lib_dir.display());
 
-  #[cfg(target_os = "macos")]
-  println!("cargo:rustc-link-lib=dylib=openconnect");
+  if target_os() == "macos" {
+    println!("cargo:rustc-link-lib=dylib=openconnect");
+  }
 
-  #[cfg(not(target_os = "macos"))]
-  println!("cargo:rustc-link-lib=static=openconnect");
+  if target_os() != "macos" {
+    println!("cargo:rustc-link-lib=static=openconnect");
+  }
 
   // Export include path for downstream use (bindgen / cc)
   println!("cargo:include={}", include_dir.display());
@@ -186,6 +187,11 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
 }
 
 fn main() {
+  let target = target_os();
+  assert!(
+    matches!(target.as_str(), "macos" | "linux" | "freebsd" | "openbsd"),
+    "Unsupported OpenConnect target: {target}"
+  );
   let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
   let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
   let deps_dir = PathBuf::from(manifest_dir).join("deps");
@@ -210,15 +216,15 @@ fn main() {
 
   // Using pkg-config to find system deps
   pkg_config::probe_library("zlib").unwrap();
-  #[cfg(target_os = "macos")]
-  pkg_config::probe_library("gnutls").unwrap();
+  if target_os() == "macos" {
+    pkg_config::probe_library("gnutls").unwrap();
+  }
 
-  #[cfg(not(target_os = "macos"))]
-  {
+  if target_os() != "macos" {
     pkg_config::probe_library("liblz4").unwrap();
     pkg_config::probe_library("gnutls").unwrap();
 
-    // Below are required by gnutls
+    // OpenConnect also uses Hogweed/GMP directly for its GnuTLS backend.
     pkg_config::probe_library("p11-kit-1").unwrap();
     pkg_config::probe_library("hogweed").unwrap();
     pkg_config::probe_library("nettle").unwrap();
@@ -229,15 +235,13 @@ fn main() {
   println!("cargo:rerun-if-changed=src/ffi/vpn.c");
   println!("cargo:rerun-if-changed=src/ffi/vpn.h");
 
-  #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-  {
+  if matches!(target_os().as_str(), "freebsd" | "openbsd") {
     println!("cargo:rustc-link-search=native=/usr/local/lib");
     println!("cargo:rustc-link-lib=iconv");
   }
 
   // Prevent silent fallback to dynamic libraries
-  #[cfg(target_os = "linux")]
-  {
+  if target_os() == "linux" {
     println!("cargo:rustc-link-arg=-Wl,-Bstatic");
     println!("cargo:rustc-link-arg=-Wl,-Bdynamic");
   }
@@ -247,4 +251,8 @@ fn main() {
     .include("src/ffi")
     .include(&oc_dst.join("include"))
     .compile("vpn");
+}
+
+fn target_os() -> String {
+  env::var("CARGO_CFG_TARGET_OS").expect("Cargo target OS")
 }

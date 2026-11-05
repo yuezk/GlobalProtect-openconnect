@@ -3,7 +3,7 @@ use std::{
   time::Duration,
 };
 
-use gpapi::session::tunnel::{
+use gpapi::session::desktop::tunnel::{
   TunnelPhase, TunnelState, TunnelStatistics, TunnelStatisticsSnapshot, TunnelStatisticsState, TunnelStatisticsView,
   TunnelTransport,
 };

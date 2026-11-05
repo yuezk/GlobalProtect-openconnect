@@ -29,6 +29,18 @@ pub struct DesktopLauncher<'a> {
 }
 
 impl<'a> DesktopLauncher<'a> {
+  /// Bring an already-running GUI to the foreground through its service.
+  pub async fn activate_existing() -> anyhow::Result<()> {
+    let endpoint = crate::utils::endpoint::http_endpoint().await?;
+    crate::utils::request::client_builder()
+      .build()?
+      .post(format!("{endpoint}/active-gui"))
+      .send()
+      .await?
+      .error_for_status()?;
+    Ok(())
+  }
+
   pub fn new(version: &'a str) -> Self {
     Self {
       version,
@@ -70,11 +82,12 @@ impl<'a> DesktopLauncher<'a> {
     let mut cancelled = false;
     let cancellation = CancellationToken::new();
     let mut recovery = RecoveryState::default();
+    #[cfg(target_os = "linux")]
+    let switch_listener = super::gui_switch::SwitchListener::new()?;
     let result = {
       let operation = async {
         let mut minimized = self.minimized;
         let mut expecting_renewal = false;
-        let mut program = None;
         loop {
           let credential = tokio::select! {
             biased;
@@ -95,37 +108,61 @@ impl<'a> DesktopLauncher<'a> {
             "Service product version mismatch"
           );
           let mut envs: HashMap<String, String> = std::env::vars().collect();
+          #[cfg(target_os = "linux")]
+          envs.insert(
+            super::gui_switch::SOCKET_ENV.into(),
+            switch_listener.path().to_string_lossy().into_owned(),
+          );
           if recovery.dmabuf_disabled() {
             envs.insert("WEBKIT_DISABLE_DMABUF_RENDERER".into(), "1".into());
           }
           if let Some(path) = &self.log_file {
             envs.insert("GP_LOG_FILE".into(), path.clone());
           }
-          let launcher = GuiLauncher::new(self.version, Arc::new(credential))
+          let launcher = GuiLauncher::new(self.version, Arc::new(credential), crate::gui::preferred()?)
             .envs(envs)
             .minimized(minimized);
+          #[cfg(not(target_os = "linux"))]
           let mut unexpected = [0];
           // Program resolution may launch the WebKit download helper. Keep it under
           // the same cancellation, service ownership and recovery budget as gpgui.
-          let attempt = async {
-            if program.is_none() {
-              program = Some(launcher.resolve_program(&cancellation).await?);
-            }
-            launcher.launch_program(program.as_ref().unwrap(), &cancellation).await
-          };
-          tokio::pin!(attempt);
-          let outcome = tokio::select! {
-            biased;
-            _ = cancellation.cancelled() => { let _ = attempt.await; return Ok(()); }
-            result = &mut attempt => result,
-            status = service.wait() => {
-              cancellation.cancel(); let _ = attempt.await;
-              anyhow::bail!("The privileged service exited while the GUI was running: {}", status?);
-            }
-            result = output.read(&mut unexpected) => {
-              cancellation.cancel(); let _ = attempt.await;
-              ensure!(result? == 0, "Unexpected service credential data while the GUI is running");
-              anyhow::bail!("The privileged service closed its credential channel");
+          let outcome = {
+            let attempt = async {
+              let program = launcher
+                .resolve_program(&cancellation, crate::gui::GuiTheme::System)
+                .await?;
+              #[cfg(target_os = "linux")]
+              return launcher
+                .launch_with_switches(
+                  &program,
+                  &cancellation,
+                  &switch_listener.listener,
+                  &mut input,
+                  &mut output,
+                )
+                .await;
+              #[cfg(not(target_os = "linux"))]
+              launcher.launch_program(&program, &cancellation).await
+            };
+            tokio::pin!(attempt);
+            tokio::select! {
+              biased;
+              _ = cancellation.cancelled() => { let _ = attempt.await; return Ok(()); }
+              result = &mut attempt => result,
+              status = service.wait() => {
+                cancellation.cancel(); let _ = attempt.await;
+                anyhow::bail!("The privileged service exited while the GUI was running: {}", status?);
+              }
+              result = async {
+                #[cfg(not(target_os = "linux"))]
+                return output.read(&mut unexpected).await;
+                #[cfg(target_os = "linux")]
+                std::future::pending::<std::io::Result<usize>>().await
+              } => {
+                cancellation.cancel(); let _ = attempt.await;
+                ensure!(result? == 0, "Unexpected service credential data while the GUI is running");
+                anyhow::bail!("The privileged service closed its credential channel");
+              }
             }
           };
           if cancellation.is_cancelled() {
@@ -184,7 +221,9 @@ fn create_log_file(path: &Path) -> std::io::Result<File> {
   OpenOptions::new().append(true).open(path)
 }
 
-async fn read_credential(reader: &mut (impl AsyncRead + Unpin)) -> anyhow::Result<Option<SessionCredential>> {
+pub(super) async fn read_credential(
+  reader: &mut (impl AsyncRead + Unpin),
+) -> anyhow::Result<Option<SessionCredential>> {
   let mut header = [0; 2];
   if reader.read(&mut header[..1]).await? == 0 {
     return Ok(None);

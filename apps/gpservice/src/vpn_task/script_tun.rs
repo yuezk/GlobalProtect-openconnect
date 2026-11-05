@@ -60,7 +60,7 @@ pub(super) async fn run(
   events: mpsc::Sender<LifecycleEvent>,
   session_id: uuid::Uuid,
   registry: Arc<crate::session_registry::SessionRegistry>,
-  sessions: &mut gpapi::session::GatewaySessions,
+  sessions: &mut gpapi::session::desktop::GatewaySessions,
 ) -> anyhow::Result<()> {
   let attempt = identity.attempt;
   let (native_tx, native) = mpsc::channel(64);
@@ -219,12 +219,12 @@ async fn supervise(
 
 fn observed_network(
   config: openconnect::tunnel::Configuration,
-) -> anyhow::Result<gpapi::session::tunnel::NegotiatedNetwork> {
+) -> anyhow::Result<gpapi::session::desktop::tunnel::NegotiatedNetwork> {
   ensure!(
     !config.truncated && !config.dns.truncated && !config.search_domains.truncated,
     "VPN configuration is truncated"
   );
-  Ok(gpapi::session::tunnel::NegotiatedNetwork {
+  Ok(gpapi::session::desktop::tunnel::NegotiatedNetwork {
     addresses: [config.ipv4, config.ipv6.or(config.netmask6)]
       .into_iter()
       .flatten()

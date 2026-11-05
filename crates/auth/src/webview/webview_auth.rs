@@ -129,6 +129,8 @@ impl<'a> WebviewAuthenticator<'a> {
       .title(self.window_title)
       .theme(native_theme(self.window_theme))
       .devtools(cfg!(any(debug_assertions, feature = "release-devtools")));
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+    let auth_window_builder = auth_window_builder.on_navigation(super::platform_impl::open_okta_verify);
     let auth_window = auth_window_builder
       .inner_size(900.0, 650.0 + get_title_bar_height() + TOOLBAR_HEIGHT)
       .min_inner_size(400.0, 300.0)

@@ -833,7 +833,10 @@ mod tests {
     }
 
     let valid = gphip::generate_report(&gphip::ReportInput {
-      profile: gpapi::os_profile::OsProfile::builder(gpapi::os_profile::ClientOs::Linux).build(),
+      profile: gpapi::os_profile::desktop::collect_profile(
+        gpapi::os_profile::OsProfile::builder(gpapi::os_profile::ClientOs::Linux),
+        None,
+      ),
       context: gphip::ReportContext::Preview,
     })
     .unwrap();

@@ -45,7 +45,10 @@ impl LockFile {
       Ok(content) => {
         let url = format!("http://127.0.0.1:{}/health", content.trim());
 
-        match reqwest::get(&url).await {
+        let Ok(client) = crate::utils::request::client_builder().build() else {
+          return false;
+        };
+        match client.get(&url).send().await {
           Ok(resp) => resp.status().is_success(),
           Err(_) => false,
         }

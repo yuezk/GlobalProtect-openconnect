@@ -11,7 +11,10 @@ use gpapi::{
     transport::ServiceResult,
     vpn_state::{ConnectInfo, VpnState},
   },
-  session::{ClientAddresses, GatewayAuthentication, GatewaySession, GatewaySessions, transport::GatewayTransport},
+  session::{
+    GatewayAuthentication, desktop::ClientAddresses, desktop::GatewaySession, desktop::GatewaySessions,
+    transport::GatewayTransport,
+  },
 };
 use openssl::{
   asn1::Asn1Time,
@@ -70,7 +73,7 @@ async fn cancelled_pending_owner_logs_out_and_releases_admission_after_response(
   let mut member = fixture.plan().members()[0].clone();
   member.authentication =
     GatewayAuthentication::new("authcookie=fixture&user=fixture".into(), "internal".into()).unwrap();
-  let plan = gpapi::session::ConnectionPlan::new(vec![member], vec![], fixture.plan().policy()).unwrap();
+  let plan = gpapi::session::desktop::ConnectionPlan::new(vec![member], vec![], fixture.plan().policy()).unwrap();
   let request = gpapi::service::request::ConnectRequest::new(fixture.info().clone(), plan);
   let mut prepared = PreparedConnection::lifecycle_fixture(request);
   let mut params = GpParams::builder(prepared.resources.profile.clone());

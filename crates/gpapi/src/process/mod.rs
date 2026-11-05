@@ -9,6 +9,10 @@ pub use command_traits::CommandExt;
 pub mod auth_launcher;
 pub mod desktop_launcher;
 pub mod gui_launcher;
+#[cfg(any(target_os = "linux", test))]
+pub mod gui_switch;
+#[cfg(any(target_os = "linux", test))]
+mod nsh_runtime;
 pub mod users;
 
 pub mod collection;

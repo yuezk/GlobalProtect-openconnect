@@ -3,6 +3,11 @@ use thiserror::Error;
 mod server_tls;
 pub use server_tls::{ServerTlsError, ServerTlsErrorKind};
 
+/// An explicit server rejection, distinct from transport, TLS, and parsing failures.
+#[derive(Error, Debug)]
+#[error("Authentication was rejected")]
+pub struct AuthenticationRejected;
+
 #[derive(Error, Debug)]
 pub enum PortalError {
   #[error("Prelogin error: {0}")]

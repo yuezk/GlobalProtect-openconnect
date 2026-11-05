@@ -98,7 +98,7 @@ impl Drop for AuthCallbackReceiver {
 }
 
 pub async fn forward_auth_callback(callback: &str) -> anyhow::Result<()> {
-  validate_callback(callback)?;
+  validate_auth_callback(callback)?;
   forward_auth_callback_to(callback, &callback_socket_path()).await
 }
 
@@ -121,7 +121,7 @@ pub fn ensure_auth_callback_handler() -> anyhow::Result<()> {
 }
 
 async fn forward_auth_callback_to(callback: &str, socket_path: &Path) -> anyhow::Result<()> {
-  validate_callback(callback)?;
+  validate_auth_callback(callback)?;
 
   let (version, status) = timeout(IO_TIMEOUT, async {
     let mut stream = UnixStream::connect(socket_path)
@@ -232,7 +232,7 @@ fn remove_stale_socket(socket_path: &Path) -> anyhow::Result<()> {
   Ok(())
 }
 
-fn validate_callback(callback: &str) -> anyhow::Result<()> {
+pub fn validate_auth_callback(callback: &str) -> anyhow::Result<()> {
   if callback.len() > MAX_CALLBACK_SIZE {
     bail!("Authentication callback exceeds the maximum supported size");
   }
@@ -276,7 +276,7 @@ async fn read_callback(stream: &mut UnixStream) -> Result<String, CallbackReadEr
     .await
     .map_err(|_| CallbackReadError::Io)?;
   let callback = String::from_utf8(payload).map_err(|_| CallbackReadError::Invalid)?;
-  validate_callback(&callback).map_err(|_| CallbackReadError::Invalid)?;
+  validate_auth_callback(&callback).map_err(|_| CallbackReadError::Invalid)?;
   Ok(callback)
 }
 
@@ -296,10 +296,10 @@ mod tests {
 
   #[test]
   fn validates_supported_callback_scheme() {
-    assert!(validate_callback(VALID_CALLBACK).is_ok());
-    assert!(validate_callback("https://example.com").is_err());
-    assert!(validate_callback("globalprotectcallback:").is_err());
-    assert!(validate_callback(&format!("globalprotectcallback:{}", "x".repeat(MAX_CALLBACK_SIZE))).is_err());
+    assert!(validate_auth_callback(VALID_CALLBACK).is_ok());
+    assert!(validate_auth_callback("https://example.com").is_err());
+    assert!(validate_auth_callback("globalprotectcallback:").is_err());
+    assert!(validate_auth_callback(&format!("globalprotectcallback:{}", "x".repeat(MAX_CALLBACK_SIZE))).is_err());
   }
 
   #[tokio::test]

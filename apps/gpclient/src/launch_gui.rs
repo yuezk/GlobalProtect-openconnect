@@ -11,7 +11,7 @@ use clap::Args;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
 use common::binary_paths;
 use directories::ProjectDirs;
-use gpapi::{process::desktop_launcher::DesktopLauncher, utils::endpoint::http_endpoint};
+use gpapi::process::desktop_launcher::DesktopLauncher;
 use log::info;
 
 #[derive(Args)]
@@ -61,7 +61,7 @@ impl<'a> LaunchGuiHandler<'a> {
       return forward_auth_callback(callback);
     }
 
-    if try_active_gui().await.is_ok() {
+    if DesktopLauncher::activate_existing().await.is_ok() {
       info!("The GUI is already running");
       return Ok(());
     }
@@ -113,18 +113,6 @@ fn parse_auth_callback(callback: &str) -> Result<String, String> {
     .starts_with("globalprotectcallback:")
     .then(|| callback.to_owned())
     .ok_or_else(|| "callback URL must use the globalprotectcallback scheme".to_owned())
-}
-
-async fn try_active_gui() -> anyhow::Result<()> {
-  let service_endpoint = http_endpoint().await?;
-
-  reqwest::Client::default()
-    .post(format!("{}/active-gui", service_endpoint))
-    .send()
-    .await?
-    .error_for_status()?;
-
-  Ok(())
 }
 
 fn get_log_file() -> anyhow::Result<PathBuf> {

@@ -12,6 +12,8 @@ pub struct GuiHelperLauncher<'a> {
   envs: Option<&'a HashMap<String, String>>,
   credential: &'a SessionCredential,
   gui_version: Option<&'a str>,
+  variant: crate::gui::GuiVariant,
+  theme: crate::gui::GuiTheme,
 }
 
 impl<'a> GuiHelperLauncher<'a> {
@@ -21,6 +23,8 @@ impl<'a> GuiHelperLauncher<'a> {
       envs: None,
       credential,
       gui_version: None,
+      variant: crate::gui::GuiVariant::Tauri,
+      theme: crate::gui::GuiTheme::System,
     }
   }
 
@@ -34,6 +38,16 @@ impl<'a> GuiHelperLauncher<'a> {
     self
   }
 
+  pub fn variant(mut self, variant: crate::gui::GuiVariant) -> Self {
+    self.variant = variant;
+    self
+  }
+
+  pub fn theme(mut self, theme: crate::gui::GuiTheme) -> Self {
+    self.theme = theme;
+    self
+  }
+
   pub async fn launch(&self, cancellation: &CancellationToken) -> anyhow::Result<()> {
     let mut cmd = Command::new(&self.program);
 
@@ -43,9 +57,15 @@ impl<'a> GuiHelperLauncher<'a> {
     }
 
     cmd.arg("--service-credential-on-stdin");
+    if self.variant == crate::gui::GuiVariant::Nsh {
+      cmd.arg("--gui-variant").arg("nsh");
+    }
 
     if let Some(gui_version) = self.gui_version {
       cmd.arg("--gui-version").arg(gui_version);
+    }
+    if self.theme != crate::gui::GuiTheme::System {
+      cmd.arg("--theme").arg(self.theme.as_str());
     }
 
     info!("Launching gpgui-helper");
@@ -84,6 +104,40 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn forwards_explicit_themes_and_leaves_initial_downloads_on_system() {
+    use crate::gui::{GuiTheme, GuiVariant};
+    let dir = tempfile::TempDir::new().unwrap();
+    let credential = SessionCredential::generate(uuid::Uuid::new_v4(), "test").unwrap();
+    let captured = dir.path().join("arguments");
+    for variant in [GuiVariant::Tauri, GuiVariant::Nsh] {
+      for theme in [GuiTheme::System, GuiTheme::Light, GuiTheme::Dark] {
+        let mut launcher = GuiHelperLauncher::new(&credential)
+          .variant(variant)
+          .gui_version(Some("test"))
+          .theme(theme);
+        launcher.program = fixture(
+          &dir,
+          &credential,
+          &format!("printf '%s\\n' \"$@\" > '{}'", captured.display()),
+        );
+        launcher.launch(&CancellationToken::new()).await.unwrap();
+        let mut expected = vec!["--service-credential-on-stdin"];
+        if variant == GuiVariant::Nsh {
+          expected.extend(["--gui-variant", "nsh"]);
+        }
+        expected.extend(["--gui-version", "test"]);
+        if theme != GuiTheme::System {
+          expected.extend(["--theme", theme.as_str()]);
+        }
+        assert_eq!(
+          std::fs::read_to_string(&captured).unwrap().lines().collect::<Vec<_>>(),
+          expected
+        );
+      }
+    }
+  }
+
+  #[tokio::test]
   async fn propagates_helper_failure_and_preserves_stderr_in_desktop_log() {
     let dir = tempfile::TempDir::new().unwrap();
     let credential = SessionCredential::generate(uuid::Uuid::new_v4(), "test").unwrap();
@@ -96,6 +150,8 @@ mod tests {
       envs: Some(&envs),
       credential: &credential,
       gui_version: None,
+      variant: crate::gui::GuiVariant::Tauri,
+      theme: crate::gui::GuiTheme::System,
     };
     let error = launcher.launch(&CancellationToken::new()).await.unwrap_err();
     assert!(error.to_string().contains("gpgui-helper exited with"), "{error:#}");
@@ -122,6 +178,8 @@ mod tests {
         envs: Some(&envs),
         credential: &credential,
         gui_version: None,
+        variant: crate::gui::GuiVariant::Tauri,
+        theme: crate::gui::GuiTheme::System,
       };
       let error = launcher.launch(&CancellationToken::new()).await.unwrap_err();
       let eligible =
@@ -143,6 +201,8 @@ mod tests {
       envs: Some(&envs),
       credential: &credential,
       gui_version: None,
+      variant: crate::gui::GuiVariant::Tauri,
+      theme: crate::gui::GuiTheme::System,
     };
     let cancellation = CancellationToken::new();
     let attempt = launcher.launch(&cancellation);

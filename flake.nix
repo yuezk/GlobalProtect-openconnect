@@ -29,8 +29,8 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         pname = "globalprotect-openconnect";
         version = cargoToml.workspace.package.version;
-        releaseTag = "v3.2.0";
-        releaseVersion = "3.2.0";
+        releaseTag = "v3.3.0";
+        releaseVersion = "3.3.0";
 
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
@@ -55,8 +55,8 @@
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
         gpguiHashes = {
-          x86_64 = "sha256-Y0MbRebzQCPjvXUyWF8grBxGPuvDhIlnvEoEkFl5WMI=";
-          aarch64 = "sha256-TnQPKllHSRfl/ir6PYZE6dVb8XUtayg7CRZUkWE4jsw=";
+          x86_64 = "sha256-6+rt47Cu/6uLwM3FgUaP/0qvTALF+UJRFD2nkybNCTg=";
+          aarch64 = "sha256-auCDdt6LMwnYJ0B9oneoPYAVfEGa/1GkIs8XkXXv85U=";
         };
 
         gpguiArchive = pkgs.fetchurl {
@@ -70,8 +70,8 @@
         };
 
         binaryHashes = {
-          x86_64 = "sha256-3SvFEL9C8uB+ekp/PygBw0k8vZwdbnBWnvBcfGN8e1A=";
-          aarch64 = "sha256-3lVKM1lnYQsgAboBCRuzEOFY/uB8+lf+yrxIRJJZtV4=";
+          x86_64 = "sha256-nsVNOfZ1JxT1mTyiHS3VYyBjbKm5+XsHC/v/fkWwK7A=";
+          aarch64 = "sha256-EjvkgYpOsaktnNE+Xta/GoKjILQzijW0U2bN1e/FiAQ=";
         };
 
         binaryArchive = pkgs.fetchurl {
@@ -91,6 +91,49 @@
         ];
 
         runtimeTools = with pkgs; [ coreutils iproute2 systemd procps util-linux nettools xdg-utils ];
+
+        guiRecipe = pkgs.writeText "gp-downloaded-gui.nix" ''
+          { archive, checksum, binaryName }:
+          import ${./nix/gui-package.nix} {
+            pkgs = import ${pkgs.path} {
+              system = "${pkgs.stdenv.hostPlatform.system}";
+              config = {};
+              overlays = [];
+            };
+            inherit archive checksum binaryName;
+            version = "${version}";
+          }
+        '';
+
+        guiInstaller = pkgs.writeShellApplication {
+          name = "gp-gui-installer";
+          runtimeInputs = [ pkgs.nix pkgs.coreutils ];
+          text = ''
+            archive=$1
+            checksum=$2
+            target=$3
+            binary_name=$(basename "$target")
+            case "$binary_name" in
+              gpgui|gpgui-nsh) ;;
+              *) echo "Unsupported GUI executable" >&2; exit 1 ;;
+            esac
+            directory=$(dirname "$target")
+            root="$directory/nix-gui/$binary_name"
+            mkdir -p "$directory/nix-gui"
+            nix-build ${guiRecipe} --out-link "$root" --no-build-output \
+              --argstr archive "$archive" --argstr checksum "$checksum" \
+              --argstr binaryName "$binary_name"
+            temporary=$(mktemp -d "$directory/.gui-link.XXXXXX")
+            trap 'rm -rf "$temporary"' EXIT
+            ln -s "$root/bin/$binary_name" "$temporary/$binary_name"
+            mv -Tf "$temporary/$binary_name" "$target"
+          '';
+        };
+
+        installGuiInstaller = lib.optionalString pkgs.stdenv.isLinux ''
+          install -Dm755 ${guiInstaller}/bin/gp-gui-installer \
+            "$out/libexec/gpclient/gp-gui-installer"
+        '';
 
         nativeRuntimeWrapping = lib.optionalString pkgs.stdenv.isLinux ''
           gappsWrapperArgs+=(
@@ -118,7 +161,6 @@
           [
             libxml2
             zlib
-            openssl
             lz4
             gnutls
             p11-kit
@@ -153,6 +195,7 @@
 
         fromSource = lib.makeOverridable ({ gui ? gpgui }: naersk'.buildPackage {
           inherit pname version;
+          SNAPSHOT = lib.boolToString (releaseTag == "snapshot");
           src = assert lib.assertMsg
             (builtins.pathExists (src + "/crates/openconnect/deps/openconnect/configure.ac")
               && builtins.pathExists (src + "/crates/openconnect/deps/libxml2/configure.ac"))
@@ -203,6 +246,7 @@
           ''
           + lib.optionalString pkgs.stdenv.isLinux ''
             ${installNixosPolkitRule}
+            ${installGuiInstaller}
           ''
           + ''
             ${rewriteVpncScriptToolPaths}
@@ -245,6 +289,7 @@
             ${rewriteVpncScriptToolPaths}
             sh ${./scripts/relocate-install-paths.sh} "$out" /usr "$out"
             ${installNixosPolkitRule}
+            ${installGuiInstaller}
 
             runHook postInstall
           '';

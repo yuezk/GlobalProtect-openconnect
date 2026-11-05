@@ -6,7 +6,6 @@ use std::{
 };
 
 use anyhow::bail;
-use common::binary_paths;
 use log::info;
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
@@ -15,6 +14,7 @@ use crate::{process::gui_helper_launcher::GuiHelperLauncher, service::transport:
 
 pub struct GuiLauncher<'a> {
   version: &'a str,
+  variant: crate::gui::GuiVariant,
   programs: Vec<PathBuf>,
   credential: Arc<SessionCredential>,
   minimized: bool,
@@ -22,9 +22,9 @@ pub struct GuiLauncher<'a> {
 }
 
 impl<'a> GuiLauncher<'a> {
-  pub fn new(version: &'a str, credential: Arc<SessionCredential>) -> Self {
-    let primary = binary_paths::gpgui();
-    let update_target = binary_paths::gpgui_update_target();
+  pub fn new(version: &'a str, credential: Arc<SessionCredential>, variant: crate::gui::GuiVariant) -> Self {
+    let primary = variant.primary();
+    let update_target = variant.update_target();
     let programs = if primary == update_target {
       vec![primary]
     } else {
@@ -33,6 +33,7 @@ impl<'a> GuiLauncher<'a> {
 
     Self {
       version,
+      variant,
       programs,
       credential,
       minimized: false,
@@ -50,20 +51,20 @@ impl<'a> GuiLauncher<'a> {
     self
   }
 
-  pub(crate) async fn resolve_program(&self, cancellation: &CancellationToken) -> anyhow::Result<PathBuf> {
+  pub(crate) async fn resolve_program(
+    &self,
+    cancellation: &CancellationToken,
+    helper_theme: crate::gui::GuiTheme,
+  ) -> anyhow::Result<PathBuf> {
     anyhow::ensure!(
       uzers::get_effective_uid() != 0,
       "The desktop GUI must not be launched by root"
     );
-    if let Some(program) = tokio::select! {
-      biased;
-      _ = cancellation.cancelled() => anyhow::bail!("GUI resolution cancelled"),
-      result = self.find_compatible_program() => result,
-    } {
+    if let Some(program) = self.find_compatible_program(cancellation).await? {
       return Ok(program);
     }
-    self.download_program(cancellation).await?;
-    let program = binary_paths::gpgui_update_target();
+    self.download_program(cancellation, helper_theme).await?;
+    let program = self.variant.update_target();
     tokio::select! {
       biased;
       _ = cancellation.cancelled() => anyhow::bail!("GUI resolution cancelled"),
@@ -72,10 +73,15 @@ impl<'a> GuiLauncher<'a> {
     Ok(program)
   }
 
-  async fn find_compatible_program(&self) -> Option<PathBuf> {
+  async fn find_compatible_program(&self, cancellation: &CancellationToken) -> anyhow::Result<Option<PathBuf>> {
     for program in &self.programs {
-      match self.check_version(program).await {
-        Ok(()) => return Some(program.clone()),
+      let result = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => anyhow::bail!("GUI resolution cancelled"),
+        result = self.check_version(program) => result,
+      };
+      match result {
+        Ok(()) => return Ok(Some(program.clone())),
         Err(err) => info!(
           "GUI candidate {} is unavailable or incompatible: {err}",
           program.display()
@@ -83,7 +89,7 @@ impl<'a> GuiLauncher<'a> {
       }
     }
 
-    None
+    Ok(None)
   }
 
   pub(crate) async fn launch_program(
@@ -99,7 +105,7 @@ impl<'a> GuiLauncher<'a> {
     if self.minimized {
       cmd.arg("--minimized");
     }
-    info!("Launching gpgui");
+    info!("Launching {}", program.display());
     super::desktop_child::launch_desktop_child(
       "gpgui",
       cmd.into_std(),
@@ -137,15 +143,172 @@ impl<'a> GuiLauncher<'a> {
     Ok(())
   }
 
-  async fn download_program(&self, cancellation: &CancellationToken) -> anyhow::Result<()> {
+  async fn download_program(
+    &self,
+    cancellation: &CancellationToken,
+    theme: crate::gui::GuiTheme,
+  ) -> anyhow::Result<()> {
     let gui_helper = GuiHelperLauncher::new(&self.credential);
 
     gui_helper
       .envs(self.envs.as_ref())
       .gui_version(Some(self.version))
+      .variant(self.variant)
+      .theme(theme)
       .launch(cancellation)
       .await
   }
+
+  #[cfg(target_os = "linux")]
+  pub(crate) async fn launch_with_switches(
+    &self,
+    program: &Path,
+    cancellation: &CancellationToken,
+    listener: &tokio::net::UnixListener,
+    service_input: &mut (impl tokio::io::AsyncWrite + Unpin),
+    service_output: &mut (impl tokio::io::AsyncRead + Unpin),
+  ) -> anyhow::Result<ExitStatus> {
+    use super::gui_switch;
+    use crate::gui::GuiSwitchOutcome;
+    use crate::service::transport::{DESKTOP_SWITCH_BEGIN, DESKTOP_SWITCH_CANCEL, DESKTOP_SWITCH_COMMIT};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut current = Some(self.start_owned(program.to_owned(), cancellation.child_token()));
+    let mut retired = Vec::new();
+    let mut unexpected = [0];
+    let result = async { loop {
+      tokio::select! {
+        biased;
+        outcome = &mut current.as_mut().unwrap().task => {
+          current.take();
+          break outcome?;
+        }
+        accepted = listener.accept() => {
+          let (mut socket, _) = accepted?;
+          let mut pending = false;
+          let replacement = async {
+            let command = gui_switch::receive(&mut socket).await?;
+            let selection = command.selection;
+            let variant = selection.variant;
+            let candidate = Self::new(self.version, self.credential.clone(), variant).envs(self.envs.clone());
+            let program = candidate.find_compatible_program(cancellation).await?;
+            if program.is_none() && variant == crate::gui::GuiVariant::Nsh {
+              use crate::service::transport::DESKTOP_GUI_INSTALLER;
+              service_input.write_all(&[DESKTOP_GUI_INSTALLER]).await?;
+              let supplies_runtime = match service_output.read_u8().await? {
+                0 => false,
+                1 => true,
+                _ => anyhow::bail!("Invalid GUI installer capability response"),
+              };
+              if !supplies_runtime {
+                super::nsh_runtime::check()?;
+              }
+            }
+            if program.is_none() && !selection.allow_download {
+              gui_switch::reply(&mut socket, Ok(GuiSwitchOutcome::DownloadRequired)).await?;
+              return Ok(None);
+            }
+            service_input.write_all(&[DESKTOP_SWITCH_BEGIN]).await?;
+            pending = true;
+            let credential = super::desktop_launcher::read_credential(service_output).await?
+              .ok_or_else(|| anyhow::anyhow!("Service closed before issuing the switch credential"))?;
+            anyhow::ensure!(credential.product_version() == self.version, "Service product version mismatch");
+            let ready = gui_switch::SwitchListener::new()?;
+            let mut envs = self.envs.clone().unwrap_or_else(|| std::env::vars().collect());
+            envs.insert(gui_switch::READY_ENV.into(), ready.path().to_string_lossy().into_owned());
+            let launcher = Self::new(self.version, Arc::new(credential), variant)
+              .envs(envs)
+              .minimized(false);
+            let program = match program {
+              Some(program) => program,
+              None => launcher.resolve_program(cancellation, command.theme).await?,
+            };
+            let mut child = launcher.start_owned(program, cancellation.child_token());
+            let start_result = tokio::select! {
+              result = tokio::time::timeout(std::time::Duration::from_secs(30), ready.ready()) => {
+                result.map_err(|_| anyhow::anyhow!("The selected GUI did not finish starting" )).and_then(|result| result)
+              },
+              outcome = &mut child.task => {
+                return match outcome? {
+                  Ok(status) => Err(anyhow::anyhow!("The selected GUI exited during startup: {status}")),
+                  Err(error) => Err(error),
+                };
+              }
+            };
+            if let Err(error) = start_result.and_then(|()| crate::gui::save_preference(variant)) {
+              child.cancel.cancel();
+              let _ = child.task.await;
+              return Err(error);
+            }
+            if let Err(error) = gui_switch::reply(&mut socket, Ok(GuiSwitchOutcome::Switched)).await {
+              child.cancel.cancel();
+              let _ = child.task.await;
+              return Err(error);
+            }
+            if let Err(error) = service_input.write_all(&[DESKTOP_SWITCH_COMMIT]).await {
+              child.cancel.cancel();
+              let _ = child.task.await;
+              return Err(error.into());
+            }
+            pending = false;
+            Ok(Some(child))
+          }.await;
+          match replacement {
+            Ok(Some(child)) => retired.push(current.replace(child).unwrap()),
+            Ok(None) => {},
+            Err(error) => {
+              if pending {
+                service_input.write_all(&[DESKTOP_SWITCH_CANCEL]).await?;
+              }
+              let _ = gui_switch::reply(&mut socket, Err(format!("{error:#}"))).await;
+            }
+          }
+        }
+        result = service_output.read(&mut unexpected) => {
+          break match result {
+            Ok(0) => Err(anyhow::anyhow!("The privileged service closed its credential channel")),
+            Ok(_) => Err(anyhow::anyhow!("Unexpected service credential data while the GUI is running")),
+            Err(error) => Err(error.into()),
+          };
+        }
+      }
+    }}.await;
+    // Every GUI remains owned by this supervisor until it is reaped. The retiring
+    // GUI exits after the successful switch reply; cancellation also joins it.
+    if let Some(child) = current {
+      retired.push(child);
+    }
+    for child in &retired {
+      child.cancel.cancel();
+    }
+    for child in retired {
+      let _ = child.task.await;
+    }
+    result
+  }
+
+  #[cfg(target_os = "linux")]
+  fn start_owned(&self, program: PathBuf, cancel: CancellationToken) -> RunningGui {
+    let version = self.version.to_owned();
+    let variant = self.variant;
+    let credential = self.credential.clone();
+    let envs = self.envs.clone();
+    let minimized = self.minimized;
+    let task_cancel = cancel.clone();
+    let task = tokio::spawn(async move {
+      GuiLauncher::new(&version, credential, variant)
+        .envs(envs)
+        .minimized(minimized)
+        .launch_program(&program, &task_cancel)
+        .await
+    });
+    RunningGui { task, cancel }
+  }
+}
+
+#[cfg(target_os = "linux")]
+struct RunningGui {
+  task: tokio::task::JoinHandle<anyhow::Result<ExitStatus>>,
+  cancel: CancellationToken,
 }
 
 #[cfg(test)]
@@ -174,6 +337,7 @@ mod tests {
   fn launcher(version: &'static str, programs: Vec<PathBuf>) -> GuiLauncher<'static> {
     GuiLauncher {
       version,
+      variant: crate::gui::GuiVariant::Tauri,
       programs,
       credential: Arc::new(SessionCredential::generate(Uuid::new_v4(), version).unwrap()),
       minimized: false,
@@ -247,7 +411,7 @@ mod tests {
     }
     let launcher = launcher(VERSION, vec![first, second]);
     let cancellation = CancellationToken::new();
-    let attempt = launcher.resolve_program(&cancellation);
+    let attempt = launcher.resolve_program(&cancellation, crate::gui::GuiTheme::System);
     tokio::pin!(attempt);
     tokio::select! {
       result = &mut attempt => panic!("version probe exited early: {result:?}"),
@@ -277,7 +441,13 @@ mod tests {
     let downloaded = executable(&dir, "downloaded", "gpgui test-version", 0);
     let launcher = launcher(VERSION, vec![packaged.clone(), downloaded]);
 
-    assert_eq!(launcher.find_compatible_program().await, Some(packaged));
+    assert_eq!(
+      launcher
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap(),
+      Some(packaged)
+    );
   }
 
   #[tokio::test]
@@ -287,7 +457,13 @@ mod tests {
     let downloaded = executable(&dir, "downloaded", "gpgui test-version", 0);
     let launcher = launcher(VERSION, vec![packaged, downloaded.clone()]);
 
-    assert_eq!(launcher.find_compatible_program().await, Some(downloaded));
+    assert_eq!(
+      launcher
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap(),
+      Some(downloaded)
+    );
   }
 
   #[tokio::test]
@@ -296,6 +472,326 @@ mod tests {
     let program = executable(&dir, "broken", "gpgui test-version", 1);
     let launcher = launcher(VERSION, vec![program]);
 
-    assert_eq!(launcher.find_compatible_program().await, None);
+    assert_eq!(
+      launcher
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap(),
+      None
+    );
+  }
+
+  #[tokio::test]
+  async fn nsh_version_mismatch_cannot_select_a_compatible_tauri_binary() {
+    let dir = TempDir::new().unwrap();
+    let _tauri = executable(&dir, "gpgui", "gpgui test-version", 0);
+    let nsh = executable(&dir, "gpgui-nsh", "gpgui-nsh old-version", 0);
+    let mut selected = launcher(VERSION, vec![nsh.clone()]);
+    selected.variant = crate::gui::GuiVariant::Nsh;
+    assert!(
+      selected
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap()
+        .is_none()
+    );
+    executable(&dir, "gpgui-nsh", "gpgui-nsh test-version", 0);
+    assert_eq!(
+      selected
+        .find_compatible_program(&CancellationToken::new())
+        .await
+        .unwrap(),
+      Some(nsh)
+    );
+  }
+
+  #[test]
+  #[cfg(target_os = "linux")]
+  fn supervisor_switch_success_and_failure_preserve_child_ownership() {
+    for scenario in [
+      "success",
+      "failure",
+      "missing",
+      "incompatible",
+      "runtime-too-old",
+      "runtime-too-old-confirmed",
+    ] {
+      let directory = TempDir::new().unwrap();
+      let executable = std::env::current_exe().unwrap();
+      // An old host GTK must block generic downloads, but not package-managed downloads.
+      let gtk = super::super::nsh_runtime::tests::gtk_fixture(directory.path(), 12);
+      fs::rename(gtk, directory.path().join("libgtk-4.so.1")).unwrap();
+      for name in ["gpgui", "gpgui-nsh"] {
+        if (scenario == "missing" || scenario.starts_with("runtime-too-old")) && name == "gpgui-nsh" {
+          continue;
+        }
+        let version = if scenario == "incompatible" && name == "gpgui-nsh" {
+          "old-version"
+        } else {
+          VERSION
+        };
+        let path = directory.path().join(name);
+        fs::write(&path, format!(
+          "#!/bin/sh\nif [ \"$1\" = --version ]; then echo '{name} {version}'; exit 0; fi\nGP_SWITCH_GUI_VARIANT={name} exec '{}' --exact process::gui_launcher::tests::gui_process_fixture --ignored --nocapture\n",
+          executable.display()
+        )).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+      }
+      let output = std::process::Command::new(&executable)
+        .args([
+          "--exact",
+          "process::gui_launcher::tests::supervisor_fixture",
+          "--ignored",
+          "--nocapture",
+        ])
+        .env("GP_SWITCH_SCENARIO", scenario)
+        .env("GP_SWITCH_DIRECTORY", directory.path())
+        .env("GP_GUI_BINARY", directory.path().join("gpgui"))
+        .env("LD_LIBRARY_PATH", directory.path())
+        .env("XDG_CONFIG_HOME", directory.path().join("config"))
+        .output()
+        .unwrap();
+      assert!(
+        output.status.success(),
+        "{scenario}: {} {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+      );
+    }
+  }
+
+  #[test]
+  #[cfg(target_os = "linux")]
+  fn selected_nsh_upgrade_downloads_nsh_without_probing_tauri() {
+    let directory = TempDir::new().unwrap();
+    let test_executable = std::env::current_exe().unwrap();
+    let tauri_marker = directory.path().join("tauri-probed");
+    let tauri = executable(&directory, "gpgui", "gpgui test-version", 0);
+    fs::write(
+      &tauri,
+      format!(
+        "#!/bin/sh\ntouch '{}'; echo 'gpgui {VERSION}'\n",
+        tauri_marker.display()
+      ),
+    )
+    .unwrap();
+    executable(&directory, "gpgui-nsh", "gpgui-nsh old-version", 0);
+    let helper = directory.path().join("gpgui-helper");
+    fs::write(&helper, format!(
+      "#!/bin/sh\n[ \"$2\" = --gui-variant ] && [ \"$3\" = nsh ] || exit 21\nexec '{}' --exact process::gui_launcher::tests::upgrade_helper_fixture --ignored --nocapture\n",
+      test_executable.display()
+    )).unwrap();
+    fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+    let result = std::process::Command::new(test_executable)
+      .args([
+        "--exact",
+        "process::gui_launcher::tests::upgrade_fixture",
+        "--ignored",
+        "--nocapture",
+      ])
+      .env("GP_SWITCH_DIRECTORY", directory.path())
+      .env("GP_GUI_BINARY", &tauri)
+      .env("GP_GUI_HELPER_BINARY", helper)
+      .env("XDG_CONFIG_HOME", directory.path().join("config"))
+      .output()
+      .unwrap();
+    assert!(
+      result.status.success(),
+      "{} {}",
+      String::from_utf8_lossy(&result.stdout),
+      String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(!tauri_marker.exists());
+    assert!(directory.path().join("nsh-updated").exists());
+  }
+
+  #[tokio::test]
+  #[ignore = "subprocess upgrade resolver fixture"]
+  #[cfg(target_os = "linux")]
+  async fn upgrade_fixture() {
+    crate::gui::save_preference(crate::gui::GuiVariant::Nsh).unwrap();
+    let credential = Arc::new(SessionCredential::generate(Uuid::new_v4(), VERSION).unwrap());
+    let selected = GuiLauncher::new(VERSION, credential, crate::gui::preferred().unwrap());
+    let program = selected
+      .resolve_program(&CancellationToken::new(), crate::gui::GuiTheme::System)
+      .await
+      .unwrap();
+    assert_eq!(program.file_name().unwrap(), "gpgui-nsh");
+  }
+
+  #[test]
+  #[ignore = "subprocess download helper fixture"]
+  #[cfg(target_os = "linux")]
+  fn upgrade_helper_fixture() {
+    use std::io::Read;
+    let mut input = std::io::stdin().lock();
+    let mut header = [0; 2];
+    input.read_exact(&mut header).unwrap();
+    let mut frame = zeroize::Zeroizing::new(vec![0; usize::from(u16::from_be_bytes(header))]);
+    input.read_exact(&mut frame).unwrap();
+    let directory = PathBuf::from(std::env::var_os("GP_SWITCH_DIRECTORY").unwrap());
+    fs::write(
+      directory.join("gpgui-nsh"),
+      format!("#!/bin/sh\necho 'gpgui-nsh {VERSION}'\n"),
+    )
+    .unwrap();
+    fs::write(directory.join("nsh-updated"), "").unwrap();
+  }
+
+  #[test]
+  #[ignore = "subprocess GUI fixture"]
+  #[cfg(target_os = "linux")]
+  fn gui_process_fixture() {
+    use std::io::Read;
+    let mut input = std::io::stdin().lock();
+    let mut header = [0; 2];
+    input.read_exact(&mut header).unwrap();
+    let mut frame = zeroize::Zeroizing::new(vec![0; usize::from(u16::from_be_bytes(header))]);
+    input.read_exact(&mut frame).unwrap();
+    let directory = PathBuf::from(std::env::var_os("GP_SWITCH_DIRECTORY").unwrap());
+    let variant = std::env::var("GP_SWITCH_GUI_VARIANT").unwrap();
+    if variant == "gpgui-nsh" && std::env::var("GP_SWITCH_SCENARIO").unwrap() == "failure" {
+      panic!("fixture: native host failed to initialize");
+    }
+    super::super::gui_switch::notify_ready().unwrap();
+    fs::write(directory.join(format!("{variant}-started")), "").unwrap();
+    while !directory.join(format!("stop-{variant}")).exists() {
+      std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    fs::write(directory.join(format!("{variant}-exited")), "").unwrap();
+  }
+
+  #[tokio::test]
+  #[ignore = "subprocess supervisor fixture with isolated GUI paths and preferences"]
+  #[cfg(target_os = "linux")]
+  async fn supervisor_fixture() {
+    use crate::service::transport::{
+      DESKTOP_GUI_INSTALLER, DESKTOP_SWITCH_BEGIN, DESKTOP_SWITCH_CANCEL, DESKTOP_SWITCH_COMMIT,
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let directory = PathBuf::from(std::env::var_os("GP_SWITCH_DIRECTORY").unwrap());
+    let scenario = std::env::var("GP_SWITCH_SCENARIO").unwrap();
+    let success = scenario == "success";
+    let download_required = matches!(scenario.as_str(), "missing" | "incompatible");
+    let runtime_too_old = scenario.starts_with("runtime-too-old");
+    let listener = super::super::gui_switch::SwitchListener::new().unwrap();
+    let (mut service_input, mut control) = tokio::io::duplex(64);
+    let (mut service_output, mut credentials) = tokio::io::duplex(2048);
+    let service_marker = directory.join("service-switch-started");
+    let service = tokio::spawn(async move {
+      loop {
+        let message = control.read_u8().await.unwrap();
+        match message {
+          DESKTOP_GUI_INSTALLER => {
+            credentials.write_all(&[u8::from(!runtime_too_old)]).await.unwrap();
+          }
+          DESKTOP_SWITCH_BEGIN => {
+            fs::write(&service_marker, "").unwrap();
+            let credential = SessionCredential::generate(Uuid::new_v4(), VERSION).unwrap();
+            credentials
+              .write_all(&credential.encode_frame().unwrap())
+              .await
+              .unwrap();
+          }
+          DESKTOP_SWITCH_COMMIT | DESKTOP_SWITCH_CANCEL => {}
+          _ => panic!("unexpected fixture desktop control"),
+        }
+      }
+    });
+    let envs = std::env::vars().collect::<HashMap<_, _>>();
+    let launcher = launcher(VERSION, vec![]).envs(envs);
+    let cancel = CancellationToken::new();
+    let program = directory.join("gpgui");
+    let run = launcher.launch_with_switches(
+      &program,
+      &cancel,
+      &listener.listener,
+      &mut service_input,
+      &mut service_output,
+    );
+    tokio::pin!(run);
+    let checkpoint = async {
+      while !directory.join("gpgui-started").exists() {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+      }
+      let result = super::super::gui_switch::request_at(
+        &listener.path(),
+        crate::gui::GuiSwitchRequest {
+          variant: crate::gui::GuiVariant::Nsh,
+          allow_download: scenario == "runtime-too-old-confirmed",
+        },
+        crate::gui::GuiTheme::System,
+      )
+      .await;
+      if runtime_too_old {
+        let error = result.unwrap_err().to_string();
+        anyhow::ensure!(
+          error.contains("4.14") && error.contains("4.12.1"),
+          "Unexpected runtime error: {error}"
+        );
+      } else if download_required {
+        anyhow::ensure!(
+          result? == crate::gui::GuiSwitchOutcome::DownloadRequired,
+          "Missing download confirmation"
+        );
+      } else {
+        anyhow::ensure!(result.is_ok() == success, "Unexpected switch result: {result:?}");
+        if success {
+          anyhow::ensure!(
+            result? == crate::gui::GuiSwitchOutcome::Switched,
+            "Compatible GUI did not switch directly"
+          );
+        }
+      }
+      if download_required || runtime_too_old {
+        anyhow::ensure!(
+          !directory.join("service-switch-started").exists(),
+          "Download check changed the service session"
+        );
+        anyhow::ensure!(
+          !directory.join("gpgui-nsh-started").exists(),
+          "Download check launched the replacement"
+        );
+      }
+      anyhow::ensure!(
+        !directory.join("gpgui-exited").exists(),
+        "Current GUI exited before acknowledgement"
+      );
+      if success {
+        anyhow::ensure!(
+          crate::gui::preferred()? == crate::gui::GuiVariant::Nsh,
+          "Successful switch did not save preference"
+        );
+        fs::write(directory.join("stop-gpgui"), "")?;
+        while !directory.join("gpgui-exited").exists() {
+          tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+      } else {
+        anyhow::ensure!(
+          crate::gui::preferred()? == crate::gui::GuiVariant::Tauri,
+          "Failed switch changed preference"
+        );
+      }
+      Ok::<_, anyhow::Error>(())
+    };
+    let checkpoint_result = tokio::select! {
+      result = &mut run => panic!("supervisor exited before the owned GUI: {result:?}"),
+      result = tokio::time::timeout(std::time::Duration::from_secs(10), checkpoint) => result.map_err(anyhow::Error::from).and_then(|result| result),
+    };
+    if let Err(error) = checkpoint_result {
+      cancel.cancel();
+      let _ = run.await;
+      panic!("{error:#}");
+    }
+    let stop = if success { "stop-gpgui-nsh" } else { "stop-gpgui" };
+    fs::write(directory.join(stop), "").unwrap();
+    assert!(
+      tokio::time::timeout(std::time::Duration::from_secs(5), run)
+        .await
+        .unwrap()
+        .unwrap()
+        .success()
+    );
+    service.abort();
   }
 }
