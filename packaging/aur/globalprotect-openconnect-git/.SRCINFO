@@ -30,6 +30,7 @@ pkgbase = globalprotect-openconnect-git
 	depends = gnutls
 	depends = libp11-kit
 	depends = nettle
+	depends = libhogweed.so
 	depends = gmp
 	depends = shared-mime-info
 	depends = desktop-file-utils
@@ -42,6 +43,7 @@ pkgbase = globalprotect-openconnect-git
 	provides = gpgui
 	conflicts = globalprotect-openconnect
 	options = !strip
+	options = !lto
 	source = globalprotect-openconnect::git+https://github.com/yuezk/GlobalProtect-openconnect.git#branch=main
 	sha256sums = SKIP
 
