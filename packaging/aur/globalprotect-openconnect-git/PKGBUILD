@@ -22,7 +22,8 @@ source=("${_pkgname_prefix}::git+https://github.com/yuezk/GlobalProtect-openconn
 
 sha256sums=("SKIP")
 
-options=('!strip')
+# GCC LTO objects from native dependencies cannot be linked by Rust's LLD.
+options=('!strip' '!lto')
 
 pkgver() {
   cd "${_pkgname_prefix}"
