@@ -190,8 +190,7 @@ install-unix: install-gpclient-unix
 	set -e; if [ -f "$(GPGUI_BINARY)" ]; then \
 		install -m 755 "$(GPGUI_BINARY)" "$(DESTDIR)$(PREFIX)/bin/gpgui"; \
 	fi
-	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.* \
-		packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-*.svg; do \
+	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.*; do \
 		destination="$(DESTDIR)$(PREFIX)/$${file#packaging/files/usr/}"; \
 		install -d "$$(dirname "$$destination")"; \
 		install -m 644 "$$file" "$$destination"; \
@@ -318,8 +317,7 @@ uninstall-unix:
 	set -e; for file in gp-hip-script-installer gp-vpnc-script-installer vpnc-script; do \
 		rm -f "$(DESTDIR)$(PREFIX)/libexec/gpclient/$$file"; \
 	done
-	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.* \
-		packaging/files/usr/share/icons/hicolor/scalable/status/gpgui-*.svg; do \
+	set -e; for file in packaging/files/usr/share/icons/hicolor/*/apps/gpgui.*; do \
 		rm -f "$(DESTDIR)$(PREFIX)/$${file#packaging/files/usr/}"; \
 	done
 	rm -f "$(DESTDIR)$(PREFIX)/share/applications/gpgui.desktop" \

@@ -57,17 +57,6 @@ verify_same_file \
 verify_same_file \
   "$GPGUI_APP_DIR/src-tauri/icons/icon.svg" \
   "$GP_DIR/packaging/files/usr/share/icons/hicolor/scalable/apps/gpgui.svg"
-for icon in \
-  gpgui-connected-symbolic.svg \
-  gpgui-disconnected-symbolic.svg \
-  gpgui-connecting-1-symbolic.svg \
-  gpgui-connecting-2-symbolic.svg \
-  gpgui-connecting-3-symbolic.svg \
-  gpgui-connecting-4-symbolic.svg; do
-  verify_same_file \
-    "$GPGUI_DIR/crates/desktop-tray/assets/theme/$icon" \
-    "$GP_DIR/packaging/files/usr/share/icons/hicolor/scalable/status/$icon"
-done
 verify_same_file \
   "$GPGUI_APP_DIR/src-tauri/icons/32x32.png" \
   "$GP_DIR/apps/gpauth/icons/32x32.png"
@@ -150,4 +139,4 @@ for app in gpgui-helper gpauth; do
   verify_contains "$GP_DIR/packaging/bsd/$app.desktop" "Exec=/usr/local/bin/gpclient launch-gui"
 done
 
-echo "Linux desktop and tray assets are synchronized"
+echo "Linux desktop assets are synchronized"
