@@ -1,0 +1,64 @@
+name: Prepare cached macOS native dependencies
+description: Cache only the completed public native-library prefix, without private source or app outputs.
+inputs:
+  gpgui-directory:
+    description: Private checkout containing the native dependency builder
+    required: true
+outputs:
+  prefix:
+    description: Validated native dependency installation prefix
+    value: ${{ steps.identity.outputs.path }}
+  cache-hit:
+    description: Whether the exact dependency cache was restored
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - name: Identify native dependency cache
+      id: identity
+      shell: bash
+      env:
+        GPGUI_DIRECTORY: ${{ inputs.gpgui-directory }}
+        GPGUI_MACOS_DEPS_CACHE_DIR: ${{ runner.tool_cache }}
+      run: |
+        set -euo pipefail
+        trap 'status=$?; if [ "$status" -ne 0 ]; then echo "::error::Native dependency cache identification failed; diagnostics suppressed."; fi' EXIT
+        metadata="$("$GPGUI_DIRECTORY/scripts/build-macos-native-deps.sh" --cache-info 2>/dev/null)"
+        key="$(printf '%s\n' "$metadata" | sed -n 's/^key=//p')"
+        prefix="$(printf '%s\n' "$metadata" | sed -n 's/^path=//p')"
+        # Emit only an opaque identity and one dependency directory outside the checkout.
+        if [[ "$key" =~ ^[0-9a-f]{64}$ ]] &&
+           [[ "$metadata" == "key=$key"$'\n'"path=$prefix" ]] &&
+           [[ "${prefix%/*}" == "$RUNNER_TOOL_CACHE/gpgui-macos-native-deps" ]] &&
+           [[ "${prefix##*/}" == macos-*-"$key" ]]; then
+          printf 'key=macos-native-deps-%s\npath=%s\n' "$key" "$prefix" >> "$GITHUB_OUTPUT"
+        else
+          exit 1
+        fi
+
+    - name: Restore public native libraries
+      id: restore
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ steps.identity.outputs.path }}
+        key: ${{ steps.identity.outputs.key }}
+
+    - name: Build or validate native libraries
+      shell: bash
+      env:
+        GPGUI_DIRECTORY: ${{ inputs.gpgui-directory }}
+        GPGUI_MACOS_DEPS_CACHE_DIR: ${{ runner.tool_cache }}
+      run: |
+        set -euo pipefail
+        trap 'status=$?; if [ "$status" -ne 0 ]; then echo "::error::Native dependency preparation failed; diagnostics suppressed."; fi' EXIT
+        started=$SECONDS
+        "$GPGUI_DIRECTORY/scripts/build-macos-native-deps.sh" >/dev/null 2>&1
+        echo "Native dependency preparation passed in $((SECONDS - started)) seconds."
+
+    # Save before any private application compilation or signing credential import.
+    - name: Save public native libraries
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ steps.identity.outputs.path }}
+        key: ${{ steps.identity.outputs.key }}

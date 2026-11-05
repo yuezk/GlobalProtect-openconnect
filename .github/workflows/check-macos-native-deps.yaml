@@ -1,0 +1,67 @@
+name: Check macOS native dependency cache
+
+on:
+  workflow_dispatch:
+    inputs:
+      gpgui_ref:
+        description: Full gpgui commit SHA
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      gpgui_ref:
+        required: true
+        type: string
+    secrets:
+      GH_PAT:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ${{ vars.MACOS_RUNNER || 'macos-15' }}
+    timeout-minutes: 30
+    steps:
+      - name: Require immutable source ref
+        env:
+          GPGUI_REF: ${{ inputs.gpgui_ref }}
+        run: test "${#GPGUI_REF}" -eq 40 && [[ "$GPGUI_REF" != *[!0-9a-f]* ]]
+
+      - uses: actions/checkout@v6
+        with:
+          path: .ci
+          persist-credentials: false
+
+      - name: Checkout gpgui quietly
+        uses: ./.ci/.github/actions/checkout-private
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ inputs.gpgui_ref }}
+          path: source/gpgui
+
+      - name: Select release toolchain and install native build tools
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          brew install autoconf automake gettext libtool meson ninja pkgconf
+
+      - name: Prepare cached native dependencies
+        id: native
+        uses: ./.ci/.github/actions/macos-native-deps
+        with:
+          gpgui-directory: source/gpgui
+
+      - name: Record cache result
+        env:
+          CACHE_HIT: ${{ steps.native.outputs.cache-hit }}
+        run: |
+          if [[ "$CACHE_HIT" == true ]]; then
+            echo "Validated an exact native dependency cache hit." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Built and validated native dependencies after a cache miss." >> "$GITHUB_STEP_SUMMARY"
+          fi
