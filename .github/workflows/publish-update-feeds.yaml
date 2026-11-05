@@ -27,6 +27,10 @@ on:
       gp_ref:
         required: true
         type: string
+      expected_gui:
+        required: false
+        default: nsh
+        type: string
       highlights:
         required: false
         type: string
@@ -61,6 +65,12 @@ on:
         required: true
         default: main
         type: string
+      expected_gui:
+        description: Expected macOS shell in the selected update archive
+        required: true
+        default: nsh
+        type: choice
+        options: [tauri, nsh]
       highlights:
         description: Stable release highlights, one per line
         required: false
@@ -88,7 +98,7 @@ jobs:
       REQUESTED_ARCHIVE: ${{ inputs.archive_name }}
       FEED_URL: ${{ vars.SPARKLE_FEED_URL }}
       EXPECTED_TEAM_ID: ${{ vars.MACOS_TEAM_ID }}
-      EXPECTED_GUI: tauri
+      EXPECTED_GUI: ${{ inputs.expected_gui }}
       UPDATES_WORKER_NAME: ${{ vars.UPDATES_WORKER_NAME || 'gp-updates' }}
       SPARKLE_VERSION: 2.9.2
       UPDATE_HIGHLIGHTS: ${{ inputs.highlights }}
@@ -105,6 +115,10 @@ jobs:
 
           if [[ "$CHANNEL" != "stable" && "$CHANNEL" != "snapshot" ]]; then
             echo "channel must be stable or snapshot" >&2
+            exit 1
+          fi
+          if [[ "$EXPECTED_GUI" != "tauri" && "$EXPECTED_GUI" != "nsh" ]]; then
+            echo "expected_gui must be tauri or nsh" >&2
             exit 1
           fi
           if [[ ! "$UNIX_PLATFORMS" =~ ^(linux|freebsd|openbsd)(,(linux|freebsd|openbsd))*$ ]]; then
