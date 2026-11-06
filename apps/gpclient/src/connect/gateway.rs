@@ -785,9 +785,8 @@ mod tests {
 
   #[test]
   fn explicit_hip_user_resolves_to_the_selected_account() {
-    let current = uzers::get_user_by_uid(uzers::get_effective_uid()).unwrap();
-    let name = current.name().to_string_lossy().into_owned();
-    assert_eq!(get_uid(&Some(name)).unwrap(), Some(current.uid()));
+    // Build sandboxes may use a UID without an entry in the user database.
+    assert_eq!(get_uid(&Some("root".to_string())).unwrap(), Some(0));
   }
 
   #[test]
