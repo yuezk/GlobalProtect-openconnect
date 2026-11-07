@@ -3,6 +3,7 @@ pub mod xml;
 pub mod base64;
 mod certificate;
 pub mod checksum;
+mod client_tls;
 pub mod crypto;
 #[cfg(feature = "desktop")]
 pub mod endpoint;

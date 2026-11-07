@@ -1,4 +1,8 @@
+mod client_key;
+pub(super) use client_key::{ClientKey, validate_certificate};
+
 pub(super) mod pkcs12;
+mod pkcs12_format;
 
 #[cfg(any(
   target_os = "macos",
@@ -7,7 +11,7 @@ pub(super) mod pkcs12;
   target_os = "openbsd"
 ))]
 #[path = "gnutls.rs"]
-mod legacy_key;
+mod platform_import;
 #[cfg(not(any(
   target_os = "macos",
   target_os = "linux",
@@ -15,6 +19,6 @@ mod legacy_key;
   target_os = "openbsd"
 )))]
 #[path = "unsupported.rs"]
-mod legacy_key;
+mod platform_import;
 
-pub(super) use legacy_key::decrypt as decrypt_key;
+pub(super) use platform_import::{archive, decrypt as decrypt_key};

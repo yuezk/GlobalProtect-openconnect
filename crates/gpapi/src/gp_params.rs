@@ -6,7 +6,7 @@ use zeroize::Zeroize;
 
 use crate::{
   os_profile::{ClientOs, HostIdentity, OsProfile},
-  utils::request::{ClientIdentity, create_identity},
+  utils::request::ClientIdentity,
 };
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Type, Default)]
@@ -160,21 +160,21 @@ impl GpParams {
     self.prepared_identity.as_ref()
   }
 
+  pub(crate) fn has_client_identity(&self) -> bool {
+    self.prepared_identity.is_some() || self.certificate.is_some()
+  }
+
   pub(crate) fn client_builder(&self) -> anyhow::Result<ClientBuilder> {
-    let mut builder = crate::utils::request::client_builder()
-      .tls_info(true)
-      .danger_accept_invalid_certs(self.ignore_tls_errors)
-      .user_agent(self.user_agent());
-    if let Some(identity) = &self.prepared_identity {
-      builder = builder.identity(identity.request_identity());
+    let builder = if let Some(identity) = &self.prepared_identity {
+      identity.client_builder(self.ignore_tls_errors)?
     } else if let Some(cert) = self.certificate.as_deref() {
       info!("Using client certificate authentication...");
-      builder = builder.identity(create_identity(
-        cert,
-        self.sslkey.as_deref(),
-        self.key_password.as_deref(),
-      )?);
-    }
+      ClientIdentity::load(cert, self.sslkey.as_deref(), self.key_password.as_deref())?
+        .client_builder(self.ignore_tls_errors)?
+    } else {
+      crate::utils::request::client_builder().danger_accept_invalid_certs(self.ignore_tls_errors)
+    };
+    let builder = builder.tls_info(true).user_agent(self.user_agent());
     Ok(builder)
   }
 }

@@ -16,8 +16,10 @@ log.workspace = true
 reqwest.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = "2"
+rustls-platform-verifier = "0.7"
 p12-keystore = "0.4.1"
-sec1 = { version = "0.8.1", default-features = false, features = ["der"] }
+pkcs12 = { version = "=0.2.0-pre.0", default-features = false }
+cms = { version = "=0.3.0-pre.1", default-features = false }
 pem.workspace = true
 pkcs8 = { version = "0.11", features = ["pem", "encryption", "sha1-insecure", "3des", "des-insecure"] }
 x509-cert = { version = "0.3", default-features = false }

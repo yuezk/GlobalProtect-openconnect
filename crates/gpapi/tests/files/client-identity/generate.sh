@@ -17,6 +17,19 @@ for algorithm in rsa ec; do
   "$openssl_bin" x509 -req -in "$scratch/$algorithm.csr" -CA root.pem -CAkey "$scratch/root.key" \
     -set_serial 10 -days 3650 -sha256 -out "$algorithm-cert.pem"
 done
+# Issue #697: the local identity must allow a server-specific critical extension.
+"$openssl_bin" req -new -x509 -key rsa-pkcs8.pem -sha256 -days 3650 \
+  -subj '/CN=GP Critical Extension Regression' \
+  -addext '1.3.6.1.4.1.55555.1=critical,DER:05:00' -out rsa-critical-extension.pem
+# Compatibility and unsupported-input fixtures use the same public test keys.
+"$openssl_bin" ec -in ec-pkcs8.pem -conv_form compressed -out ec-compressed.pem
+"$openssl_bin" ec -in ec-pkcs8.pem -param_enc explicit -out ec-explicit.pem
+"$openssl_bin" ecparam -name secp521r1 -genkey -noout -out ec-p521.pem
+"$openssl_bin" genpkey -algorithm RSA-PSS -pkeyopt rsa_keygen_bits:2048 -out rsa-pss.pem
+for variant in ec-compressed ec-explicit ec-p521 rsa-pss; do
+  "$openssl_bin" req -new -x509 -key "$variant.pem" -sha256 -days 3650 \
+    -subj "/CN=GP Public $variant Regression" -out "$variant-cert.pem"
+done
 "$openssl_bin" rsa -in rsa-pkcs8.pem -traditional -out rsa-pkcs1.pem
 "$openssl_bin" ec -in ec-pkcs8.pem -out ec-sec1.pem
 for cipher in aes128 aes192 aes256 des3; do
@@ -69,6 +82,14 @@ done
 # DES requires the legacy provider in OpenSSL 3, unlike PBES2 3DES.
 "$openssl_bin" pkcs8 -provider default -provider legacy -topk8 -in rsa-pkcs8.pem \
   -v2 des-cbc -v2prf hmacWithSHA256 -passout pass:fixture-password -out rsa-pbes2-des.pem
+
+# RC4-128 was usable with the former OpenSSL legacy provider and OpenConnect.
+# RC2-128 and two-key 3DES deliberately exercise unsupported-encryption errors.
+for scheme in RC4-128 RC2-128 2DES; do
+  "$openssl_bin" pkcs12 -export -legacy -inkey rsa-pkcs8.pem -in rsa-cert.pem \
+    -keypbe "PBE-SHA1-$scheme" -certpbe PBE-SHA1-3DES \
+    -passout pass:fixture-password -out "legacy-$scheme.p12"
+done
 
 # Incomplete identity archives exercise validation before native TLS import.
 "$openssl_bin" pkcs12 -export -nokeys -in rsa-cert.pem \

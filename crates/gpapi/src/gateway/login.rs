@@ -187,8 +187,8 @@ async fn receive_gateway_login(
     .await
     .map_err(|e| {
       warn!("Network error: {:?}", e);
-      match crate::error::ServerTlsError::from_request(origin, &e) {
-        Some(tls) => anyhow::anyhow!(tls),
+      match crate::error::ServerTlsError::from_request(origin, &e, gp_params.has_client_identity()) {
+        Some(tls) => tls,
         None => anyhow::anyhow!(PortalError::NetworkError(e)),
       }
     })?;
@@ -201,8 +201,8 @@ async fn receive_gateway_login(
   let endpoint = res.remote_addr();
   let url = res.url().clone();
   let res = parse_gp_response(res).await.map_err(|err| {
-    if let Some(tls) = crate::error::ServerTlsError::from_request(origin, &err) {
-      return anyhow::anyhow!(tls);
+    if let Some(tls) = crate::error::ServerTlsError::from_request(origin, &err, gp_params.has_client_identity()) {
+      return tls;
     }
     if gp_params.os_profile().client_os() == crate::os_profile::ClientOs::Ios && err.is_authentication_rejection() {
       return anyhow::anyhow!(crate::error::AuthenticationRejected);

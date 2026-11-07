@@ -22,11 +22,23 @@ pub enum ServerTlsErrorKind {
 }
 
 impl ServerTlsError {
-  pub(crate) fn from_request(server: &url::Url, error: &(dyn Error + 'static)) -> Option<Self> {
-    Some(Self {
+  pub(crate) fn from_request(
+    server: &url::Url,
+    error: &(dyn Error + 'static),
+    has_client_identity: bool,
+  ) -> Option<anyhow::Error> {
+    let kind = classify_with_identity(error, has_client_identity)?;
+    let error = anyhow::Error::new(Self {
       server: server.origin().ascii_serialization(),
-      kind: classify(error)?,
-    })
+      kind,
+    });
+    if has_client_identity && kind == ServerTlsErrorKind::ClientCertificateRequired {
+      Some(error.context(
+        "The VPN server could not use the configured client certificate. Check it with your VPN administrator",
+      ))
+    } else {
+      Some(error)
+    }
   }
 }
 
@@ -60,6 +72,10 @@ impl ServerTlsErrorKind {
 }
 
 pub(super) fn classify(error: &(dyn Error + 'static)) -> Option<ServerTlsErrorKind> {
+  classify_with_identity(error, false)
+}
+
+fn classify_with_identity(error: &(dyn Error + 'static), has_client_identity: bool) -> Option<ServerTlsErrorKind> {
   let mut source = Some(error);
   while let Some(error) = source {
     if let Some(tls) = error.downcast_ref::<ServerTlsError>() {
@@ -71,6 +87,14 @@ pub(super) fn classify(error: &(dyn Error + 'static)) -> Option<ServerTlsErrorKi
         rustls::Error::AlertReceived(rustls::AlertDescription::CertificateRequired) => {
           ServerTlsErrorKind::ClientCertificateRequired
         }
+        rustls::Error::AlertReceived(
+          rustls::AlertDescription::BadCertificate
+          | rustls::AlertDescription::UnsupportedCertificate
+          | rustls::AlertDescription::CertificateRevoked
+          | rustls::AlertDescription::CertificateExpired
+          | rustls::AlertDescription::CertificateUnknown
+          | rustls::AlertDescription::UnknownCA,
+        ) if has_client_identity => ServerTlsErrorKind::ClientCertificateRequired,
         _ => ServerTlsErrorKind::Other,
       });
     }
@@ -121,6 +145,39 @@ mod tests {
     let required = rustls::Error::AlertReceived(rustls::AlertDescription::CertificateRequired);
     assert_eq!(classify(&required), Some(ServerTlsErrorKind::ClientCertificateRequired));
     assert_eq!(classify(&std::io::Error::other("certificate verify failed")), None);
+  }
+
+  #[test]
+  fn configured_identity_peer_errors_have_actionable_copy_without_becoming_server_trust_failures() {
+    let server = url::Url::parse("https://vpn.example.com/private/login").unwrap();
+    for alert in [
+      rustls::AlertDescription::CertificateRequired,
+      rustls::AlertDescription::BadCertificate,
+      rustls::AlertDescription::UnknownCA,
+    ] {
+      let error = rustls::Error::AlertReceived(alert);
+      let configured = ServerTlsError::from_request(&server, &error, true).unwrap();
+      assert_eq!(
+        ServerTlsErrorKind::from_error(&configured),
+        Some(ServerTlsErrorKind::ClientCertificateRequired)
+      );
+      let message = configured.to_string();
+      assert!(
+        message.contains("configured client certificate") && message.contains("VPN administrator"),
+        "{message}"
+      );
+      assert!(
+        !message.contains("password") && !message.contains("passphrase"),
+        "{message}"
+      );
+      assert!(!message.contains("/private/login"));
+    }
+    let trust_error = rustls::Error::InvalidCertificate(rustls::CertificateError::UnknownIssuer);
+    let classified = ServerTlsError::from_request(&server, &trust_error, true).unwrap();
+    assert_eq!(
+      ServerTlsErrorKind::from_error(&classified),
+      Some(ServerTlsErrorKind::Certificate)
+    );
   }
 
   fn server(tls: bool) -> (String, thread::JoinHandle<()>) {
@@ -226,8 +283,8 @@ mod tests {
       .await
       .unwrap_err();
     worker.join().unwrap();
-    let tls = ServerTlsError::from_request(&url::Url::parse(&address).unwrap(), &error).unwrap();
-    assert_eq!(tls.kind, ServerTlsErrorKind::Other);
+    let tls = ServerTlsError::from_request(&url::Url::parse(&address).unwrap(), &error, false).unwrap();
+    assert_eq!(ServerTlsErrorKind::from_error(&tls), Some(ServerTlsErrorKind::Other));
   }
 
   #[tokio::test]
@@ -312,6 +369,38 @@ mod tests {
         "{operation}: {error:?}"
       );
     }
+  }
+
+  #[tokio::test]
+  async fn prelogin_explains_peer_rejection_of_an_already_configured_identity() {
+    use crate::{
+      gp_params::GpParams,
+      os_profile::{ClientOs, OsProfile},
+      portal::{PreloginOptions, prelogin},
+      utils::request::ClientIdentity,
+    };
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/files/client-identity");
+    let identity = ClientIdentity::load(
+      fixtures.join("rsa-critical-extension.pem").to_str().unwrap(),
+      Some(fixtures.join("rsa-pkcs8.pem").to_str().unwrap()),
+      None,
+    )
+    .unwrap();
+    let params = GpParams::builder(OsProfile::builder(ClientOs::Linux).build(crate::os_profile::test_snapshot()))
+      .client_identity(Some(identity))
+      .ignore_tls_errors(true)
+      .build();
+    let (address, worker) = server_with_client_auth(true, SslVerifyMode::PEER | SslVerifyMode::FAIL_IF_NO_PEER_CERT);
+    let error = prelogin(&address, &params, PreloginOptions::default())
+      .await
+      .unwrap_err();
+    worker.join().unwrap();
+    assert_eq!(
+      ServerTlsErrorKind::from_error(&error),
+      Some(ServerTlsErrorKind::ClientCertificateRequired)
+    );
+    assert!(error.to_string().contains("configured client certificate"), "{error:#}");
+    assert!(!error.to_string().contains("passphrase"));
   }
 
   #[tokio::test]
@@ -411,10 +500,10 @@ mod tests {
       .await
       .unwrap_err();
     assert_eq!(
-      ServerTlsError::from_request(&url::Url::parse(&server).unwrap(), &error)
-        .unwrap()
-        .kind,
-      ServerTlsErrorKind::Certificate
+      ServerTlsErrorKind::from_error(
+        &ServerTlsError::from_request(&url::Url::parse(&server).unwrap(), &error, false).unwrap()
+      ),
+      Some(ServerTlsErrorKind::Certificate)
     );
   }
 

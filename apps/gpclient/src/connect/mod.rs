@@ -186,6 +186,8 @@ impl<'a> ConnectHandler<'a> {
       match identity_error {
         RequestIdentityError::UnsupportedEncryption
         | RequestIdentityError::UnsupportedKeyFormat
+        | RequestIdentityError::UnsupportedKeyAlgorithm(_)
+        | RequestIdentityError::KeyMismatch
         | RequestIdentityError::InvalidKey
         | RequestIdentityError::InvalidCertificate
         | RequestIdentityError::IncompletePkcs12
@@ -206,8 +208,12 @@ impl<'a> ConnectHandler<'a> {
           return Ok(());
         }
         RequestIdentityError::NoPassphrase(cert_type) | RequestIdentityError::DecryptError(cert_type) => {
-          let message = format!("Enter the {} passphrase:", cert_type);
-          let password = Password::new(&message)
+          let message = if *cert_type == "PKCS#12" {
+            "Enter the certificate file password:"
+          } else {
+            "Enter the private key password:"
+          };
+          let password = Password::new(message)
             .without_confirmation()
             .with_display_mode(PasswordDisplayMode::Masked)
             .prompt()?;

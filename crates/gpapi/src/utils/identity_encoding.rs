@@ -90,7 +90,8 @@ pub(super) fn private_key(bytes: &[u8], passphrase: Option<&str>) -> anyhow::Res
       }
       "ENCRYPTED PRIVATE KEY" => decrypt(der, passphrase)?,
       "EC PRIVATE KEY" => {
-        sec1::EcPrivateKey::from_der(der).map_err(|_| RequestIdentityError::InvalidKey)?;
+        // The signing provider validates both named and explicitly encoded curves.
+        SecretDocument::try_from(der.as_slice()).map_err(|_| RequestIdentityError::InvalidKey)?;
         return Ok(block.encoded());
       }
       _ => return Err(RequestIdentityError::UnsupportedKeyFormat.into()),
