@@ -65,10 +65,17 @@ pub(in crate::utils) fn certified_key(
   let mut chain = Vec::new();
   loop {
     chain.extend_from_slice(pem::encode(&pem::Pem::new("CERTIFICATE", current.as_der())).as_bytes());
-    if current.subject() == current.issuer() {
+    if super::issuer::is_issuer(current.as_der(), current.as_der())? {
       break;
     }
-    let Some(parent) = certs.iter().position(|cert| cert.subject() == current.issuer()) else {
+    let mut parent = None;
+    for (index, candidate) in certs.iter().enumerate() {
+      if super::issuer::is_issuer(current.as_der(), candidate.as_der())? {
+        parent = Some(index);
+        break;
+      }
+    }
+    let Some(parent) = parent else {
       break;
     };
     current = certs.remove(parent);

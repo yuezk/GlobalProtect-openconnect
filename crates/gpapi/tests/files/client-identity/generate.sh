@@ -99,3 +99,4 @@ done
 
 # Plain PKCS#12 bags let the import tests omit optional IDs and reorder bags.
 python3 "$(dirname "$0")/generate-plain-pfx.py"
+bash "$(dirname "$0")/generate-pss-chain.sh"

@@ -49,6 +49,40 @@ void gp_key_free(unsigned char *data, size_t length) {
 #include <stdlib.h>
 #include <string.h>
 
+/* Check only the signature, not whether this local certificate is trusted,
+ * current, or has extensions understood by the client. */
+int gp_certificate_verify_signature(
+    const unsigned char *certificate, size_t certificate_length,
+    const unsigned char *issuer_key, size_t issuer_key_length,
+    const unsigned char *message, size_t message_length,
+    const unsigned char *signature, size_t signature_length) {
+  gnutls_x509_crt_t child = NULL;
+  gnutls_pubkey_t public_key = NULL;
+  int result, algorithm;
+  if (certificate_length > UINT_MAX || issuer_key_length > UINT_MAX ||
+      message_length > UINT_MAX || signature_length > UINT_MAX) return -1;
+  result = gnutls_global_init();
+  if (result < 0) return -1;
+  gnutls_datum_t child_data = {(unsigned char *)certificate, (unsigned int)certificate_length};
+  gnutls_datum_t key_data = {(unsigned char *)issuer_key, (unsigned int)issuer_key_length};
+  gnutls_datum_t data = {(unsigned char *)message, (unsigned int)message_length};
+  gnutls_datum_t sig = {(unsigned char *)signature, (unsigned int)signature_length};
+  result = gnutls_x509_crt_init(&child);
+  if (result >= 0) result = gnutls_x509_crt_import(child, &child_data, GNUTLS_X509_FMT_DER);
+  if (result >= 0) result = gnutls_pubkey_init(&public_key);
+  if (result >= 0) result = gnutls_pubkey_import(public_key, &key_data, GNUTLS_X509_FMT_DER);
+  if (result >= 0) {
+    algorithm = gnutls_x509_crt_get_signature_algorithm(child);
+    if (algorithm < 0) result = algorithm;
+    else result = gnutls_pubkey_verify_data2(public_key, algorithm,
+        GNUTLS_VERIFY_ALLOW_BROKEN | GNUTLS_VERIFY_ALLOW_SIGN_WITH_SHA1, &data, &sig) >= 0;
+  }
+  if (public_key != NULL) gnutls_pubkey_deinit(public_key);
+  if (child != NULL) gnutls_x509_crt_deinit(child);
+  gnutls_global_deinit();
+  return result < 0 ? -1 : result;
+}
+
 /* Stable private kinds, independent of the native enum values. */
 struct gp_client_key {
   gnutls_privkey_t signer;

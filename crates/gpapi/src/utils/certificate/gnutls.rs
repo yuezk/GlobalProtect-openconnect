@@ -1,11 +1,22 @@
 use std::ffi::{c_char, c_int};
 
 use pkcs8::SecretDocument;
+use pkcs8::der::{Encode, asn1::ObjectIdentifier};
 use zeroize::Zeroizing;
 
 use crate::utils::request::RequestIdentityError;
 
 unsafe extern "C" {
+  fn gp_certificate_verify_signature(
+    certificate: *const u8,
+    certificate_length: usize,
+    issuer_key: *const u8,
+    issuer_key_length: usize,
+    message: *const u8,
+    message_length: usize,
+    signature: *const u8,
+    signature_length: usize,
+  ) -> c_int;
   fn gp_key_import(
     input: *const u8,
     length: usize,
@@ -24,6 +35,46 @@ unsafe extern "C" {
     key_length: *mut usize,
   ) -> c_int;
   fn gp_key_free(data: *mut u8, length: usize);
+}
+
+pub(super) fn verify_certificate_signature(
+  certificate: &x509_cert::Certificate,
+  issuer: &x509_cert::Certificate,
+  message: &[u8],
+  signature: &[u8],
+) -> anyhow::Result<bool> {
+  const RSA: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.1");
+  const RSA_PSS: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.10");
+  let mut issuer_key = issuer.tbs_certificate().subject_public_key_info().clone();
+  if certificate.signature_algorithm().oid == RSA_PSS {
+    if !matches!(issuer_key.algorithm.oid, RSA | RSA_PSS) {
+      return Ok(false);
+    }
+    // GnuTLS's generic verifier takes PSS parameters from the imported key.
+    // Give this verification operation the certificate's full AlgorithmIdentifier,
+    // including salt length, rather than the default implied by its signature enum.
+    // This temporary SPKI never changes the certificates sent to the server.
+    issuer_key.algorithm = certificate.signature_algorithm().clone();
+  }
+  let issuer_key = issuer_key.to_der()?;
+  let certificate = certificate.to_der()?;
+  let result = unsafe {
+    gp_certificate_verify_signature(
+      certificate.as_ptr(),
+      certificate.len(),
+      issuer_key.as_ptr(),
+      issuer_key.len(),
+      message.as_ptr(),
+      message.len(),
+      signature.as_ptr(),
+      signature.len(),
+    )
+  };
+  match result {
+    0 => Ok(false),
+    1 => Ok(true),
+    _ => Err(RequestIdentityError::InvalidCertificate.into()),
+  }
 }
 
 struct ExportedKey {

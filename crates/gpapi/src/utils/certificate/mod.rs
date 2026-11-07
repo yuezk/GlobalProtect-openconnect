@@ -1,4 +1,5 @@
 mod client_key;
+mod issuer;
 pub(super) use client_key::{ClientKey, validate_certificate};
 
 pub(super) mod pkcs12;
@@ -18,7 +19,7 @@ mod platform_import;
   target_os = "freebsd",
   target_os = "openbsd"
 )))]
-#[path = "unsupported.rs"]
+#[path = "portable_import.rs"]
 mod platform_import;
 
 pub(super) use platform_import::{archive, decrypt as decrypt_key};

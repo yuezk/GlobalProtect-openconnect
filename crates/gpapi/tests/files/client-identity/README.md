@@ -37,6 +37,7 @@ optional fixture-generation script, not identity import.
 | `legacy-rc2.p12` | Issue #437 case: RC2-40 certificate bags, SHA1/3DES key bag, SHA1 MAC |
 | `ec-p521.pem`, `ec-p521-cert.pem` | Valid P-521 identity; explicit unsupported-key error until HTTP negotiation parity exists |
 | `rsa-pss.pem`, `rsa-pss-cert.pem` | Valid RSA-PSS identity; explicit unsupported-key error until Rustls negotiation parity exists |
+| `pss-chain-{root,issuer}.pem`, `pss-chain-salt-{20,32,48}.pem` | RSA client certificates signed with RSA-PSS/SHA256 and different salt lengths; client key is `rsa-pkcs8.pem`. Regenerate with `generate-pss-chain.sh` |
 | `ec-{compressed,explicit}.pem`, matching `-cert.pem` files | Valid OpenSSL inputs rejected by the tested GnuTLS backend; actionable unsupported-encoding tests |
 | `legacy-RC4-128.p12` | SHA1/RC4-128 key encryption and SHA1/3DES certificate encryption; native archive import |
 | `legacy-RC2-128.p12`, `legacy-2DES.p12` | Unsupported archive encryption; terminal AES re-export guidance with any password |
@@ -83,6 +84,12 @@ verifier with Rustls/ring. RSA-PSS and P-521 key types deliberately fail before 
 until the HTTP transport can negotiate them correctly on both TLS versions.
 This differs from ordinary RSA keys producing RSA-PSS signatures, which remain
 supported. OpenSSL remains development-only.
+
+`tests/client_certificate_chain.rs` checks mutual TLS with PKCS#12 CA rollover,
+including self-issued intermediates and both certificate bag orders. It also
+checks RSA-PSS certificate signatures with 20-, 32-, and 48-byte salts against
+a same-name, wrong-key issuer. The server must receive the original leaf and
+correct intermediate; OpenConnect must retain the original archive.
 
 `tests/client_certificate_tls12_hash.rs` records the remaining TLS 1.2 P-384
 with SHA-256-only peer request gap: the OpenSSL baseline passes, while the
