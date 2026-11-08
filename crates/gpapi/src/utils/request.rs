@@ -1,34 +1,40 @@
 use std::{fmt, fs, io::Write, path::Path, sync::Arc};
 
 use anyhow::{Context, ensure};
-use reqwest::Identity;
+use rustls::sign::CertifiedKey;
 use zeroize::Zeroizing;
 
-use super::{certificate::pkcs12, identity_encoding};
+use super::{certificate::pkcs12, client_tls, identity_encoding};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RequestIdentityError {
-  #[error("Failed to find the private key")]
+  #[error("No private key was found. Choose the matching key file")]
   NoKey,
-  #[error("No passphrase provided")]
+  #[error("This certificate or key is password-protected. Enter its password")]
   NoPassphrase(&'static str),
-  #[error("Failed to decrypt private key")]
+  #[error("Could not unlock the certificate or key. Check the password and file")]
   DecryptError(&'static str),
-  #[error(
-    "Unsupported private key encryption. Convert the key to modern PKCS#8 using PBES2 with AES before importing it"
-  )]
+  #[error("This certificate or key uses unsupported encryption. Re-export it with AES encryption")]
   UnsupportedEncryption,
-  #[error("Unsupported private key format. Convert the key to PKCS#8 before importing it")]
+  #[error("This private key format is not supported. Choose a PEM key or a PKCS#12 certificate file")]
   UnsupportedKeyFormat,
-  #[error("Invalid private key")]
+  #[error(
+    "This client certificate uses an unsupported key type ({0}). Ask your VPN administrator for an RSA or P-256 certificate"
+  )]
+  UnsupportedKeyAlgorithm(&'static str),
+  #[error("The private key does not match this certificate. Choose the matching key file")]
+  KeyMismatch,
+  #[error("The private key file is invalid. Choose a different key file")]
   InvalidKey,
-  #[error("Invalid certificate or certificate chain")]
+  #[error("The certificate file is invalid. Choose a different certificate file")]
   InvalidCertificate,
   #[error("The PKCS#12 file must contain both a client certificate and its private key")]
   IncompletePkcs12,
-  #[error("Could not open the PKCS#12 certificate. Check the password and certificate file")]
+  #[error("Could not open the PKCS#12 file. Check the password or choose another file")]
   InvalidPkcs12(#[source] p12_keystore::error::Error),
-  #[error("The PKCS#12 file must contain one matching client identity")]
+  #[error(
+    "The certificate file contains more than one matching identity. Choose a file with one client certificate and key"
+  )]
   AmbiguousPkcs12,
 }
 
@@ -38,7 +44,7 @@ pub enum RequestIdentityError {
 #[derive(Clone)]
 pub struct ClientIdentity {
   material: Arc<IdentityMaterial>,
-  identity: Identity,
+  certified_key: Arc<CertifiedKey>,
 }
 
 struct IdentityMaterial {
@@ -68,14 +74,14 @@ impl ClientIdentity {
     };
     let key = identity_encoding::private_key(&key_bytes, passphrase)?;
     let certificate = identity_encoding::certificate_chain(&certificate_bytes)?;
-    let identity = pem_request_identity(&certificate, &key)?;
+    let certified_key = client_tls::pem_certified_key(&certificate, &key)?;
     Ok(Self {
       material: Arc::new(IdentityMaterial {
         certificate,
         key: Some(key),
         passphrase: None,
       }),
-      identity,
+      certified_key,
     })
   }
 
@@ -86,12 +92,12 @@ impl ClientIdentity {
     key: Option<Zeroizing<Vec<u8>>>,
     passphrase: Option<&str>,
   ) -> anyhow::Result<Self> {
-    let (identity, passphrase) = match &key {
-      Some(key) => (pem_request_identity(&certificate, key)?, None),
+    let (certified_key, passphrase) = match &key {
+      Some(key) => (client_tls::pem_certified_key(&certificate, key)?, None),
       None => {
-        let identity = pkcs12::identity(&certificate, passphrase)?;
+        let certified_key = pkcs12::certified_key(&certificate, passphrase)?;
         (
-          identity,
+          certified_key,
           Some(Zeroizing::new(passphrase.unwrap_or_default().to_owned())),
         )
       }
@@ -102,7 +108,7 @@ impl ClientIdentity {
         key,
         passphrase,
       }),
-      identity,
+      certified_key,
     })
   }
 
@@ -115,8 +121,8 @@ impl ClientIdentity {
   pub fn key_password(&self) -> Option<&str> {
     self.material.passphrase.as_ref().map(|value| value.as_str())
   }
-  pub(crate) fn request_identity(&self) -> Identity {
-    self.identity.clone()
+  pub(crate) fn client_builder(&self, ignore_tls_errors: bool) -> anyhow::Result<reqwest::ClientBuilder> {
+    client_tls::identity_client_builder(self.certified_key.clone(), ignore_tls_errors)
   }
 
   pub fn write_files(&self, directory: Option<&Path>) -> anyhow::Result<ClientIdentityFiles> {
@@ -147,29 +153,6 @@ impl ClientIdentityFiles {
       .as_ref()
       .map(|key| key.path().to_str().expect("identity path is UTF-8"))
   }
-}
-
-pub(super) fn pem_request_identity(certificate: &[u8], key: &[u8]) -> anyhow::Result<Identity> {
-  let error_context =
-    "Client certificate and private key cannot be used together. Check that the private key matches the certificate";
-  let mut combined = Zeroizing::new(certificate.to_vec());
-  combined.push(b'\n');
-  combined.extend_from_slice(key);
-  let identity = Identity::from_pem(&combined).context(error_context)?;
-  let certificates = rustls_pemfile::certs(&mut std::io::Cursor::new(certificate))
-    .collect::<Result<Vec<_>, _>>()
-    .context(error_context)?;
-  let private_key = rustls_pemfile::private_key(&mut std::io::Cursor::new(key))
-    .context(error_context)?
-    .context(error_context)?;
-  rustls::sign::CertifiedKey::from_der(certificates, private_key, &rustls::crypto::ring::default_provider())
-    .context(error_context)?;
-  client_builder()
-    .no_proxy()
-    .identity(identity.clone())
-    .build()
-    .context(error_context)?;
-  Ok(identity)
 }
 
 fn read_identity_file(path: &str) -> anyhow::Result<Zeroizing<Vec<u8>>> {
@@ -208,12 +191,6 @@ pub fn client_builder() -> reqwest::ClientBuilder {
   reqwest::Client::builder().tls_backend_rustls()
 }
 
-/// General request clients may load an identity directly. Session owners call
-/// ClientIdentity::load once and retain that snapshot across their lifecycle.
-pub fn create_identity(cert: &str, key: Option<&str>, passphrase: Option<&str>) -> anyhow::Result<Identity> {
-  Ok(ClientIdentity::load(cert, key, passphrase)?.request_identity())
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -221,6 +198,29 @@ mod tests {
   const CERTIFICATE: &[u8] = include_bytes!("../../tests/files/client-identity/rsa-cert.pem");
   const KEY: &[u8] = include_bytes!("../../tests/files/client-identity/rsa-pkcs8.pem");
   const ENCRYPTED_KEY: &[u8] = include_bytes!("../../tests/files/client-identity/rsa-pbes2-sha256.pem");
+
+  #[test]
+  fn unsupported_identity_errors_explain_the_action_without_blaming_passwords_or_key_matching() {
+    for error in [
+      RequestIdentityError::UnsupportedKeyAlgorithm("RSA-PSS"),
+      RequestIdentityError::UnsupportedEncryption,
+      RequestIdentityError::UnsupportedKeyFormat,
+    ] {
+      let message = error.to_string();
+      assert!(
+        message.contains("unsupported") || message.contains("not supported"),
+        "{message}"
+      );
+      assert!(
+        message.contains("Ask ") || message.contains("Re-export ") || message.contains("Choose "),
+        "{message}"
+      );
+      assert!(
+        !message.contains("password") && !message.contains("does not match"),
+        "{message}"
+      );
+    }
+  }
 
   #[test]
   fn pem_without_key_reports_missing_key_even_with_passphrase() {
@@ -247,21 +247,21 @@ mod tests {
   }
 
   #[test]
-  fn create_identity_preserves_password_errors_and_builds_a_request_client() {
+  fn identity_loading_preserves_password_errors_and_builds_a_request_client() {
     let mut source = tempfile::NamedTempFile::new().unwrap();
     source.write_all(CERTIFICATE).unwrap();
     source.write_all(ENCRYPTED_KEY).unwrap();
     for (password, missing) in [(None, true), (Some("wrong"), false)] {
-      let error = create_identity(source.path().to_str().unwrap(), None, password).unwrap_err();
+      let error = ClientIdentity::load(source.path().to_str().unwrap(), None, password).unwrap_err();
       match error.downcast_ref::<RequestIdentityError>() {
         Some(RequestIdentityError::NoPassphrase("PEM")) => assert!(missing),
         Some(RequestIdentityError::DecryptError("PEM")) => assert!(!missing),
         other => panic!("Unexpected identity error: {other:?}"),
       }
     }
-    let identity = create_identity(source.path().to_str().unwrap(), None, Some("fixture-password")).unwrap();
+    let identity = ClientIdentity::load(source.path().to_str().unwrap(), None, Some("fixture-password")).unwrap();
     drop(source);
-    client_builder().identity(identity).build().unwrap();
+    identity.client_builder(false).unwrap().build().unwrap();
   }
 
   #[test]
@@ -283,7 +283,7 @@ mod tests {
     assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
     drop(files);
     assert!(!Path::new(&path).exists());
-    client_builder().identity(identity.request_identity()).build().unwrap();
+    identity.client_builder(false).unwrap().build().unwrap();
   }
 }
 

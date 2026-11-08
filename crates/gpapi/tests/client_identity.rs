@@ -114,11 +114,10 @@ fn malformed_rsa_pkcs1_is_rejected_before_connection() {
     None,
   )
   .unwrap_err();
-  assert!(
-    error
-      .to_string()
-      .contains("Check that the private key matches the certificate")
-  );
+  assert!(matches!(
+    error.downcast_ref::<RequestIdentityError>(),
+    Some(RequestIdentityError::InvalidKey)
+  ));
 }
 
 fn check_archive(name: &str, password: &str) {
@@ -604,17 +603,15 @@ fn mismatched_certificate_key_is_rejected_before_request_client_creation() {
   let certificate = fs::read(fixture("root.pem")).unwrap();
   let key = fs::read(fixture("rsa-pkcs8.pem")).unwrap();
   let error = load("root.pem", "rsa-pkcs8.pem", None).unwrap_err();
-  assert!(
-    error
-      .to_string()
-      .contains("Check that the private key matches the certificate")
-  );
+  assert!(matches!(
+    error.downcast_ref::<RequestIdentityError>(),
+    Some(RequestIdentityError::KeyMismatch)
+  ));
   let error = ClientIdentity::from_data(certificate.into(), Some(key.into()), None).unwrap_err();
-  assert!(
-    error
-      .to_string()
-      .contains("Check that the private key matches the certificate")
-  );
+  assert!(matches!(
+    error.downcast_ref::<RequestIdentityError>(),
+    Some(RequestIdentityError::KeyMismatch)
+  ));
 }
 
 #[test]
@@ -640,7 +637,7 @@ fn pkcs12_rejects_mismatched_and_multiple_identities() {
     let error = ClientIdentity::load(fixture(name).to_str().unwrap(), None, None).unwrap_err();
     match error.downcast_ref::<RequestIdentityError>() {
       Some(RequestIdentityError::AmbiguousPkcs12) => assert!(ambiguous),
-      Some(RequestIdentityError::InvalidCertificate) => assert!(!ambiguous),
+      Some(RequestIdentityError::KeyMismatch) => assert!(!ambiguous),
       other => panic!("{name}: unexpected archive error: {other:?}"),
     }
   }

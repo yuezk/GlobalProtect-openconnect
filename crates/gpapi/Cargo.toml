@@ -8,7 +8,6 @@ license = "MIT"
 [dependencies]
 nix = { version = "0.31", features = ["fs", "signal", "process"], optional = true }
 common = { path = "../common" }
-directories = { workspace = true, optional = true }
 anyhow.workspace = true
 base64.workspace = true
 dns-lookup = { workspace = true, optional = true }
@@ -16,8 +15,10 @@ log.workspace = true
 reqwest.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = "2"
+rustls-platform-verifier = "0.7"
 p12-keystore = "0.4.1"
-sec1 = { version = "0.8.1", default-features = false, features = ["der"] }
+pkcs12 = { version = "=0.2.0-pre.0", default-features = false }
+cms = { version = "=0.3.0-pre.1", default-features = false }
 pem.workspace = true
 pkcs8 = { version = "0.11", features = ["pem", "encryption", "sha1-insecure", "3des", "des-insecure"] }
 x509-cert = { version = "0.3", default-features = false }
@@ -43,7 +44,6 @@ chrono.workspace = true
 humantime.workspace = true
 netdev = { workspace = true, optional = true }
 socket2 = { version = "0.6", features = ["all"], optional = true }
-os_info = { version = "3", default-features = false, optional = true }
 snow.workspace = true
 zeroize = { workspace = true, features = ["serde"] }
 getrandom = "0.4"
@@ -64,7 +64,14 @@ oslog = { version = "0.2", default-features = false, optional = true }
 gtk = { version = "0.18", optional = true }
 
 [target.'cfg(target_os="linux")'.dependencies]
+directories = { workspace = true, optional = true }
 libloading = { version = "0.9", optional = true }
+
+[target.'cfg(target_os="macos")'.dependencies]
+os_info = { version = "3", default-features = false, optional = true }
+
+[target.'cfg(target_os="windows")'.dependencies]
+os_info = { version = "3", default-features = false }
 
 [build-dependencies]
 cc = "1"
@@ -78,8 +85,8 @@ tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 default = ["desktop"]
-desktop = ["tokio/process", "tokio/signal", "dep:directories", "dep:nix", "dep:uzers", "dep:netdev", "dep:os_info", "dep:whoami", "dep:dns-lookup", "dep:socket2", "dep:libloading"]
-tauri = ["desktop", "dep:tauri", "dep:gtk"]
+desktop = ["tokio/process", "tokio/signal", "dep:directories", "dep:nix", "dep:uzers", "dep:netdev", "dep:whoami", "dep:dns-lookup", "dep:socket2", "dep:libloading"]
+tauri = ["desktop", "dep:tauri", "dep:gtk", "dep:os_info"]
 clap = ["desktop", "dep:clap", "dep:clap-verbosity-flag"]
 webview-auth = []
 logger = ["desktop", "dep:env_logger", "dep:log-reload", "dep:oslog"]

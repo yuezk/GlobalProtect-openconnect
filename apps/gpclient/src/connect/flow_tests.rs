@@ -511,3 +511,62 @@ printf '%s\n' '{"success":{"username":"alice","preloginCookie":"new-cookie"}}'
     );
   }
 }
+
+#[tokio::test]
+async fn unsupported_and_malformed_identities_fail_before_password_prompt_or_network_connection() {
+  use gpapi::utils::request::RequestIdentityError;
+  let directory = tempfile::tempdir().unwrap();
+  let malformed = directory.path().join("invalid.p12");
+  std::fs::write(&malformed, b"not a certificate archive").unwrap();
+  let fixtures =
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/gpapi/tests/files/client-identity");
+
+  for (certificate, key, expected) in [
+    (
+      fixtures.join("rsa-pss-cert.pem"),
+      Some(fixtures.join("rsa-pss.pem")),
+      "algorithm",
+    ),
+    (fixtures.join("legacy-RC2-128.p12"), None, "encryption"),
+    (malformed, None, "malformed"),
+  ] {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("https://{}", listener.local_addr().unwrap());
+    let mut argv = vec![
+      "test".to_owned(),
+      server,
+      "--as-gateway".to_owned(),
+      "--certificate".to_owned(),
+      certificate.to_string_lossy().into_owned(),
+    ];
+    if let Some(key) = key {
+      argv.extend(["--sslkey".to_owned(), key.to_string_lossy().into_owned()]);
+    }
+    let args = TestArgs::parse_from(argv).connect;
+    let lock = directory.path().join("client.pid");
+    let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
+    let shared = SharedArgs {
+      ignore_tls_errors: false,
+      lock_file: &lock,
+      verbose: &verbose,
+      log_format: LogFormat::Text,
+    };
+    let handler = ConnectHandler::new(&args, &shared);
+    let error = tokio::time::timeout(Duration::from_secs(2), handler.handle_attempt())
+      .await
+      .expect("identity failure must not wait for a password or server")
+      .unwrap_err();
+    match (expected, error.downcast_ref::<RequestIdentityError>()) {
+      ("algorithm", Some(RequestIdentityError::UnsupportedKeyAlgorithm("RSA-PSS"))) => {}
+      ("encryption", Some(RequestIdentityError::UnsupportedEncryption)) => {}
+      ("malformed", Some(RequestIdentityError::InvalidPkcs12(_) | RequestIdentityError::InvalidCertificate)) => {}
+      _ => panic!("{expected}: unexpected failure {error:#}"),
+    }
+    assert!(
+      tokio::time::timeout(Duration::from_millis(20), listener.accept())
+        .await
+        .is_err(),
+      "{expected}: local identity failure must precede network access"
+    );
+  }
+}

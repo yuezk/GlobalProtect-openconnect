@@ -292,7 +292,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auth"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "anyhow",
  "block2",
@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "browser-launcher"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "anyhow",
  "log",
@@ -911,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "tempfile",
 ]
@@ -2115,7 +2115,7 @@ dependencies = [
 
 [[package]]
 name = "gpapi"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -2124,6 +2124,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap-verbosity-flag",
+ "cms",
  "common",
  "directories",
  "dns-lookup",
@@ -2142,6 +2143,7 @@ dependencies = [
  "oslog",
  "p12-keystore",
  "pem",
+ "pkcs12",
  "pkcs8",
  "pkg-config",
  "proptest",
@@ -2149,7 +2151,7 @@ dependencies = [
  "reqwest",
  "rustls",
  "rustls-pemfile",
- "sec1",
+ "rustls-platform-verifier",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -2174,7 +2176,7 @@ dependencies = [
 
 [[package]]
 name = "gpauth"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "anyhow",
  "auth",
@@ -2193,7 +2195,7 @@ dependencies = [
 
 [[package]]
 name = "gpclient"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2224,7 +2226,7 @@ dependencies = [
 
 [[package]]
 name = "gpgui-helper"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2245,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "gphip"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "anyhow",
  "askama",
@@ -2262,7 +2264,7 @@ dependencies = [
 
 [[package]]
 name = "gpservice"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -2297,7 +2299,7 @@ dependencies = [
 
 [[package]]
 name = "gptunnel"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "gpapi",
  "log",
@@ -2309,7 +2311,7 @@ dependencies = [
 
 [[package]]
 name = "gpvpnc"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "log",
 ]
@@ -3823,7 +3825,7 @@ dependencies = [
 
 [[package]]
 name = "openconnect"
-version = "3.3.0"
+version = "3.3.1"
 dependencies = [
  "autotools",
  "cc",
@@ -4878,16 +4880,6 @@ dependencies = [
  "pbkdf2",
  "salsa20",
  "sha2 0.11.1",
-]
-
-[[package]]
-name = "sec1"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d56d437c2f19203ce5f7122e507831de96f3d2d4d3be5af44a0b0a09d8a80e4d"
-dependencies = [
- "der",
- "zeroize",
 ]
 
 [[package]]

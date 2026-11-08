@@ -201,15 +201,15 @@ pub async fn retrieve_config(
     result = async {
       let res = client.post(&url).form(&request_params.body).send().await.map_err(|e| {
         warn!("Network error: {:?}", e);
-        match ServerTlsError::from_request(&server_url, &e) {
-          Some(tls) => anyhow::anyhow!(tls),
+        match ServerTlsError::from_request(&server_url, &e, gp_params.has_client_identity()) {
+          Some(tls) => tls,
           None => anyhow::anyhow!(PortalError::NetworkError(e)),
         }
       })?;
 
       parse_gp_response(res).await.or_else(|err| {
-        if let Some(tls) = ServerTlsError::from_request(&server_url, &err) {
-          return Err(anyhow::anyhow!(tls));
+        if let Some(tls) = ServerTlsError::from_request(&server_url, &err, gp_params.has_client_identity()) {
+          return Err(tls);
         }
         if gp_params.os_profile().client_os() == crate::os_profile::ClientOs::Ios && err.is_authentication_rejection() {
           return Err(anyhow::anyhow!(crate::error::AuthenticationRejected));
@@ -274,15 +274,15 @@ async fn retrieve_csc_config(
 
   let res = client.post(&url).form(&params).send().await.map_err(|e| {
     warn!("Network error: {:?}", e);
-    match ServerTlsError::from_request(&server_url, &e) {
-      Some(tls) => anyhow::anyhow!(tls),
+    match ServerTlsError::from_request(&server_url, &e, gp_params.has_client_identity()) {
+      Some(tls) => tls,
       None => anyhow::anyhow!(PortalError::NetworkError(e)),
     }
   })?;
 
   parse_gp_response(res).await.or_else(|err| {
-    if let Some(tls) = ServerTlsError::from_request(&server_url, &err) {
-      return Err(anyhow::anyhow!(tls));
+    if let Some(tls) = ServerTlsError::from_request(&server_url, &err, gp_params.has_client_identity()) {
+      return Err(tls);
     }
     if err.status == StatusCode::NOT_FOUND {
       bail!(PortalError::ConfigError("CSC config endpoint not found".to_string()));
