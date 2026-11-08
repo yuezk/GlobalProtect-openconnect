@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.3.1
+
+### Improved
+
+- Made client certificate errors clearer and added more detail to gateway sign-in logs.
+
+### Fixed
+
+- Restored support for client certificates with private extensions and legacy RC4-encrypted PKCS#12 files.
+- Fixed certificate chain selection for PKCS#12 files containing multiple possible issuers.
+- Fixed certificate validation and recovery guidance in both desktop interfaces.
+- Fixed Native Shell Settings windows failing to activate from the macOS menu or reopening on the wrong page.
+- Fixed keyboard navigation and Escape handling in the macOS Native Shell interface.
+- Fixed AUR package builds and dependency metadata.
+
 ## 3.3.0
 
 ### Added
