@@ -24,7 +24,6 @@ base64 = { version = "0.23", default-features = false, features = ["std"] }
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap-verbosity-flag = "3"
-ctrlc = "3.4"
 directories = "6.0"
 dns-lookup = "4.0.2"
 env_logger = "0.11"

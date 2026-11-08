@@ -18,7 +18,7 @@ use crate::{
   gp_params::GpParams,
   params::gateway_login::{self, GatewayLoginInput},
   session::GatewayAuthentication,
-  utils::{normalize_server, parse_gp_response, remove_url_scheme, xml::ElementExt},
+  utils::{normalize_server, parse_gp_response, redact::redact_uri, remove_url_scheme, xml::ElementExt},
 };
 
 pub enum GatewayLogin {
@@ -181,7 +181,7 @@ async fn receive_gateway_login(
   log_gateway_login_context(context, client_ip, gp_params);
 
   let res = client
-    .post(login_url)
+    .post(&login_url)
     .form(&request_params.body)
     .send()
     .await
@@ -200,14 +200,30 @@ async fn receive_gateway_login(
     .map(<[u8]>::to_vec);
   let endpoint = res.remote_addr();
   let url = res.url().clone();
+  let http_version = res.version();
+  let content_type = res.headers().get(reqwest::header::CONTENT_TYPE).cloned();
   let res = parse_gp_response(res).await.map_err(|err| {
+    // Redirect paths and query strings can contain authentication tokens. Log
+    // only the redacted origin and whether the response is from the login path.
+    warn!(
+      "Gateway login response failed: status={}, reason={}, http={:?}, origin={}, port={:?}, redirected={}, login_endpoint={}, content_type={:?}, client_certificate={}, ignore_tls_errors={}",
+      err.status,
+      err.reason,
+      http_version,
+      redact_uri(&url.origin().ascii_serialization()),
+      url.port_or_known_default(),
+      url.as_str() != login_url,
+      url.path() == "/ssl-vpn/login.esp",
+      content_type,
+      gp_params.has_client_identity(),
+      gp_params.ignore_tls_errors(),
+    );
     if let Some(tls) = crate::error::ServerTlsError::from_request(origin, &err, gp_params.has_client_identity()) {
       return tls;
     }
     if gp_params.os_profile().client_os() == crate::os_profile::ClientOs::Ios && err.is_authentication_rejection() {
       return anyhow::anyhow!(crate::error::AuthenticationRejected);
     }
-    warn!("Gateway login response failed: {}", err.reason);
     anyhow::anyhow!("Gateway login error: {}", err.reason)
   })?;
 
@@ -427,6 +443,85 @@ mod tests {
         .build(crate::os_profile::test_snapshot()),
     )
     .build()
+  }
+
+  #[tokio::test]
+  async fn failed_login_logs_http_context_without_credentials_or_redirect_tokens() {
+    use std::cell::RefCell;
+
+    thread_local! {
+      static MESSAGES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+    struct Logger;
+    impl log::Log for Logger {
+      fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+        true
+      }
+
+      fn log(&self, record: &log::Record<'_>) {
+        let message = record.args().to_string();
+        if message.starts_with("Gateway login response failed:") {
+          MESSAGES.with_borrow_mut(|messages| messages.push(message));
+        }
+      }
+
+      fn flush(&self) {}
+    }
+    log::set_logger(&Logger).unwrap();
+    log::set_max_level(log::LevelFilter::Warn);
+
+    for (status, reason, redirected) in [
+      (403, None, false),
+      (502, None, true),
+      (401, Some("access denied"), false),
+    ] {
+      let body = "<html>response-body-secret</html>";
+      let mut responses = Vec::new();
+      if redirected {
+        responses.push(
+          "HTTP/1.1 307 Temporary Redirect\r\nLocation: /path-secret?token=query-secret\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
+        );
+      }
+      let reason_header = reason
+        .map(|reason| format!("x-private-pan-globalprotect: {reason}\r\n"))
+        .unwrap_or_default();
+      responses.push(format!(
+        "HTTP/1.1 {status} Error\r\nContent-Type: text/html\r\nSet-Cookie: cookie-secret\r\n{reason_header}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+      ));
+      let (_, origin, server) = crate::session::transport::tests::login_gateway(responses).await;
+      let mut client = GatewayLoginClient::new(origin.as_str(), test_params()).unwrap();
+      let credential = crate::credential::PasswordCredential::new("username-secret", "password-secret").into();
+      let error = client
+        .login(&credential, None, &CancellationToken::new())
+        .await
+        .err()
+        .unwrap();
+      server.await.unwrap();
+
+      assert_eq!(
+        error.to_string(),
+        format!("Gateway login error: {}", reason.unwrap_or("<none>"))
+      );
+      let messages = MESSAGES.with_borrow_mut(std::mem::take);
+      assert_eq!(messages.len(), 1);
+      let message = &messages[0];
+      for expected in [
+        format!("status={status}"),
+        format!("reason={}", reason.unwrap_or("<none>")),
+        format!("port={:?}", origin.port()),
+        format!("redirected={redirected}"),
+        format!("login_endpoint={}", !redirected),
+        "http=HTTP/1.1".into(),
+        "content_type=Some(\"text/html\")".into(),
+        "client_certificate=false".into(),
+        "ignore_tls_errors=false".into(),
+      ] {
+        assert!(message.contains(&expected), "missing {expected}: {message}");
+      }
+      assert!(!message.contains("secret"), "sensitive data in diagnostic: {message}");
+      assert!(!message.contains("127.0.0.1"), "unredacted origin: {message}");
+    }
   }
 
   #[tokio::test]
