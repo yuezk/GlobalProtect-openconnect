@@ -87,7 +87,8 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ${{ vars.MACOS_RUNNER || 'macos-15' }}
+    # Feed verification runs host tools, so it can use Intel runner capacity.
+    runs-on: macos-26-intel
     environment: macos-release
     permissions:
       contents: write
