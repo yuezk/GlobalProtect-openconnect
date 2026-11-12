@@ -28,12 +28,7 @@ options=('!strip' '!lto')
 pkgver() {
   cd "${_pkgname_prefix}"
 
-  local version
-  version="$(awk -F '"' '
-    /^\[workspace.package\]$/ { in_workspace = 1; next }
-    in_workspace && /^version = / { print $2; exit }
-  ' Cargo.toml)"
-  printf '%s.r%s.g%s\n' "$version" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
 }
 
 prepare() {

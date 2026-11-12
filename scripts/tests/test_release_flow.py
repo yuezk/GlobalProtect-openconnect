@@ -119,7 +119,7 @@ class SourceSelectionTests(unittest.TestCase):
 
 
 class PromotionTests(unittest.TestCase):
-    def test_sources_and_flake_are_committed_together_preserving_main_work(self):
+    def test_promotion_keeps_tag_history_and_adds_flake_commit(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             repo, origin, artifact = root / 'repo', root / 'origin.git', root / 'artifact'
@@ -149,7 +149,8 @@ class PromotionTests(unittest.TestCase):
             self.assertEqual(git(repo, 'show', f'{old}:Cargo.toml'), '[workspace.package]\nversion = "3.1.0"')
             self.assertTrue((repo / 'infrastructure').exists())
             self.assertTrue((repo / 'feature').exists())
-            self.assertEqual(git(repo, 'rev-list', '--parents', '-1', 'HEAD').split()[1:], [main, release])
+            self.assertEqual(git(repo, 'rev-list', '--parents', '-1', 'HEAD^').split()[1:], [main, release])
+            self.assertEqual(git(repo, 'diff', '--name-only', 'HEAD^', 'HEAD'), 'flake.nix')
             self.assertEqual(git(repo, 'status', '--porcelain'), '')
 
 
