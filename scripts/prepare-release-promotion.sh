@@ -36,13 +36,13 @@ PY
 
 branch="chore/promote-$tag"
 git switch -c "$branch" origin/main
-git merge --no-commit --no-ff "$release_sha"
+git merge --ff --no-edit "$release_sha"
 cp "$artifact_dir/flake.nix" "$artifact_dir/flake.lock" .
 python3 "$script_dir/validate-release-version.py" --version "${tag#v}"
 # Check against Cargo too: overriding the expectation above is only for artifacts.
 python3 "$script_dir/validate-release-version.py"
 git add flake.nix flake.lock
-if ! git diff --cached --quiet || [[ -f "$(git rev-parse --git-path MERGE_HEAD)" ]]; then
-  git commit -m "release: promote $tag sources and Nix packages together"
+if ! git diff --cached --quiet; then
+  git commit -m "release: validate Nix packages for $tag"
 fi
-echo "Prepared $branch. Review the candidate, push normally, and open one PR against main."
+echo "Prepared $branch. Open one PR against main and use a regular merge to preserve $tag in main's history."
