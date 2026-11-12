@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.4.0
+
+### Added
+
+- Added gateway selection and switching directly from the system tray or macOS menu bar.
+
+### Improved
+
+- Added a Retry Activation action to recover from temporary license activation failures without re-entering the key.
+- Made sign-in prompts and connection errors visible when connecting or switching gateways from the tray.
+
+### Fixed
+
+- Fixed a Native Shell crash after license activation.
+- Fixed the macOS Tauri interface opening unexpectedly after signing in from the tray while the main window was hidden.
+- Fixed the Native Shell update button text becoming unreadable when pressed.
+- Fixed Linux Nix builds using unavailable WebKitGTK dependencies.
+
 ## 3.3.1
 
 ### Improved
