@@ -1,6 +1,25 @@
 name: Build Windows package
 
 on:
+  workflow_dispatch:
+    inputs:
+      gp_ref:
+        type: string
+        required: true
+      gpgui_ref:
+        type: string
+        required: true
+      channel:
+        type: choice
+        options: [snapshot, stable]
+        default: snapshot
+      build:
+        type: string
+        required: true
+      architecture:
+        type: choice
+        options: [x64, arm64]
+        required: true
   workflow_call:
     inputs:
       gp_ref:
@@ -15,6 +34,9 @@ on:
       build:
         type: string
         required: true
+      architecture:
+        type: string
+        required: true
     secrets:
       GH_PAT:
         required: true
@@ -26,9 +48,10 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: ${{ inputs.architecture == 'arm64' && 'windows-11-arm' || 'windows-2022' }}
     timeout-minutes: 120
     env:
+      BUILD_ARCHITECTURE: ${{ inputs.architecture }}
       CARGO_INCREMENTAL: '0'
       CARGO_TARGET_DIR: ${{ github.workspace }}/target-windows
       CARGO_BUILD_JOBS: '2'
@@ -37,6 +60,19 @@ jobs:
       GPGUI_WINDOWS_UPDATE_PUBLIC_KEY: ${{ vars.WINDOWS_UPDATE_PUBLIC_KEY }}
       GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
     steps:
+      - name: Select native build tools
+        id: native
+        shell: pwsh
+        run: |
+          if ($env:BUILD_ARCHITECTURE -eq 'arm64') {
+            'msystem=CLANGARM64' >> $env:GITHUB_OUTPUT
+            'subsystem=clangarm64' >> $env:GITHUB_OUTPUT
+            'packages=mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-pkgconf mingw-w64-clang-aarch64-gnutls mingw-w64-clang-aarch64-libxml2 mingw-w64-clang-aarch64-lz4' >> $env:GITHUB_OUTPUT
+          } elseif ($env:BUILD_ARCHITECTURE -eq 'x64') {
+            'msystem=UCRT64' >> $env:GITHUB_OUTPUT
+            'subsystem=ucrt64' >> $env:GITHUB_OUTPUT
+            'packages=mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-gnutls mingw-w64-ucrt-x86_64-libxml2 mingw-w64-ucrt-x86_64-lz4' >> $env:GITHUB_OUTPUT
+          } else { throw 'Unsupported Windows architecture.' }
       - uses: actions/checkout@v6
         with:
           path: .ci
@@ -59,13 +95,11 @@ jobs:
       - uses: msys2/setup-msys2@v2
         id: msys2
         with:
-          msystem: UCRT64
+          msystem: ${{ steps.native.outputs.msystem }}
           update: true
           install: >-
             base-devel autoconf automake libtool gettext git
-            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-gnutls mingw-w64-ucrt-x86_64-libxml2
-            mingw-w64-ucrt-x86_64-lz4
+            ${{ steps.native.outputs.packages }}
       - name: Prepare pinned installer and driver inputs
         shell: pwsh
         run: |
@@ -88,8 +122,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $prefix = Join-Path $env:RUNNER_TEMP 'native-windows'
-          & ./source/gp/scripts/build-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -MsysSubsystem ucrt64 -Prefix $prefix
-          & ./source/gp/scripts/test-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -MsysSubsystem ucrt64 -Prefix $prefix
+          & ./source/gp/scripts/build-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -MsysSubsystem ${{ steps.native.outputs.subsystem }} -Prefix $prefix
+          & ./source/gp/scripts/test-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -MsysSubsystem ${{ steps.native.outputs.subsystem }} -Prefix $prefix
           "OPENCONNECT_WINDOWS_PREFIX=$prefix" >> $env:GITHUB_ENV
       - name: Build and package the matching Windows runtime
         shell: pwsh
@@ -101,7 +135,7 @@ jobs:
           # Compiler diagnostics may contain private GUI source. Keep them on the runner.
           try {
             & ./source/gpgui/scripts/build-windows.ps1 -Profile Release `
-              -NativePrefix $env:OPENCONNECT_WINDOWS_PREFIX -MsysRoot $env:MSYS_ROOT -MsysSubsystem ucrt64 `
+              -NativePrefix $env:OPENCONNECT_WINDOWS_PREFIX -MsysRoot $env:MSYS_ROOT -MsysSubsystem ${{ steps.native.outputs.subsystem }} `
               -WintunDirectory (Join-Path $env:WINDOWS_BUILD_TOOLS 'wintun') `
               -MakeNsis (Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe') `
               -OutputDirectory "$env:GITHUB_WORKSPACE/artifacts" *> $log
@@ -129,13 +163,19 @@ jobs:
             Remove-Item $key -Force -ErrorAction SilentlyContinue
             Remove-Item artifacts/tools -Recurse -Force -ErrorAction SilentlyContinue
           }
+      - name: Test native installer and uninstaller
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem artifacts -Filter '*-setup.exe')
+          if ($installer.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
+          & ./source/gp/scripts/test-windows-installer.ps1 -Installer $installer[0].FullName -Architecture $env:BUILD_ARCHITECTURE -Build $env:GPGUI_BUILD_VERSION
       - uses: actions/upload-artifact@v7
         with:
-          name: artifact-gpgui-windows-x64
+          name: artifact-gpgui-windows-${{ inputs.architecture }}
           path: |
             artifacts/*.exe
             artifacts/*.sig
             artifacts/*.sha256
             artifacts/*.zip
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7

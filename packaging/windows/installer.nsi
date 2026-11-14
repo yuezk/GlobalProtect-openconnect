@@ -12,6 +12,9 @@ RequestExecutionLevel admin
 !ifndef PRODUCT_VERSION
   !error "PRODUCT_VERSION is required"
 !endif
+!ifndef TARGET_ARCH
+  !define TARGET_ARCH "x64"
+!endif
 !ifndef BUILD_VERSION
   !define BUILD_VERSION "${PRODUCT_VERSION}.0"
 !endif
@@ -43,10 +46,21 @@ ShowUninstDetails show
 !insertmacro MUI_LANGUAGE "English"
 
 Function .onInit
-  ${IfNot} ${RunningX64}
-    MessageBox MB_OK|MB_ICONSTOP "GP Connect requires 64-bit Windows."
+!if "${TARGET_ARCH}" == "arm64"
+  ${IfNot} ${IsNativeARM64}
+    MessageBox MB_OK|MB_ICONSTOP "This GP Connect installer requires Windows 11 on ARM64." /SD IDOK
+    SetErrorLevel 1
     Abort
   ${EndIf}
+!else if "${TARGET_ARCH}" == "x64"
+  ${IfNot} ${IsNativeAMD64}
+    MessageBox MB_OK|MB_ICONSTOP "This GP Connect installer requires x64 Windows." /SD IDOK
+    SetErrorLevel 1
+    Abort
+  ${EndIf}
+!else
+  !error "Unsupported TARGET_ARCH"
+!endif
   SetRegView 64
 FunctionEnd
 

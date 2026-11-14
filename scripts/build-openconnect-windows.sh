@@ -13,7 +13,12 @@ cd "$source_dir"
 autoreconf -fi
 mkdir -p "$build_dir"
 cd "$build_dir"
-"$source_dir/configure" --host=x86_64-w64-mingw32 --prefix="$prefix" \
+host=x86_64-w64-mingw32
+if [[ $subsystem == clangarm64 ]]; then
+  host=aarch64-w64-mingw32
+  export CC=clang AR=llvm-ar RANLIB=llvm-ranlib NM=llvm-nm
+fi
+"$source_dir/configure" --host="$host" --prefix="$prefix" \
   --enable-shared --disable-static --disable-nls --disable-docs --disable-dsa-tests \
   --without-libproxy --without-stoken --without-libpcsclite --without-libpskc \
   --without-gssapi --with-gnutls --without-openssl --with-gnutls-tss2=no \

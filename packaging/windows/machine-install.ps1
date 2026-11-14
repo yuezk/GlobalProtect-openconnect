@@ -232,11 +232,15 @@ try {
       throw 'Use the Windows installer to update this installation.'
     }
     if (!$Version) { $Version = $info.version }
-    if ($info.product -ne 'GP Connect' -or $info.architecture -ne 'x64' -or !$Version -or $info.version -ne $Version) {
+    $architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+    if ($info.product -ne 'GP Connect' -or $info.architecture -notin @('x64','arm64') -or $info.architecture -ne $architecture -or !$Version -or $info.version -ne $Version) {
       throw 'The package version or architecture does not match this installer.'
     }
     if (![Environment]::Is64BitProcess -or [Environment]::OSVersion.Version.Build -lt 19041) {
-      throw 'GP Connect requires Windows 10 build 19041 or newer, x64.'
+      throw 'GP Connect requires Windows 10 build 19041 or newer.'
+    }
+    if ($architecture -eq 'arm64' -and [Environment]::OSVersion.Version.Build -lt 22000) {
+      throw 'GP Connect for ARM64 requires Windows 11.'
     }
     $payload = @(Get-ChildItem -LiteralPath $source -Force | Where-Object {
       ($_.PSIsContainer -and $_.Name -eq 'licenses') -or
