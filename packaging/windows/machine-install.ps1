@@ -8,6 +8,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+  # A PowerShell 7 caller can pass incompatible modules to Windows PowerShell.
+  $env:PSModulePath = Join-Path $PSHOME 'Modules'
+}
 if (![Environment]::Is64BitProcess) { throw 'Run the GP Connect installer with 64-bit PowerShell.' }
 $destination = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'GP Connect'
 $state = Join-Path $env:ProgramData 'GP Connect'
@@ -276,7 +280,12 @@ try {
       $files = @($item)
       if ($item.PSIsContainer) { $files = @(Get-ChildItem -LiteralPath $item.FullName -File -Recurse) }
       foreach ($file in $files) {
-        $relative = $file.FullName.Substring($source.Length).TrimStart('\')
+        $relative = $file.Name
+        if ($item.PSIsContainer) {
+          # Enumerated paths share the same expanded spelling, including 8.3 temp paths.
+          $child = $file.FullName.Substring($item.FullName.Length).TrimStart('\')
+          $relative = Join-Path $item.Name $child
+        }
         $target = Join-Path $stage $relative
         $parent = Split-Path $target -Parent
         if (!(Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
