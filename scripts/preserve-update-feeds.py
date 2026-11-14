@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlparse
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
 FEEDS = ("appcast.xml", "latest.json", "windows/latest.json", "windows/stable/appcast.xml", "windows/snapshot/appcast.xml")
@@ -18,7 +18,9 @@ def preserve(base_url: str, directory: Path, exclude: list[str]) -> None:
         if relative in exclude:
             continue
         try:
-            with urlopen(base_url.rstrip("/") + "/" + relative, timeout=30) as response:
+            request = Request(base_url.rstrip("/") + "/" + relative,
+                headers={"User-Agent": "GPConnectReleasePublisher/1.0"})
+            with urlopen(request, timeout=30) as response:
                 data = response.read(1024 * 1024 + 1)
         except HTTPError as error:
             if error.code == 404:
