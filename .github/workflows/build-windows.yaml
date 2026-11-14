@@ -59,13 +59,13 @@ jobs:
       - uses: msys2/setup-msys2@v2
         id: msys2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
             base-devel autoconf automake libtool gettext git
-            mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-gnutls mingw-w64-x86_64-libxml2
-            mingw-w64-x86_64-lz4
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gnutls mingw-w64-ucrt-x86_64-libxml2
+            mingw-w64-ucrt-x86_64-lz4
       - name: Prepare pinned installer and driver inputs
         shell: pwsh
         run: |
@@ -73,11 +73,8 @@ jobs:
           if (!$env:GPGUI_WINDOWS_UPDATE_PUBLIC_KEY -or !$env:GPGUI_LICENSE_SIGNING_KEYS) { throw 'Configure the Windows update and licensing public keys.' }
           $tools = Join-Path $env:RUNNER_TEMP 'windows-tools'
           New-Item -ItemType Directory -Force $tools | Out-Null
-          $nsis = Join-Path $tools 'nsis.zip'
-          Invoke-WebRequest 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12.zip' -OutFile $nsis
-          if ((Get-FileHash $nsis).Hash -ne '56581F90DB321581C5381193D796FFFCF2D24B2F8FED2160A6C6A3BAA67F2C4F') { throw 'NSIS checksum mismatch.' }
-          Expand-Archive $nsis $tools
-          Remove-Item $nsis
+          choco install nsis --version=3.12.0 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Installing NSIS 3.12 failed.' }
           $wintun = Join-Path $tools 'wintun.zip'
           Invoke-WebRequest 'https://www.wintun.net/builds/wintun-0.14.1.zip' -OutFile $wintun
           if ((Get-FileHash $wintun).Hash -ne '07C256185D6EE3652E09FA55C0B673E2624B565E02C4B9091C79CA7D2F24EF51') { throw 'Wintun checksum mismatch.' }
@@ -91,8 +88,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $prefix = Join-Path $env:RUNNER_TEMP 'native-windows'
-          & ./source/gp/scripts/build-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -Prefix $prefix
-          & ./source/gp/scripts/test-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -Prefix $prefix
+          & ./source/gp/scripts/build-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -MsysSubsystem ucrt64 -Prefix $prefix
+          & ./source/gp/scripts/test-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -MsysSubsystem ucrt64 -Prefix $prefix
           "OPENCONNECT_WINDOWS_PREFIX=$prefix" >> $env:GITHUB_ENV
       - name: Build and package the matching Windows runtime
         shell: pwsh
@@ -104,9 +101,9 @@ jobs:
           # Compiler diagnostics may contain private GUI source. Keep them on the runner.
           try {
             & ./source/gpgui/scripts/build-windows.ps1 -Profile Release `
-              -NativePrefix $env:OPENCONNECT_WINDOWS_PREFIX -MsysRoot $env:MSYS_ROOT `
+              -NativePrefix $env:OPENCONNECT_WINDOWS_PREFIX -MsysRoot $env:MSYS_ROOT -MsysSubsystem ucrt64 `
               -WintunDirectory (Join-Path $env:WINDOWS_BUILD_TOOLS 'wintun') `
-              -MakeNsis (Join-Path $env:WINDOWS_BUILD_TOOLS 'nsis-3.12/Bin/makensis.exe') `
+              -MakeNsis (Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe') `
               -OutputDirectory "$env:GITHUB_WORKSPACE/artifacts" *> $log
           } catch { throw 'Windows compilation or packaging failed; private diagnostics remain on the runner.' }
           Write-Host 'Windows compilation and packaging passed.'

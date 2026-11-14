@@ -528,15 +528,18 @@ jobs:
             --channel "$CHANNEL" \
             --archive-url "https://github.com/$REPOSITORY/releases/download/$RELEASE_TAG/$ARCHIVE_NAME"
 
-      - name: Deploy update feed worker
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Preserve other platform feeds
         run: |
           python3 scripts/preserve-update-feeds.py \
             --base-url "${FEED_URL%/appcast.xml}" \
             --directory gpgui/apps/update-feed-worker/public \
             --exclude appcast.xml --exclude latest.json
+
+      - name: Deploy update feed worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
           trap 'status=$?; if [ "$status" -ne 0 ]; then echo "::error::Private operation failed; diagnostics suppressed."; fi' EXIT
           (
             set -euo pipefail
