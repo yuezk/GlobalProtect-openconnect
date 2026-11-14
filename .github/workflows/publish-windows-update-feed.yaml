@@ -146,7 +146,17 @@ jobs:
           foreach ($relative in $feeds) {
             $expected = [IO.File]::ReadAllBytes((Join-Path 'gpgui/apps/update-feed-worker/public/windows' $relative))
             $downloaded = Join-Path $env:RUNNER_TEMP ('published-' + ($relative -replace '/', '-'))
-            Invoke-WebRequest "https://updates.gpgui.com/windows/$relative" -OutFile $downloaded
-            $actual = [IO.File]::ReadAllBytes($downloaded)
-            if ([Convert]::ToBase64String($expected) -ne [Convert]::ToBase64String($actual)) { throw "Published feed does not match: $relative" }
+            $matched = $false
+            foreach ($attempt in 1..10) {
+              try {
+                Invoke-WebRequest "https://updates.gpgui.com/windows/$relative" -UserAgent 'GPConnectReleasePublisher/1.0' -OutFile $downloaded
+                $actual = [IO.File]::ReadAllBytes($downloaded)
+                $matched = [Convert]::ToBase64String($expected) -eq [Convert]::ToBase64String($actual)
+              } catch {
+                Write-Host "Waiting for published feed: $relative ($attempt/10)"
+              }
+              if ($matched) { break }
+              if ($attempt -lt 10) { Start-Sleep -Seconds 3 }
+            }
+            if (!$matched) { throw "Published feed does not match: $relative" }
           }
