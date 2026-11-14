@@ -49,9 +49,15 @@ impl RecoveryState {
   }
 }
 
+#[cfg(unix)]
 pub(crate) fn is_crash_exit(status: ExitStatus) -> bool {
   use std::os::unix::process::ExitStatusExt;
   !status.success() && !matches!(status.signal(), Some(1 | 2 | 9 | 15))
+}
+
+#[cfg(windows)]
+pub(crate) fn is_crash_exit(status: ExitStatus) -> bool {
+  status.code().is_some_and(|code| (code as u32) >= 0xC0000000)
 }
 
 pub fn eligible(command: &Command) -> bool {

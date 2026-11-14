@@ -6,7 +6,6 @@ edition.workspace = true
 license = "MIT"
 
 [dependencies]
-nix = { version = "0.31", features = ["fs", "signal", "process"], optional = true }
 common = { path = "../common" }
 anyhow.workspace = true
 base64.workspace = true
@@ -35,7 +34,6 @@ thiserror.workspace = true
 chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
 url.workspace = true
 regex.workspace = true
-uzers = { workspace = true, optional = true }
 serde_urlencoded.workspace = true
 md5.workspace = true
 sha2.workspace = true
@@ -90,3 +88,13 @@ tauri = ["desktop", "dep:tauri", "dep:gtk", "dep:os_info"]
 clap = ["desktop", "dep:clap", "dep:clap-verbosity-flag"]
 webview-auth = []
 logger = ["desktop", "dep:env_logger", "dep:log-reload", "dep:oslog"]
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["fs", "signal", "process"], optional = true }
+uzers = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_System_Threading", "Win32_System_Services", "Win32_Globalization", "Win32_System_Environment", "Win32_System_JobObjects", "Win32_System_IO"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61", features = ["Win32_UI_Shell"] }

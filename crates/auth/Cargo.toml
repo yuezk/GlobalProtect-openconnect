@@ -20,7 +20,6 @@ browser-launcher = { path = "../browser-launcher", default-features = false, fea
 tiny_http = { version = "0.12", optional = true }
 tempfile = { workspace = true, optional = true }
 uuid = { version = "1", optional = true, features = ["v4"] }
-uzers = { workspace = true, optional = true }
 
 # Webview auth dependencies
 tauri = { workspace = true, optional = true }
@@ -28,6 +27,7 @@ regex = { workspace = true, optional = true }
 tokio-util = { workspace = true, optional = true }
 html-escape = { version = "0.3", optional = true }
 url = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))'.dependencies]
 webkit2gtk = { version = "2", optional = true }
@@ -60,6 +60,9 @@ webview-auth = [
   "dep:tokio-util",
   "dep:html-escape",
   "dep:url",
+  "dep:serde_json",
+  "dep:webview2-com",
+  "dep:windows",
   "dep:gtk",
   "dep:webkit2gtk",
   "dep:block2",
@@ -94,3 +97,15 @@ release-devtools = ["webview-auth", "tauri/devtools"]
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+uzers = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+# Child webviews let the Windows host own layout beside native controls.
+tauri = { workspace = true, optional = true, features = ["unstable"] }
+webview2-com = { version = "0.39", optional = true }
+windows = { version = "0.62", optional = true, features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_UI_Controls", "Win32_UI_HiDpi", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+dunce = "1"
+winreg = "0.55"
+common = { path = "../common" }

@@ -10,6 +10,7 @@ pub enum AnchorSource {
   UnixMac,
   UnixRandom,
   MacosIokit,
+  WindowsSmbios,
 }
 
 impl From<AnchorSource> for u8 {
@@ -18,6 +19,7 @@ impl From<AnchorSource> for u8 {
       AnchorSource::UnixMac => 1,
       AnchorSource::UnixRandom => 2,
       AnchorSource::MacosIokit => 3,
+      AnchorSource::WindowsSmbios => 4,
     }
   }
 }
@@ -41,6 +43,7 @@ impl TryFrom<u8> for AnchorSource {
       1 => Ok(Self::UnixMac),
       2 => Ok(Self::UnixRandom),
       3 => Ok(Self::MacosIokit),
+      4 => Ok(Self::WindowsSmbios),
       value => Err(InvalidAnchorSource(value)),
     }
   }
@@ -65,6 +68,7 @@ impl DeviceAnchor {
       AnchorSource::UnixMac => b"gp-device-anchor:v1:unix-mac:".as_slice(),
       AnchorSource::UnixRandom => b"gp-device-anchor:v1:unix-random:".as_slice(),
       AnchorSource::MacosIokit => b"gp-device-anchor:v1:macos-platform-uuid:".as_slice(),
+      AnchorSource::WindowsSmbios => b"gp-device-anchor:v1:windows-smbios-uuid:".as_slice(),
     };
     let mut input = domain.to_vec();
     input.extend_from_slice(seed.as_ref());
@@ -81,7 +85,7 @@ mod tests {
 
   #[test]
   fn preserves_existing_hardware_ids_for_all_sources() {
-    let cases: [(AnchorSource, &[u8], &str); 3] = [
+    let cases: [(AnchorSource, &[u8], &str); 4] = [
       (
         AnchorSource::UnixMac,
         &[0, 17, 34, 51, 68, 85],
@@ -96,6 +100,11 @@ mod tests {
         AnchorSource::MacosIokit,
         b"12345678-1234-5678-9abc-def012345678",
         "K1KMtAwiOiXKQvQuRmTDKPA6-ZPF5QKUWZzmvRzeP34",
+      ),
+      (
+        AnchorSource::WindowsSmbios,
+        b"12345678-1234-5678-9abc-def012345678",
+        "C843jG-lDX91Tab02VelrMJl_OmOji_pCtNWilwzW5s",
       ),
     ];
     for (source, seed, expected) in cases {
@@ -124,12 +133,17 @@ mod tests {
     assert_eq!(serde_json::to_string(&AnchorSource::UnixMac).unwrap(), "1");
     assert_eq!(serde_json::to_string(&AnchorSource::UnixRandom).unwrap(), "2");
     assert_eq!(serde_json::to_string(&AnchorSource::MacosIokit).unwrap(), "3");
+    assert_eq!(serde_json::to_string(&AnchorSource::WindowsSmbios).unwrap(), "4");
+    assert_eq!(
+      serde_json::from_str::<AnchorSource>("4").unwrap(),
+      AnchorSource::WindowsSmbios
+    );
     assert_eq!(
       serde_json::from_str::<AnchorSource>("1").unwrap(),
       AnchorSource::UnixMac
     );
     assert!(serde_json::from_str::<AnchorSource>("0").is_err());
-    assert!(serde_json::from_str::<AnchorSource>("4").is_err());
+    assert!(serde_json::from_str::<AnchorSource>("5").is_err());
     assert!(serde_json::from_str::<AnchorSource>(r#""unix_mac""#).is_err());
   }
 }

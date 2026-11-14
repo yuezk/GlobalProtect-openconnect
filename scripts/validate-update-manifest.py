@@ -10,7 +10,7 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
 
-ALLOWED_PLATFORMS = {"linux", "freebsd", "openbsd"}
+ALLOWED_PLATFORMS = {"linux", "freebsd", "openbsd", "windows"}
 SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 BUILD = re.compile(r"^(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*)){0,2}$")
 EXPECTED_TOP_LEVEL_KEYS = {"schemaVersion", "stable", "snapshot"}
@@ -192,7 +192,7 @@ def main() -> None:
     generate_parser.add_argument("--channel", choices=("stable", "snapshot"), required=True)
     generate_parser.add_argument("--version", required=True)
     generate_parser.add_argument("--platform", action="append", choices=sorted(ALLOWED_PLATFORMS),
-                                 help="Published Unix target; repeat for multiple targets (default: all)")
+                                 help="Published target; repeat for multiple targets (default: Unix targets)")
     generate_parser.add_argument("--build")
     generate_parser.add_argument("--released-at", required=True)
     generate_parser.add_argument("--highlights-file", required=True, type=Path)

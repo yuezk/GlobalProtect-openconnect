@@ -570,11 +570,14 @@ fn detect_ufw(commands: &CollectorCommands<'_>) -> io::Result<Option<UfwInfo>> {
   let Some(ufw) = commands.resolve("ufw") else {
     return Ok(None);
   };
+  #[cfg(unix)]
   let output = if uzers::get_effective_uid() == 0 {
     commands.run_path(&ufw, &["status"])?
   } else {
     commands.run("sudo", &["-n", &ufw.to_string_lossy(), "status"])?
   };
+  #[cfg(windows)]
+  let output = commands.run_path(&ufw, &["status"])?;
   let Some(output) = output.filter(|output| output.status.success()) else {
     return Ok(None);
   };

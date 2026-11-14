@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use anyhow::{Context, bail};
 use clap::Parser;
-use common::constants::GP_SERVICE_LOCK_FILE;
+use common::paths::service_lock_file;
 use gpapi::clap::InfoLevelVerbosity;
 use gpapi::logger;
 #[cfg(debug_assertions)]
@@ -25,14 +25,7 @@ use crate::{
   request_dispatcher::RequestDispatcher, session_registry::SessionRegistry, vpn_task::VpnTask, ws_server::WsServer,
 };
 
-const VERSION: &str = concat!(
-  env!("CARGO_PKG_VERSION"),
-  " (",
-  env!("GPSERVICE_GIT_COMMIT"),
-  " ",
-  compile_time::date_str!(),
-  ")"
-);
+use crate::VERSION;
 
 #[cfg(target_os = "macos")]
 struct RedactingMacosLogger {
@@ -271,7 +264,7 @@ impl Cli {
       return Ok(dev_service_lock_file_path(socket));
     }
 
-    Ok(PathBuf::from(GP_SERVICE_LOCK_FILE))
+    Ok(service_lock_file())
   }
 
   fn init_logger(&self) -> Arc<Redaction> {

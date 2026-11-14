@@ -11,6 +11,8 @@ pub use message::{ClientMessage, ServerMessage, ServiceRejection, ServiceResult}
 pub use noise::{NoiseInitiator, NoiseResponder, NoiseTransport};
 
 pub const MAX_CREDENTIAL_FRAME: usize = 512;
+/// First request read before a Windows service captures its pipe client's token.
+pub const WINDOWS_ADMISSION_REQUEST: [u8; 4] = *b"GPC1";
 pub const MAX_PRELUDE: usize = 256;
 pub const MAX_PRODUCT_VERSION: usize = 64;
 pub const HIP_PROTOCOL_VERSION: u16 = 1;

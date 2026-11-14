@@ -126,6 +126,7 @@ impl LifecycleHandle {
     ServiceResult::Accepted
   }
 
+  #[cfg(any(unix, test))]
   pub async fn disconnect_and_wait(&self) -> bool {
     let completion = {
       let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
@@ -447,7 +448,7 @@ pub(crate) struct VpnTask {
   events: mpsc::Receiver<LifecycleEvent>,
   lifecycle: LifecycleHandle,
   vpn_state_tx: watch::Sender<VpnState>,
-  brokered_macos: bool,
+  restricted_desktop: bool,
   registry: Arc<crate::session_registry::SessionRegistry>,
   active: Option<ActiveAttempt>,
   cancel_token: CancellationToken,
@@ -456,7 +457,7 @@ pub(crate) struct VpnTask {
 impl VpnTask {
   pub fn new(
     vpn_state_tx: watch::Sender<VpnState>,
-    brokered_macos: bool,
+    restricted_desktop: bool,
     registry: Arc<crate::session_registry::SessionRegistry>,
   ) -> (Self, LifecycleHandle) {
     let (events_tx, events) = mpsc::channel(4);
@@ -470,7 +471,7 @@ impl VpnTask {
       events,
       lifecycle: lifecycle.clone(),
       vpn_state_tx,
-      brokered_macos,
+      restricted_desktop,
       registry,
       active: None,
       cancel_token: CancellationToken::new(),
@@ -617,7 +618,7 @@ impl VpnTask {
         desktop_uid,
         edited_report,
         session_id,
-        brokered_macos: self.brokered_macos,
+        restricted_desktop: self.restricted_desktop,
         registry: self.registry.clone(),
         lifecycle: self.lifecycle.clone(),
       },

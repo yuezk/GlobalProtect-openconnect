@@ -12,12 +12,17 @@ mod platform_impl;
 #[path = "webview/macos.rs"]
 mod platform_impl;
 
+#[cfg(windows)]
+#[path = "webview/windows.rs"]
+mod platform_impl;
+
 #[cfg(not(any(
+  windows,
   target_os = "macos",
   target_os = "linux",
   target_os = "freebsd",
   target_os = "openbsd"
 )))]
-compile_error!("webview-auth is only supported on macOS and GTK/WebKitGTK Unix targets");
+compile_error!("webview-auth is only supported on Windows, macOS and GTK/WebKitGTK Unix targets");
 
 pub use webview_auth::{WebviewAuthenticator, apply_auth_theme};

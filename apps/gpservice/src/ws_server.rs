@@ -344,6 +344,7 @@ impl WsServer {
     }
   }
 
+  #[cfg(unix)]
   pub fn context(&self) -> Arc<WsServerContext> {
     Arc::clone(&self.ctx)
   }

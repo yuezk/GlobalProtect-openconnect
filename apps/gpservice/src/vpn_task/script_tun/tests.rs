@@ -1,6 +1,8 @@
 use super::*;
+use gpapi::script_tun::{Bootstrap, ScriptTunRequest};
 use openconnect::{VpnSessionInfo, tunnel::Configuration};
 use tokio::io::AsyncWriteExt;
+use tokio::net::UnixStream;
 
 // A generic consumer, with no proxy settings or private worker protocol.
 struct Consumer {
@@ -23,16 +25,26 @@ impl Consumer {
       launch_id: uuid::Uuid::new_v4(),
     };
     let cancel = CancellationToken::new();
-    let task = tokio::spawn(supervise(
-      identity,
-      PreparedScriptTun {
-        control,
+    let stopped = cancel.clone();
+    let task = tokio::spawn(async move {
+      let mut prepared = PreparedScriptTun {
+        control: Some(control),
         bootstrap: Bootstrap::new(b"consumer bootstrap").unwrap(),
-      },
-      observations,
-      cancel.clone(),
-      events,
-    ));
+      };
+      let channel = prepared.connect().await?;
+      let mut control = ConsumerControl::new(channel);
+      let result = supervise(
+        identity,
+        &mut control,
+        prepared.bootstrap,
+        observations,
+        stopped,
+        events,
+      )
+      .await;
+      control.stop().await;
+      result
+    });
     Self {
       control: UnixStream::from_std(child).unwrap(),
       native,
@@ -290,4 +302,37 @@ async fn reconnect_during_activation_returns_clear_error_without_connected() {
       .contains("during script-tun activation")
   );
   assert!(consumer.events.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn supervision_completion_keeps_consumer_alive_until_owner_stops_it() {
+  let (channel, mut peer) = UnixStream::pair().unwrap();
+  let mut control = ConsumerControl::new(channel);
+  let (_native, observations) = mpsc::channel(1);
+  let (events, _notifications) = mpsc::channel(1);
+  let cancellation = CancellationToken::new();
+  cancellation.cancel();
+  supervise(
+    Identity {
+      service_instance: uuid::Uuid::new_v4(),
+      attempt: 1,
+      launch_id: uuid::Uuid::new_v4(),
+    },
+    &mut control,
+    Bootstrap::default(),
+    observations,
+    cancellation,
+    events,
+  )
+  .await
+  .unwrap();
+  assert!(
+    tokio::time::timeout(Duration::from_millis(30), receive(&mut peer))
+      .await
+      .is_err()
+  );
+  control.stop().await;
+  assert!(matches!(receive(&mut peer).await.unwrap(), Message::Stop));
+  drop(control);
+  assert!(receive(&mut peer).await.is_err());
 }

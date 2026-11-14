@@ -1,3 +1,10 @@
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+typedef SOCKET vpn_command_handle;
+#else
+typedef int vpn_command_handle;
+#endif
 #include <openconnect.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -13,7 +20,7 @@ typedef struct vpn_session_info {
 	const char *nlb_connected_gw_ip;
 } vpn_session_info;
 
-typedef void (*vpn_connected_callback)(int cmd_pipe_fd,
+typedef void (*vpn_connected_callback)(vpn_command_handle cmd_pipe_fd,
 				       const vpn_session_info *session_info,
 				       void *user_data);
 typedef void (*vpn_hip_report_callback)(void *user_data, const char *report,
@@ -45,9 +52,12 @@ typedef struct vpn_options {
 
 	const char *script;
 	openconnect_configure_tun_fn configure_network;
-	const char *interface;
+	const char *interface_name;
 	const int script_tun;
 	const struct openconnect_script_tun_launch *script_tun_launch;
+#ifdef _WIN32
+	intptr_t script_tun_pipe;
+#endif
 
 	const char *certificate;
 	const char *sslkey;
@@ -73,7 +83,7 @@ extern int vpn_resolve_gateway(const char *node, const char *service,
 int vpn_collect_hip_report(const vpn_hip_script *, const struct openconnect_gp_hip_request *,
 	const struct openconnect_gp_hip_control *, openconnect_gp_hip_generate_fn, void *, char *, size_t, size_t *);
 
-extern int vpn_attach_command_pipe(void *user_data, int fd);
+extern int vpn_attach_command_pipe(void *user_data, vpn_command_handle fd);
 extern void vpn_detach_command_pipe(void *user_data);
 extern void vpn_script_started(void *user_data);
 enum vpn_tunnel_event {
@@ -82,7 +92,7 @@ enum vpn_tunnel_event {
 	VPN_TUNNEL_ENDED,
 };
 extern void vpn_tunnel_event(void *user_data, int event);
-extern void vpn_tunnel_configuration(void *user_data, const char *interface,
+extern void vpn_tunnel_configuration(void *user_data, const char *interface_name,
 				     const struct oc_ip_info *info);
 extern void vpn_tunnel_statistics(void *user_data, const struct oc_stats *stats);
 
@@ -122,8 +132,8 @@ static void _log(int level, ...)
 	}
 }
 
-#define LOG(level, ...) _log(level, __VA_ARGS__)
-#define ERROR(...) LOG(PRG_ERR, __VA_ARGS__)
-#define INFO(...) LOG(PRG_INFO, __VA_ARGS__)
-#define DEBUG(...) LOG(PRG_DEBUG, __VA_ARGS__)
-#define TRACE(...) LOG(PRG_TRACE, __VA_ARGS__)
+#define VPN_LOG(level, ...) _log(level, __VA_ARGS__)
+#define VPN_ERROR(...) VPN_LOG(PRG_ERR, __VA_ARGS__)
+#define VPN_INFO(...) VPN_LOG(PRG_INFO, __VA_ARGS__)
+#define VPN_DEBUG(...) VPN_LOG(PRG_DEBUG, __VA_ARGS__)
+#define VPN_TRACE(...) VPN_LOG(PRG_TRACE, __VA_ARGS__)

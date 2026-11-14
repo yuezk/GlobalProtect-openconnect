@@ -1,4 +1,4 @@
-use std::{fs, io, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
+use std::{io, sync::Arc};
 
 use anyhow::{Context, ensure};
 use gpapi::{
@@ -6,7 +6,17 @@ use gpapi::{
   os_profile::{ClientOs, HostIdentity, OsProfile, OsProfileBuilder},
 };
 use gphip::{ReportContext, ReportInput};
-use openconnect::{HipRequest, HipScript, HipScriptEnvironment};
+use openconnect::HipRequest;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use openconnect::HipScript;
+#[cfg(unix)]
+#[path = "hip_source/unix.rs"]
+mod scripts;
+#[cfg(windows)]
+#[path = "hip_source/windows.rs"]
+mod scripts;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+use scripts::script_environment;
 
 pub(crate) struct HipExecution {
   pub source: openconnect::HipSource,
@@ -36,7 +46,7 @@ impl HipApproval {
 pub(crate) fn resolve(
   source: &HipSource,
   desktop_uid: Option<u32>,
-  brokered_macos: bool,
+  restricted_desktop: bool,
   edited_report: Option<Arc<str>>,
   profile: Option<OsProfile>,
 ) -> anyhow::Result<HipExecution> {
@@ -63,22 +73,11 @@ pub(crate) fn resolve(
     }
     HipSource::UserScript { path } => {
       approval = None;
-      ensure_custom_available(brokered_macos)?;
-      let uid = desktop_uid.context("HIP custom scripts require a verified desktop user")?;
-      ensure!(uid != 0, "HIP custom scripts require a non-root desktop user");
-      let path = PathBuf::from(path);
-      ensure!(path.is_absolute(), "HIP custom script path must be absolute");
-      let metadata = fs::symlink_metadata(&path).context("Failed to inspect the HIP script")?;
-      ensure!(
-        metadata.is_file() && !metadata.file_type().is_symlink() && metadata.permissions().mode() & 0o111 != 0,
-        "HIP custom script must be an executable regular file"
-      );
-      let script =
-        HipScript::new(path.to_string_lossy().into_owned(), Some(uid))?.with_environment(script_environment(uid)?)?;
-      openconnect::HipSource::Script(script)
+      ensure_custom_available(restricted_desktop)?;
+      scripts::user_script(path, desktop_uid)?
     }
     HipSource::ApprovedRootScript { approval_id } => {
-      ensure_custom_available(brokered_macos)?;
+      ensure_custom_available(restricted_desktop)?;
       #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
       {
         let owner_uid = desktop_uid.context("Root HIP scripts require a verified desktop user")?;
@@ -113,10 +112,10 @@ pub(crate) fn resolve(
   })
 }
 
-fn ensure_custom_available(brokered_macos: bool) -> anyhow::Result<()> {
+fn ensure_custom_available(restricted_desktop: bool) -> anyhow::Result<()> {
   ensure!(
-    !cfg!(target_os = "macos") && !brokered_macos,
-    "Custom HIP scripts are unavailable on macOS"
+    !cfg!(target_os = "macos") && !restricted_desktop,
+    "Custom HIP scripts are unavailable on this platform"
   );
   Ok(())
 }
@@ -147,27 +146,6 @@ pub(crate) fn generate(
     Some(xml) => gphip::refresh_edited_report_with_control(xml, &input, control),
     None => gphip::generate_report_with_control(&input, control),
   }
-}
-
-pub(crate) fn script_environment(uid: u32) -> anyhow::Result<HipScriptEnvironment> {
-  let user =
-    nix::unistd::User::from_uid(nix::unistd::Uid::from_raw(uid))?.context("HIP execution user is unavailable")?;
-  let home = user.dir.to_string_lossy().into_owned();
-  Ok(HipScriptEnvironment {
-    variables: vec![
-      (
-        "PATH".into(),
-        gpapi::process::collection::command_path(uid == 0)?
-          .into_string()
-          .map_err(|_| anyhow::anyhow!("HIP command path is not valid UTF-8"))?,
-      ),
-      ("LC_ALL".into(), "C".into()),
-      ("HOME".into(), home.clone()),
-      ("USER".into(), user.name.clone()),
-      ("LOGNAME".into(), user.name),
-    ],
-    cwd: home,
-  })
 }
 
 pub(crate) fn profile(

@@ -30,7 +30,6 @@ uuid = { workspace = true, features = ["v4"] }
 zeroize.workspace = true
 tempfile.workspace = true
 getrandom = "0.4"
-mac_address = "1.2.1"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["fs", "socket", "user"] }
@@ -39,5 +38,10 @@ nix = { version = "0.31", features = ["fs", "socket", "user"] }
 openssl.workspace = true
 tokio-tungstenite.workspace = true
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
 gpvpnc = { path = "../../crates/gpvpnc" }
+
+[target.'cfg(windows)'.dependencies]
+file-rotate = "0.8.0"
+windows-service = "0.8.1"
+windows-sys = { version = "0.61", features = ["Win32_System_Pipes"] }

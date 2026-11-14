@@ -1,8 +1,11 @@
+#[cfg(all(feature = "launcher", windows))]
+#[path = "platform/windows.rs"]
+mod platform;
 #[cfg(all(feature = "launcher", target_os = "macos"))]
 #[path = "platform/macos.rs"]
 mod platform;
 
-#[cfg(all(feature = "launcher", not(target_os = "macos")))]
+#[cfg(all(feature = "launcher", unix, not(target_os = "macos")))]
 #[path = "platform/generic.rs"]
 mod platform;
 
@@ -38,7 +41,7 @@ impl<'a> Browser<'a> {
     }
   }
 
-  #[cfg(all(feature = "launcher", not(target_os = "macos")))]
+  #[cfg(all(feature = "launcher", unix, not(target_os = "macos")))]
   pub(crate) fn as_str(&self) -> &str {
     match self {
       Browser::Auto => "auto",

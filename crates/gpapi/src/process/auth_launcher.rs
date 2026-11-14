@@ -236,7 +236,7 @@ impl<'a> SamlAuthLauncher<'a> {
     }
 
     #[cfg(feature = "webview-auth")]
-    {
+    if self.browser.is_none() {
       if self.hidpi {
         auth_cmd.arg("--hidpi");
       }
@@ -407,6 +407,42 @@ mod tests {
     let args = child_args(launcher);
     assert!(!args.iter().any(|arg| arg == "--fix-openssl"));
     assert!(args.iter().any(|arg| arg == "--ignore-tls-errors"));
+  }
+
+  #[cfg(feature = "webview-auth")]
+  #[test]
+  fn external_browser_receives_no_embedded_window_arguments() {
+    let args = child_args(
+      SamlAuthLauncher::new("vpn.example.com")
+        .browser(Some("edge"))
+        .clean(true)
+        .hidpi(true)
+        .window_title("GP Connect Login")
+        .window_theme(AuthWindowTheme::Dark),
+    );
+    assert!(args.windows(2).any(|pair| pair == ["--browser", "edge"]));
+    for option in ["--clean", "--hidpi", "--window-title", "--window-theme"] {
+      assert!(!args.iter().any(|arg| arg == option), "unexpected {option} in {args:?}");
+    }
+  }
+
+  #[cfg(feature = "webview-auth")]
+  #[test]
+  fn embedded_window_receives_auth_preferences() {
+    let args = child_args(
+      SamlAuthLauncher::new("vpn.example.com")
+        .clean(true)
+        .window_title("GP Connect Login")
+        .window_theme(AuthWindowTheme::Dark),
+    );
+    assert!(args.iter().any(|arg| arg == "--clean"));
+    assert!(
+      args
+        .windows(2)
+        .any(|pair| pair == ["--window-title", "GP Connect Login"])
+    );
+    assert!(args.windows(2).any(|pair| pair == ["--window-theme", "dark"]));
+    assert!(!args.iter().any(|arg| arg == "--browser"));
   }
 
   #[test]

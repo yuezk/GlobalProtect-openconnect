@@ -1,16 +1,15 @@
-#include <openconnect.h>
+#include "vpn.h"
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/utsname.h>
+#ifndef _WIN32
 #include <unistd.h>
-
-#include "vpn.h"
+#endif
 
 struct vpn_context {
 	struct openconnect_info *vpninfo;
-	int command_fd;
+	vpn_command_handle command_fd;
 	const vpn_options *options;
 	vpn_connected_callback on_connected;
 };
@@ -59,21 +58,22 @@ static int validate_peer_cert(void *private_data,
 	if (context->options->servercert)
 		return openconnect_check_peer_cert_hash(context->vpninfo,
 			context->options->servercert);
-	INFO("Accepting the server certificate though %s", reason);
+	VPN_INFO("Accepting the server certificate though %s", reason);
 	return 0;
 }
 
 /* Print progress messages */
-static void print_progress(__attribute__((unused)) void *_vpninfo, int level,
+static void print_progress(void *_vpninfo, int level,
 			   const char *format, ...)
 {
+	(void)_vpninfo;
 	va_list args;
 	va_start(args, format);
 	char *message = format_message(format, args);
 	va_end(args);
 
 	if (message == NULL) {
-		ERROR("Failed to format log message");
+		VPN_ERROR("Failed to format log message");
 	} else {
 		vpn_log(level, message);
 		free(message);
@@ -88,15 +88,24 @@ static void setup_tun_handler(void *private_data)
 	int ret;
 	if (options->script_tun) {
 		const struct openconnect_script_tun_launch *launch = options->script_tun_launch;
+#ifdef _WIN32
+		if (options->script_tun_pipe != -1) {
+			ret = openconnect_setup_tun_pipe(_vpninfo, options->script_tun_pipe);
+		} else
+#endif
 		if (launch) {
+#ifndef _WIN32
 			ret = openconnect_setup_tun_script_exec(_vpninfo, launch);
 			vpn_script_started(options->user_data);
+#else
+			ret = -EOPNOTSUPP;
+#endif
 		} else {
 			ret = openconnect_setup_tun_script(_vpninfo, options->script);
 		}
 	} else {
 		ret = openconnect_setup_tun_device(_vpninfo, options->script,
-						   options->interface);
+						   options->interface_name);
 	}
 
 	if (!ret) {
@@ -122,39 +131,39 @@ static void setup_tun_handler(void *private_data)
 int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 {
 	struct openconnect_info *vpninfo;
-	struct utsname utsbuf;
+	char hostname[256];
 	const char *effective_local_hostname = NULL;
 
 	struct vpn_context context = { .options = options, .on_connected = callback };
 	int result = 1;
 
-	INFO("USER_AGENT: %s", options->user_agent);
-	INFO("OS: %s", options->os);
-	INFO("CLIENT_VERSION: %s", options->client_version);
-	INFO("HOST_ID: %s", options->host_id ? options->host_id : "(not set)");
+	VPN_INFO("USER_AGENT: %s", options->user_agent);
+	VPN_INFO("OS: %s", options->os);
+	VPN_INFO("CLIENT_VERSION: %s", options->client_version);
+	VPN_INFO("HOST_ID: %s", options->host_id ? options->host_id : "(not set)");
 	const char *configuration = options->script;
 	if (options->configure_network)
 		configuration = "callback";
 	else if (options->script_tun_launch)
 		configuration = options->script_tun_launch->program;
-	INFO("Network configuration: %s", configuration);
-	INFO("SCRIPT_TUN: %d", options->script_tun);
-	INFO("CSD_USER: %d", options->hip_script.uid);
-	INFO("CSD_WRAPPER: %s", options->hip_script.path);
-	INFO("RECONNECT_TIMEOUT: %d", options->reconnect_timeout);
-	INFO("MTU: %d", options->mtu);
-	INFO("DISABLE_IPV6: %d", options->disable_ipv6);
-	INFO("GATEWAY_IP_PREFERENCE: %d", options->gateway_ip_preference);
-	INFO("NO_DTLS: %d", options->no_dtls);
-	INFO("DPD_INTERVAL: %d", options->dpd_interval);
-	INFO("NO_XMLPOST: %d", options->no_xmlpost);
+	VPN_INFO("Network configuration: %s", configuration);
+	VPN_INFO("SCRIPT_TUN: %d", options->script_tun);
+	VPN_INFO("CSD_USER: %d", options->hip_script.uid);
+	VPN_INFO("CSD_WRAPPER: %s", options->hip_script.path);
+	VPN_INFO("RECONNECT_TIMEOUT: %d", options->reconnect_timeout);
+	VPN_INFO("MTU: %d", options->mtu);
+	VPN_INFO("DISABLE_IPV6: %d", options->disable_ipv6);
+	VPN_INFO("GATEWAY_IP_PREFERENCE: %d", options->gateway_ip_preference);
+	VPN_INFO("NO_DTLS: %d", options->no_dtls);
+	VPN_INFO("DPD_INTERVAL: %d", options->dpd_interval);
+	VPN_INFO("NO_XMLPOST: %d", options->no_xmlpost);
 
 	vpninfo =
 	    openconnect_vpninfo_new(options->user_agent, validate_peer_cert,
 				    NULL, NULL, print_progress, &context);
 
 	if (!vpninfo) {
-		ERROR("openconnect_vpninfo_new failed");
+		VPN_ERROR("openconnect_vpninfo_new failed");
 		vpn_tunnel_event(options->user_data, VPN_TUNNEL_ENDED);
 		return 1;
 	}
@@ -168,20 +177,21 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	openconnect_set_stats_handler(vpninfo, observe_statistics);
 	openconnect_set_gp_hip_report_callback(vpninfo, options->user_data,
 					options->on_hip_report_submitted);
+	/* Windows command pipes are Winsock sockets. Initialize before creating them. */
+	openconnect_init_ssl();
 	context.command_fd = openconnect_setup_cmd_pipe(vpninfo);
-	if (context.command_fd < 0) {
-		ERROR("openconnect_setup_cmd_pipe failed");
+	if (context.command_fd == (vpn_command_handle)-1) {
+		VPN_ERROR("openconnect_setup_cmd_pipe failed");
 		goto cleanup;
 	}
 	/* An earlier disconnect remains latched on this attempt. */
 	if (vpn_attach_command_pipe(options->user_data, context.command_fd)) {
-		INFO("VPN attempt canceled before startup");
+		VPN_INFO("VPN attempt canceled before startup");
 		result = -EINTR;
 		goto cleanup;
 	}
 
 	openconnect_set_loglevel(vpninfo, PRG_TRACE);
-	openconnect_init_ssl();
 	openconnect_set_protocol(vpninfo, "gp");
 	openconnect_parse_url(vpninfo, options->server);
 	if (options->gateway_ip_preference)
@@ -207,18 +217,19 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	}
 
 	effective_local_hostname = options->local_hostname;
-	if (!effective_local_hostname && !uname(&utsbuf)) {
-		effective_local_hostname = utsbuf.nodename;
+	if (!effective_local_hostname && !gethostname(hostname, sizeof(hostname))) {
+		hostname[sizeof(hostname) - 1] = 0;
+		effective_local_hostname = hostname;
 	}
 	if (effective_local_hostname) {
 		openconnect_set_localname(vpninfo, effective_local_hostname);
 	}
 
-	INFO("LOCAL_HOSTNAME: %s",
+	VPN_INFO("LOCAL_HOSTNAME: %s",
 	     effective_local_hostname ? effective_local_hostname : "(not set)");
 
 	if (options->certificate) {
-		INFO("Setting client certificate: %s", options->certificate);
+		VPN_INFO("Setting client certificate: %s", options->certificate);
 		openconnect_set_client_cert(vpninfo, options->certificate,
 					    options->sslkey);
 	}
@@ -256,7 +267,7 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 	// Essential step
 	vpn_tunnel_event(options->user_data, OC_TUNNEL_NEGOTIATING);
 	if (openconnect_make_cstp_connection(vpninfo) != 0) {
-		ERROR("openconnect_make_cstp_connection failed");
+		VPN_ERROR("openconnect_make_cstp_connection failed");
 		goto cleanup;
 	}
 
@@ -273,12 +284,12 @@ int vpn_connect(const vpn_options *options, vpn_connected_callback callback)
 					       options->reconnect_timeout, 10);
 
 		if (ret) {
-			INFO("openconnect_mainloop returned %d, exiting", ret);
+			VPN_INFO("openconnect_mainloop returned %d, exiting", ret);
 			result = ret;
 			goto cleanup;
 		}
 
-		INFO("openconnect_mainloop returned 0, reconnecting");
+		VPN_INFO("openconnect_mainloop returned 0, reconnecting");
 	}
 cleanup:
 	vpn_detach_command_pipe(options->user_data);
@@ -289,24 +300,28 @@ cleanup:
 }
 
 /* Called with the attempt cancellation mutex held, never after detach/free. */
-int vpn_write_cancel(int fd)
+static int write_command(vpn_command_handle fd, char command)
 {
-	char command = OC_CMD_CANCEL;
+#ifdef _WIN32
+	int written = send(fd, &command, 1, 0);
+	return written == 1 ? 0 : (written == SOCKET_ERROR ? WSAGetLastError() : EIO);
+#else
 	ssize_t written;
 	do {
 		written = write(fd, &command, 1);
 	} while (written < 0 && errno == EINTR);
 	return written == 1 ? 0 : (written < 0 ? errno : EIO);
+#endif
 }
 
-int vpn_write_statistics(int fd)
+int vpn_write_cancel(vpn_command_handle fd)
 {
-	char command = OC_CMD_STATS;
-	ssize_t written;
-	do {
-		written = write(fd, &command, 1);
-	} while (written < 0 && errno == EINTR);
-	return written == 1 ? 0 : (written < 0 ? errno : EIO);
+	return write_command(fd, OC_CMD_CANCEL);
+}
+
+int vpn_write_statistics(vpn_command_handle fd)
+{
+	return write_command(fd, OC_CMD_STATS);
 }
 
 int vpn_collect_hip_report(const vpn_hip_script *script,
