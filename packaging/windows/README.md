@@ -4,8 +4,12 @@
 `machine-install.ps1` installation implementation. Build it with NSIS 3 Unicode:
 
 ```powershell
-& makensis /DPAYLOAD_DIR=C:\build\payload /DOUTPUT_FILE=C:\build\GPConnect-Setup.exe /DPRODUCT_VERSION=3.4.0 /DBUILD_VERSION=3.4.0.0 /DDISPLAY_VERSION=3.4.0-snapshot.2026.1114.2 .\packaging\windows\installer.nsi
+& makensis /DTARGET_ARCH=x64 /DPAYLOAD_DIR=C:\build\payload /DOUTPUT_FILE=C:\build\GPConnect-Setup.exe /DPRODUCT_VERSION=3.4.0 /DBUILD_VERSION=3.4.0.0 /DDISPLAY_VERSION=3.4.0-snapshot.2026.1114.2 .\packaging\windows\installer.nsi
 ```
+
+`TARGET_ARCH` is `x64` or `arm64` and must match every executable and DLL in
+the payload. Each installer accepts only its native Windows architecture. ARM64
+requires Windows 11; x64 requires Windows 10 build 19041 or newer.
 
 `BUILD_VERSION` must contain four numeric components. `PRODUCT_VERSION` must
 match the payload's `build-info.json`. `DISPLAY_VERSION` is the full release

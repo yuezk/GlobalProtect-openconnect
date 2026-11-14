@@ -43,7 +43,7 @@ on:
         default: false
         type: boolean
       build_windows:
-        description: 'Build the Windows x64 NSH installer and development ZIP'
+        description: 'Build Windows x64 and ARM64 NSH installers and development ZIPs'
         required: true
         default: false
         type: boolean

@@ -175,7 +175,7 @@ release_snapshot() {
 
     # The appcast publisher removes expired macOS snapshots after the new feed
     # is live. Removing them here would temporarily break the current feed.
-    if [[ "$asset" == GPConnect_*_arm64.* || "$asset" == GPConnect_*_windows-x64-setup.exe* ]]; then
+    if [[ "$asset" == GPConnect_*_arm64.* || "$asset" == GPConnect_*_windows-x64-setup.exe* || "$asset" == GPConnect_*_windows-arm64-setup.exe* ]]; then
       continue
     fi
     if ! delete_release_asset "$asset"; then

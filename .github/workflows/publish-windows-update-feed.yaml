@@ -9,11 +9,7 @@ on:
         default: main
         type: string
       release_tag:
-        description: GitHub release containing the tested installer and detached signature
-        required: true
-        type: string
-      installer_name:
-        description: Exact Windows x64 installer asset name
+        description: GitHub release containing both tested native installers and signatures
         required: true
         type: string
       version:
@@ -46,7 +42,6 @@ jobs:
     env:
       REPOSITORY: yuezk/GlobalProtect-openconnect
       RELEASE_TAG: ${{ inputs.release_tag }}
-      INSTALLER_NAME: ${{ inputs.installer_name }}
       PRODUCT_VERSION: ${{ inputs.version }}
       UPDATE_CHANNEL: ${{ inputs.channel }}
       BUILD_VERSION: ${{ inputs.build }}
@@ -72,7 +67,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - name: Verify tested release installer
+      - name: Verify both tested native installers
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -82,28 +77,31 @@ jobs:
           } elseif ($env:RELEASE_TAG -ne 'snapshot' -or $env:BUILD_VERSION -notmatch '^\d+(\.\d+){0,2}$') { throw 'Snapshot release identity does not match.' }
           $displayVersion = $env:PRODUCT_VERSION
           if ($env:UPDATE_CHANNEL -eq 'snapshot') { $displayVersion += "-snapshot.$env:BUILD_VERSION" }
-          if ($env:INSTALLER_NAME -ne "GPConnect_${displayVersion}_windows-x64-setup.exe") { throw 'Installer asset does not match the product version, channel and build.' }
           if (!$env:WINDOWS_UPDATE_PUBLIC_KEY) { throw 'Configure the Windows public update key before promotion.' }
           $downloads = Join-Path $env:RUNNER_TEMP 'windows-update'
           New-Item -ItemType Directory -Force $downloads | Out-Null
-          foreach ($asset in @($env:INSTALLER_NAME, "$env:INSTALLER_NAME.sig", "$env:INSTALLER_NAME.sha256")) {
-            gh release download $env:RELEASE_TAG --repo $env:REPOSITORY --pattern $asset --dir $downloads
-            if ($LASTEXITCODE -ne 0) { throw "Missing release asset: $asset" }
-          }
-          $installer = Join-Path $downloads $env:INSTALLER_NAME
-          $sum = (Get-Content "$installer.sha256" -Raw).Trim()
-          if ($sum -notmatch '^([a-fA-F0-9]{64})  (.+)$' -or $Matches[2] -ne $env:INSTALLER_NAME) { throw 'Invalid installer checksum file.' }
-          if ((Get-FileHash $installer).Hash -ne $Matches[1]) { throw 'Installer checksum mismatch.' }
-          if ($env:WINDOWS_SIGNING_PUBLISHER) {
-            $authenticode = Get-AuthenticodeSignature $installer
-            if ($authenticode.Status -ne 'Valid' -or $authenticode.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -ne $env:WINDOWS_SIGNING_PUBLISHER) { throw 'Installer publisher signature is invalid.' }
-          }
-          if ([Diagnostics.FileVersionInfo]::GetVersionInfo($installer).ProductVersion -ne $displayVersion) { throw 'Installer product version/build mismatch.' }
           . ./gpgui/scripts/windows-updates/Get-WinSparkle.ps1
           $tools = Get-WinSparkleTools (Join-Path $env:RUNNER_TEMP 'signing-tools')
-          $signature = (Get-Content "$installer.sig" -Raw).Trim()
-          & $tools.Tool verify -p $env:WINDOWS_UPDATE_PUBLIC_KEY -s $signature $installer
-          if ($LASTEXITCODE -ne 0) { throw 'Installer update signature is invalid.' }
+          foreach ($architecture in @('x64','arm64')) {
+            $name = "GPConnect_${displayVersion}_windows-$architecture-setup.exe"
+            foreach ($asset in @($name, "$name.sig", "$name.sha256")) {
+              gh release download $env:RELEASE_TAG --repo $env:REPOSITORY --pattern $asset --dir $downloads
+              if ($LASTEXITCODE -ne 0) { throw "Missing release asset: $asset" }
+            }
+            $installer = Join-Path $downloads $name
+            $sum = (Get-Content "$installer.sha256" -Raw).Trim()
+            if ($sum -notmatch '^([a-fA-F0-9]{64})  (.+)$' -or $Matches[2] -ne $name) { throw 'Invalid installer checksum file.' }
+            if ((Get-FileHash $installer).Hash -ne $Matches[1]) { throw 'Installer checksum mismatch.' }
+            if ($env:WINDOWS_SIGNING_PUBLISHER) {
+              $authenticode = Get-AuthenticodeSignature $installer
+              if ($authenticode.Status -ne 'Valid' -or $authenticode.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -ne $env:WINDOWS_SIGNING_PUBLISHER) { throw 'Installer publisher signature is invalid.' }
+            }
+            if ([Diagnostics.FileVersionInfo]::GetVersionInfo($installer).ProductVersion -ne $displayVersion) { throw 'Installer product version/build mismatch.' }
+            $signature = (Get-Content "$installer.sig" -Raw).Trim()
+            & $tools.Tool verify -p $env:WINDOWS_UPDATE_PUBLIC_KEY -s $signature $installer
+            if ($LASTEXITCODE -ne 0) { throw 'Installer update signature is invalid.' }
+          }
+          "WINDOWS_DISPLAY_VERSION=$displayVersion" >> $env:GITHUB_ENV
       - name: Preserve other feeds and generate Windows metadata
         shell: pwsh
         run: |
@@ -115,12 +113,15 @@ jobs:
           $env:UPDATE_HIGHLIGHTS | Set-Content $notes -Encoding utf8NoBOM
           $output = Join-Path $public 'windows'
           $previous = Join-Path $output 'latest.json'
-          $installer = Join-Path (Join-Path $env:RUNNER_TEMP 'windows-update') $env:INSTALLER_NAME
-          $arguments = @('scripts/windows-update-feed.py', '--installer', $installer,
-            '--installer-url', "https://github.com/$env:REPOSITORY/releases/download/$env:RELEASE_TAG/$env:INSTALLER_NAME",
-            '--signature-file', "$installer.sig", '--version', $env:PRODUCT_VERSION,
+          $arguments = @('scripts/windows-update-feed.py', '--version', $env:PRODUCT_VERSION,
             '--channel', $env:UPDATE_CHANNEL, '--released-at', [DateTime]::UtcNow.ToString('yyyy-MM-dd'),
             '--highlights-file', $notes, '--output', $output)
+          foreach ($architecture in @('x64','arm64')) {
+            $name = "GPConnect_$($env:WINDOWS_DISPLAY_VERSION)_windows-$architecture-setup.exe"
+            $installer = Join-Path (Join-Path $env:RUNNER_TEMP 'windows-update') $name
+            $arguments += @('--payload', $architecture, $installer,
+              "https://github.com/$env:REPOSITORY/releases/download/$env:RELEASE_TAG/$name", "$installer.sig")
+          }
           if (Test-Path $previous) { $arguments += @('--input', $previous) }
           if ($env:BUILD_VERSION) { $arguments += @('--build', $env:BUILD_VERSION) }
           python @arguments
