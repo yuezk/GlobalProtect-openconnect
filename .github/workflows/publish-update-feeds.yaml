@@ -533,6 +533,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
+          python3 scripts/preserve-update-feeds.py \
+            --base-url "${FEED_URL%/appcast.xml}" \
+            --directory gpgui/apps/update-feed-worker/public \
+            --exclude appcast.xml --exclude latest.json
           trap 'status=$?; if [ "$status" -ne 0 ]; then echo "::error::Private operation failed; diagnostics suppressed."; fi' EXIT
           (
             set -euo pipefail

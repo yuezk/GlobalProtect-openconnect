@@ -1,0 +1,151 @@
+name: Publish Windows update feed
+
+on:
+  workflow_dispatch:
+    inputs:
+      gpgui_ref:
+        description: gpgui ref containing the update Worker and pinned WinSparkle tools
+        required: true
+        default: main
+        type: string
+      release_tag:
+        description: GitHub release containing the tested installer and detached signature
+        required: true
+        type: string
+      installer_name:
+        description: Exact Windows x64 installer asset name
+        required: true
+        type: string
+      version:
+        description: Base product version (x.y.z)
+        required: true
+        type: string
+      channel:
+        description: Update channel
+        required: true
+        type: choice
+        options: [stable, snapshot]
+      build:
+        description: Numeric snapshot build; empty for stable
+        type: string
+      highlights:
+        description: Release highlights, one per line
+        required: true
+        type: string
+
+concurrency:
+  group: update-feeds
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    environment: macos-release
+    permissions:
+      contents: read
+    env:
+      REPOSITORY: yuezk/GlobalProtect-openconnect
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      INSTALLER_NAME: ${{ inputs.installer_name }}
+      PRODUCT_VERSION: ${{ inputs.version }}
+      UPDATE_CHANNEL: ${{ inputs.channel }}
+      BUILD_VERSION: ${{ inputs.build }}
+      UPDATE_HIGHLIGHTS: ${{ inputs.highlights }}
+      WINDOWS_UPDATE_PUBLIC_KEY: ${{ vars.WINDOWS_UPDATE_PUBLIC_KEY }}
+      WINDOWS_SIGNING_PUBLISHER: ${{ vars.WINDOWS_SIGNING_PUBLISHER }}
+      UPDATES_WORKER_NAME: ${{ vars.UPDATES_WORKER_NAME || 'gp-updates' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Checkout update Worker and build helpers
+        uses: ./.github/actions/checkout-private
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ inputs.gpgui_ref }}
+          path: gpgui
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Verify tested release installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PRODUCT_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid product version.' }
+          if ($env:UPDATE_CHANNEL -eq 'stable') {
+            if ($env:RELEASE_TAG -ne "v$env:PRODUCT_VERSION" -or $env:BUILD_VERSION) { throw 'Stable release identity does not match.' }
+          } elseif ($env:RELEASE_TAG -ne 'snapshot' -or $env:BUILD_VERSION -notmatch '^\d+(\.\d+){0,2}$') { throw 'Snapshot release identity does not match.' }
+          $displayVersion = $env:PRODUCT_VERSION
+          if ($env:UPDATE_CHANNEL -eq 'snapshot') { $displayVersion += "-snapshot.$env:BUILD_VERSION" }
+          if ($env:INSTALLER_NAME -ne "GPConnect_${displayVersion}_windows-x64-setup.exe") { throw 'Installer asset does not match the product version, channel and build.' }
+          if (!$env:WINDOWS_UPDATE_PUBLIC_KEY) { throw 'Configure the Windows public update key before promotion.' }
+          $downloads = Join-Path $env:RUNNER_TEMP 'windows-update'
+          New-Item -ItemType Directory -Force $downloads | Out-Null
+          foreach ($asset in @($env:INSTALLER_NAME, "$env:INSTALLER_NAME.sig", "$env:INSTALLER_NAME.sha256")) {
+            gh release download $env:RELEASE_TAG --repo $env:REPOSITORY --pattern $asset --dir $downloads
+            if ($LASTEXITCODE -ne 0) { throw "Missing release asset: $asset" }
+          }
+          $installer = Join-Path $downloads $env:INSTALLER_NAME
+          $sum = (Get-Content "$installer.sha256" -Raw).Trim()
+          if ($sum -notmatch '^([a-fA-F0-9]{64})  (.+)$' -or $Matches[2] -ne $env:INSTALLER_NAME) { throw 'Invalid installer checksum file.' }
+          if ((Get-FileHash $installer).Hash -ne $Matches[1]) { throw 'Installer checksum mismatch.' }
+          if ($env:WINDOWS_SIGNING_PUBLISHER) {
+            $authenticode = Get-AuthenticodeSignature $installer
+            if ($authenticode.Status -ne 'Valid' -or $authenticode.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -ne $env:WINDOWS_SIGNING_PUBLISHER) { throw 'Installer publisher signature is invalid.' }
+          }
+          if ([Diagnostics.FileVersionInfo]::GetVersionInfo($installer).ProductVersion -ne $displayVersion) { throw 'Installer product version/build mismatch.' }
+          . ./gpgui/scripts/windows-updates/Get-WinSparkle.ps1
+          $tools = Get-WinSparkleTools (Join-Path $env:RUNNER_TEMP 'signing-tools')
+          $signature = (Get-Content "$installer.sig" -Raw).Trim()
+          & $tools.Tool verify -p $env:WINDOWS_UPDATE_PUBLIC_KEY -s $signature $installer
+          if ($LASTEXITCODE -ne 0) { throw 'Installer update signature is invalid.' }
+      - name: Preserve other feeds and generate Windows metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $public = 'gpgui/apps/update-feed-worker/public'
+          python scripts/preserve-update-feeds.py --base-url https://updates.gpgui.com --directory $public
+          if ($LASTEXITCODE -ne 0) { throw 'Could not preserve published feeds.' }
+          $notes = Join-Path $env:RUNNER_TEMP 'windows-highlights.txt'
+          $env:UPDATE_HIGHLIGHTS | Set-Content $notes -Encoding utf8NoBOM
+          $output = Join-Path $public 'windows'
+          $previous = Join-Path $output 'latest.json'
+          $installer = Join-Path (Join-Path $env:RUNNER_TEMP 'windows-update') $env:INSTALLER_NAME
+          $arguments = @('scripts/windows-update-feed.py', '--installer', $installer,
+            '--installer-url', "https://github.com/$env:REPOSITORY/releases/download/$env:RELEASE_TAG/$env:INSTALLER_NAME",
+            '--signature-file', "$installer.sig", '--version', $env:PRODUCT_VERSION,
+            '--channel', $env:UPDATE_CHANNEL, '--released-at', [DateTime]::UtcNow.ToString('yyyy-MM-dd'),
+            '--highlights-file', $notes, '--output', $output)
+          if (Test-Path $previous) { $arguments += @('--input', $previous) }
+          if ($env:BUILD_VERSION) { $arguments += @('--build', $env:BUILD_VERSION) }
+          python @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid Windows metadata.' }
+      - name: Deploy complete feed set
+        shell: pwsh
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          pnpm --dir gpgui/apps/update-feed-worker install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw 'Worker dependency installation failed.' }
+          pnpm --dir gpgui/apps/update-feed-worker exec wrangler deploy --config wrangler.jsonc --name $env:UPDATES_WORKER_NAME
+          if ($LASTEXITCODE -ne 0) { throw 'Feed deployment failed.' }
+      - name: Verify published Windows metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $windows = 'gpgui/apps/update-feed-worker/public/windows'
+          $feeds = @('latest.json', 'stable/appcast.xml', 'snapshot/appcast.xml') | Where-Object { Test-Path (Join-Path $windows $_) }
+          foreach ($relative in $feeds) {
+            $expected = [IO.File]::ReadAllBytes((Join-Path 'gpgui/apps/update-feed-worker/public/windows' $relative))
+            $downloaded = Join-Path $env:RUNNER_TEMP ('published-' + ($relative -replace '/', '-'))
+            Invoke-WebRequest "https://updates.gpgui.com/windows/$relative" -OutFile $downloaded
+            $actual = [IO.File]::ReadAllBytes($downloaded)
+            if ([Convert]::ToBase64String($expected) -ne [Convert]::ToBase64String($actual)) { throw "Published feed does not match: $relative" }
+          }
