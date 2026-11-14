@@ -154,7 +154,7 @@ jobs:
           try {
             [IO.File]::WriteAllText($key, $env:UPDATE_PRIVATE_KEY.Trim())
             . ./source/gpgui/scripts/windows-updates/Get-WinSparkle.ps1
-            $tools = Get-WinSparkleTools "$env:GITHUB_WORKSPACE/artifacts/tools"
+            $tools = Get-WinSparkleTools "$env:GITHUB_WORKSPACE/artifacts/tools" -Architecture $env:BUILD_ARCHITECTURE
             $installer = @(Get-ChildItem artifacts -Filter '*-setup.exe')
             if ($installer.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
             $signature = (& $tools.Tool sign -f $key $installer[0].FullName | Out-String).Trim()
