@@ -187,6 +187,9 @@ class WindowsFeedTests(unittest.TestCase):
                     ["appcast.xml", "latest.json", "windows/stable/appcast.xml", "windows/snapshot/appcast.xml"])
                 self.assertTrue((root / "windows/latest.json").exists())
                 self.assertEqual(request.call_count, 1)
+                outgoing = request.call_args.args[0]
+                self.assertEqual(outgoing.full_url, "https://updates.gpgui.com/windows/latest.json")
+                self.assertEqual(outgoing.get_header("User-agent"), "GPConnectReleasePublisher/1.0")
             with patch.object(preserver, "urlopen", side_effect=HTTPError("url", 500, "failure", {}, None)):
                 with self.assertRaises(HTTPError):
                     preserver.preserve("https://updates.gpgui.com", root, [])
