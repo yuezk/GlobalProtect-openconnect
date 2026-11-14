@@ -145,6 +145,7 @@ jobs:
           }
           Write-Host 'Windows compilation and packaging passed.'
       - name: Sign and verify update payload
+        id: sign
         shell: pwsh
         env:
           UPDATE_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_PRIVATE_KEY }}
@@ -173,6 +174,7 @@ jobs:
           if ($installer.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
           & ./source/gp/scripts/test-windows-installer.ps1 -Installer $installer[0].FullName -Architecture $env:BUILD_ARCHITECTURE -Build $env:GPGUI_BUILD_VERSION
       - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() && steps.sign.outcome == 'success' }}
         with:
           name: artifact-gpgui-windows-${{ inputs.architecture }}
           path: |
@@ -180,5 +182,6 @@ jobs:
             artifacts/*.sig
             artifacts/*.sha256
             artifacts/*.zip
+          overwrite: true
           if-no-files-found: error
           retention-days: 7

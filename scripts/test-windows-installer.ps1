@@ -12,7 +12,12 @@ if ((Test-Path $destination) -or (Get-Service GPConnect -ErrorAction SilentlyCon
   throw 'Run this installer test on a clean Windows test machine.'
 }
 $process = Start-Process $Installer -ArgumentList '/S' -PassThru -Wait
-if ($process.ExitCode -ne 0) { throw 'The installer failed.' }
+if ($process.ExitCode -ne 0) {
+  # This test requires an empty CI installation; this log contains only installer operations.
+  $log = Join-Path $env:ProgramData 'GP Connect\installer.log'
+  if (Test-Path $log) { Get-Content $log -Tail 80 | Write-Host }
+  throw "The installer failed with exit code $($process.ExitCode)."
+}
 $info = Get-Content (Join-Path $destination 'build-info.json') -Raw | ConvertFrom-Json
 if ($info.architecture -ne $Architecture -or [string]$info.build_version -ne $Build) { throw 'The installed package identity does not match.' }
 $service = Get-CimInstance Win32_Service -Filter "Name='GPConnect'"
