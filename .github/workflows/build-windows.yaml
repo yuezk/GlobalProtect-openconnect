@@ -1,0 +1,141 @@
+name: Build Windows package
+
+on:
+  workflow_call:
+    inputs:
+      gp_ref:
+        type: string
+        required: true
+      gpgui_ref:
+        type: string
+        required: true
+      channel:
+        type: string
+        required: true
+      build:
+        type: string
+        required: true
+    secrets:
+      GH_PAT:
+        required: true
+      WINDOWS_UPDATE_PRIVATE_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target-windows
+      CARGO_BUILD_JOBS: '2'
+      GPGUI_UPDATE_CHANNEL: ${{ inputs.channel }}
+      GPGUI_BUILD_VERSION: ${{ inputs.channel == 'snapshot' && inputs.build || '' }}
+      GPGUI_WINDOWS_UPDATE_PUBLIC_KEY: ${{ vars.WINDOWS_UPDATE_PUBLIC_KEY }}
+      GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: .ci
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.gp_ref }}
+          path: source/gp
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.ci/.github/actions/checkout-private
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ inputs.gpgui_ref }}
+          path: source/gpgui
+      - uses: dtolnay/rust-toolchain@1.97.0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel autoconf automake libtool gettext git
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gnutls mingw-w64-ucrt-x86_64-libxml2
+            mingw-w64-ucrt-x86_64-lz4
+      - name: Prepare pinned installer and driver inputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (!$env:GPGUI_WINDOWS_UPDATE_PUBLIC_KEY -or !$env:GPGUI_LICENSE_SIGNING_KEYS) { throw 'Configure the Windows update and licensing public keys.' }
+          $tools = Join-Path $env:RUNNER_TEMP 'windows-tools'
+          New-Item -ItemType Directory -Force $tools | Out-Null
+          choco install nsis --version=3.12.0 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Installing NSIS 3.12 failed.' }
+          $wintun = Join-Path $tools 'wintun.zip'
+          Invoke-WebRequest 'https://www.wintun.net/builds/wintun-0.14.1.zip' -OutFile $wintun
+          if ((Get-FileHash $wintun).Hash -ne '07C256185D6EE3652E09FA55C0B673E2624B565E02C4B9091C79CA7D2F24EF51') { throw 'Wintun checksum mismatch.' }
+          Expand-Archive $wintun $tools
+          Remove-Item $wintun
+          "WINDOWS_BUILD_TOOLS=$tools" >> $env:GITHUB_ENV
+      - name: Build OpenConnect and test native packet transport
+        shell: pwsh
+        env:
+          MSYS_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $prefix = Join-Path $env:RUNNER_TEMP 'native-windows'
+          & ./source/gp/scripts/build-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -MsysSubsystem ucrt64 -Prefix $prefix
+          & ./source/gp/scripts/test-openconnect-windows.ps1 -MsysRoot $env:MSYS_ROOT -MsysSubsystem ucrt64 -Prefix $prefix
+          "OPENCONNECT_WINDOWS_PREFIX=$prefix" >> $env:GITHUB_ENV
+      - name: Build and package the matching Windows runtime
+        shell: pwsh
+        env:
+          MSYS_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $log = Join-Path $env:RUNNER_TEMP 'windows-package.log'
+          # Compiler diagnostics may contain private GUI source. Keep them on the runner.
+          try {
+            & ./source/gpgui/scripts/build-windows.ps1 -Profile Release `
+              -NativePrefix $env:OPENCONNECT_WINDOWS_PREFIX -MsysRoot $env:MSYS_ROOT -MsysSubsystem ucrt64 `
+              -WintunDirectory (Join-Path $env:WINDOWS_BUILD_TOOLS 'wintun') `
+              -MakeNsis (Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe') `
+              -OutputDirectory "$env:GITHUB_WORKSPACE/artifacts" *> $log
+          } catch { throw 'Windows compilation or packaging failed; private diagnostics remain on the runner.' }
+          Write-Host 'Windows compilation and packaging passed.'
+      - name: Sign and verify update payload
+        shell: pwsh
+        env:
+          UPDATE_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_PRIVATE_KEY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $key = Join-Path $env:RUNNER_TEMP 'windows-update.key'
+          try {
+            [IO.File]::WriteAllText($key, $env:UPDATE_PRIVATE_KEY.Trim())
+            . ./source/gpgui/scripts/windows-updates/Get-WinSparkle.ps1
+            $tools = Get-WinSparkleTools "$env:GITHUB_WORKSPACE/artifacts/tools"
+            $installer = @(Get-ChildItem artifacts -Filter '*-setup.exe')
+            if ($installer.Count -ne 1) { throw 'Expected exactly one Windows installer.' }
+            $signature = (& $tools.Tool sign -f $key $installer[0].FullName | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0) { throw 'Windows update signing failed.' }
+            & $tools.Tool verify -p $env:GPGUI_WINDOWS_UPDATE_PUBLIC_KEY -s $signature $installer[0].FullName
+            if ($LASTEXITCODE -ne 0) { throw 'Windows update signature verification failed.' }
+            $signature | Set-Content ($installer[0].FullName + '.sig') -Encoding ascii
+          } finally {
+            Remove-Item $key -Force -ErrorAction SilentlyContinue
+            Remove-Item artifacts/tools -Recurse -Force -ErrorAction SilentlyContinue
+          }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: artifact-gpgui-windows-x64
+          path: |
+            artifacts/*.exe
+            artifacts/*.sig
+            artifacts/*.sha256
+            artifacts/*.zip
+          if-no-files-found: error
+          retention-days: 14

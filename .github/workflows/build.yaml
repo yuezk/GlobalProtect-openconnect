@@ -42,6 +42,11 @@ on:
         required: true
         default: false
         type: boolean
+      build_windows:
+        description: 'Build the Windows x64 NSH installer and development ZIP'
+        required: true
+        default: false
+        type: boolean
   push:
     paths-ignore:
       - LICENSE
@@ -464,6 +469,19 @@ jobs:
       channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
     secrets:
       GH_PAT: ${{ secrets.GH_PAT }}
+
+  build-windows:
+    needs: validate-inputs
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_windows) || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_WINDOWS_ON_TAG == 'true') }}
+    uses: ./.github/workflows/build-windows.yaml
+    with:
+      gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
+      gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
+      channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+      build: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
+    secrets:
+      GH_PAT: ${{ secrets.GH_PAT }}
+      WINDOWS_UPDATE_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_PRIVATE_KEY }}
 
   nix-source:
     needs: [validate-inputs, build-gpgui-glibc]
@@ -1191,6 +1209,7 @@ jobs:
       - build-gpgui-glibc
       - build-gpgui-musl
       - build-gpgui-nsh
+      - build-windows
       - setup-bsd-matrix
       - build-gpgui-frontend
       - build-bsd
@@ -1201,6 +1220,7 @@ jobs:
         NEEDS_JSON: ${{ toJson(needs) }}
         BSD_MATRIX_ENABLED: ${{ needs.setup-bsd-matrix.outputs.enabled }}
         IS_STABLE: ${{ (startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.channel == 'stable')) }}
+        BUILD_WINDOWS: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_windows) || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_WINDOWS_ON_TAG == 'true') }}
       run: |
         python3 - <<'PY'
         import json
@@ -1219,6 +1239,8 @@ jobs:
             elif name in {"build-gp", "build-docker-image", "nix-prebuilt"} and result == "skipped" and is_stable:
                 continue
             elif name in {"build-gpgui-frontend", "build-bsd"} and result == "skipped" and not bsd_matrix_enabled:
+                continue
+            elif name == "build-windows" and result == "skipped" and os.environ["BUILD_WINDOWS"] != "true":
                 continue
             elif result == "skipped":
                 failed.append(f"{name}: {result}")

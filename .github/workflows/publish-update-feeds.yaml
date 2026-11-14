@@ -528,6 +528,13 @@ jobs:
             --channel "$CHANNEL" \
             --archive-url "https://github.com/$REPOSITORY/releases/download/$RELEASE_TAG/$ARCHIVE_NAME"
 
+      - name: Preserve other platform feeds
+        run: |
+          python3 scripts/preserve-update-feeds.py \
+            --base-url "${FEED_URL%/appcast.xml}" \
+            --directory gpgui/apps/update-feed-worker/public \
+            --exclude appcast.xml --exclude latest.json
+
       - name: Deploy update feed worker
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
