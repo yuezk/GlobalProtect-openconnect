@@ -37,6 +37,9 @@ jobs:
       GPGUI_WINDOWS_UPDATE_PUBLIC_KEY: ${{ vars.WINDOWS_UPDATE_PUBLIC_KEY }}
       GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
     steps:
+      - name: Preserve Unix source line endings
+        shell: pwsh
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v6
         with:
           path: .ci

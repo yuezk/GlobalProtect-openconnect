@@ -1,4 +1,4 @@
-# Requires MSYS2 base-devel/autoconf/automake/libtool and the MINGW64 gcc,
+# Requires MSYS2 base-devel/autoconf/automake/libtool and the selected native gcc,
 # pkgconf, gnutls, libxml2 and lz4 packages, plus Visual Studio C++ Build Tools.
 [CmdletBinding()]
 param(
