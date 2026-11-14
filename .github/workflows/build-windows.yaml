@@ -139,7 +139,10 @@ jobs:
               -WintunDirectory (Join-Path $env:WINDOWS_BUILD_TOOLS 'wintun') `
               -MakeNsis (Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe') `
               -OutputDirectory "$env:GITHUB_WORKSPACE/artifacts" *> $log
-          } catch { throw 'Windows compilation or packaging failed; private diagnostics remain on the runner.' }
+          } catch {
+            python ./.ci/scripts/private-ci-diagnostics.py compile $log
+            throw 'Windows compilation or packaging failed; private diagnostics remain on the runner.'
+          }
           Write-Host 'Windows compilation and packaging passed.'
       - name: Sign and verify update payload
         shell: pwsh

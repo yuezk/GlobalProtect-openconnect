@@ -274,6 +274,23 @@ class PrivateTestStageTests(unittest.TestCase):
                 self.assertIn(expected, result.stdout)
                 self.assertNotRegex(result.stdout, r'(?m)^Rust tests: started')
 
+    def test_compile_diagnostics_hash_source_locations_and_allowlist_windows_stage(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / 'private.log'
+            log.write_text('GP_WINDOWS_BUILD_STAGE=gui\n'
+                           'error[E0433]: PRIVATE_ERROR_MESSAGE\n'
+                           ' --> D:/a/repo/source/gpgui/crates/private.rs:42:9\n'
+                           'PRIVATE_SOURCE_AND_CREDENTIALS\n')
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/private-ci-diagnostics.py'),
+                                     'compile', str(log)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            digest = hashlib.sha256(b'crates/private.rs').hexdigest()
+            self.assertEqual(result.stdout,
+                             '::error::Windows build stage: gui.\n'
+                             f'::error::Rust source location fingerprint: {digest} 42:9\n'
+                             '::error::Rust diagnostic codes: error[E0433].\n')
+            self.assertEqual(result.stderr, '')
+
     def test_test_diagnostics_hash_names_without_exposing_private_details(self):
         with tempfile.TemporaryDirectory() as temporary:
             log = Path(temporary) / 'private.log'
