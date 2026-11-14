@@ -3,6 +3,7 @@
 [CmdletBinding()]
 param(
   [string]$MsysRoot = 'C:\msys64',
+  [ValidateSet('mingw64','ucrt64')][string]$MsysSubsystem = 'mingw64',
   [string]$Prefix,
   [int]$Jobs = 4
 )
@@ -13,7 +14,7 @@ $Prefix = [System.IO.Path]::GetFullPath($Prefix)
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
 if (!(Test-Path $bash)) { throw 'MSYS2 is required to build OpenConnect.' }
 $ErrorActionPreference = 'Continue'
-& $bash "$PSScriptRoot/build-openconnect-windows.sh" $repo $Prefix $Jobs
+& $bash "$PSScriptRoot/build-openconnect-windows.sh" $repo $Prefix $Jobs $MsysSubsystem
 $nativeExit = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
 if ($nativeExit -ne 0) { throw 'OpenConnect compilation failed.' }
@@ -49,7 +50,7 @@ while ($pending.Count) {
   foreach ($line in $dependencies) {
     if ($line -notmatch '^\s+(\S+\.dll)\s*$') { continue }
     $name = $Matches[1]
-    $source = Join-Path "$MsysRoot\mingw64\bin" $name
+    $source = Join-Path "$MsysRoot\$MsysSubsystem\bin" $name
     if (Test-Path $source) {
       $target = Join-Path "$Prefix\bin" $name
       Copy-Item $source $target -Force

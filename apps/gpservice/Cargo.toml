@@ -34,6 +34,12 @@ getrandom = "0.4"
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["fs", "socket", "user"] }
 
+[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))'.dependencies]
+mac_address = "1.2.1"
+
+[target.'cfg(unix)'.dev-dependencies]
+mac_address = "1.2.1"
+
 [dev-dependencies]
 openssl.workspace = true
 tokio-tungstenite.workspace = true

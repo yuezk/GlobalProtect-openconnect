@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run the native packet-pipe regression against the bundled Windows DLL.
 set -euo pipefail
-export PATH="/mingw64/bin:/usr/bin:$PATH"
+subsystem=$3
+export PATH="/$subsystem/bin:/usr/bin:$PATH"
 repo=$(cygpath -u "$1")
 prefix=$(cygpath -u "$2")
 build_dir="$repo/target/openconnect-windows"

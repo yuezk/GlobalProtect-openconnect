@@ -2299,6 +2299,7 @@ dependencies = [
  "gptunnel",
  "gpvpnc",
  "log",
+ "mac_address",
  "nix",
  "openconnect",
  "openssl",
@@ -3257,6 +3258,16 @@ name = "mac-addr"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3d25b0e0b648a86960ac23b7ad4abb9717601dec6f66c165f5b037f3f03065f"
+
+[[package]]
+name = "mac_address"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3d0581a75c45969c63afd2bb87b1d8b25cfcc556c7a918cf9bb13b0fe8d2381"
+dependencies = [
+ "nix",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "macro-string"

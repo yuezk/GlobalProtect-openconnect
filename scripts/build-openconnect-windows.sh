@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Build the bundled protocol library with MSYS2's native Windows compiler.
 set -euo pipefail
-export PATH="/mingw64/bin:/usr/bin:$PATH"
+subsystem=$4
+export PATH="/$subsystem/bin:/usr/bin:$PATH"
 repo=$(cygpath -u "$1")
 prefix=$(cygpath -u "$2")
 jobs=$3
-export ACLOCAL_PATH=/mingw64/share/aclocal
+export ACLOCAL_PATH="/$subsystem/share/aclocal"
 source_dir="$repo/crates/openconnect/deps/openconnect"
 build_dir="$repo/target/openconnect-windows"
 cd "$source_dir"
