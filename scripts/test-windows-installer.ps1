@@ -23,7 +23,7 @@ foreach ($name in @('gpgui.exe', 'gpauth.exe')) {
   $process = Start-Process (Join-Path $destination $name) -ArgumentList '--version' -PassThru -Wait
   if ($process.ExitCode -ne 0) { throw "The installed $name cannot start." }
 }
-$state = Join-Path $env:LOCALAPPDATA 'GP Connect'
+$state = Join-Path $env:LOCALAPPDATA 'GP Connect\config\protected-state'
 New-Item -ItemType Directory -Force $state | Out-Null
 $marker = Join-Path $state 'ci-install-retention'
 [IO.File]::WriteAllText($marker, 'retain user settings')
