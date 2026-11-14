@@ -43,7 +43,7 @@ on:
         default: false
         type: boolean
       build_windows:
-        description: 'Build the Windows x64 NSH installer and development ZIP'
+        description: 'Build Windows x64 and ARM64 NSH installers and development ZIPs'
         required: true
         default: false
         type: boolean
@@ -473,8 +473,13 @@ jobs:
   build-windows:
     needs: validate-inputs
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_windows) || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_WINDOWS_ON_TAG == 'true') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, arm64]
     uses: ./.github/workflows/build-windows.yaml
     with:
+      architecture: ${{ matrix.architecture }}
       gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
       gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
       channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}

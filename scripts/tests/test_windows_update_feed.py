@@ -22,17 +22,17 @@ preserver = load("preserve_update_feeds", "preserve-update-feeds.py")
 
 
 class WindowsFeedTests(unittest.TestCase):
-    def args(self, root, channel="stable", version="3.4.0", build=None):
-        name = feed.installer_name(version, channel, build)
+    def args(self, root, channel="stable", version="3.4.0", build=None, architecture="x64"):
+        name = feed.installer_name(version, channel, build, architecture)
         installer = root / name
-        installer.write_bytes(b"test installer")
-        signature = root / "installer.sig"
-        signature.write_text(base64.b64encode(bytes(64)).decode())
+        installer.write_bytes(f"test installer {architecture}".encode())
+        signature = root / f"installer-{architecture}.sig"
+        signature.write_text(base64.b64encode(bytes([1 if architecture == "arm64" else 0]) * 64).decode())
         highlights = root / "highlights.txt"
         highlights.write_text("Update & improve <Windows>.\n")
         tag = f"v{version}" if channel == "stable" else "snapshot"
-        return argparse.Namespace(installer=installer, signature_file=signature,
-            installer_url=f"https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{tag}/{name}",
+        return argparse.Namespace(payload=[feed.Payload(architecture, installer,
+            f"https://github.com/yuezk/GlobalProtect-openconnect/releases/download/{tag}/{name}", signature)],
             repository="yuezk/GlobalProtect-openconnect", channel=channel,
             version=version, build=build, released_at="2026-11-14",
             highlights_file=highlights, input=None, output=root / "windows", allow_localhost=False)
@@ -47,8 +47,40 @@ class WindowsFeedTests(unittest.TestCase):
             self.assertEqual(item.findtext("description"), "Update & improve <Windows>.")
             enclosure = item.find("enclosure")
             self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}version"), catalog["stable"]["version"])
-            self.assertEqual(int(enclosure.get("length")), args.installer.stat().st_size)
+            self.assertEqual(int(enclosure.get("length")), args.payload[0].installer.stat().st_size)
             self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}os"), "windows-x64")
+
+    def test_native_architectures_share_one_release_with_separate_signed_enclosures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = self.args(Path(directory))
+            arm = self.args(Path(directory), architecture="arm64")
+            args.payload += arm.payload
+            feed.generate(args)
+            items = ET.parse(args.output / "stable/appcast.xml").findall("channel/item")
+            self.assertEqual(len(items), 2)
+            for item, payload in zip(items, args.payload):
+                enclosure = item.find("enclosure")
+                self.assertEqual(enclosure.get("url"), payload.installer_url)
+                self.assertEqual(int(enclosure.get("length")), payload.installer.stat().st_size)
+                self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}edSignature"), payload.signature_file.read_text())
+                self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}os"), f"windows-{payload.architecture}")
+                self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}version"), "3.4.0")
+                minimum = "10.0.22000" if payload.architecture == "arm64" else "10.0.19041"
+                self.assertEqual(item.findtext(f"{{{feed.SPARKLE}}}minimumSystemVersion"), minimum)
+            self.assertEqual(json.loads((args.output / "latest.json").read_text())["stable"]["platforms"], ["windows"])
+
+    def test_mismatched_or_duplicate_architecture_does_not_write_a_feed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = self.args(Path(directory))
+            args.payload[0].architecture = "arm64"
+            with self.assertRaisesRegex(ValueError, "filename"):
+                feed.generate(args)
+            self.assertFalse(args.output.exists())
+            args.payload[0].architecture = "x64"
+            args.payload *= 2
+            with self.assertRaisesRegex(ValueError, "one installer per"):
+                feed.generate(args)
+            self.assertFalse(args.output.exists())
 
     def test_snapshot_promotion_retains_stable_and_rejects_downgrade(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -56,8 +88,8 @@ class WindowsFeedTests(unittest.TestCase):
             feed.generate(args)
             args.input = args.output / "latest.json"
             args.channel, args.build = "snapshot", "2026.1114.2"
-            args.installer = args.installer.rename(args.installer.parent / feed.installer_name(args.version, args.channel, args.build))
-            args.installer_url = f"https://github.com/{args.repository}/releases/download/snapshot/{args.installer.name}"
+            args.payload[0].installer = args.payload[0].installer.rename(args.payload[0].installer.parent / feed.installer_name(args.version, args.channel, args.build))
+            args.payload[0].installer_url = f"https://github.com/{args.repository}/releases/download/snapshot/{args.payload[0].installer.name}"
             feed.generate(args)
             catalog = json.loads(args.input.read_text())
             self.assertEqual(catalog["stable"]["version"], "3.4.0")
@@ -65,8 +97,8 @@ class WindowsFeedTests(unittest.TestCase):
             enclosure = ET.parse(args.output / "snapshot/appcast.xml").find("channel/item/enclosure")
             self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}version"), "3.4.0-snapshot.2026.1114.2")
             args.build = "2026.1114.1"
-            args.installer = args.installer.rename(args.installer.parent / feed.installer_name(args.version, args.channel, args.build))
-            args.installer_url = f"https://github.com/{args.repository}/releases/download/snapshot/{args.installer.name}"
+            args.payload[0].installer = args.payload[0].installer.rename(args.payload[0].installer.parent / feed.installer_name(args.version, args.channel, args.build))
+            args.payload[0].installer_url = f"https://github.com/{args.repository}/releases/download/snapshot/{args.payload[0].installer.name}"
             with self.assertRaisesRegex(ValueError, "older"):
                 feed.generate(args)
 
@@ -91,7 +123,7 @@ class WindowsFeedTests(unittest.TestCase):
             for channel in ("stable", "snapshot"):
                 enclosure = ET.parse(stable.output / channel / "appcast.xml").find("channel/item/enclosure")
                 self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}version"), "3.5.0")
-                self.assertEqual(enclosure.get("url"), stable.installer_url)
+                self.assertEqual(enclosure.get("url"), stable.payload[0].installer_url)
 
     def test_stable_without_snapshot_initializes_both_native_feeds(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -130,7 +162,7 @@ class WindowsFeedTests(unittest.TestCase):
     def test_private_loopback_download_requires_explicit_opt_in(self):
         with tempfile.TemporaryDirectory() as directory:
             args = self.args(Path(directory))
-            args.installer_url = "http://127.0.0.1:18770/setup.exe"
+            args.payload[0].installer_url = "http://127.0.0.1:18770/setup.exe"
             with self.assertRaisesRegex(ValueError, "matching GitHub"):
                 feed.generate(args)
             args.allow_localhost = True
@@ -139,7 +171,7 @@ class WindowsFeedTests(unittest.TestCase):
     def test_missing_or_malformed_signature_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             args = self.args(Path(directory))
-            args.signature_file.write_text("not a signature")
+            args.payload[0].signature_file.write_text("not a signature")
             with self.assertRaises(ValueError):
                 feed.generate(args)
 

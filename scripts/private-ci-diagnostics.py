@@ -8,6 +8,18 @@ import sys
 
 
 def report_compile(output):
+    output = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', output)
+    stages = re.findall(r'^GP_WINDOWS_BUILD_STAGE=(core|gui|bundle|installer)\r?$', output, re.MULTILINE)
+    if stages:
+        print(f'::error::Windows build stage: {stages[-1]}.')
+    locations = re.findall(r'(?:-->\s+|panicked at )([^\r\n]+?):([0-9]+):([0-9]+)', output)
+    for path, line, column in sorted(set(locations)):
+        path = path.replace('\\', '/')
+        for prefix in ('/source/gpgui/', '/source/gp/'):
+            if prefix in path:
+                path = path.split(prefix, 1)[1]
+        fingerprint = hashlib.sha256(path.encode()).hexdigest()
+        print(f'::error::Rust source location fingerprint: {fingerprint} {line}:{column}')
     codes = sorted(set(re.findall(r'error\[E[0-9]{4}\]', output)))
     if codes:
         print(f'::error::Rust diagnostic codes: {" ".join(codes)}.')
@@ -17,6 +29,10 @@ def report_compile(output):
          'compiler or linker killed by SIGKILL'),
         (r'undefined reference to|undefined symbol:', 'unresolved linker symbols'),
         ('proc macro panicked', 'procedural macro failed'),
+        (r'Review runtime license notices for|Required runtime notice is missing',
+         'runtime library notices require review'),
+        ('Unresolved Windows runtime dependency:', 'Windows runtime dependency is missing'),
+        (r'out of memory|paging file is too small|os error 1455', 'memory exhausted'),
     ]
     for pattern, description in categories:
         if re.search(pattern, output):
