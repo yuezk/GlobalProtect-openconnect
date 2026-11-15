@@ -179,9 +179,8 @@ jobs:
           name: artifact-gpgui-windows-${{ inputs.architecture }}
           path: |
             artifacts/*.exe
-            artifacts/*.sig
-            artifacts/*.sha256
-            artifacts/*.zip
+            artifacts/*.exe.sig
+            artifacts/*.exe.sha256
           overwrite: true
           if-no-files-found: error
           retention-days: 7
