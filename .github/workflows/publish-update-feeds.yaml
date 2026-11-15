@@ -34,6 +34,10 @@ on:
       highlights:
         required: false
         type: string
+      unix_snapshot_build:
+        description: Verified Unix snapshot build when it differs from the macOS retry
+        required: false
+        type: string
       unix_platforms:
         required: false
         default: linux,freebsd,openbsd
@@ -75,6 +79,10 @@ on:
         description: Stable release highlights, one per line
         required: false
         type: string
+      unix_snapshot_build:
+        description: Verified Unix snapshot build; omit when it matches the macOS build
+        required: false
+        type: string
       unix_platforms:
         description: Comma-separated Unix platforms with published assets (linux,freebsd,openbsd)
         required: true
@@ -104,6 +112,7 @@ jobs:
       SPARKLE_VERSION: 2.9.2
       UPDATE_HIGHLIGHTS: ${{ inputs.highlights }}
       UNIX_PLATFORMS: ${{ inputs.unix_platforms }}
+      UNIX_SNAPSHOT_BUILD: ${{ inputs.unix_snapshot_build }}
       SPARKLE_ARCHIVE_SHA256: b83e37436774556ed055e0244b297ef2c790e0737393bf65bf495fcbba6eed65
     steps:
       - name: Validate inputs
@@ -125,6 +134,12 @@ jobs:
           if [[ ! "$UNIX_PLATFORMS" =~ ^(linux|freebsd|openbsd)(,(linux|freebsd|openbsd))*$ ]]; then
             echo "unix_platforms must list published Unix targets separated by commas" >&2
             exit 1
+          fi
+          if [[ -n "$UNIX_SNAPSHOT_BUILD" ]]; then
+            if [[ "$CHANNEL" != "snapshot" || ! "$UNIX_SNAPSHOT_BUILD" =~ ^(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)){0,2}$ ]]; then
+              echo "unix_snapshot_build requires a snapshot channel and one to three numeric components" >&2
+              exit 1
+            fi
           fi
           if [[ "$CHANNEL" == "snapshot" && "$RELEASE_TAG" != "snapshot" ]]; then
             echo "The snapshot channel must publish to the snapshot release" >&2
@@ -344,6 +359,7 @@ jobs:
           echo "short_version=$short_version" >> "$GITHUB_OUTPUT"
 
       - name: Prepare Unix update manifest
+        id: unix_manifest
         env:
           RELEASED_AT: ${{ steps.release.outputs.released_at }}
         run: |
@@ -384,7 +400,8 @@ jobs:
           else
             printf 'Development snapshot after %s.\n' \
               "${{ steps.bundle.outputs.short_version }}" > "$highlights"
-            generate_args+=(--build "${{ steps.bundle.outputs.version }}")
+            unix_build="${UNIX_SNAPSHOT_BUILD:-${{ steps.bundle.outputs.version }}}"
+            generate_args+=(--build "$unix_build")
             released_at="$(date -u +%F)"
           fi
 
@@ -393,6 +410,9 @@ jobs:
             --released-at "$released_at" \
             --highlights-file "$highlights" \
             --output "$manifest"
+          if [[ "$CHANNEL" == "snapshot" ]]; then
+            echo "build=$unix_build" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Fetch current appcast
         id: current-appcast
@@ -588,7 +608,7 @@ jobs:
             --version "${{ steps.bundle.outputs.short_version }}"
           )
           if [[ "$CHANNEL" == "snapshot" ]]; then
-            expected+=(--build "${{ steps.bundle.outputs.version }}")
+            expected+=(--build "${{ steps.unix_manifest.outputs.build }}")
           fi
           for _ in 1 2 3 4 5 6 7 8 9 10; do
             if curl --fail --location --silent --show-error \
