@@ -292,6 +292,11 @@ impl<'a> ConnectHandler<'a> {
         Ok(config) => Some((cred, config)),
         Err(error) => {
           self.check_cancelled()?;
+          // The portal never answered: keep the cached cookie and report the error.
+          if gateway::is_unanswered_request(&error) {
+            warn!("Cached portal authentication could not reach the portal: {error}");
+            return Err(error);
+          }
           warn!("Cached portal authentication failed: {error}");
           self.clear_cookie_cache();
           None

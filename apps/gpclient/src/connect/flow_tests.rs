@@ -127,6 +127,49 @@ async fn cached_tunnel_authentication_does_not_require_portal_discovery() {
 }
 
 #[tokio::test]
+async fn unreachable_gateway_keeps_cached_cookie() {
+  // Nothing listens here: the cached gateway login gets no answer at all.
+  let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+  let gateway = format!("http://{}", listener.local_addr().unwrap());
+  drop(listener);
+  let directory = tempfile::tempdir().unwrap();
+  let cache = directory.path().join("cookie.json");
+  let args = TestArgs::parse_from([
+    "test",
+    "http://unavailable-portal.invalid",
+    "--cookie-only",
+    "--cookie-cache",
+    cache.to_str().unwrap(),
+  ])
+  .connect;
+  let lock = directory.path().join("client.pid");
+  let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
+  let shared = SharedArgs {
+    ignore_tls_errors: true,
+    lock_file: &lock,
+    verbose: &verbose,
+    log_format: LogFormat::Text,
+  };
+  let handler = ConnectHandler::new(&args, &shared);
+  cookie_store::save(
+    &cache,
+    &StoredCookie::new(
+      args.server.clone(),
+      "alice".into(),
+      handler.os_profile.borrow().host_identity().host_id().into(),
+      gateway,
+      AuthCookieCredential::new("alice", "portal-cookie", ""),
+    ),
+  )
+  .unwrap();
+  assert!(handler.handle_impl().await.is_err());
+  assert!(
+    cache.exists(),
+    "a login that got no answer must not delete the cookie cache"
+  );
+}
+
+#[tokio::test]
 async fn internal_tunnel_keeps_gateway_authentication_after_portal_cookie_rejection() {
   let (origin, worker) = gateway(vec![
     (
