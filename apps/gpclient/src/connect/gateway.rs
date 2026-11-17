@@ -101,6 +101,11 @@ impl ConnectHandler<'_> {
         {
           return Some(Err(error));
         }
+        // A failed request does not establish that the cookie was rejected.
+        if is_network_error(&error) {
+          warn!("Cached gateway authentication request failed: {error}");
+          return Some(Err(error));
+        }
         cookie_store::clear(&path);
         warn!("Cached gateway authentication failed: {error}");
         return None;
@@ -829,4 +834,12 @@ mod tests {
       "gpauth --gateway gateway.example.test | sudo gpclient connect gateway.example.test --as-gateway --cookie-on-stdin"
     );
   }
+}
+
+/// A failed request says nothing about whether a cached cookie is still valid.
+pub(super) fn is_network_error(error: &anyhow::Error) -> bool {
+  matches!(
+    error.downcast_ref::<gpapi::error::PortalError>(),
+    Some(gpapi::error::PortalError::NetworkError(_))
+  )
 }

@@ -292,6 +292,11 @@ impl<'a> ConnectHandler<'a> {
         Ok(config) => Some((cred, config)),
         Err(error) => {
           self.check_cancelled()?;
+          // A failed request does not establish that the cookie was rejected.
+          if gateway::is_network_error(&error) {
+            warn!("Cached portal authentication request failed: {error}");
+            return Err(error);
+          }
           warn!("Cached portal authentication failed: {error}");
           self.clear_cookie_cache();
           None
