@@ -36,6 +36,27 @@ fn login_response() -> String {
   )
 }
 
+async fn read_request(stream: &mut tokio::net::TcpStream) -> String {
+  let mut request = Vec::new();
+  loop {
+    let mut buf = [0; 4096];
+    let count = stream.read(&mut buf).await.unwrap();
+    assert_ne!(count, 0, "Request ended before its body");
+    request.extend_from_slice(&buf[..count]);
+    if let Some(end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+      let headers = String::from_utf8_lossy(&request[..end]).to_ascii_lowercase();
+      let length = headers
+        .lines()
+        .find_map(|line| line.strip_prefix("content-length:"))
+        .map(|value| value.trim().parse::<usize>().unwrap())
+        .unwrap_or(0);
+      if request.len() >= end + 4 + length {
+        return String::from_utf8(request).unwrap();
+      }
+    }
+  }
+}
+
 async fn gateway(responses: Vec<(&'static str, String)>) -> (String, tokio::task::JoinHandle<Vec<String>>) {
   let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
   let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -44,25 +65,7 @@ async fn gateway(responses: Vec<(&'static str, String)>) -> (String, tokio::task
       let mut requests = Vec::new();
       for (status, body) in responses {
         let (mut stream, _) = listener.accept().await.unwrap();
-        let mut request = Vec::new();
-        loop {
-          let mut buf = [0; 4096];
-          let count = stream.read(&mut buf).await.unwrap();
-          assert_ne!(count, 0, "Request ended before its body");
-          request.extend_from_slice(&buf[..count]);
-          if let Some(end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
-            let headers = String::from_utf8_lossy(&request[..end]).to_ascii_lowercase();
-            let length = headers
-              .lines()
-              .find_map(|line| line.strip_prefix("content-length:"))
-              .map(|value| value.trim().parse::<usize>().unwrap())
-              .unwrap_or(0);
-            if request.len() >= end + 4 + length {
-              break;
-            }
-          }
-        }
-        requests.push(String::from_utf8(request).unwrap());
+        requests.push(read_request(&mut stream).await);
         stream
           .write_all(
             format!(
@@ -167,6 +170,95 @@ async fn unreachable_gateway_keeps_cached_cookie() {
     cache.exists(),
     "a login that got no answer must not delete the cookie cache"
   );
+}
+
+#[tokio::test]
+async fn gateway_closing_without_response_keeps_cached_cookie() {
+  closed_connection_keeps_cached_cookie(false).await;
+}
+
+#[tokio::test]
+async fn portal_closing_without_response_keeps_cached_cookie() {
+  closed_connection_keeps_cached_cookie(true).await;
+}
+
+async fn closed_connection_keeps_cached_cookie(portal_discovery: bool) {
+  let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let origin = format!("http://{}", listener.local_addr().unwrap());
+  let worker = tokio::spawn(async move {
+    tokio::time::timeout(Duration::from_secs(5), async move {
+      if portal_discovery {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        assert!(read_request(&mut stream).await.contains("/global-protect/prelogin.esp"));
+        let body = "<prelogin-response><status>Success</status></prelogin-response>";
+        stream
+          .write_all(
+            format!(
+              "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+              body.len()
+            )
+            .as_bytes(),
+          )
+          .await
+          .unwrap();
+      }
+      let (mut stream, _) = listener.accept().await.unwrap();
+      // Read the complete request, then close without sending HTTP headers.
+      read_request(&mut stream).await
+    })
+    .await
+    .expect("Connection-closing fixture timed out")
+  });
+  let directory = tempfile::tempdir().unwrap();
+  let cache = directory.path().join("cookie.json");
+  let args = TestArgs::parse_from([
+    "test",
+    &origin,
+    "--cookie-only",
+    "--cookie-cache",
+    cache.to_str().unwrap(),
+  ])
+  .connect;
+  let lock = directory.path().join("client.pid");
+  let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
+  let shared = SharedArgs {
+    ignore_tls_errors: true,
+    lock_file: &lock,
+    verbose: &verbose,
+    log_format: LogFormat::Text,
+  };
+  let handler = ConnectHandler::new(&args, &shared);
+  cookie_store::save(
+    &cache,
+    &StoredCookie::new(
+      args.server.clone(),
+      "alice".into(),
+      handler.os_profile.borrow().host_identity().host_id().into(),
+      origin.clone(),
+      AuthCookieCredential::new("alice", "portal-cookie", ""),
+    ),
+  )
+  .unwrap();
+  let result = if portal_discovery {
+    handler.connect_portal_with_prelogin(&origin).await
+  } else {
+    handler.handle_impl().await
+  };
+  let error = result.unwrap_err();
+  let Some(gpapi::error::PortalError::NetworkError(network)) = error.downcast_ref() else {
+    panic!("Expected a network error, got {error:?}");
+  };
+  assert!(network.is_request());
+  assert!(!network.is_connect());
+  assert!(!network.is_timeout());
+  assert!(cache.exists(), "an unanswered request must not delete the cookie cache");
+  let request = worker.await.unwrap();
+  assert!(request.contains("portal-cookie"));
+  if portal_discovery {
+    assert!(request.starts_with("POST /global-protect/getconfig.esp "));
+  } else {
+    assert!(request.starts_with("POST /ssl-vpn/login.esp "));
+  }
 }
 
 #[tokio::test]

@@ -101,10 +101,9 @@ impl ConnectHandler<'_> {
         {
           return Some(Err(error));
         }
-        // The gateway never answered, so it did not reject the cookie: keep the
-        // cache for the next attempt instead of forcing a new sign-in.
-        if is_unanswered_request(&error) {
-          warn!("Cached gateway authentication could not reach the gateway: {error}");
+        // A failed request does not establish that the cookie was rejected.
+        if is_network_error(&error) {
+          warn!("Cached gateway authentication request failed: {error}");
           return Some(Err(error));
         }
         cookie_store::clear(&path);
@@ -837,12 +836,10 @@ mod tests {
   }
 }
 
-/// True when a request failed before the server answered (DNS, connect, or
-/// timeout). Such a failure says nothing about whether a cached cookie is still
-/// valid, so the cookie cache must be kept.
-pub(super) fn is_unanswered_request(error: &anyhow::Error) -> bool {
+/// A failed request says nothing about whether a cached cookie is still valid.
+pub(super) fn is_network_error(error: &anyhow::Error) -> bool {
   matches!(
     error.downcast_ref::<gpapi::error::PortalError>(),
-    Some(gpapi::error::PortalError::NetworkError(e)) if e.is_connect() || e.is_timeout()
+    Some(gpapi::error::PortalError::NetworkError(_))
   )
 }
