@@ -39,14 +39,6 @@ class RepositoryTests(unittest.TestCase):
             with self.assertRaises(publication.Pending):
                 publication.rpm_packages("https://repo")
 
-    def test_copr_same_version_from_another_build_does_not_pass(self):
-        primary = ET.fromstring('''<metadata xmlns="http://linux.duke.edu/metadata/common"><package>
-          <name>globalprotect-openconnect</name><arch>x86_64</arch><version ver="3.0.1" rel="1.fc44"/>
-          <location href="011106217-globalprotect-openconnect/package.rpm"/></package></metadata>''')
-        with patch.object(publication, "rpm_packages", return_value=primary):
-            params = ("https://repo", "globalprotect-openconnect", "3.0.1", "x86_64", lambda release: True)
-            self.assertTrue(publication.rpm_present(*params, build_id=11106217))
-            self.assertFalse(publication.rpm_present(*params, build_id=11106218))
 
 
 class LaunchpadTests(unittest.TestCase):
@@ -138,6 +130,25 @@ class OBSTests(unittest.TestCase):
 
 
 class CoprTests(unittest.TestCase):
+    def test_migrated_repository_matches_exact_build_manifest(self):
+        checker = publication.Copr(arguments(build_id=42))
+        build = {"ownername": "yuezk", "projectname": "globalprotect-openconnect",
+                 "state": "succeeded", "source_package": {"name": "globalprotect-openconnect", "version": "3.0.1-1"},
+                 "chroots": ["fedora-44-x86_64"], "repo_url": "https://repo"}
+        status = {"state": "succeeded", "result_url": "https://results/42/"}
+        package = {"name": "globalprotect-openconnect", "version": "3.0.1", "release": "1.fc44", "arch": "x86_64"}
+        primary = ET.fromstring('''<metadata xmlns="http://linux.duke.edu/metadata/common"><package>
+          <name>globalprotect-openconnect</name><arch>x86_64</arch><version ver="3.0.1" rel="1.fc44"/>
+          <location href="Packages/g/globalprotect-openconnect-3.0.1-1.fc44.x86_64.rpm"/></package></metadata>''')
+        with patch.object(publication, "api", side_effect=[build, status, {"packages": [package]}]), \
+                patch.object(publication, "rpm_packages", return_value=primary):
+            self.assertIn("1 targets built and published", checker.check())
+        package["release"] = "1.fc45"
+        with patch.object(publication, "api", side_effect=[build, status, {"packages": [package]}]), \
+                patch.object(publication, "rpm_packages", return_value=primary):
+            with self.assertRaisesRegex(publication.Pending, "Waiting for Copr build 42"):
+                checker.check()
+
     def test_unselected_chroot_cannot_be_hidden_by_verification(self):
         checker = publication.Copr(arguments(build_id=42, chroots=["fedora-44-x86_64"]))
         build = {"ownername": "yuezk", "projectname": "globalprotect-openconnect",
