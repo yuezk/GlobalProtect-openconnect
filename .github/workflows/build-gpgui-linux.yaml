@@ -12,6 +12,9 @@ on:
       channel:
         required: true
         type: string
+      build:
+        required: true
+        type: string
       builder:
         required: true
         type: string
@@ -85,7 +88,7 @@ jobs:
       - name: Build gpgui in Docker
         env:
           GPGUI_BUILDER: ${{ inputs.builder }}
-          GPGUI_BUILD_VERSION: ${{ github.run_number }}.${{ github.run_attempt }}
+          GPGUI_BUILD_VERSION: ${{ inputs.build }}
           GPGUI_UPDATE_CHANNEL: ${{ inputs.channel }}
           GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}
         run: |
