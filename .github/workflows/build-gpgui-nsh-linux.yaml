@@ -12,6 +12,9 @@ on:
       channel:
         required: true
         type: string
+      build:
+        required: true
+        type: string
     secrets:
       GH_PAT:
         required: true
@@ -35,7 +38,7 @@ jobs:
     env:
       CARGO_INCREMENTAL: '0'
       CARGO_BUILD_JOBS: '2'
-      GPGUI_BUILD_VERSION: ${{ github.run_number }}.${{ github.run_attempt }}
+      GPGUI_BUILD_VERSION: ${{ inputs.build }}
       GPGUI_GIT_COMMIT: ${{ inputs.gpgui_ref }}
       GPGUI_UPDATE_CHANNEL: ${{ inputs.channel }}
       GPGUI_LICENSE_SIGNING_KEYS: ${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}

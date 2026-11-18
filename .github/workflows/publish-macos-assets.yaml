@@ -1,6 +1,21 @@
 name: Publish macOS assets
 
 on:
+  workflow_call:
+    inputs:
+      build_run_id:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+      expected_gui:
+        required: false
+        default: nsh
+        type: string
+    secrets:
+      GH_PAT:
+        required: false
   workflow_dispatch:
     inputs:
       build_run_id:

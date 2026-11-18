@@ -69,8 +69,10 @@ jobs:
       actions: read
       contents: read
     outputs:
-      gp_sha: ${{ steps.sources.outputs.gp_sha }}
-      gpgui_sha: ${{ steps.sources.outputs.gpgui_sha }}
+      gp_sha: ${{ steps.identity.outputs.gp_sha }}
+      gpgui_sha: ${{ steps.identity.outputs.gpgui_sha }}
+      version: ${{ steps.identity.outputs.version }}
+      build_version: ${{ steps.identity.outputs.build_version }}
     steps:
     - name: Validate stable refs
       env:
@@ -119,11 +121,12 @@ jobs:
         token: ${{ secrets.GH_PAT }}
         ref: ${{ github.event_name == 'workflow_dispatch' && inputs.gpgui_branch || github.ref_name }}
         path: selected/gpgui
-    - name: Record selected sources
-      id: sources
+    - name: Record selected sources and versions
+      id: identity
       run: |
         python3 scripts/record-build-sources.py selected-sources/sources.json \
-          --gp selected/gp --gpgui selected/gpgui
+          --gp selected/gp --gpgui selected/gpgui \
+          --build-version "${{ github.run_number }}.${{ github.run_attempt }}"
     - name: Retain selected sources for retries
       if: steps.restored.outputs.cached != 'true'
       uses: actions/upload-artifact@v7
@@ -442,6 +445,7 @@ jobs:
       gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
       gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
       channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+      build: ${{ needs.validate-inputs.outputs.build_version }}
       builder: gpgui-builder-tauri2
       verify_desktop_assets: true
     secrets:
@@ -455,6 +459,7 @@ jobs:
       gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
       gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
       channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+      build: ${{ needs.validate-inputs.outputs.build_version }}
       builder: gpgui-alpine-builder-tauri2
       artifact_suffix: -musl
     secrets:
@@ -467,11 +472,15 @@ jobs:
       gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
       gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
       channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
+      build: ${{ needs.validate-inputs.outputs.build_version }}
     secrets:
       GH_PAT: ${{ secrets.GH_PAT }}
 
   build-windows:
     needs: validate-inputs
+    permissions:
+      contents: read
+      id-token: write
     if: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_windows) || (startsWith(github.ref, 'refs/tags/') && vars.BUILD_WINDOWS_ON_TAG == 'true') }}
     strategy:
       fail-fast: false
@@ -483,7 +492,7 @@ jobs:
       gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
       gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
       channel: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
-      build: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
+      build: ${{ needs.validate-inputs.outputs.build_version }}
     secrets:
       GH_PAT: ${{ secrets.GH_PAT }}
       WINDOWS_UPDATE_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_PRIVATE_KEY }}
@@ -682,7 +691,7 @@ jobs:
           FEED_URL: ${{ vars.SPARKLE_FEED_URL }}
           CHANNEL: ${{ (github.event_name == 'workflow_dispatch' && inputs.channel || 'stable') }}
           RELEASE_TAG: ${{ (github.event_name == 'workflow_dispatch' && (inputs.channel == 'stable' && inputs.gp_branch || 'snapshot') || github.ref_name) }}
-          BUILD_VERSION: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
+          BUILD_VERSION: ${{ needs.validate-inputs.outputs.build_version }}
         run: |
           set -euo pipefail
 
@@ -850,7 +859,7 @@ jobs:
           CHANNEL: ${{ (github.event_name == 'workflow_dispatch' && inputs.channel || 'stable') }}
           RELEASE_TAG: ${{ (github.event_name == 'workflow_dispatch' && (inputs.channel == 'stable' && inputs.gp_branch || 'snapshot') || github.ref_name) }}
           REQUEST_ID: ${{ format('{0}.{1}.macos', github.run_id, github.run_attempt) }}
-          BUILD_VERSION: ${{ format('{0}.{1}', github.run_number, github.run_attempt) }}
+          BUILD_VERSION: ${{ needs.validate-inputs.outputs.build_version }}
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -1049,7 +1058,6 @@ jobs:
             nettle \
             gmp \
             gnome-keyring \
-            libayatana-appindicator \
             polkit \
             webkit2-gtk_41
           pkgconf --exists libxml-2.0 liblz4 gnutls p11-kit-1 hogweed nettle gmp
@@ -1058,7 +1066,7 @@ jobs:
           exec 3>&1
           (
             set -eu
-            export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
+            export GPGUI_BUILD_VERSION=${{ needs.validate-inputs.outputs.build_version }}
             export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
             export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
@@ -1142,7 +1150,7 @@ jobs:
             set -eu
             export AUTOCONF_VERSION=2.72
             export AUTOMAKE_VERSION=1.17
-            export GPGUI_BUILD_VERSION=${{ github.run_number }}.${{ github.run_attempt }}
+            export GPGUI_BUILD_VERSION=${{ needs.validate-inputs.outputs.build_version }}
             export GPGUI_UPDATE_CHANNEL=${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'stable' }}
             export GPGUI_LICENSE_SIGNING_KEYS='${{ vars.GPGUI_LICENSE_SIGNING_KEYS }}'
 
@@ -1312,6 +1320,61 @@ jobs:
         RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && (inputs.channel == 'stable' && inputs.gp_branch || 'snapshot') || github.ref_name }}
       run: |
         cd gh-release/gp/scripts && ./gh-release.sh "$RELEASE_TAG"
+
+  publish-macos-assets:
+    needs: [build-macos, gh-release]
+    if: >-
+      ${{ !cancelled() &&
+          needs.build-macos.result == 'success' && needs.gh-release.result == 'success' }}
+    permissions:
+      actions: read
+      contents: write
+    uses: ./.github/workflows/publish-macos-assets.yaml
+    with:
+      build_run_id: ${{ github.run_id }}
+      release_tag: ${{ github.event_name == 'workflow_dispatch' && (inputs.channel == 'stable' && inputs.gp_branch || 'snapshot') || github.ref_name }}
+      expected_gui: ${{ github.event_name == 'workflow_dispatch' && inputs.macos_gui || 'nsh' }}
+    secrets: inherit
+
+  publish-windows-snapshot-feed:
+    needs: [validate-inputs, gh-release, publish-macos-assets]
+    if: >-
+      ${{ !cancelled() && github.event_name == 'workflow_dispatch' &&
+          inputs.channel == 'snapshot' && !inputs.build_only && inputs.build_windows &&
+          needs.gh-release.result == 'success' &&
+          (!inputs.build_macos || needs.publish-macos-assets.result == 'success') }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/publish-windows-update-feed.yaml
+    with:
+      gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
+      release_tag: snapshot
+      version: ${{ needs.validate-inputs.outputs.version }}
+      channel: snapshot
+      build: ${{ needs.validate-inputs.outputs.build_version }}
+      highlights: Development snapshot.
+    secrets: inherit
+
+  publish-macos-unix-snapshot-feeds:
+    needs: [validate-inputs, gh-release, publish-macos-assets, publish-windows-snapshot-feed]
+    if: >-
+      ${{ !cancelled() && github.event_name == 'workflow_dispatch' &&
+          inputs.channel == 'snapshot' && !inputs.build_only && inputs.build_macos &&
+          needs.gh-release.result == 'success' && needs.publish-macos-assets.result == 'success' &&
+          (!inputs.build_windows || needs.publish-windows-snapshot-feed.result == 'success') }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/publish-update-feeds.yaml
+    with:
+      gpgui_ref: ${{ needs.validate-inputs.outputs.gpgui_sha }}
+      gp_ref: ${{ needs.validate-inputs.outputs.gp_sha }}
+      channel: snapshot
+      release_tag: snapshot
+      archive_name: ${{ format('GPConnect_{0}-snapshot.{1}_arm64.zip', needs.validate-inputs.outputs.version, needs.validate-inputs.outputs.build_version) }}
+      expected_gui: ${{ inputs.macos_gui }}
+      unix_platforms: ${{ (inputs.build_bsd || inputs.build_bsd_arm64) && 'linux,freebsd,openbsd' || 'linux' }}
+      highlights: Development snapshot.
+    secrets: inherit
 
   publish-docker-image:
     needs:

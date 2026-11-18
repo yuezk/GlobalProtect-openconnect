@@ -90,24 +90,43 @@ class ReleaseVersionTests(unittest.TestCase):
                 versions.validate(root, package=package)
 
 
-class SourceSelectionTests(unittest.TestCase):
+class BuildIdentityTests(unittest.TestCase):
     def test_retry_uses_original_sources_after_both_branches_advance(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             paths = [root / 'gp', root / 'gpgui']
             for repo in paths:
                 initialize(repo)
+                write_version(repo)
                 (repo / 'source').write_text('first')
                 commit(repo, 'first')
             path, output = root / 'sources.json', root / 'output'
-            sources.record(path, *paths, output)
+            sources.record(path, *paths, output, '42.1')
             original = json.loads(path.read_text())
             for repo in paths:
+                write_version(repo, '3.2.0')
                 (repo / 'source').write_text('second')
                 commit(repo, 'second')
-            sources.record(path, *paths, output)
+            sources.record(path, *paths, output, '42.2')
             self.assertEqual(json.loads(path.read_text()), original)
             self.assertEqual(output.read_text().count(f"gp_sha={original['gp_sha']}"), 2)
+            self.assertEqual(original['version'], '3.1.0')
+            self.assertEqual(original['build_version'], '42.1')
+            sources.record(path, root / 'missing-gp', root / 'missing-gui', output, '42.3')
+            self.assertEqual(json.loads(path.read_text()), original)
+
+    def test_mismatched_product_versions_are_not_retained(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = [root / 'gp', root / 'gpgui']
+            for repo, version in zip(paths, ['3.1.0', '3.2.0']):
+                initialize(repo)
+                write_version(repo, version)
+                commit(repo, 'source')
+            path = root / 'sources.json'
+            with self.assertRaisesRegex(ValueError, 'versions differ'):
+                sources.record(path, *paths, root / 'output', '42.1')
+            self.assertFalse(path.exists())
 
     def test_corrupt_retained_sources_do_not_resolve_again(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -115,7 +134,7 @@ class SourceSelectionTests(unittest.TestCase):
             path = root / 'sources.json'
             path.write_text('{"gp_sha":"main","gpgui_sha":"main"}')
             with self.assertRaises(ValueError):
-                sources.record(path, root, root, root / 'output')
+                sources.record(path, root, root, root / 'output', '42.1')
 
 
 class PromotionTests(unittest.TestCase):
@@ -194,6 +213,65 @@ class SnapshotBranchTests(unittest.TestCase):
             self.assertEqual(fresh.returncode, 0, fresh.stdout + fresh.stderr)
             self.assertNotEqual(git(origin, 'rev-parse', 'refs/heads/chore/flake-feature-example'), head)
             self.assertEqual(git(origin, 'branch', '--list', 'main'), '')
+
+
+class PublicationWorkflowTests(unittest.TestCase):
+    def job(self, name):
+        source = (ROOT / '.github/workflows/build.yaml').read_text()
+        return re.search(r'(?ms)^  ' + name + r':\n.*?(?=^  [\w-]+:|\Z)', source).group(0)
+
+    def decisions(self, name, cases):
+        expression = re.search(r'\$\{\{ (.*?) \}\}', self.job(name), re.DOTALL).group(1)
+        expression = re.sub(r'needs\.([\w-]+)\.result', r'needs["\1"].result', expression)
+        script = """
+const cases = JSON.parse(process.argv[1]);
+const allows = new Function('needs', 'inputs', 'github', 'cancelled',
+  'return (' + process.argv[2] + ')');
+console.log(JSON.stringify(cases.map(c => allows(c.needs, c.inputs, c.github, () => c.cancelled))));
+"""
+        return json.loads(subprocess.check_output(
+            ['node', '-e', script, json.dumps(cases), expression], text=True))
+
+    def test_macos_assets_require_both_jobs_and_a_live_run(self):
+        job = self.job('publish-macos-assets')
+        self.assertIn('needs: [build-macos, gh-release]', job)
+        self.assertIn('uses: ./.github/workflows/publish-macos-assets.yaml', job)
+        cases, expected = [], []
+        for macos in ['success', 'failure', 'skipped', 'cancelled']:
+            for release in ['success', 'failure', 'skipped', 'cancelled']:
+                for cancelled in [False, True]:
+                    cases.append({'needs': {'build-macos': {'result': macos},
+                                             'gh-release': {'result': release}},
+                                  'inputs': {}, 'github': {}, 'cancelled': cancelled})
+                    expected.append(not cancelled and macos == release == 'success')
+        self.assertEqual(self.decisions('publish-macos-assets', cases), expected)
+
+    def test_snapshot_feeds_follow_selection_and_publication_results(self):
+        cases, expected_windows, expected_macos = [], [], []
+        for macos in [False, True]:
+            for windows in [False, True]:
+                for override in [{}, {'channel': 'stable'}, {'build_only': True},
+                                 {'event': 'push'}, {'cancelled': True}, {'release': 'failure'},
+                                 {'macos_publish': 'failure'}, {'windows_feed': 'failure'}]:
+                    inputs = dict(channel='snapshot', build_only=False,
+                                  build_macos=macos, build_windows=windows)
+                    inputs.update({key: value for key, value in override.items() if key in inputs})
+                    release = override.get('release', 'success')
+                    macos_publish = override.get('macos_publish', 'success') if macos else 'skipped'
+                    windows_feed = override.get('windows_feed', 'success') if windows else 'skipped'
+                    cancelled = override.get('cancelled', False)
+                    event = override.get('event', 'workflow_dispatch')
+                    cases.append({'needs': {'gh-release': {'result': release},
+                                             'publish-macos-assets': {'result': macos_publish},
+                                             'publish-windows-snapshot-feed': {'result': windows_feed}},
+                                  'inputs': inputs, 'github': {'event_name': event}, 'cancelled': cancelled})
+                    ready = (not cancelled and event == 'workflow_dispatch' and
+                             inputs['channel'] == 'snapshot' and not inputs['build_only'] and
+                             release == 'success' and (not macos or macos_publish == 'success'))
+                    expected_windows.append(ready and windows)
+                    expected_macos.append(ready and macos and (not windows or windows_feed == 'success'))
+        self.assertEqual(self.decisions('publish-windows-snapshot-feed', cases), expected_windows)
+        self.assertEqual(self.decisions('publish-macos-unix-snapshot-feeds', cases), expected_macos)
 
 
 class DockerMatrixTests(unittest.TestCase):

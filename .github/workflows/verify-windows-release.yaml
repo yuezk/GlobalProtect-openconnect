@@ -1,0 +1,93 @@
+name: Verify public Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published snapshot or stable release tag
+        required: true
+        type: string
+      version:
+        description: Base product version
+        required: true
+        type: string
+      build:
+        description: Numeric snapshot build; empty for stable
+        type: string
+      gpgui_ref:
+        description: Matching GUI source ref containing the pinned update tools
+        required: true
+        default: release/next
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, arm64]
+    runs-on: ${{ matrix.architecture == 'arm64' && 'windows-11-arm' || 'windows-2022' }}
+    timeout-minutes: 20
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      PRODUCT_VERSION: ${{ inputs.version }}
+      BUILD_VERSION: ${{ inputs.build }}
+      ARCHITECTURE: ${{ matrix.architecture }}
+      WINDOWS_UPDATE_PUBLIC_KEY: ${{ vars.WINDOWS_UPDATE_PUBLIC_KEY }}
+      WINDOWS_SIGNING_PUBLISHER: ${{ vars.WINDOWS_SIGNING_PUBLISHER }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.release_tag == 'snapshot' && 'release/next' || inputs.release_tag }}
+          persist-credentials: false
+      - uses: ./.github/actions/checkout-private
+        with:
+          token: ${{ secrets.GH_PAT }}
+          ref: ${{ inputs.gpgui_ref }}
+          path: gpgui
+      - name: Download, verify, install and uninstall the public installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PRODUCT_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid product version.' }
+          if (!$env:WINDOWS_UPDATE_PUBLIC_KEY -or !$env:WINDOWS_SIGNING_PUBLISHER) { throw 'Configure the update key and signing publisher.' }
+          $displayVersion = $env:PRODUCT_VERSION
+          if ($env:RELEASE_TAG -eq 'snapshot') {
+            if ($env:BUILD_VERSION -notmatch '^\d+(\.\d+){0,2}$') { throw 'Invalid snapshot build.' }
+            $displayVersion += "-snapshot.$env:BUILD_VERSION"
+          } elseif ($env:RELEASE_TAG -ne "v$env:PRODUCT_VERSION" -or $env:BUILD_VERSION) { throw 'Stable release identity does not match.' }
+          $name = "GPConnect_${displayVersion}_windows-$env:ARCHITECTURE-setup.exe"
+          $downloads = Join-Path $env:RUNNER_TEMP 'public-windows-release'
+          New-Item -ItemType Directory $downloads | Out-Null
+          foreach ($asset in @($name, "$name.sha256", "$name.sig")) {
+            gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern $asset --dir $downloads
+            if ($LASTEXITCODE -ne 0) { throw "Could not download $asset" }
+          }
+          $installer = Join-Path $downloads $name
+          $sum = (Get-Content "$installer.sha256" -Raw).Trim()
+          if ($sum -notmatch '^([a-fA-F0-9]{64})  (.+)$' -or $Matches[2] -ne $name) { throw 'Invalid checksum file.' }
+          $hash = (Get-FileHash $installer).Hash
+          if ($hash -ne $Matches[1]) { throw 'Installer checksum mismatch.' }
+          if ([Diagnostics.FileVersionInfo]::GetVersionInfo($installer).ProductVersion -ne $displayVersion) { throw 'Installer version mismatch.' }
+          & ./scripts/test-windows-signature.ps1 -Files $installer -Publisher $env:WINDOWS_SIGNING_PUBLISHER
+          . ./gpgui/scripts/windows-updates/Get-WinSparkle.ps1
+          $tools = Get-WinSparkleTools (Join-Path $env:RUNNER_TEMP 'winsparkle-tools') -Architecture $env:ARCHITECTURE
+          $signature = (Get-Content "$installer.sig" -Raw).Trim()
+          & $tools.Tool verify -p $env:WINDOWS_UPDATE_PUBLIC_KEY -s $signature $installer
+          if ($LASTEXITCODE -ne 0) { throw 'Installer update signature is invalid.' }
+          & ./scripts/test-windows-installer.ps1 -Installer $installer -Architecture $env:ARCHITECTURE -Build $env:BUILD_VERSION
+          @{ release = $env:RELEASE_TAG; version = $displayVersion; architecture = $env:ARCHITECTURE;
+            sha256 = $hash.ToLowerInvariant(); publisher = $env:WINDOWS_SIGNING_PUBLISHER;
+            authenticode = 'Valid'; timestamped = $true; update_signature = 'Valid';
+            installed_signatures = 'Valid'; install_uninstall = 'Passed'
+          } | ConvertTo-Json | Set-Content verification.json -Encoding utf8
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-release-verification-${{ matrix.architecture }}
+          path: verification.json
+          if-no-files-found: error
+          retention-days: 30

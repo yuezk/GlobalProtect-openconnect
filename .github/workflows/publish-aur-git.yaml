@@ -54,7 +54,6 @@ jobs:
             gettext \
             gmp \
             gnutls \
-            libappindicator-gtk3 \
             libp11-kit \
             libsecret \
             libtool \

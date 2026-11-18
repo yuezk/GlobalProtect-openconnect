@@ -1,6 +1,33 @@
 name: Publish Windows update feed
 
 on:
+  workflow_call:
+    inputs:
+      gpgui_ref:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+      build:
+        required: true
+        type: string
+      highlights:
+        required: true
+        type: string
+    secrets:
+      GH_PAT:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      CLOUDFLARE_API_TOKEN:
+        required: false
   workflow_dispatch:
     inputs:
       gpgui_ref:
