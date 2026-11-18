@@ -84,16 +84,13 @@ def rpm_packages(base_url):
     return ET.fromstring(unpack(content, location))
 
 
-def rpm_present(base_url, package, version, arch, release_matches, build_id=None):
+def rpm_present(base_url, package, version, arch, release_matches):
     namespace = {"rpm": "http://linux.duke.edu/metadata/common"}
     for entry in rpm_packages(base_url).findall("rpm:package", namespace):
         info = entry.find("rpm:version", namespace)
-        location = entry.find("rpm:location", namespace).get("href")
         if (entry.findtext("rpm:name", namespaces=namespace) != package or
                 entry.findtext("rpm:arch", namespaces=namespace) != arch or
                 info.get("ver") != version or not release_matches(info.get("rel", ""))):
-            continue
-        if build_id is not None and not re.search(rf"(?:^|/)0*{build_id}-", location):
             continue
         return True
     return False
@@ -254,9 +251,16 @@ class Copr:
                 raise Pending(f"Copr {chroot}: {status['state']}; {link}")
             base = build["repo_url"].rstrip("/") + "/" + chroot
             arch = chroot.rsplit("-", 1)[1]
+            packages = api(urljoin(status["result_url"], "results.json"))["packages"]
+            package = next((item for item in packages
+                            if item["name"] == args.package and item["version"] == args.version
+                            and item["arch"] == arch
+                            and (item["release"] == args.revision
+                                 or item["release"].startswith(args.revision + "."))), None)
+            if package is None:
+                raise Failed(f"Copr build {args.build_id} has no requested package for {chroot}")
             if not rpm_present(base, args.package, args.version, arch,
-                               lambda release: release == args.revision or release.startswith(args.revision + "."),
-                               build_id=args.build_id):
+                               lambda release: release == package["release"]):
                 raise Pending(f"Waiting for Copr build {args.build_id} in {base}")
         return f"Copr build {args.build_id}: {len(build['chroots'])} targets built and published; {link}"
 
