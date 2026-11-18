@@ -172,6 +172,7 @@ mod tests {
     );
   }
 
+  #[cfg(unix)]
   #[tokio::test]
   async fn cancellation_kills_and_joins_the_running_resolver_process() {
     let file = tempfile::NamedTempFile::new().unwrap();

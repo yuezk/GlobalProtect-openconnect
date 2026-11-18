@@ -63,6 +63,8 @@ pub(crate) struct WsServerContext {
   state: Mutex<ServiceState>,
   handshake_slots: Arc<Semaphore>,
   pub(crate) hip_previews: crate::hip_preview::HipPreviews,
+  #[cfg(windows)]
+  pub(crate) patch_checks: Arc<crate::windows_patches::PatchChecks>,
 }
 
 impl WsServerContext {
@@ -75,6 +77,8 @@ impl WsServerContext {
     Self {
       product_version,
       registry,
+      #[cfg(windows)]
+      patch_checks: dispatcher.patch_checks(),
       dispatcher,
       state: Mutex::new(ServiceState {
         revision: 0,
@@ -183,6 +187,8 @@ impl WsServerContext {
 
   pub async fn remove_connection(&self, connection_id: Uuid, session_id: Uuid, generation: u64) {
     self.registry.disconnect_if_current(session_id, generation);
+    #[cfg(windows)]
+    self.patch_checks.set_interest(connection_id, false);
     let mut state = self.state.lock().await;
     state.connections.remove(&connection_id);
     state.refresh_demand();
@@ -344,6 +350,7 @@ impl WsServer {
     }
   }
 
+  #[cfg(unix)]
   pub fn context(&self) -> Arc<WsServerContext> {
     Arc::clone(&self.ctx)
   }
@@ -363,6 +370,12 @@ impl WsServer {
     };
     let _ = ready_tx.send(());
 
+    #[cfg(windows)]
+    let patch_task = {
+      let checks = self.ctx.patch_checks.clone();
+      let stop = self.cancel_token.clone();
+      tokio::spawn(async move { checks.run(stop).await })
+    };
     tokio::select! {
       _ = watch_vpn_state(self.vpn_state_rx.clone(), Arc::clone(&self.ctx)) => {
         info!("VPN state watch task completed");
@@ -377,6 +390,9 @@ impl WsServer {
         info!("WS server cancelled");
       }
     }
+    self.cancel_token.cancel();
+    #[cfg(windows)]
+    let _ = patch_task.await;
     self.ctx.hip_previews.shutdown().await;
     let _ = shutdown_tx.send(()).await;
   }

@@ -28,15 +28,9 @@ BuildRequires:  file
 BuildRequires:  perl
 
 BuildRequires:  pkgconfig(webkit2gtk-4.1)
-BuildRequires:  (pkgconfig(appindicator3-0.1) or pkgconfig(ayatana-appindicator3-0.1))
 
 BuildRequires:  (librsvg2-devel or librsvg-devel)
 
-%if 0%{?suse_version}
-Requires:       (libappindicator3-1 or libayatana-appindicator3-1)
-%else
-Requires:       (libappindicator-gtk3 or libayatana-appindicator-gtk3)
-%endif
 Requires:       xdg-utils
 Conflicts:      globalprotect-openconnect-snapshot
 

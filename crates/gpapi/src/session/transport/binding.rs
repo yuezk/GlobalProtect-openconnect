@@ -45,7 +45,7 @@ fn bind_interface(builder: reqwest::ClientBuilder, binding: &GatewayBinding) -> 
   Ok(builder.interface(binding.interface()))
 }
 
-#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+#[cfg(any(target_os = "freebsd", target_os = "openbsd", windows))]
 fn bind_interface(builder: reqwest::ClientBuilder, binding: &GatewayBinding) -> anyhow::Result<reqwest::ClientBuilder> {
   if let std::net::SocketAddr::V6(source) = binding.source() {
     anyhow::ensure!(

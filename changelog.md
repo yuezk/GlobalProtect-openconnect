@@ -1,5 +1,27 @@
 # Changelog
 
+## 3.5.0
+
+### Added
+
+- Added Windows x64 and ARM64 support, with signed installers, built-in browser sign-in, desktop notifications, and in-app updates.
+- Added a Windows system tray flyout, native HIP reports, and background Windows Update checks.
+- Added a Compatibility Graphics option on Linux for display problems.
+
+### Improved
+
+- Refined Windows settings, controls, icons, and window behavior.
+- Made HIP Preview faster on Windows and polished connection details across platforms.
+
+### Fixed
+
+- Fixed Windows keyboard activation, menu dismissal, dropdown feedback, and scrollbars.
+- Restored focus to GP Connect after browser sign-in on Windows.
+- Improved recovery from temporary sign-in and license verification failures.
+- Corrected native HIP host information on Windows, macOS, Linux, and BSD.
+- Kept sensitive authentication and tunnel data out of debug logs.
+- Removed unnecessary Linux and FreeBSD package dependencies.
+
 ## 3.4.0
 
 ### Added

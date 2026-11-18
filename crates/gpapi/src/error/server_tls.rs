@@ -109,6 +109,7 @@ fn classify_with_identity(error: &(dyn Error + 'static), has_client_identity: bo
 #[cfg(test)]
 mod tests {
   use super::*;
+  #[cfg(feature = "openssl-tests")]
   use openssl::{
     asn1::Asn1Time,
     hash::MessageDigest,
@@ -180,10 +181,12 @@ mod tests {
     );
   }
 
+  #[cfg(feature = "openssl-tests")]
   fn server(tls: bool) -> (String, thread::JoinHandle<()>) {
     server_with_client_auth(tls, SslVerifyMode::NONE)
   }
 
+  #[cfg(feature = "openssl-tests")]
   fn server_with_client_auth(tls: bool, verify: SslVerifyMode) -> (String, thread::JoinHandle<()>) {
     let key = PKey::from_rsa(Rsa::generate(2048).unwrap()).unwrap();
     let mut name = X509NameBuilder::new().unwrap();
@@ -233,6 +236,7 @@ mod tests {
     (address, worker)
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[tokio::test]
   async fn prelogin_returns_typed_certificate_failure_with_only_the_server_origin() {
     use crate::{
@@ -254,6 +258,7 @@ mod tests {
     assert_eq!(tls.server, address);
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[tokio::test]
   async fn certificate_bypass_allows_prelogin() {
     use crate::{
@@ -270,6 +275,7 @@ mod tests {
     assert!(matches!(result.unwrap(), crate::portal::Prelogin::Saml(_)));
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[tokio::test]
   async fn incompatible_tls_is_not_a_certificate_error_even_with_bypass() {
     let (address, worker) = server(false);
@@ -303,7 +309,7 @@ mod tests {
     assert_eq!(classify(&error), None);
   }
 
-  #[cfg(feature = "desktop")]
+  #[cfg(all(feature = "desktop", unix))]
   #[test]
   fn rendering_recovery_retains_client_certificate_requirement() {
     use crate::process::rendering_recovery::{RecoveryState, RenderingCrash};
@@ -330,6 +336,7 @@ mod tests {
     );
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[tokio::test]
   async fn required_client_certificate_is_not_bypassed_by_ignoring_server_trust() {
     use crate::{
@@ -371,6 +378,7 @@ mod tests {
     }
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[tokio::test]
   async fn prelogin_explains_peer_rejection_of_an_already_configured_identity() {
     use crate::{
@@ -403,6 +411,7 @@ mod tests {
     assert!(!error.to_string().contains("passphrase"));
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[tokio::test]
   async fn prelogin_accepts_a_valid_identity_and_an_optional_certificate_request() {
     use crate::{
@@ -435,6 +444,7 @@ mod tests {
     }
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[tokio::test]
   async fn imported_identity_formats_complete_mutual_tls_prelogin() {
     use crate::{

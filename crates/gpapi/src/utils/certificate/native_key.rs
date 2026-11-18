@@ -204,6 +204,7 @@ impl Signer for ClientSigner {
 #[cfg(test)]
 mod tests {
   use super::*;
+  #[cfg(feature = "openssl-tests")]
   use openssl::{
     hash::MessageDigest,
     pkey::PKey,
@@ -220,6 +221,7 @@ mod tests {
     .unwrap()
   }
 
+  #[cfg(feature = "openssl-tests")]
   fn native_key(bytes: &[u8]) -> ClientKey {
     let key = rustls_pemfile::private_key(&mut std::io::Cursor::new(bytes))
       .unwrap()
@@ -227,6 +229,7 @@ mod tests {
     ClientKey::load(&key).unwrap()
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[test]
   fn rsa_signatures_use_the_offered_scheme_and_tls_pss_salt_length() {
     let bytes = fixture("rsa-pkcs8.pem");
@@ -255,6 +258,7 @@ mod tests {
     assert!(key.choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256]).is_none());
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[test]
   fn p256_signatures_verify_with_an_independent_backend() {
     let bytes = fixture("ec-pkcs8.pem");
@@ -281,6 +285,7 @@ mod tests {
     }
   }
 
+  #[cfg(feature = "openssl-tests")]
   #[test]
   fn a_key_remains_usable_when_shared_clients_sign_concurrently() {
     let key = native_key(&fixture("rsa-pkcs8.pem"));

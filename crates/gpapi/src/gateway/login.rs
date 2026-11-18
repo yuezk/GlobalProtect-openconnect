@@ -202,7 +202,7 @@ async fn receive_gateway_login(
   let url = res.url().clone();
   let http_version = res.version();
   let content_type = res.headers().get(reqwest::header::CONTENT_TYPE).cloned();
-  let res = parse_gp_response(res).await.map_err(|err| {
+  let res = parse_gp_response(res).await.map_err(|mut err| {
     // Redirect paths and query strings can contain authentication tokens. Log
     // only the redacted origin and whether the response is from the login path.
     warn!(
@@ -220,6 +220,9 @@ async fn receive_gateway_login(
     );
     if let Some(tls) = crate::error::ServerTlsError::from_request(origin, &err, gp_params.has_client_identity()) {
       return tls;
+    }
+    if let Some(error) = err.take_body_read_error() {
+      return PortalError::NetworkError(error).into();
     }
     if gp_params.os_profile().client_os() == crate::os_profile::ClientOs::Ios && err.is_authentication_rejection() {
       return anyhow::anyhow!(crate::error::AuthenticationRejected);

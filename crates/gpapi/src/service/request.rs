@@ -424,6 +424,8 @@ pub struct UpdateLogLevelRequest(pub String);
 #[derive(Debug, Deserialize, Serialize)]
 pub enum WsRequest {
   SetTunnelStatisticsEnabled { enabled: bool },
+  SetWindowsPatchInterest { enabled: bool },
+  RefreshWindowsPatches { after: Option<u64> },
   Connect(Box<ConnectRequest>),
   Disconnect(DisconnectRequest),
   StopNonTunnelAttachment { connection_id: uuid::Uuid },

@@ -18,14 +18,14 @@ fn negotiated_os_version_is_used_in_profile_and_user_agent() {
 }
 
 #[test]
-fn csc_support_defaults_match_official_profiles() {
+fn csc_support_defaults_match_platform_profiles() {
   assert!(!ClientOs::Linux.default_csc_support());
   assert!(ClientOs::Mac.default_csc_support());
   assert!(ClientOs::Windows.default_csc_support());
 }
 
 #[test]
-fn prelogin_param_location_matches_official_profiles() {
+fn prelogin_param_location_matches_platform_profiles() {
   assert_eq!(
     OsProfileBuilder::new(ClientOs::Linux)
       .build(test_snapshot())
@@ -91,7 +91,7 @@ fn embedded_gateway_default_browser_is_zero_for_all() {
 }
 
 #[test]
-fn external_default_browser_values_match_official_profiles() {
+fn external_default_browser_values_match_platform_profiles() {
   assert_eq!(
     OsProfileBuilder::new(ClientOs::Linux)
       .build(test_snapshot())
@@ -132,7 +132,7 @@ fn external_default_browser_values_match_official_profiles() {
 }
 
 #[test]
-fn saml_password_matches_official_profiles() {
+fn saml_password_matches_platform_profiles() {
   assert_eq!(
     OsProfileBuilder::new(ClientOs::Linux)
       .build(test_snapshot())
@@ -173,7 +173,7 @@ fn gateway_server_uses_resolved_ipv4_for_all() {
 }
 
 #[test]
-fn kerberos_support_in_query_matches_official_profiles() {
+fn kerberos_support_in_query_matches_platform_profiles() {
   assert!(
     !OsProfileBuilder::new(ClientOs::Linux)
       .build(test_snapshot())
@@ -192,7 +192,7 @@ fn kerberos_support_in_query_matches_official_profiles() {
 }
 
 #[test]
-fn os_vendor_matches_official_profiles() {
+fn os_vendor_matches_platform_profiles() {
   assert_eq!(
     OsProfileBuilder::new(ClientOs::Linux)
       .build(test_snapshot())

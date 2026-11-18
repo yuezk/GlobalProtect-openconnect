@@ -1,3 +1,8 @@
+#[cfg(unix)]
+pub(crate) type CommandHandle = i32;
+#[cfg(windows)]
+pub(crate) type CommandHandle = usize;
+
 mod gateway;
 mod hip;
 mod network_configuration;
@@ -41,9 +46,11 @@ pub(crate) struct ConnectOptions {
 
   pub script: *const c_char,
   pub configure_network: Option<unsafe extern "C" fn(*mut c_void, *const c_char, *const VpnOptionRaw) -> c_int>,
-  pub interface: *const c_char,
+  pub interface_name: *const c_char,
   pub script_tun: u32,
   pub script_tun_launch: *const ScriptTunLaunchRaw,
+  #[cfg(windows)]
+  pub script_tun_pipe: isize,
 
   pub certificate: *const c_char,
   pub sslkey: *const c_char,
@@ -77,17 +84,17 @@ pub(crate) struct VpnSessionInfoRaw {
 
 #[link(name = "vpn")]
 unsafe extern "C" {
-  fn vpn_write_cancel(fd: c_int) -> c_int;
-  fn vpn_write_statistics(fd: c_int) -> c_int;
+  fn vpn_write_cancel(fd: CommandHandle) -> c_int;
+  fn vpn_write_statistics(fd: CommandHandle) -> c_int;
   #[link_name = "vpn_connect"]
   fn vpn_connect(
     options: *const ConnectOptions,
-    callback: extern "C" fn(i32, *const VpnSessionInfoRaw, *mut c_void),
+    callback: extern "C" fn(CommandHandle, *const VpnSessionInfoRaw, *mut c_void),
   ) -> c_int;
 
 }
 
-pub(crate) fn write_cancel(fd: i32) -> std::io::Result<()> {
+pub(crate) fn write_cancel(fd: CommandHandle) -> std::io::Result<()> {
   let error = unsafe { vpn_write_cancel(fd) };
   if error == 0 {
     Ok(())
@@ -96,7 +103,7 @@ pub(crate) fn write_cancel(fd: i32) -> std::io::Result<()> {
   }
 }
 
-pub(crate) fn write_statistics(fd: i32) -> std::io::Result<()> {
+pub(crate) fn write_statistics(fd: CommandHandle) -> std::io::Result<()> {
   let error = unsafe { vpn_write_statistics(fd) };
   if error == 0 {
     Ok(())
@@ -106,7 +113,7 @@ pub(crate) fn write_statistics(fd: i32) -> std::io::Result<()> {
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn vpn_attach_command_pipe(vpn: *mut c_void, fd: c_int) -> c_int {
+extern "C" fn vpn_attach_command_pipe(vpn: *mut c_void, fd: CommandHandle) -> c_int {
   unsafe { &*(vpn as *const Vpn) }.attach_command_pipe(fd).into()
 }
 
@@ -134,7 +141,7 @@ pub(crate) extern "C" fn on_hip_report_submitted(vpn: *mut c_void, report: *cons
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn on_vpn_connected(pipe_fd: i32, session_info: *const VpnSessionInfoRaw, vpn: *mut c_void) {
+extern "C" fn on_vpn_connected(pipe_fd: CommandHandle, session_info: *const VpnSessionInfoRaw, vpn: *mut c_void) {
   let vpn = unsafe { &*(vpn as *const Vpn) };
   vpn.on_connected(pipe_fd, crate::vpn::session_info_from_raw(session_info));
 }
@@ -146,6 +153,14 @@ extern "C" fn on_vpn_connected(pipe_fd: i32, session_info: *const VpnSessionInfo
 extern "C" fn vpn_log(level: i32, message: *const c_char) {
   let message = unsafe { std::ffi::CStr::from_ptr(message) };
   let message = message.to_str().unwrap_or("Invalid log message");
+  // This dump comes from the native GlobalProtect protocol handler.
+  if let Some(body) = message.strip_prefix("GlobalProtect getconfig.esp response:\n") {
+    debug!(
+      "GlobalProtect getconfig.esp response:\n{}",
+      gp_xml::redact_xml(body.as_bytes())
+    );
+    return;
+  }
   // Strip the trailing newline
   let message = message.trim_end_matches('\n');
 
@@ -163,5 +178,43 @@ extern "C" fn vpn_log(level: i32, message: *const c_char) {
       level
     );
     debug!("{}", message);
+  }
+}
+
+#[cfg(test)]
+mod log_tests {
+  use super::vpn_log;
+  use std::sync::Mutex;
+
+  struct Capture(Mutex<String>);
+  impl log::Log for Capture {
+    fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+      true
+    }
+    fn flush(&self) {}
+    fn log(&self, record: &log::Record<'_>) {
+      if record.target() == module_path!().trim_end_matches("::log_tests") {
+        self.0.lock().unwrap().push_str(&record.args().to_string());
+      }
+    }
+  }
+
+  #[test]
+  fn native_config_dump_keeps_settings_and_redacts_keys_before_logging() {
+    static CAPTURE: Capture = Capture(Mutex::new(String::new()));
+    log::set_logger(&CAPTURE).unwrap();
+    log::set_max_level(log::LevelFilter::Debug);
+    let message = c"GlobalProtect getconfig.esp response:\n<response><mtu>1400</mtu><akey-c2s><val>fixture-secret</val></akey-c2s><hs-key><bits>128</bits><val>fixture-handshake-key</val></hs-key></response>\n";
+    vpn_log(2, message.as_ptr());
+    vpn_log(
+      2,
+      c"GlobalProtect getconfig.esp response:\n<malformed>fixture-secret".as_ptr(),
+    );
+    let output = CAPTURE.0.lock().unwrap();
+    assert!(output.contains("<mtu>1400</mtu>"));
+    assert!(output.contains("[redacted]"));
+    assert!(output.contains("[XML omitted:"));
+    assert!(!output.contains("fixture-secret"));
+    assert!(!output.contains("fixture-handshake-key"));
   }
 }

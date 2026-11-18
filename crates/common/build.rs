@@ -5,11 +5,16 @@ fn main() {
   let workspace_dir = Path::new(manifest_dir).ancestors().nth(2).unwrap();
   let gpgui_dir = workspace_dir.parent().unwrap().join("gpgui");
 
-  let gp_service_binary = workspace_dir.join("target/debug/gpservice");
-  let gp_client_binary = workspace_dir.join("target/debug/gpclient");
-  let gp_auth_binary = workspace_dir.join("target/debug/gpauth");
-  let gp_gui_helper_binary = workspace_dir.join("target/debug/gpgui-helper");
-  let gp_gui_binary = gpgui_dir.join("target/debug/gpgui");
+  let suffix = if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+    ".exe"
+  } else {
+    ""
+  };
+  let gp_service_binary = workspace_dir.join(format!("target/debug/gpservice{suffix}"));
+  let gp_client_binary = workspace_dir.join(format!("target/debug/gpclient{suffix}"));
+  let gp_auth_binary = workspace_dir.join(format!("target/debug/gpauth{suffix}"));
+  let gp_gui_helper_binary = workspace_dir.join(format!("target/debug/gpgui-helper{suffix}"));
+  let gp_gui_binary = gpgui_dir.join(format!("target/debug/gpgui{suffix}"));
 
   println!("cargo:rustc-env=GP_SERVICE_BINARY={}", gp_service_binary.display());
   println!("cargo:rustc-env=GP_CLIENT_BINARY={}", gp_client_binary.display());

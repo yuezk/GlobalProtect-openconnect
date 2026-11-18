@@ -55,6 +55,8 @@ pub enum ServiceResult {
     offset: usize,
     xml: String,
     complete: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    windows_updates: Option<crate::hip::WindowsUpdateStatus>,
   },
   HipApprovalStatus(HipApprovalStatus),
   NoSubmittedHipReport,

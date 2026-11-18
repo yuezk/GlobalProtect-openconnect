@@ -89,7 +89,7 @@ fn sibling_binary(binary_name: &str) -> Option<PathBuf> {
 fn sibling_binary_for_executable(executable: &Path, binary_name: &str) -> Option<PathBuf> {
   let executable = executable.canonicalize().ok()?;
   let bin_dir = executable.parent()?;
-  let binary = bin_dir.join(binary_name);
+  let binary = bin_dir.join(format!("{binary_name}{}", std::env::consts::EXE_SUFFIX));
   if is_file(&binary) {
     return Some(binary);
   }

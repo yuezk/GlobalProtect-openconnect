@@ -2,7 +2,6 @@ pub const GP_USER_AGENT: &str = "PAN GlobalProtect";
 pub const GP_CLIENT_VERSION_LINUX: &str = "6.3.3-619";
 pub const GP_CLIENT_VERSION_WINDOWS: &str = "6.3.3-650";
 pub const GP_CLIENT_VERSION_MACOS: &str = "6.3.3-915";
-pub const GP_SERVICE_LOCK_FILE: &str = "/var/run/gpservice.lock";
 #[cfg(target_os = "linux")]
 pub const GP_VPNC_SCRIPT_INSTALLER_BINARY: &str = "/usr/libexec/gpclient/gp-vpnc-script-installer";
 #[cfg(target_os = "linux")]

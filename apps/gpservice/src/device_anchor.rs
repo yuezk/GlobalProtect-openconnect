@@ -366,7 +366,7 @@ mod tests {
       r#"{"version":1,"anchor":{"hardware_id":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","source":1}}"#
     );
 
-    for source in [0, 4] {
+    for source in [0, u8::MAX] {
       let json = serde_json::json!({
         "version": 1,
         "anchor": {

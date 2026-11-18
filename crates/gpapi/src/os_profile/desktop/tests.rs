@@ -137,14 +137,24 @@ fn assert_mac(value: &str, separator: char) {
 }
 
 #[test]
-fn builder_delegates_default_identity_to_host_identity() {
+fn builder_preserves_supplied_hardware_fields() {
   let expected = collect_identity();
   let profile = collect_profile(
     OsProfileBuilder::new(runtime_client_os()).host_identity(expected.clone()),
     None,
   );
 
-  assert_eq!(profile.host_identity(), &expected);
+  assert!(
+    profile
+      .host_identity()
+      .computer()
+      .eq_ignore_ascii_case(expected.computer())
+  );
+  assert_eq!(profile.host_identity().serialno(), expected.serialno());
+  assert_eq!(profile.host_identity().mac_addr(), expected.mac_addr());
+  if runtime_client_os() != ClientOs::Windows {
+    assert_eq!(profile.host_identity().host_id(), expected.host_id());
+  }
 }
 
 #[test]
@@ -177,4 +187,77 @@ fn controlled_profile_collection_propagates_cancellation_and_deadline() {
   let expired = CollectionBudget::new(Duration::ZERO);
   let error = collect_profile_with_control(OsProfileBuilder::new(ClientOs::Linux), None, &expired).unwrap_err();
   assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+}
+
+#[cfg(windows)]
+#[test]
+fn native_windows_profile_uses_installation_id_and_emulation_keeps_its_seed() {
+  let identity = HostIdentity::from_parts(
+    "test-host".into(),
+    "hardware-seed".into(),
+    "serial".into(),
+    "00:11:22:33:44:55".into(),
+  );
+  let control = CollectionBudget::new(Duration::from_secs(60));
+  let native = collect_profile_with_control(
+    OsProfile::builder(ClientOs::Windows).host_identity(identity.clone()),
+    None,
+    &control,
+  )
+  .unwrap();
+  // Read independently through the registry CLI to check the native API's source and view.
+  let output = std::process::Command::new("reg")
+    .args([
+      "query",
+      r"HKLM\SOFTWARE\Microsoft\Cryptography",
+      "/v",
+      "MachineGuid",
+      "/reg:64",
+    ])
+    .output()
+    .unwrap();
+  assert!(output.status.success());
+  let text = String::from_utf8(output.stdout).unwrap();
+  let expected = text
+    .lines()
+    .find_map(|line| {
+      let mut parts = line.split_whitespace();
+      (parts.next()? == "MachineGuid").then(|| parts.last().unwrap())
+    })
+    .unwrap();
+  assert_eq!(native.host_id(), expected);
+  assert_eq!(native.host_identity().host_id(), expected);
+  assert!(native.computer().eq_ignore_ascii_case(&fallback_hostname()));
+  let with_host_id = collect_profile_with_control(
+    OsProfile::builder(ClientOs::Windows).host_identity(identity.clone()),
+    Some("explicit-host-id"),
+    &control,
+  )
+  .unwrap();
+  assert_eq!(with_host_id.host_id(), "explicit-host-id");
+  assert_eq!(with_host_id.computer(), native.computer());
+  let overridden = collect_profile_with_control(
+    OsProfile::builder(ClientOs::Windows)
+      .host_identity(identity.clone())
+      .computer_name_override("Custom-Host"),
+    None,
+    &control,
+  )
+  .unwrap();
+  assert_eq!(overridden.computer(), "Custom-Host");
+
+  for client_os in [ClientOs::Mac, ClientOs::Linux] {
+    let builder = OsProfile::builder(client_os).host_identity(identity.clone());
+    let expected = builder.clone().build(HostSnapshot {
+      runtime_os: ClientOs::Windows,
+      identity: identity.clone(),
+      os_version: String::new(),
+      software_version: String::new(),
+    });
+    let actual = collect_profile_with_control(builder, None, &control).unwrap();
+    assert_eq!(actual.host_identity(), &identity);
+    assert_eq!(actual.host_id(), expected.host_id());
+    assert_eq!(actual.serialno(), expected.serialno());
+    assert_eq!(actual.mac_addr(), expected.mac_addr());
+  }
 }

@@ -8,6 +8,7 @@ use gpapi::{
 mod browser;
 
 #[cfg(feature = "browser-auth")]
+#[cfg_attr(windows, path = "callback/windows.rs")]
 mod callback;
 
 #[cfg(feature = "browser-auth")]

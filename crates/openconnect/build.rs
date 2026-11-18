@@ -1,3 +1,6 @@
+#[path = "build/windows.rs"]
+mod windows;
+
 use std::{env, path::PathBuf};
 
 fn build_libxml2(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
@@ -188,6 +191,10 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
 
 fn main() {
   let target = target_os();
+  if target == "windows" {
+    windows::build();
+    return;
+  }
   assert!(
     matches!(target.as_str(), "macos" | "linux" | "freebsd" | "openbsd"),
     "Unsupported OpenConnect target: {target}"

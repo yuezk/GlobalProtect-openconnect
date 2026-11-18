@@ -13,6 +13,8 @@ mod identity_encoding;
 #[cfg(feature = "desktop")]
 pub mod lock_file;
 pub mod redact;
+mod response_log;
+pub(crate) use response_log::log_response_xml;
 pub mod request;
 #[cfg(feature = "tauri")]
 pub mod window;
@@ -53,16 +55,23 @@ pub fn remove_url_scheme(s: &str) -> String {
 }
 
 #[derive(Error, Debug)]
-#[error("GP response error: reason={reason}, status={status}, body={body}")]
+#[error("GP response error: reason={reason}, status={status}")]
 pub struct GpError {
   pub status: StatusCode,
   pub reason: String,
-  body: String,
   #[source]
   source: Option<reqwest::Error>,
 }
 
 impl GpError {
+  pub(crate) fn take_body_read_error(&mut self) -> Option<reqwest::Error> {
+    if self.is_status_error() {
+      None
+    } else {
+      self.source.take()
+    }
+  }
+
   pub fn is_status_error(&self) -> bool {
     self.status.is_client_error() || self.status.is_server_error()
   }
@@ -79,16 +88,20 @@ pub async fn parse_gp_response(res: Response) -> anyhow::Result<String, GpError>
     return Err(parse_gp_error(res).await);
   }
 
-  res.text().await.map_err(|err| {
+  let path = log::log_enabled!(log::Level::Debug).then(|| res.url().path().to_owned());
+  let body = res.text().await.map_err(|err| {
     warn!("Failed to read response: {}", err);
 
     GpError {
       status,
       reason: "failed to read response".to_string(),
-      body: "<failed to read response>".to_string(),
       source: Some(err),
     }
-  })
+  })?;
+  if let Some(path) = path {
+    log_response_xml(&path, status, body.as_bytes());
+  }
+  Ok(body)
 }
 
 async fn parse_gp_error(res: Response) -> GpError {
@@ -99,15 +112,16 @@ async fn parse_gp_error(res: Response) -> GpError {
     .map_or_else(|| "<none>", |v| v.to_str().unwrap_or("<invalid header>"))
     .to_string();
 
-  let (body, source) = match res.text().await {
-    Ok(body) => (if body.is_empty() { "<empty>".to_string() } else { body }, None),
-    Err(error) => ("<failed to read response>".to_string(), Some(error)),
+  let path = log::log_enabled!(log::Level::Debug).then(|| res.url().path().to_owned());
+  let source = match res.text().await {
+    Ok(body) => {
+      if let Some(path) = path {
+        log_response_xml(&path, status, body.as_bytes());
+      }
+      None
+    }
+    Err(error) => Some(error),
   };
 
-  GpError {
-    status,
-    reason,
-    body,
-    source,
-  }
+  GpError { status, reason, source }
 }

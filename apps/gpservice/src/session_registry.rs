@@ -62,6 +62,8 @@ enum SessionStatus {
 }
 
 struct SessionRecord {
+  #[cfg(windows)]
+  windows_identity: Option<Arc<gpapi::windows::PipeClientIdentity>>,
   non_tunnel: Option<AttachmentAttempt>,
   closed_attachment: Option<Uuid>,
   secret: Zeroizing<[u8; 32]>,
@@ -255,6 +257,8 @@ impl SessionRegistry {
     sessions.insert(
       credential.session_id(),
       SessionRecord {
+        #[cfg(windows)]
+        windows_identity: None,
         non_tunnel: None,
         closed_attachment: None,
         secret: Zeroizing::new(*credential.secret()),
@@ -271,6 +275,38 @@ impl SessionRegistry {
       },
     );
     Ok(credential)
+  }
+
+  #[cfg(windows)]
+  pub(crate) fn issue_windows(
+    &self,
+    product_version: &str,
+    identity: Arc<gpapi::windows::PipeClientIdentity>,
+  ) -> Result<Arc<SessionCredential>, SessionError> {
+    let credential = self.issue(product_version, None)?;
+    // The credential is not published until its Windows owner is retained.
+    self
+      .sessions
+      .lock()
+      .map_err(|_| SessionError::Unavailable)?
+      .get_mut(&credential.session_id())
+      .ok_or(SessionError::Unauthorized)?
+      .windows_identity = Some(identity);
+    Ok(credential)
+  }
+
+  #[cfg(windows)]
+  pub(crate) fn windows_identity(
+    &self,
+    session_id: Uuid,
+  ) -> Result<Arc<gpapi::windows::PipeClientIdentity>, SessionError> {
+    self
+      .sessions
+      .lock()
+      .map_err(|_| SessionError::Unavailable)?
+      .get(&session_id)
+      .and_then(|record| record.windows_identity.clone())
+      .ok_or(SessionError::Unauthorized)
   }
 
   #[cfg(target_os = "macos")]

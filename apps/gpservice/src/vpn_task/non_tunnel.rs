@@ -66,10 +66,13 @@ pub(super) async fn run(
         md5: request.md5.clone(),
       };
       if !posture_enabled {
-        return gphip::generate_identity_report(&gphip::ReportInput {
-          profile: profile.clone(),
-          context,
-        })
+        return gphip::generate_identity_report(
+          &gphip::ReportInput {
+            profile: profile.clone(),
+            context,
+          },
+          control,
+        )
         .map_err(std::io::Error::other);
       }
       source.collect(

@@ -85,7 +85,7 @@ impl HipPreviews {
       })
       .await;
       let result = match generated {
-        Ok(Ok(xml)) => preview_result(&registry, session_id, xml),
+        Ok(Ok(report)) => preview_result(&registry, session_id, report),
         Ok(Err(error)) => {
           log::warn!("HIP preview failed: {error:#}");
           ServiceResult::rejected(ServiceErrorCode::Internal, "HIP preview failed")
@@ -132,17 +132,20 @@ impl HipPreviews {
   }
 }
 
-fn preview_result(registry: &SessionRegistry, session_id: Uuid, xml: String) -> ServiceResult {
-  let result = registry.store_hip_preview(session_id, xml).and_then(|preview_id| {
-    registry
-      .hip_preview_chunk(session_id, preview_id, 0)
-      .map(|(xml, complete)| ServiceResult::HipPreviewChunk {
-        preview_id: preview_id.to_string(),
-        offset: 0,
-        xml,
-        complete,
-      })
-  });
+fn preview_result(registry: &SessionRegistry, session_id: Uuid, report: gpapi::hip::HipReport) -> ServiceResult {
+  let result = registry
+    .store_hip_preview(session_id, report.xml)
+    .and_then(|preview_id| {
+      registry
+        .hip_preview_chunk(session_id, preview_id, 0)
+        .map(|(xml, complete)| ServiceResult::HipPreviewChunk {
+          preview_id: preview_id.to_string(),
+          offset: 0,
+          xml,
+          complete,
+          windows_updates: report.windows_updates,
+        })
+    });
   result.unwrap_or_else(|_| ServiceResult::rejected(ServiceErrorCode::Internal, "HIP preview is unavailable"))
 }
 
@@ -152,7 +155,7 @@ fn generate(
   desktop_uid: Option<u32>,
   identity: HostIdentity,
   cancellation: CancellationToken,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<gpapi::hip::HipReport> {
   ensure!(request.client_version.len() <= 64, "Invalid HIP client version");
   ensure!(
     request.host_id.as_ref().is_none_or(|id| id.len() <= 256),
@@ -188,7 +191,15 @@ fn generate(
   };
   let xml = match &request.source {
     HipSource::Disabled => bail!("HIP is disabled"),
-    HipSource::Generated => crate::hip_source::generate(&profile, None, &input, &check, true)?,
+    HipSource::Generated => {
+      return gphip::generate_report_details(
+        &gphip::ReportInput {
+          profile,
+          context: gphip::ReportContext::Preview,
+        },
+        &check,
+      );
+    }
     HipSource::Edited { .. } => {
       let xml = edited_report.context("Edited HIP report is unavailable")?;
       crate::hip_source::generate(&profile, Some(&xml), &input, &check, true)?
@@ -204,7 +215,10 @@ fn generate(
     }
   };
   check()?;
-  Ok(xml)
+  Ok(gpapi::hip::HipReport {
+    xml,
+    windows_updates: None,
+  })
 }
 
 #[cfg(test)]

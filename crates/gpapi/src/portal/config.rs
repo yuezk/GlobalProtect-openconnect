@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::bail;
-use log::{debug, info, warn};
+use log::{info, warn};
 use reqwest::{Client, StatusCode};
 use serde::Serialize;
 use specta::Type;
@@ -207,9 +207,12 @@ pub async fn retrieve_config(
         }
       })?;
 
-      parse_gp_response(res).await.or_else(|err| {
+      parse_gp_response(res).await.or_else(|mut err| {
         if let Some(tls) = ServerTlsError::from_request(&server_url, &err, gp_params.has_client_identity()) {
           return Err(tls);
+        }
+        if let Some(error) = err.take_body_read_error() {
+          return Err(PortalError::NetworkError(error).into());
         }
         if gp_params.os_profile().client_os() == crate::os_profile::ClientOs::Ios && err.is_authentication_rejection() {
           return Err(anyhow::anyhow!(crate::error::AuthenticationRejected));
@@ -232,7 +235,6 @@ pub async fn retrieve_config(
     bail!(PortalError::ConfigError("Empty portal config response".to_string()))
   }
 
-  debug!("Portal config response received: {} bytes", res_xml.len());
   let root = Element::parse(res_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
 
   if csc::is_config_criteria(&root) {
@@ -247,7 +249,6 @@ pub async fn retrieve_config(
       _ = cancellation.cancelled() => bail!("Portal configuration cancelled"),
       result = retrieve_csc_config(&client, &portal, &root, cred.username(), gp_params) => result?,
     };
-    debug!("Portal CSC config response received: {} bytes", csc_xml.len());
     let root = Element::parse(csc_xml.as_bytes()).map_err(|e| PortalError::ConfigError(e.to_string()))?;
     return parse_portal_policy(&server, cred, root, cancellation).await;
   }
@@ -280,9 +281,12 @@ async fn retrieve_csc_config(
     }
   })?;
 
-  parse_gp_response(res).await.or_else(|err| {
+  parse_gp_response(res).await.or_else(|mut err| {
     if let Some(tls) = ServerTlsError::from_request(&server_url, &err, gp_params.has_client_identity()) {
       return Err(tls);
+    }
+    if let Some(error) = err.take_body_read_error() {
+      return Err(PortalError::NetworkError(error).into());
     }
     if err.status == StatusCode::NOT_FOUND {
       bail!(PortalError::ConfigError("CSC config endpoint not found".to_string()));

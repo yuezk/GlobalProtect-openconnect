@@ -93,12 +93,19 @@ fn traditional_encrypted_pem_preserves_password_errors() {
         let result = load(&certificate, &key, password);
         if password == Some(PASSWORD) {
           let identity = result.unwrap_or_else(|error| panic!("{key:?}: {error}"));
-          let actual = openssl::pkey::PKey::private_key_from_pem(identity.key_data().unwrap()).unwrap();
-          let expected = openssl::pkey::PKey::private_key_from_pem(&bytes(&format!("{algorithm}-pkcs8.pem"))).unwrap();
-          assert!(
-            actual.public_eq(&expected),
-            "{key:?}: imported key differs from the fixture"
-          );
+          let public_key = |pem: &[u8]| {
+            let key = rustls_pemfile::private_key(&mut std::io::Cursor::new(pem))
+              .unwrap()
+              .unwrap();
+            rustls::crypto::ring::sign::any_supported_type(&key)
+              .unwrap()
+              .public_key()
+              .unwrap()
+              .into_owned()
+          };
+          let actual = public_key(identity.key_data().unwrap());
+          let expected = public_key(&bytes(&format!("{algorithm}-pkcs8.pem")));
+          assert!(actual == expected, "{key:?}: imported key differs from the fixture");
           assert!(identity.key_password().is_none());
         } else {
           let error = result.unwrap_err();

@@ -163,7 +163,7 @@ jobs:
             # Tauri generates schemas in the source tree. Keep the host checkout read-only.
             cp -R /workspace /tmp/gp-test-workspace
             cd /tmp/gp-test-workspace
-            cargo test --workspace --locked
+            cargo test --workspace --locked --features gpapi/openssl-tests
 
             # Exercise only the paths that require an actual root process.
             sudo -E env PATH="$PATH" PKEXEC_UID="$(id -u)" cargo test --locked -p gpapi \

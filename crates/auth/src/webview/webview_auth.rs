@@ -1,6 +1,8 @@
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::bail;
+#[cfg(not(windows))]
+use gpapi::utils::window::get_title_bar_height;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 use gpapi::utils::window::{WindowTypeHint, set_window_type_hint};
 use gpapi::{
@@ -8,24 +10,51 @@ use gpapi::{
   error::ServerTlsError,
   gp_params::GpParams,
   os_profile::{WebviewUserAgent, WebviewUserAgentTransform},
-  utils::{redact::redact_uri, window::get_title_bar_height},
+  utils::redact::redact_uri,
 };
 use log::{info, warn};
 #[cfg(target_os = "macos")]
 use tauri::Manager;
-use tauri::{AppHandle, WebviewUrl, WebviewWindow, WindowEvent};
+#[cfg(not(windows))]
+use tauri::WebviewUrl;
+use tauri::{AppHandle, WindowEvent};
 use tokio::{sync::oneshot, time};
 
 use crate::auth_prelogin;
 
+#[cfg(not(windows))]
 use super::address_bar::TOOLBAR_HEIGHT;
 use super::auth_messenger::{AuthError, AuthEvent, AuthMessenger};
 use super::recovery::{Recovery, RecoveryStatus, RetryPlan, RetrySource, RetryTiming};
 
+#[cfg(not(windows))]
+type AuthWindow = tauri::WebviewWindow;
+#[cfg(windows)]
+use super::platform_impl::{AuthWindow, create_auth_window};
+
+#[cfg(not(windows))]
+fn create_auth_window(app: &AppHandle, title: &str, theme: Option<tauri::Theme>) -> anyhow::Result<AuthWindow> {
+  let builder = AuthWindow::builder(app, "auth_window", WebviewUrl::default())
+    .title(title)
+    .theme(theme)
+    .devtools(cfg!(any(debug_assertions, feature = "release-devtools")));
+  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  let builder = builder.on_navigation(super::platform_impl::open_okta_verify);
+  Ok(
+    builder
+      .inner_size(900.0, 650.0 + get_title_bar_height() + TOOLBAR_HEIGHT)
+      .min_inner_size(400.0, 300.0)
+      .focused(true)
+      .visible(false)
+      .center()
+      .build()?,
+  )
+}
+
 const RESTART_TIMEOUT: Duration = Duration::from_secs(30);
 
-pub trait PlatformWebviewExt {
-  fn install_auth_controls(&self, window: &WebviewWindow, messenger: Arc<AuthMessenger>) -> anyhow::Result<()>;
+pub(super) trait PlatformWebviewExt {
+  fn install_auth_controls(&self, window: &AuthWindow, messenger: Arc<AuthMessenger>) -> anyhow::Result<()>;
 
   fn set_recovery_status(&self, status: RecoveryStatus) -> anyhow::Result<()>;
 
@@ -54,7 +83,7 @@ pub trait PlatformWebviewExt {
   }
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+#[cfg(any(windows, target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
 pub trait GetHeader {
   fn get_header(&self, key: &str) -> Option<String>;
 }
@@ -125,19 +154,7 @@ impl<'a> WebviewAuthenticator<'a> {
 
   pub async fn authenticate(&self, app_handle: &AppHandle) -> anyhow::Result<SamlAuthData> {
     let auth_messenger = Arc::new(AuthMessenger::new());
-    let auth_window_builder = WebviewWindow::builder(app_handle, "auth_window", WebviewUrl::default())
-      .title(self.window_title)
-      .theme(native_theme(self.window_theme))
-      .devtools(cfg!(any(debug_assertions, feature = "release-devtools")));
-    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
-    let auth_window_builder = auth_window_builder.on_navigation(super::platform_impl::open_okta_verify);
-    let auth_window = auth_window_builder
-      .inner_size(900.0, 650.0 + get_title_bar_height() + TOOLBAR_HEIGHT)
-      .min_inner_size(400.0, 300.0)
-      .focused(true)
-      .visible(false)
-      .center()
-      .build()?;
+    let auth_window = create_auth_window(app_handle, self.window_title, native_theme(self.window_theme))?;
 
     #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
     set_window_type_hint(&auth_window, WindowTypeHint::Dialog)?;
@@ -170,7 +187,7 @@ impl<'a> WebviewAuthenticator<'a> {
 
   async fn wait_for_auth(
     &self,
-    auth_window: &WebviewWindow,
+    auth_window: &AuthWindow,
     auth_messenger: Arc<AuthMessenger>,
   ) -> anyhow::Result<SamlAuthData> {
     let mut recovery = Recovery::default();
@@ -310,13 +327,16 @@ impl<'a> WebviewAuthenticator<'a> {
 
   async fn setup_auth_window(
     &self,
-    auth_window: &WebviewWindow,
+    auth_window: &AuthWindow,
     auth_messenger: Arc<AuthMessenger>,
   ) -> anyhow::Result<()> {
     info!("Setting up auth window...");
 
     if self.clean {
       info!("Clearing all browsing data...");
+      #[cfg(windows)]
+      super::platform_impl::clear_browsing_data(auth_window).await?;
+      #[cfg(not(windows))]
       auth_window.clear_all_browsing_data()?;
     }
 
@@ -361,7 +381,7 @@ impl<'a> WebviewAuthenticator<'a> {
     Ok(())
   }
 
-  fn handle_not_found(&self, auth_window: &WebviewWindow, auth_messenger: &Arc<AuthMessenger>) {
+  fn handle_not_found(&self, auth_window: &AuthWindow, auth_messenger: &Arc<AuthMessenger>) {
     let visible = auth_window.is_visible().unwrap_or(false);
     if visible {
       return;
@@ -370,7 +390,7 @@ impl<'a> WebviewAuthenticator<'a> {
     auth_messenger.schedule_raise_window(2);
   }
 
-  fn update_recovery(&self, auth_window: &WebviewWindow, status: RecoveryStatus) -> anyhow::Result<()> {
+  fn update_recovery(&self, auth_window: &AuthWindow, status: RecoveryStatus) -> anyhow::Result<()> {
     if status != RecoveryStatus::Hidden {
       self.raise_window(auth_window);
     }
@@ -397,7 +417,7 @@ impl<'a> WebviewAuthenticator<'a> {
 
   fn load_restarted_sign_in(
     &self,
-    auth_window: &WebviewWindow,
+    auth_window: &AuthWindow,
     messenger: &Arc<AuthMessenger>,
     auth_request: String,
   ) -> anyhow::Result<()> {
@@ -415,7 +435,7 @@ impl<'a> WebviewAuthenticator<'a> {
     Ok(())
   }
 
-  fn raise_window(&self, auth_window: &WebviewWindow) {
+  fn raise_window(&self, auth_window: &AuthWindow) {
     let visible = auth_window.is_visible().unwrap_or(false);
     if visible {
       return;

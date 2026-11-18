@@ -12,6 +12,20 @@ pub const MACOS_UNIFIED_LOG_BACKEND: &str = "macos-unified";
 type BoxedLogger = Box<dyn Log + Send + Sync>;
 static LOG_HANDLE: OnceLock<ReloadHandle<log_reload::LevelFilter<BoxedLogger>>> = OnceLock::new();
 
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use windows::init_file;
+
+/// Keep helper diagnostics with the application's records when a file logger owns them.
+pub fn diagnostic_writer() -> Box<dyn std::io::Write + Send> {
+  #[cfg(windows)]
+  if let Some(writer) = windows::diagnostic_writer() {
+    return writer;
+  }
+  Box::new(std::io::stderr())
+}
+
 pub fn init(level: Level, subsystem: &str, category: &str, log_format: LogFormat) {
   #[cfg(target_os = "macos")]
   if log_format == LogFormat::Text && macos_unified_log_enabled() {

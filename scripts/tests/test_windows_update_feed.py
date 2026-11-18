@@ -64,6 +64,7 @@ class WindowsFeedTests(unittest.TestCase):
                 self.assertEqual(int(enclosure.get("length")), payload.installer.stat().st_size)
                 self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}edSignature"), payload.signature_file.read_text())
                 self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}os"), f"windows-{payload.architecture}")
+                self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}installerArguments"), "/UPDATE")
                 self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}version"), "3.4.0")
                 minimum = "10.0.22000" if payload.architecture == "arm64" else "10.0.19041"
                 self.assertEqual(item.findtext(f"{{{feed.SPARKLE}}}minimumSystemVersion"), minimum)

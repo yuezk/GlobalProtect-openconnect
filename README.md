@@ -1,6 +1,6 @@
 # GlobalProtect-openconnect
 
-A GlobalProtect VPN client built on OpenConnect. It provides command-line tools (`gpclient`) and the GP Connect desktop application for macOS, Linux, FreeBSD, and OpenBSD.
+A GlobalProtect VPN client built on OpenConnect. GP Connect runs on Windows, macOS, Linux, FreeBSD, and OpenBSD. Command-line tools (`gpclient`) are available on macOS, Linux, and BSD.
 
 > **Disclaimer**: GP Connect is an independent third-party client for GlobalProtect VPN networks. It is not affiliated with or endorsed by Palo Alto Networks, Inc.
 
@@ -21,6 +21,7 @@ A GlobalProtect VPN client built on OpenConnect. It provides command-line tools 
   - [Command-Line Interface](#command-line-interface)
   - [Graphical User Interface](#graphical-user-interface)
 - [Installation](#installation)
+  - [Windows](#windows)
   - [macOS](#macos)
   - [Debian / Ubuntu](#debian--ubuntu)
   - [Arch Linux / Manjaro](#arch-linux--manjaro)
@@ -40,8 +41,8 @@ A GlobalProtect VPN client built on OpenConnect. It provides command-line tools 
 
 ## Features
 
-- **Multi-Platform** – macOS (Apple silicon), Linux, FreeBSD, and OpenBSD
-- **Dual Interfaces** – Fast terminal CLI (`gpclient`) and desktop GUI (**GP Connect**)
+- **Multi-Platform** – Windows (x64 and ARM64), macOS (Apple silicon), Linux, FreeBSD, and OpenBSD
+- **Dual Interfaces** – Desktop GUI (**GP Connect**) and terminal CLI (`gpclient`, on macOS, Linux, and BSD)
 - **Native Shell on Linux** – Ultra-low-memory native desktop GUI alongside the webview interface
 - **Flexible Routing** – Full System VPN tunnel or local SOCKS5 proxy mode
 - **Modern Authentication** – SAML / SSO, MFA, FIDO2 (YubiKey), client certificates, and external browser login
@@ -53,7 +54,7 @@ A GlobalProtect VPN client built on OpenConnect. It provides command-line tools 
 
 ### Command-Line Interface
 
-The open-source `gpclient` CLI handles authentication, connection lifecycle, and HIP generation:
+On macOS, Linux, and BSD, the open-source `gpclient` CLI handles authentication, connection lifecycle, and HIP generation:
 
 ```bash
 # Connect to a portal server
@@ -79,6 +80,7 @@ Run `gpclient --help` or `gpclient <command> --help` to view all available comma
 
 ### Graphical User Interface
 
+- **Windows**: Open **GP Connect** from the Start menu.
 - **macOS**: Open **GP Connect** from Applications.
 - **Linux / BSD**: Launch GP Connect from your application menu or run:
   ```bash
@@ -89,6 +91,19 @@ Run `gpclient --help` or `gpclient <command> --help` to view all available comma
 > **On Linux, try Native Shell for lower memory usage.** Switch between Native Shell and Tauri in **Settings → General → Interface**.
 
 ## Installation
+
+### Windows
+
+Download the matching EXE installer from [GitHub Releases](https://github.com/yuezk/GlobalProtect-openconnect/releases/latest):
+
+- **x64**: Windows 10 version 2004 (build 19041) or later.
+- **ARM64**: Windows 11.
+
+Run the installer and confirm installation. It installs GP Connect and its background VPN service for all users; administrator access is required. Open GP Connect from the Start menu as your normal user.
+
+The installer and application executables are signed by **Tangramly, LLC**. Embedded sign-in uses Microsoft Edge WebView2 Runtime. You can also use your system browser from Settings.
+
+GP Connect checks for updates in the app. Uninstall it from Windows Settings; your app settings are kept. The Windows package contains the desktop app and service, without the `gpclient` command-line tool.
 
 ### macOS
 

@@ -170,7 +170,11 @@ impl<'a> DesktopLauncher<'a> {
           }
           match outcome {
             Err(error) if recovery.recover(&error) => {
-              warn!("{error}; restarting the desktop launch with DMABUF disabled and opaque windows");
+              if recovery.shared_memory() {
+                warn!("{error}; restarting the desktop launch with compatibility graphics");
+              } else {
+                warn!("{error}; restarting the desktop launch with DMABUF disabled and opaque windows");
+              }
               expecting_renewal = true;
               input.write_all(&[DESKTOP_RENDERING_RETRY]).await?;
             }

@@ -266,6 +266,7 @@ mod tests {
 
   #[test]
   fn unencrypted_key_ignores_unused_password_and_archive_owned_file_is_private() {
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     let identity = ClientIdentity::from_data(
       Zeroizing::new(CERTIFICATE.to_vec()),
@@ -280,6 +281,7 @@ mod tests {
     let path = files.certificate().to_owned();
     assert!(path.ends_with(".p12"));
     assert!(files.key().is_none());
+    #[cfg(unix)]
     assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
     drop(files);
     assert!(!Path::new(&path).exists());

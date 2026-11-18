@@ -75,7 +75,7 @@ impl DesktopClient {
           loop {
             match self.read_control().await? {
               Some(DESKTOP_GUI_INSTALLER) => {
-                self.write_all(&[u8::from(crate::request_dispatcher::gui_installer().is_some())]).await?;
+                self.write_all(&[u8::from(crate::gui_installation::installer().is_some())]).await?;
               }
               Some(DESKTOP_SWITCH_BEGIN) => {
                 ensure!(pending.is_none(), "A GUI switch is already pending");
@@ -299,10 +299,7 @@ mod tests {
       let mut reader = reader;
       let mut capability = [0];
       reader.read_exact(&mut capability).unwrap();
-      assert_eq!(
-        capability[0],
-        u8::from(crate::request_dispatcher::gui_installer().is_some())
-      );
+      assert_eq!(capability[0], u8::from(crate::gui_installation::installer().is_some()));
       reader
     })
     .await

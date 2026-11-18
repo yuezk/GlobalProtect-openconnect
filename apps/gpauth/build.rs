@@ -16,6 +16,9 @@ fn main() {
     resolve_commit(&repo_root, &source_commit)
   );
 
+  #[cfg(all(windows, feature = "webview-auth"))]
+  println!("cargo:rerun-if-changed=icons/windows/icon.ico");
+
   #[cfg(feature = "webview-auth")]
   tauri_build::build()
 }
