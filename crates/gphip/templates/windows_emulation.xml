@@ -1,0 +1,77 @@
+		<entry name="anti-malware">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="McAfee VirusScan Enterprise" version="8.8.0.1804" defver="8682.0" prodType="3" engver="5900.7806" osType="1" vendor="McAfee, Inc." dateday="{{ day }}" dateyear="{{ year }}" datemon="{{ month }}">
+						</Prod>
+						<real-time-protection>yes</real-time-protection>
+						<last-full-scan-time>{{ generate_time }}</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+				<entry>
+					<ProductInfo>
+						<Prod name="Windows Defender" version="4.11.15063.332" defver="1.245.683.0" prodType="3" engver="1.1.13804.0" osType="1" vendor="Microsoft Corp." dateday="{{ day }}" dateyear="{{ year }}" datemon="{{ month }}">
+						</Prod>
+						<real-time-protection>no</real-time-protection>
+						<last-full-scan-time>n/a</last-full-scan-time>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="disk-backup">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="Windows Backup and Restore" version="{{ host_info.software_version }}" vendor="Microsoft Corp.">
+						</Prod>
+						<last-backup-time>n/a</last-backup-time>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="disk-encryption">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="Windows Drive Encryption" version="{{ host_info.software_version }}" vendor="Microsoft Corp.">
+						</Prod>
+						<drives>
+							<entry>
+								<drive-name>C:\</drive-name>
+								<enc-state>encrypted</enc-state>
+							</entry>
+						</drives>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="firewall">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="Microsoft Windows Firewall" version="10.0.22621.4830" vendor="Microsoft Corp.">
+						</Prod>
+						<is-enabled>yes</is-enabled>
+					</ProductInfo>
+				</entry>
+			</list>
+		</entry>
+		<entry name="patch-management">
+			<list>
+				<entry>
+					<ProductInfo>
+						<Prod name="McAfee ePolicy Orchestrator Agent" version="5.0.5.658" vendor="McAfee, Inc.">
+						</Prod>
+						<is-enabled>yes</is-enabled>
+					</ProductInfo>
+				</entry>
+				<entry>
+					<ProductInfo>
+						<Prod name="Microsoft Windows Update Agent" version="{{ host_info.software_version }}" vendor="Microsoft Corp.">
+						</Prod>
+						<is-enabled>yes</is-enabled>
+					</ProductInfo>
+				</entry>
+			</list>
+			<missing-patches/>
+		</entry>

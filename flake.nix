@@ -86,7 +86,6 @@
 
         linuxRuntimeDependencies = with pkgs; [
           glib-networking
-          libayatana-appindicator
           xdg-utils
         ];
 
@@ -174,7 +173,6 @@
             webkitgtk_4_1
             glib-networking
             libsecret
-            libayatana-appindicator
           ];
 
         installNixosPolkitRule = ''

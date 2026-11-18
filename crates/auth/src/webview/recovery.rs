@@ -22,7 +22,7 @@ impl RecoveryStatus {
       Self::Hidden => "",
       Self::Restarting => "Restarting sign-in…",
       Self::Loading => "Loading sign-in…",
-      Self::Failed => "Couldn’t restart sign-in.",
+      Self::Failed => "Couldn’t load sign-in.",
       Self::Rejected => "Sign-in wasn’t completed.",
       Self::Tls {
         reason: TlsFailureReason::Handshake,
@@ -55,6 +55,7 @@ impl RecoveryStatus {
     matches!(self, Self::Hidden | Self::Loading | Self::CertificateBypassed)
   }
 
+  #[cfg(not(windows))]
   pub fn is_busy(self) -> bool {
     matches!(self, Self::Restarting | Self::Loading)
   }

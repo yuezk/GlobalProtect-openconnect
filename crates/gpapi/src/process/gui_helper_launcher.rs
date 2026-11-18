@@ -79,6 +79,7 @@ impl<'a> GuiHelperLauncher<'a> {
       self.envs,
       self.credential,
       cancellation,
+      false,
     )
     .await?;
     Ok(())

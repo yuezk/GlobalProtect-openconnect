@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Debug)]
 pub(crate) enum AuthDataLocation {
-  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  #[cfg(any(windows, target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   Headers,
   Body,
 }
@@ -155,7 +155,7 @@ impl AuthMessenger {
     }
   }
 
-  #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+  #[cfg(any(windows, target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   pub fn read_from_response(&self, auth_response: &impl super::webview_auth::GetHeader, generation: u64) {
     use log::warn;
 

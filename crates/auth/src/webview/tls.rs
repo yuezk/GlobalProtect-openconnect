@@ -2,7 +2,9 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum TlsFailureReason {
   Expired,
+  #[cfg(not(windows))]
   NotYetValid,
+  #[cfg(not(windows))]
   Untrusted,
   HostnameMismatch,
   InvalidCertificate,
@@ -17,7 +19,9 @@ impl TlsFailureReason {
   pub fn message(self) -> &'static str {
     match self {
       Self::Expired => "The certificate has expired.",
+      #[cfg(not(windows))]
       Self::NotYetValid => "The certificate is not valid yet.",
+      #[cfg(not(windows))]
       Self::Untrusted => "The certificate was issued by an untrusted authority.",
       Self::HostnameMismatch => "The certificate does not match this server’s hostname.",
       Self::InvalidCertificate => "The server’s certificate could not be verified.",

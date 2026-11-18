@@ -17,9 +17,16 @@ use super::{
   command_traits::CommandExt,
 };
 
-use super::rendering_recovery::{RenderingCrash, StderrDiagnostic, eligible, is_crash_exit};
+use super::rendering_recovery::{
+  AUTH_STDERR_PREFIX, GbmBufferFailure, RenderingCrash, StderrDiagnostic, allows_shared_memory_override, eligible,
+  is_crash_exit, is_gbm_diagnostic,
+};
 
 const MAX_AUTH_RESULT_BYTES: usize = 256 * 1024;
+
+#[cfg(windows)]
+/// The caller that receives foreground permission after browser authentication.
+pub const AUTH_PARENT_PROCESS_ID_ENV: &str = "GPAUTH_PARENT_PROCESS_ID";
 
 pub struct SamlAuthLauncher<'a> {
   cancellation: CancellationToken,
@@ -49,6 +56,7 @@ pub struct SamlAuthLauncher<'a> {
   verbose: Option<&'a str>,
   log_format: LogFormat,
   dmabuf_disabled: bool,
+  desktop_compatibility_graphics: bool,
 }
 
 impl<'a> SamlAuthLauncher<'a> {
@@ -81,7 +89,13 @@ impl<'a> SamlAuthLauncher<'a> {
       verbose: None,
       log_format: LogFormat::Text,
       dmabuf_disabled: false,
+      desktop_compatibility_graphics: false,
     }
+  }
+
+  pub fn desktop_compatibility_graphics(mut self) -> Self {
+    self.desktop_compatibility_graphics = true;
+    self
   }
 
   pub fn dmabuf_disabled(mut self, disabled: bool) -> Self {
@@ -197,6 +211,8 @@ impl<'a> SamlAuthLauncher<'a> {
   /// argument that never gets appended.
   fn build_command(&self, program: &Path) -> Command {
     let mut auth_cmd = Command::new(program);
+    #[cfg(windows)]
+    auth_cmd.env(AUTH_PARENT_PROCESS_ID_ENV, std::process::id().to_string());
     auth_cmd.arg(self.server);
 
     if self.gateway {
@@ -236,7 +252,7 @@ impl<'a> SamlAuthLauncher<'a> {
     }
 
     #[cfg(feature = "webview-auth")]
-    {
+    if self.browser.is_none() {
       if self.hidpi {
         auth_cmd.arg("--hidpi");
       }
@@ -292,15 +308,34 @@ impl<'a> SamlAuthLauncher<'a> {
     if embedded && bundled && self.dmabuf_disabled {
       command.env("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
+    let desktop_webview = embedded && bundled && self.desktop_compatibility_graphics;
+    let can_use_shared_memory = desktop_webview && allows_shared_memory_override(&command, true);
+    let use_shared_memory = can_use_shared_memory && crate::gui::compatibility_graphics_enabled();
+    if use_shared_memory {
+      command.env(crate::gui::FORCE_SHARED_MEMORY, "1");
+    }
+    let detect_gbm_failure = can_use_shared_memory && !use_shared_memory;
     let stdin = auth_stdin(self.browser);
     let cancellation = self.cancellation.clone();
     let output = tokio::task::spawn_blocking(move || {
+      #[cfg(feature = "logger")]
+      let stderr = crate::logger::diagnostic_writer();
+      #[cfg(not(feature = "logger"))]
+      let stderr: Box<dyn std::io::Write + Send> = Box::new(std::io::stderr());
+      let mut stderr = if desktop_webview {
+        Box::new(std::io::LineWriter::new(AuthStderr(stderr)))
+      } else {
+        stderr
+      };
+      let gbm_failed = std::cell::Cell::new(false);
       let check = || {
         if cancellation.is_cancelled() {
           Err(std::io::Error::new(
             std::io::ErrorKind::Interrupted,
             "Authentication cancelled",
           ))
+        } else if gbm_failed.get() {
+          Err(std::io::Error::other(GbmBufferFailure))
         } else {
           Ok(())
         }
@@ -310,25 +345,57 @@ impl<'a> SamlAuthLauncher<'a> {
         command,
         &check,
         Some(MAX_AUTH_RESULT_BYTES),
-        &mut |bytes| diagnostic.push(bytes),
-        &mut std::io::stderr(),
+        &mut |bytes| {
+          diagnostic.push(bytes);
+          gbm_failed.set(detect_gbm_failure && diagnostic.should_retry_gbm(can_recover));
+        },
+        &mut stderr,
         stdin,
-      )?;
-      Ok::<_, std::io::Error>((output.output, diagnostic.matched()))
+      );
+      std::io::Write::flush(&mut stderr)?;
+      if gbm_failed.get() && !cancellation.is_cancelled() {
+        return Err(GbmBufferFailure.into());
+      }
+      let output = output?;
+      Ok::<_, anyhow::Error>((output.output, diagnostic.matched()))
     })
     .await?;
     let (output, rendering_diagnostic) = match output {
       Ok(output) => output,
-      Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+      Err(error)
+        if error
+          .downcast_ref::<std::io::Error>()
+          .is_some_and(|error| error.kind() == std::io::ErrorKind::Interrupted) =>
+      {
         return Err(crate::auth::AuthenticationCancelled.into());
       }
-      Err(error) => return Err(error.into()),
+      Err(error) => return Err(error),
     };
 
     if self.cancellation.is_cancelled() {
       return Err(crate::auth::AuthenticationCancelled.into());
     }
     decode_auth_output(output, can_recover && rendering_diagnostic)
+  }
+}
+
+// Attribute GBM failures to gpauth before forwarding them to the desktop supervisor.
+struct AuthStderr(Box<dyn std::io::Write + Send>);
+
+impl std::io::Write for AuthStderr {
+  fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+    for line in bytes.split_inclusive(|&byte| byte == b'\n') {
+      if is_gbm_diagnostic(line) {
+        self.0.write_all(&[AUTH_STDERR_PREFIX, line].concat())?;
+      } else {
+        self.0.write_all(line)?;
+      }
+    }
+    Ok(bytes.len())
+  }
+
+  fn flush(&mut self) -> std::io::Result<()> {
+    self.0.flush()
   }
 }
 
@@ -366,11 +433,14 @@ fn decode_auth_output(output: std::process::Output, rendering_failure: bool) -> 
 mod tests {
   use super::*;
   use crate::os_profile::{ClientOs, OsProfileBuilder};
+  #[cfg(unix)]
+  use std::os::unix::process::ExitStatusExt;
+  #[cfg(windows)]
+  use std::os::windows::process::ExitStatusExt;
 
   #[test]
   fn server_tls_result_survives_process_decoding_as_a_typed_error() {
     use crate::error::{ServerTlsError, ServerTlsErrorKind};
-    use std::os::unix::process::ExitStatusExt;
     let output = std::process::Output {
       status: std::process::ExitStatus::from_raw(0),
       stdout: br#"{"serverTlsError":{"server":"https://vpn.example.com:8443","kind":"certificate"}}"#.to_vec(),
@@ -389,7 +459,6 @@ mod tests {
   #[test]
   fn client_certificate_required_result_survives_process_decoding() {
     use crate::error::{ServerTlsError, ServerTlsErrorKind};
-    use std::os::unix::process::ExitStatusExt;
     let output = std::process::Output {
       status: std::process::ExitStatus::from_raw(0),
       stdout: br#"{"serverTlsError":{"server":"https://vpn.example.com","kind":"clientCertificateRequired"}}"#.to_vec(),
@@ -407,6 +476,42 @@ mod tests {
     let args = child_args(launcher);
     assert!(!args.iter().any(|arg| arg == "--fix-openssl"));
     assert!(args.iter().any(|arg| arg == "--ignore-tls-errors"));
+  }
+
+  #[cfg(feature = "webview-auth")]
+  #[test]
+  fn external_browser_receives_no_embedded_window_arguments() {
+    let args = child_args(
+      SamlAuthLauncher::new("vpn.example.com")
+        .browser(Some("edge"))
+        .clean(true)
+        .hidpi(true)
+        .window_title("GP Connect Login")
+        .window_theme(AuthWindowTheme::Dark),
+    );
+    assert!(args.windows(2).any(|pair| pair == ["--browser", "edge"]));
+    for option in ["--clean", "--hidpi", "--window-title", "--window-theme"] {
+      assert!(!args.iter().any(|arg| arg == option), "unexpected {option} in {args:?}");
+    }
+  }
+
+  #[cfg(feature = "webview-auth")]
+  #[test]
+  fn embedded_window_receives_auth_preferences() {
+    let args = child_args(
+      SamlAuthLauncher::new("vpn.example.com")
+        .clean(true)
+        .window_title("GP Connect Login")
+        .window_theme(AuthWindowTheme::Dark),
+    );
+    assert!(args.iter().any(|arg| arg == "--clean"));
+    assert!(
+      args
+        .windows(2)
+        .any(|pair| pair == ["--window-title", "GP Connect Login"])
+    );
+    assert!(args.windows(2).any(|pair| pair == ["--window-theme", "dark"]));
+    assert!(!args.iter().any(|arg| arg == "--browser"));
   }
 
   #[test]
@@ -449,6 +554,19 @@ mod tests {
       .get_args()
       .map(|arg| arg.to_string_lossy().into_owned())
       .collect()
+  }
+
+  #[cfg(windows)]
+  #[test]
+  fn auth_child_receives_its_foreground_parent() {
+    let command = SamlAuthLauncher::new("portal.example.com").build_command(Path::new("gpauth"));
+    let parent = command
+      .as_std()
+      .get_envs()
+      .find(|(name, _)| *name == AUTH_PARENT_PROCESS_ID_ENV)
+      .and_then(|(_, value)| value)
+      .expect("the authenticator must know its foreground recipient");
+    assert_eq!(parent, std::process::id().to_string().as_str());
   }
 
   /// gpauth writes to the same stderr as its parent, so a caller reading the
@@ -513,11 +631,14 @@ mod tests {
 
   #[test]
   fn failed_authenticator_discards_partial_or_valid_stdout_before_decoding() {
-    use std::os::unix::process::ExitStatusExt;
+    #[cfg(unix)]
+    let status = std::process::ExitStatus::from_raw(71 << 8);
+    #[cfg(windows)]
+    let status = std::process::ExitStatus::from_raw(0xC0000005);
     for stdout in [b"{partial".to_vec(), br#"{"cancelled":null}"#.to_vec()] {
       let error = decode_auth_output(
         std::process::Output {
-          status: std::process::ExitStatus::from_raw(71 << 8),
+          status,
           stdout,
           stderr: Vec::new(),
         },
@@ -530,7 +651,6 @@ mod tests {
 
   #[test]
   fn successful_malformed_auth_output_is_not_a_rendering_crash() {
-    use std::os::unix::process::ExitStatusExt;
     let error = decode_auth_output(
       std::process::Output {
         status: std::process::ExitStatus::from_raw(0),
@@ -544,6 +664,7 @@ mod tests {
     assert_eq!(error.to_string(), "Failed to parse auth data");
   }
 
+  #[cfg(unix)]
   #[tokio::test]
   async fn custom_authenticator_crash_does_not_request_recovery() {
     use std::os::unix::fs::PermissionsExt;
@@ -579,8 +700,11 @@ mod tests {
     std::fs::write(&custom, "custom").unwrap();
     assert!(is_bundled_authenticator(&bundled, &bundled));
     assert!(!is_bundled_authenticator(&custom, &bundled));
-    let alias = directory.path().join("auth-alias");
-    std::os::unix::fs::symlink(&bundled, &alias).unwrap();
-    assert!(is_bundled_authenticator(&alias, &bundled));
+    #[cfg(unix)]
+    {
+      let alias = directory.path().join("auth-alias");
+      std::os::unix::fs::symlink(&bundled, &alias).unwrap();
+      assert!(is_bundled_authenticator(&alias, &bundled));
+    }
   }
 }

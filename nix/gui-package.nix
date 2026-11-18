@@ -18,10 +18,10 @@ pkgs.stdenv.mkDerivation {
   );
   buildInputs = with pkgs;
     [ gnutls ] ++ (if nativeShell then [ gtk4 ] else [
-      gtk3 webkitgtk_4_1 libsoup_3 glib-networking libsecret libayatana-appindicator
+      gtk3 webkitgtk_4_1 libsoup_3 glib-networking libsecret
     ]);
   runtimeDependencies = [ pkgs.libglvnd ] ++ pkgs.lib.optionals (!nativeShell) [
-    pkgs.glib-networking pkgs.libayatana-appindicator
+    pkgs.glib-networking
   ];
   installPhase = ''
     runHook preInstall

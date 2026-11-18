@@ -1,10 +1,14 @@
 use super::{
   command_runner::{ChildInput, run_observed},
-  rendering_recovery::{RenderingCrash, StderrDiagnostic, eligible_with_inheritance, is_crash_exit},
+  rendering_recovery::{
+    GbmBufferFailure, RenderingCrash, StderrDiagnostic, allows_shared_memory_override, eligible_with_inheritance,
+    is_crash_exit,
+  },
 };
 use crate::service::transport::SessionCredential;
 use anyhow::Context;
 use std::{
+  cell::Cell,
   collections::HashMap,
   fs::OpenOptions,
   path::PathBuf,
@@ -19,8 +23,10 @@ pub(super) async fn launch_desktop_child(
   envs: Option<&HashMap<String, String>>,
   credential: &SessionCredential,
   cancellation: &CancellationToken,
+  detect_gbm_failure: bool,
 ) -> anyhow::Result<ExitStatus> {
   let retry_eligible = eligible_with_inheritance(&command, envs.is_none());
+  let detect_gbm_failure = detect_gbm_failure && allows_shared_memory_override(&command, envs.is_none());
   let log_file = match envs {
     Some(envs) => envs.get("GP_LOG_FILE").map(PathBuf::from),
     None => std::env::var_os("GP_LOG_FILE").map(PathBuf::from),
@@ -38,12 +44,15 @@ pub(super) async fn launch_desktop_child(
   let cancellation = cancellation.clone();
 
   tokio::task::spawn_blocking(move || {
+    let gbm_failed = Cell::new(false);
     let check = || {
       if cancellation.is_cancelled() {
         Err(std::io::Error::new(
           std::io::ErrorKind::Interrupted,
           "Desktop child launch cancelled",
         ))
+      } else if gbm_failed.get() {
+        Err(std::io::Error::other(GbmBufferFailure))
       } else {
         Ok(())
       }
@@ -53,10 +62,17 @@ pub(super) async fn launch_desktop_child(
       command,
       &check,
       None,
-      &mut |bytes| diagnostic.push(bytes),
+      &mut |bytes| {
+        diagnostic.push(bytes);
+        gbm_failed.set(detect_gbm_failure && diagnostic.should_retry_gbm(retry_eligible));
+      },
       &mut sink,
       ChildInput::Frame(&frame),
-    )?;
+    );
+    if gbm_failed.get() && !cancellation.is_cancelled() {
+      return Err(GbmBufferFailure.into());
+    }
+    let observed = observed?;
     let output = observed.output;
     if is_crash_exit(output.status) && retry_eligible && diagnostic.matched() {
       return Err(RenderingCrash { status: output.status }.into());

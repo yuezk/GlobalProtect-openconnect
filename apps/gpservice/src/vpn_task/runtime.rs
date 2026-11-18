@@ -20,7 +20,7 @@ pub(super) struct AttemptInput {
   pub desktop_uid: Option<u32>,
   pub edited_report: Option<Arc<str>>,
   pub session_id: Option<Uuid>,
-  pub brokered_macos: bool,
+  pub restricted_desktop: bool,
   pub registry: Arc<crate::session_registry::SessionRegistry>,
   pub lifecycle: LifecycleHandle,
 }
@@ -31,6 +31,7 @@ struct TunnelInput {
   source: Arc<openconnect::HipSource>,
   session_id: Option<Uuid>,
   registry: Arc<crate::session_registry::SessionRegistry>,
+  #[cfg(unix)]
   desktop_uid: Option<u32>,
 }
 
@@ -49,13 +50,30 @@ pub(super) fn spawn(
 ) -> JoinHandle<()> {
   tokio::spawn(async move {
     let attempt = input.attempt;
+    #[cfg(windows)]
+    let _patch_interest = {
+      let args = input.connection.request.args();
+      let profile = &input.connection.resources.profile;
+      (matches!(args.hip_source(), gpapi::hip::HipSource::Generated)
+        && profile.is_native()
+        && profile.client_os() == gpapi::os_profile::ClientOs::Windows
+        && (input.connection.request.plan().policy().collect_hip_data()
+          || input
+            .connection
+            .request
+            .plan()
+            .members()
+            .iter()
+            .any(|member| member.authentication.mode() == SessionMode::Tunnel)))
+      .then(|| input.lifecycle.patch_checks.consumer())
+    };
     let mut failure = None;
     let mut approval = None;
     if !cancellation.is_cancelled() {
       let request = input.connection.request.clone();
       let resources = input.connection.resources.clone();
       let desktop_uid = input.desktop_uid;
-      let brokered = input.brokered_macos;
+      let brokered = input.restricted_desktop;
       let edited = input.edited_report.clone();
       let setup_cancel = cancellation.clone();
       let execution = tokio::task::spawn_blocking(move || {
@@ -105,6 +123,7 @@ pub(super) fn spawn(
               source,
               session_id: input.session_id,
               registry: input.registry.clone(),
+              #[cfg(unix)]
               desktop_uid: input.desktop_uid,
             };
             input.connection.request.release_script_tun_bootstrap();
@@ -253,12 +272,14 @@ fn prepare_tunnel(input: TunnelInput, cancellation: &CancellationToken) -> anyho
     ),
     gpapi::script_tun::PacketDelivery::ScriptTun(request) => {
       ensure!(input.session_id.is_some(), "Script-tun requires a desktop session");
-      let (builder, script_tun) = super::script_tun::builder(
-        member.gateway.server(),
-        member.authentication.cookie(),
-        request,
-        input.desktop_uid.context("Desktop identity is unavailable")?,
-      )?;
+      #[cfg(unix)]
+      let owner = input.desktop_uid.context("Desktop identity is unavailable")?;
+      #[cfg(windows)]
+      let owner = input
+        .registry
+        .windows_identity(input.session_id.context("Desktop session is unavailable")?)?;
+      let (builder, script_tun) =
+        super::script_tun::builder(member.gateway.server(), member.authentication.cookie(), request, owner)?;
       (builder, Some(script_tun))
     }
   };

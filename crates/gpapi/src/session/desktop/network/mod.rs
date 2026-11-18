@@ -29,6 +29,11 @@ use linux as platform;
 #[cfg(target_os = "macos")]
 use macos as platform;
 
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as platform;
+
 mod binding;
 use super::detection;
 pub mod native;
@@ -475,6 +480,7 @@ fn snapshot(interfaces: &[Interface], control: &dyn CollectionControl) -> anyhow
   })
 }
 
+#[cfg(unix)]
 fn command(name: &str, args: &[&str], control: &dyn CollectionControl) -> anyhow::Result<String> {
   let output = CollectorCommands::new(control)
     .run(name, args)?

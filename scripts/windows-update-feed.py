@@ -102,6 +102,7 @@ def generate(args: argparse.Namespace) -> None:
             "url": payload.installer_url, "length": str(length), "type": "application/octet-stream",
             f"{{{SPARKLE}}}version": display_version,
             f"{{{SPARKLE}}}shortVersionString": display_version,
+            f"{{{SPARKLE}}}installerArguments": "/UPDATE",
             f"{{{SPARKLE}}}os": f"windows-{payload.architecture}", f"{{{SPARKLE}}}edSignature": signature,
         })
     ET.indent(rss)

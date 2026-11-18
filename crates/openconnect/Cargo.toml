@@ -7,6 +7,7 @@ license = "MIT"
 links = "openconnect"
 
 [dependencies]
+gp-xml = { path = "../gp-xml" }
 log.workspace = true
 libc = "0.2"
 is_executable.workspace = true
@@ -19,3 +20,6 @@ fs_extra = "1"
 
 [dev-dependencies]
 tempfile = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock"] }

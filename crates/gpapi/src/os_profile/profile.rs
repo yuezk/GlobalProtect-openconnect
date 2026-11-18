@@ -124,8 +124,7 @@ impl OsProfile {
     self.runtime_os == self.client_os
   }
 
-  /// Default software version string for the target OS, matching the
-  /// official client values.
+  /// Software version for the target OS profile.
   pub fn software_version(&self) -> &str {
     &self.software_version
   }

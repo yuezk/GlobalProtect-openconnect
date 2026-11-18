@@ -101,6 +101,12 @@ impl<'a> GuiLauncher<'a> {
     if let Some(envs) = &self.envs {
       cmd.env_clear().envs(envs);
     }
+    if self.variant == crate::gui::GuiVariant::Tauri
+      && crate::gui::compatibility_graphics_enabled()
+      && super::rendering_recovery::allows_shared_memory_override(cmd.as_std(), self.envs.is_none())
+    {
+      cmd.env(crate::gui::FORCE_SHARED_MEMORY, "1");
+    }
     cmd.arg("--service-credential-on-stdin");
     if self.minimized {
       cmd.arg("--minimized");
@@ -112,6 +118,7 @@ impl<'a> GuiLauncher<'a> {
       self.envs.as_ref(),
       &self.credential,
       cancellation,
+      self.variant == crate::gui::GuiVariant::Tauri,
     )
     .await
   }
@@ -207,32 +214,45 @@ impl<'a> GuiLauncher<'a> {
               gui_switch::reply(&mut socket, Ok(GuiSwitchOutcome::DownloadRequired)).await?;
               return Ok(None);
             }
-            service_input.write_all(&[DESKTOP_SWITCH_BEGIN]).await?;
-            pending = true;
-            let credential = super::desktop_launcher::read_credential(service_output).await?
-              .ok_or_else(|| anyhow::anyhow!("Service closed before issuing the switch credential"))?;
-            anyhow::ensure!(credential.product_version() == self.version, "Service product version mismatch");
-            let ready = gui_switch::SwitchListener::new()?;
-            let mut envs = self.envs.clone().unwrap_or_else(|| std::env::vars().collect());
-            envs.insert(gui_switch::READY_ENV.into(), ready.path().to_string_lossy().into_owned());
-            let launcher = Self::new(self.version, Arc::new(credential), variant)
-              .envs(envs)
-              .minimized(false);
-            let program = match program {
-              Some(program) => program,
-              None => launcher.resolve_program(cancellation, command.theme).await?,
-            };
-            let mut child = launcher.start_owned(program, cancellation.child_token());
-            let start_result = tokio::select! {
-              result = tokio::time::timeout(std::time::Duration::from_secs(30), ready.ready()) => {
-                result.map_err(|_| anyhow::anyhow!("The selected GUI did not finish starting" )).and_then(|result| result)
-              },
-              outcome = &mut child.task => {
-                return match outcome? {
-                  Ok(status) => Err(anyhow::anyhow!("The selected GUI exited during startup: {status}")),
-                  Err(error) => Err(error),
-                };
-              }
+            use super::rendering_recovery::{GbmBufferFailure, RecoveryState};
+            let mut recovery = RecoveryState::default();
+            let mut program = program;
+            let (mut child, start_result) = loop {
+              service_input.write_all(&[DESKTOP_SWITCH_BEGIN]).await?;
+              pending = true;
+              let credential = super::desktop_launcher::read_credential(service_output).await?
+                .ok_or_else(|| anyhow::anyhow!("Service closed before issuing the switch credential"))?;
+              anyhow::ensure!(credential.product_version() == self.version, "Service product version mismatch");
+              let ready = gui_switch::SwitchListener::new()?;
+              let mut envs = self.envs.clone().unwrap_or_else(|| std::env::vars().collect());
+              envs.insert(gui_switch::READY_ENV.into(), ready.path().to_string_lossy().into_owned());
+              let launcher = Self::new(self.version, Arc::new(credential), variant)
+                .envs(envs)
+                .minimized(false);
+              let executable = match &program {
+                Some(program) => program.clone(),
+                None => launcher.resolve_program(cancellation, command.theme).await?,
+              };
+              let mut child = launcher.start_owned(executable.clone(), cancellation.child_token());
+              let start_result = tokio::select! {
+                result = tokio::time::timeout(std::time::Duration::from_secs(30), ready.ready()) => {
+                  result.map_err(|_| anyhow::anyhow!("The selected GUI did not finish starting" )).and_then(|result| result)
+                },
+                outcome = &mut child.task => {
+                  match outcome? {
+                    Ok(status) => return Err(anyhow::anyhow!("The selected GUI exited during startup: {status}")),
+                    Err(error) if error.is::<GbmBufferFailure>() && recovery.recover(&error) => {
+                      log::warn!("{error}; restarting the selected GUI with compatibility graphics");
+                      service_input.write_all(&[DESKTOP_SWITCH_CANCEL]).await?;
+                      pending = false;
+                      program = Some(executable);
+                      continue;
+                    }
+                    Err(error) => return Err(recovery.terminal(error)),
+                  }
+                }
+              };
+              break (child, start_result);
             };
             if let Err(error) = start_result.and_then(|()| crate::gui::save_preference(variant)) {
               child.cancel.cancel();

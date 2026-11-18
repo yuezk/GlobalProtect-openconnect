@@ -45,3 +45,27 @@ mod tests {
     assert_eq!(serde_json::from_value::<HipSource>(json).unwrap(), source);
   }
 }
+
+/// Collection metadata for the exact XML returned by a generated preview.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct HipReport {
+  pub xml: String,
+  pub windows_updates: Option<WindowsUpdateStatus>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsUpdateStatus {
+  /// Present only when this report includes a completed local patch observation.
+  pub checked_at: Option<u64>,
+  /// Time of the observed snapshot when its patch details were too large to include.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub omitted_snapshot_at: Option<u64>,
+}
+
+impl WindowsUpdateStatus {
+  pub fn refresh_cursor(&self) -> Option<u64> {
+    self.checked_at.or(self.omitted_snapshot_at)
+  }
+}

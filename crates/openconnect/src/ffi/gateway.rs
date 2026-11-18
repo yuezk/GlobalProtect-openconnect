@@ -1,7 +1,11 @@
+#[cfg(unix)]
+use libc::{AF_INET, AF_INET6, addrinfo, getaddrinfo};
 use std::{
   ffi::{c_char, c_int},
   ptr,
 };
+#[cfg(windows)]
+use windows_sys::Win32::Networking::WinSock::{ADDRINFOA as addrinfo, AF_INET, AF_INET6, getaddrinfo};
 
 /// Resolve with the system's normal policy, then prefer one family without
 /// discarding alternatives. The returned list remains owned by libc and is
@@ -13,18 +17,18 @@ use std::{
 pub unsafe extern "C" fn vpn_resolve_gateway(
   node: *const c_char,
   service: *const c_char,
-  hints: *const libc::addrinfo,
-  result: *mut *mut libc::addrinfo,
+  hints: *const addrinfo,
+  result: *mut *mut addrinfo,
   preference: u32,
 ) -> c_int {
   // SAFETY: The OpenConnect callback forwards valid getaddrinfo arguments.
-  let status = unsafe { libc::getaddrinfo(node, service, hints, result) };
+  let status = unsafe { getaddrinfo(node.cast(), service.cast(), hints, result) };
   if status != 0 {
     return status;
   }
   let family = match preference {
-    4 => libc::AF_INET,
-    6 => libc::AF_INET6,
+    4 => AF_INET as c_int,
+    6 => AF_INET6 as c_int,
     _ => return 0,
   };
   // SAFETY: A successful getaddrinfo call returns an owned, writable list.
@@ -34,7 +38,7 @@ pub unsafe extern "C" fn vpn_resolve_gateway(
 
 /// # Safety
 /// `head` must be an exclusively owned, writable addrinfo list with no cycles.
-unsafe fn prefer_family(head: *mut libc::addrinfo, family: c_int) -> *mut libc::addrinfo {
+unsafe fn prefer_family(head: *mut addrinfo, family: c_int) -> *mut addrinfo {
   let mut addresses = Vec::new();
   let mut current = head;
   // SAFETY: The caller owns every node; sorting only changes the list links.

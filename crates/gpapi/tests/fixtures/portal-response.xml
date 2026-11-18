@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?fixture fixture-pi?>
+<policy>
+  <!--fixture-comment-->
+  <portal-userauthcookie>fixture-user-cookie</portal-userauthcookie>
+  <portal-prelogonuserauthcookie><![CDATA[fixture-prelogon-cookie]]></portal-prelogonuserauthcookie>
+  <portal-csc-auth-cookie>fixture-csc-cookie</portal-csc-auth-cookie>
+  <username>fixture-username</username>
+  <saml-request>fixture-saml</saml-request>
+  <property name="password" value="fixture-property-password"/>
+  <cookie name="fixture-cookie-name"/>
+  <settings auth_token="fixture-attribute-token"/>
+  <download href="https://user:fixture-url-password@vpn.example.test/client?auth=fixture-query-token"/>
+  <hip-collection>
+    <hip-report-interval>3600</hip-report-interval>
+    <collect-hip-data>yes</collect-hip-data>
+    <custom-checks>
+      <mac-os><plist><entry name="com.paloaltonetworks.GlobalProtect.settings"><key><member>HipID</member></key></entry><entry name="com.1password.1password"><key><member>Version</member></key></entry></plist></mac-os>
+      <windows><registry-key><entry name="HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"><registry-value><member>Domain</member><member>NV Domain</member></registry-value></entry></registry-key></windows>
+    </custom-checks>
+  </hip-collection>
+  <domain>Corp.Example.test</domain>
+</policy>

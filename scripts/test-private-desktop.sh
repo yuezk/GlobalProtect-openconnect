@@ -60,6 +60,6 @@ run_stage 'Frontend tests' 5m \
 run_stage 'Frontend build' 10m \
   docker exec --workdir "$workspace" "$container" pnpm --filter gpgui build
 run_stage 'Compile Rust tests' 30m \
-  docker exec --workdir "$workspace" "$container" cargo test --workspace --locked --no-run
+  docker exec --workdir "$workspace" "$container" cargo test --workspace --locked --features gpapi/openssl-tests --no-run
 run_stage 'Rust tests' 10m \
-  docker exec --workdir "$workspace" "$container" cargo test --workspace --locked
+  docker exec --workdir "$workspace" "$container" cargo test --workspace --locked --features gpapi/openssl-tests

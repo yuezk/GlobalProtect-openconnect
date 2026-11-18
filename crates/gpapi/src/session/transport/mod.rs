@@ -164,6 +164,7 @@ async fn post(
       crate::utils::request::ResponseBodyError::Transport(error) => GatewayRequestError::Transport(error),
       crate::utils::request::ResponseBodyError::TooLarge => GatewayRequestError::ResponseTooLarge,
     })?;
+  crate::utils::log_response_xml(&format!("/ssl-vpn/{endpoint}"), status, &body);
   parse_response(&body)
 }
 

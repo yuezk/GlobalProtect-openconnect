@@ -410,6 +410,48 @@ async fn handle_client_message(
         return Ok(());
       }
 
+      if let WsRequest::SetWindowsPatchInterest { enabled } = &request {
+        #[cfg(windows)]
+        ctx.patch_checks.set_interest(control.connection_id(), *enabled);
+        #[cfg(not(windows))]
+        let _ = enabled;
+        control
+          .send(ConnectionCommand::Reply {
+            id,
+            result: ServiceResult::Accepted,
+          })
+          .map_err(|_| ())?;
+        return Ok(());
+      }
+      if let WsRequest::RefreshWindowsPatches { after } = &request {
+        #[cfg(windows)]
+        {
+          let checks = ctx.patch_checks.clone();
+          let control = control.clone();
+          let after = Some(after.unwrap_or(0));
+          tokio::spawn(async move {
+            let success = checks.refresh(after).await;
+            let result = if success {
+              ServiceResult::Accepted
+            } else {
+              ServiceResult::rejected(ServiceErrorCode::Internal, "Couldn’t check local updates.")
+            };
+            let _ = control.send(ConnectionCommand::Reply { id, result });
+          });
+        }
+        #[cfg(not(windows))]
+        {
+          let _ = after;
+          control
+            .send(ConnectionCommand::Reply {
+              id,
+              result: ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Windows patch checks are unavailable"),
+            })
+            .map_err(|_| ())?;
+        }
+        return Ok(());
+      }
+
       if let WsRequest::StoreEditedHipReportChunk(report) = request {
         let upload_id = report.upload_id.as_deref().and_then(|id| Uuid::parse_str(id).ok());
         let result = if report.upload_id.is_some() && upload_id.is_none() {
@@ -451,6 +493,7 @@ async fn handle_client_message(
                 offset: chunk.offset,
                 xml,
                 complete,
+                windows_updates: None,
               })
           })
           .unwrap_or_else(|| ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "HIP preview is unavailable"));
@@ -467,6 +510,7 @@ async fn handle_client_message(
                 offset: 0,
                 xml,
                 complete,
+                windows_updates: None,
               },
               Err(_) => ServiceResult::rejected(ServiceErrorCode::Internal, "Submitted HIP report is unavailable"),
             },
@@ -501,6 +545,10 @@ async fn handle_client_message(
       }
 
       if let WsRequest::PreviewHipReport(preview) = request {
+        #[cfg(windows)]
+        if preview.client_os == gpapi::os_profile::ClientOs::Windows && matches!(preview.source, HipSource::Generated) {
+          ctx.patch_checks.check_if_due();
+        }
         let edited_report = if let HipSource::Edited { report_id } = &preview.source {
           let report_id = match Uuid::parse_str(report_id) {
             Ok(id) => id,

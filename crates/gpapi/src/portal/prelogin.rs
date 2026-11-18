@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail};
-use log::{debug, info, warn};
+use log::{info, warn};
 use reqwest::{Client, StatusCode};
 use serde::Serialize;
 use specta::Type;
@@ -174,10 +174,8 @@ pub async fn prelogin(portal: &str, gp_params: &GpParams, options: PreloginOptio
     Err(anyhow!(PortalError::PreloginError(err.reason)))
   })?;
 
-  debug!("Prelogin response XML: {}", res_xml);
-
   let prelogin = parse_prelogin_response(&res_xml, is_gateway).map_err(|err| {
-    warn!("Parse response error, response: {}", res_xml);
+    warn!("Failed to parse prelogin response: {err}");
     PortalError::PreloginError(err.to_string())
   })?;
 

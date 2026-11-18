@@ -10,7 +10,6 @@ license="GPL-3.0-only"
 depends="
 	gmp
 	gnutls
-	libayatana-appindicator
 	libsecret
 	libxml2
 	lz4
@@ -30,7 +29,6 @@ makedepends="
 	gmp-dev
 	gnutls-dev
 	gtk+3.0-dev
-	libayatana-appindicator-dev
 	libsecret-dev
 	librsvg-dev
 	libtool

@@ -5,5 +5,21 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
 log.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+ipnet = { version = "2", features = ["serde"] }
+base64.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+winreg = "0.56"
+uuid = { workspace = true, features = ["v4"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Threading"] }
+
+[dev-dependencies]
+ipnet = "2"
+
+[target.'cfg(windows)'.dev-dependencies]
+tempfile.workspace = true
+windows-sys = { version = "0.61", features = ["Win32_System_LibraryLoader"] }

@@ -1,6 +1,9 @@
 use std::process::{Command, ExitStatus};
 
 const DMABUF: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+pub const MAIN_WEBVIEW_INITIALIZED: &str = "GP Connect main webview initialized";
+const GBM_DIAGNOSTIC: &[u8] = b"Failed to create GBM buffer";
+pub(crate) const AUTH_STDERR_PREFIX: &[u8] = b"gpauth stderr: ";
 const DIAGNOSTIC: &[u8] = b"Error 71 (Protocol error) dispatching to Wayland display";
 
 #[derive(Debug, thiserror::Error)]
@@ -16,20 +19,33 @@ pub struct RecoveryFailed(#[source] anyhow::Error);
 #[derive(Default)]
 pub struct RecoveryState {
   first_failure: Option<String>,
+  shared_memory: bool,
 }
 
 impl RecoveryState {
   pub fn dmabuf_disabled(&self) -> bool {
-    self.first_failure.is_some()
+    self.first_failure.is_some() && !self.shared_memory
+  }
+
+  pub fn shared_memory(&self) -> bool {
+    self.shared_memory
   }
 
   pub fn recover(&mut self, error: &anyhow::Error) -> bool {
-    if self.first_failure.is_none() && error.downcast_ref::<RenderingCrash>().is_some() {
-      self.first_failure = Some(error.to_string());
-      true
-    } else {
-      false
+    if self.first_failure.is_some() {
+      return false;
     }
+    let gbm_failure = error.downcast_ref::<GbmBufferFailure>().is_some();
+    if !gbm_failure && error.downcast_ref::<RenderingCrash>().is_none() {
+      return false;
+    }
+    if gbm_failure && let Err(error) = crate::gui::set_compatibility_graphics(true) {
+      log::warn!("Could not save compatibility graphics setting: {error:#}");
+      return false;
+    }
+    self.first_failure = Some(error.to_string());
+    self.shared_memory = gbm_failure;
+    true
   }
 
   pub fn terminal(&self, error: anyhow::Error) -> anyhow::Error {
@@ -49,9 +65,15 @@ impl RecoveryState {
   }
 }
 
+#[cfg(unix)]
 pub(crate) fn is_crash_exit(status: ExitStatus) -> bool {
   use std::os::unix::process::ExitStatusExt;
   !status.success() && !matches!(status.signal(), Some(1 | 2 | 9 | 15))
+}
+
+#[cfg(windows)]
+pub(crate) fn is_crash_exit(status: ExitStatus) -> bool {
+  status.code().is_some_and(|code| (code as u32) >= 0xC0000000)
 }
 
 pub fn eligible(command: &Command) -> bool {
@@ -64,6 +86,16 @@ pub(crate) fn eligible_with_inheritance(command: &Command, inherits: bool) -> bo
     && effective_env(command, DMABUF, inherits).is_none()
 }
 
+pub(crate) fn allows_shared_memory_override(command: &Command, inherits: bool) -> bool {
+  crate::gui::COMPATIBILITY_GRAPHICS_SUPPORTED
+    && effective_env(command, DMABUF, inherits).is_none()
+    && effective_env(command, crate::gui::FORCE_SHARED_MEMORY, inherits).is_none()
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("WebKit failed to create a GBM buffer")]
+pub(crate) struct GbmBufferFailure;
+
 fn effective_env(command: &Command, key: &str, inherits: bool) -> Option<std::ffi::OsString> {
   for (name, value) in command.get_envs() {
     if name == key {
@@ -73,12 +105,21 @@ fn effective_env(command: &Command, key: &str, inherits: bool) -> Option<std::ff
   inherits.then(|| std::env::var_os(key)).flatten()
 }
 
+pub(crate) fn is_gbm_diagnostic(line: &[u8]) -> bool {
+  !line.starts_with(AUTH_STDERR_PREFIX)
+    && line
+      .windows(GBM_DIAGNOSTIC.len())
+      .any(|message| message == GBM_DIAGNOSTIC)
+}
+
 /// Observes diagnostic lines without retaining arbitrary application output.
 #[derive(Default)]
 pub(crate) struct StderrDiagnostic {
   line: Vec<u8>,
   overflow: bool,
   matched: bool,
+  gbm_failed: bool,
+  main_webview_initialized: bool,
 }
 
 impl StderrDiagnostic {
@@ -98,6 +139,14 @@ impl StderrDiagnostic {
 
   fn check_line(&mut self) {
     let line = self.line.trim_ascii_end();
+    if !self.overflow {
+      if line == MAIN_WEBVIEW_INITIALIZED.as_bytes() {
+        self.main_webview_initialized = true;
+      }
+      if !self.main_webview_initialized && is_gbm_diagnostic(line) {
+        self.gbm_failed = true;
+      }
+    }
     let message = line.strip_suffix(b".").unwrap_or(line);
     if !self.overflow
       && (line.starts_with(b"Gdk-Message:")
@@ -111,6 +160,10 @@ impl StderrDiagnostic {
     }
   }
 
+  pub(crate) fn should_retry_gbm(&self, can_retry_wayland: bool) -> bool {
+    self.gbm_failed && !(can_retry_wayland && self.matched)
+  }
+
   pub(crate) fn matched(&mut self) -> bool {
     self.check_line();
     self.matched
@@ -120,6 +173,43 @@ impl StderrDiagnostic {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn detects_gbm_failure_before_main_webview_initializes() {
+    for line in [
+      b"Failed to create GBM buffer of size 280x404: Invalid argument\n".as_slice(),
+      b"(WebKitWebProcess:42): Warning: Failed to create GBM buffer\n",
+      b"gpauth: Failed to create GBM buffer\n",
+    ] {
+      let mut observer = StderrDiagnostic::default();
+      for bytes in line.chunks(7) {
+        observer.push(bytes);
+      }
+      assert!(observer.gbm_failed);
+      assert!(!observer.matched());
+    }
+  }
+
+  #[test]
+  fn ignores_gbm_failure_after_startup_and_from_auth_stderr() {
+    let mut observer = StderrDiagnostic::default();
+    observer
+      .push(b"gpauth stderr: (WebKitWebProcess:42): Failed to create GBM buffer of size 900x648: Invalid argument\n");
+    assert!(!observer.gbm_failed);
+    observer.push(format!("{MAIN_WEBVIEW_INITIALIZED}\n").as_bytes());
+    observer.push(b"Failed to create GBM buffer of size 840x640: Invalid argument\n");
+    assert!(!observer.gbm_failed);
+  }
+
+  #[test]
+  fn preserves_wayland_retry_when_both_diagnostics_are_observed() {
+    let mut observer = StderrDiagnostic::default();
+    observer.push(b"Failed to create GBM buffer of size 280x404: Invalid argument\n");
+    observer.push(b"Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display.\n");
+    assert!(observer.matched());
+    assert!(!observer.should_retry_gbm(true));
+    assert!(observer.should_retry_gbm(false));
+  }
 
   #[test]
   fn recognizes_split_diagnostic_without_matching_quoted_warning() {
@@ -192,6 +282,7 @@ mod tests {
     assert!(!eligible_with_inheritance(&command, false));
   }
 
+  #[cfg(unix)]
   #[test]
   fn recovery_is_once_and_preserves_cancellation_and_both_failures() {
     use std::os::unix::process::ExitStatusExt;
@@ -213,6 +304,7 @@ mod tests {
     assert!(error.to_string().contains("71"));
     assert!(error.to_string().contains("second exit 72"));
   }
+  #[cfg(unix)]
   #[test]
   fn explicit_termination_is_not_a_rendering_crash() {
     use std::os::unix::process::ExitStatusExt;

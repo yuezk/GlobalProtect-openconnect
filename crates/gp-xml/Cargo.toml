@@ -1,0 +1,11 @@
+[package]
+name = "gp-xml"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license = "MIT"
+description = "GlobalProtect response XML redaction for diagnostics"
+
+[dependencies]
+url.workspace = true
+xmltree.workspace = true

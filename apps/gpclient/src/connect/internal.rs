@@ -128,15 +128,18 @@ impl ConnectHandler<'_> {
       produce_report: Arc::new(move |request, control| {
         control.check()?;
         if matches!(source.as_ref(), openconnect::HipSource::Disabled) {
-          return gphip::generate_identity_report(&gphip::ReportInput {
-            profile: profile.clone(),
-            context: gphip::ReportContext::Connected {
-              cookie: request.cookie.clone(),
-              client_ip: request.client_ip.clone(),
-              client_ipv6: request.client_ipv6.clone(),
-              md5: request.md5.clone(),
+          return gphip::generate_identity_report(
+            &gphip::ReportInput {
+              profile: profile.clone(),
+              context: gphip::ReportContext::Connected {
+                cookie: request.cookie.clone(),
+                client_ip: request.client_ip.clone(),
+                client_ipv6: request.client_ipv6.clone(),
+                md5: request.md5.clone(),
+              },
             },
-          })
+            control,
+          )
           .map_err(std::io::Error::other);
         }
         source.collect(

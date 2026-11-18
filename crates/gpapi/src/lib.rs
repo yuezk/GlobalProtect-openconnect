@@ -31,3 +31,6 @@ pub mod clap;
 
 #[cfg(feature = "desktop")]
 pub mod script_tun;
+
+#[cfg(all(feature = "desktop", windows))]
+pub mod windows;

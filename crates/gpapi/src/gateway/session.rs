@@ -111,7 +111,7 @@ pub async fn extend_session(ctx: &SessionContext) -> anyhow::Result<()> {
   let response = client.post(&url).form(&form).send().await?;
   let response = parse_gp_response(response).await?;
   let root = Element::parse(response.as_bytes())?;
-  let status = parse_extend_session_status(&root, &response)?;
+  let status = parse_extend_session_status(&root)?;
 
   info!("Extend-session gateway response status: {}", status);
 
@@ -151,11 +151,11 @@ fn build_extend_session_form(ctx: &SessionContext) -> anyhow::Result<HashMap<Str
   Ok(form)
 }
 
-fn parse_extend_session_status(root: &Element, response: &str) -> anyhow::Result<String> {
+fn parse_extend_session_status(root: &Element) -> anyhow::Result<String> {
   match root.attr("status") {
     Some(status) => Ok(status.to_string()),
     None => {
-      warn!("Malformed extend-session response body: {}", response.trim());
+      warn!("Extend-session response is missing status");
       bail!("Malformed extend session response")
     }
   }
@@ -231,10 +231,7 @@ mod tests {
   fn parses_extend_session_status_attribute() {
     let root = Element::parse(r#"<response status="success"></response>"#.as_bytes()).unwrap();
 
-    assert_eq!(
-      parse_extend_session_status(&root, r#"<response status="success"></response>"#).unwrap(),
-      "success"
-    );
+    assert_eq!(parse_extend_session_status(&root).unwrap(), "success");
   }
 
   #[test]
@@ -242,9 +239,7 @@ mod tests {
     let root = Element::parse("<response><result>ok</result></response>".as_bytes()).unwrap();
 
     assert_eq!(
-      parse_extend_session_status(&root, "<response><result>ok</result></response>")
-        .unwrap_err()
-        .to_string(),
+      parse_extend_session_status(&root).unwrap_err().to_string(),
       "Malformed extend session response"
     );
   }

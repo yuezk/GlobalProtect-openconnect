@@ -70,17 +70,17 @@ impl GuiVariant {
   }
 }
 
-#[cfg(target_os = "linux")]
-fn preference_path() -> anyhow::Result<PathBuf> {
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+fn preference_path(name: &str) -> anyhow::Result<PathBuf> {
   let dirs = directories::ProjectDirs::from("com.yuezk", "GlobalProtect-openconnect", "gpclient")
     .ok_or_else(|| anyhow::anyhow!("Failed to locate GUI preference directory"))?;
-  Ok(dirs.config_dir().join("gui"))
+  Ok(dirs.config_dir().join(name))
 }
 
 pub fn preferred() -> anyhow::Result<GuiVariant> {
   #[cfg(target_os = "linux")]
   {
-    match std::fs::read_to_string(preference_path()?) {
+    match std::fs::read_to_string(preference_path("gui")?) {
       Ok(value) => match value.trim() {
         "gpgui" => Ok(GuiVariant::Tauri),
         "gpgui-nsh" => Ok(GuiVariant::Nsh),
@@ -96,12 +96,46 @@ pub fn preferred() -> anyhow::Result<GuiVariant> {
 
 #[cfg(target_os = "linux")]
 pub fn save_preference(variant: GuiVariant) -> anyhow::Result<()> {
+  save_launch_preference("gui", variant.binary_name())
+}
+
+pub const COMPATIBILITY_GRAPHICS_SUPPORTED: bool =
+  cfg!(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"));
+
+pub const FORCE_SHARED_MEMORY: &str = "WEBKIT_DMABUF_RENDERER_FORCE_SHM";
+
+const COMPATIBILITY_GRAPHICS: &str = "compatibility-graphics";
+
+#[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))]
+fn preference_path(_: &str) -> anyhow::Result<PathBuf> {
+  anyhow::bail!("Compatibility graphics is unavailable")
+}
+
+pub fn compatibility_graphics_enabled() -> bool {
+  COMPATIBILITY_GRAPHICS_SUPPORTED && preference_path(COMPATIBILITY_GRAPHICS).is_ok_and(|path| path.is_file())
+}
+
+pub fn set_compatibility_graphics(enabled: bool) -> anyhow::Result<()> {
+  anyhow::ensure!(
+    COMPATIBILITY_GRAPHICS_SUPPORTED,
+    "Compatibility graphics is unavailable"
+  );
+  if enabled {
+    return save_launch_preference(COMPATIBILITY_GRAPHICS, "enabled");
+  }
+  match std::fs::remove_file(preference_path(COMPATIBILITY_GRAPHICS)?) {
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+    result => result.map_err(Into::into),
+  }
+}
+
+fn save_launch_preference(name: &str, value: &str) -> anyhow::Result<()> {
   use std::io::Write;
-  let path = preference_path()?;
+  let path = preference_path(name)?;
   let directory = path.parent().unwrap();
   std::fs::create_dir_all(directory)?;
   let mut file = tempfile::NamedTempFile::new_in(directory)?;
-  writeln!(file, "{}", variant.binary_name())?;
+  writeln!(file, "{value}")?;
   file.persist(path)?;
   Ok(())
 }

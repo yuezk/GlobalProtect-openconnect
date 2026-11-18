@@ -292,11 +292,13 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auth"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "anyhow",
  "block2",
  "browser-launcher",
+ "common",
+ "dunce",
  "gpapi",
  "gtk",
  "html-escape",
@@ -307,6 +309,7 @@ dependencies = [
  "objc2-security",
  "objc2-web-kit",
  "regex",
+ "serde_json",
  "tauri",
  "tempfile",
  "tiny_http",
@@ -316,6 +319,10 @@ dependencies = [
  "uuid",
  "uzers",
  "webkit2gtk",
+ "webview2-com",
+ "windows",
+ "windows-sys 0.61.2",
+ "winreg 0.55.0",
 ]
 
 [[package]]
@@ -547,13 +554,14 @@ dependencies = [
 
 [[package]]
 name = "browser-launcher"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "anyhow",
  "log",
  "open",
  "webbrowser",
  "which",
+ "winreg 0.55.0",
 ]
 
 [[package]]
@@ -911,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "tempfile",
 ]
@@ -1551,7 +1559,7 @@ dependencies = [
  "rustc_version",
  "toml 1.1.8+spec-1.1.0",
  "vswhom",
- "winreg",
+ "winreg 0.56.0",
 ]
 
 [[package]]
@@ -1653,6 +1661,16 @@ checksum = "38e2275cc4e4fc009b0669731a1e5ab7ebf11f469eaede2bab9309a5b4d6057f"
 dependencies = [
  "memoffset",
  "rustc_version",
+]
+
+[[package]]
+name = "file-rotate"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e8e2fa049328a1f3295991407a88585805d126dfaadf74b9fe8c194c730aafc"
+dependencies = [
+ "chrono",
+ "flate2",
 ]
 
 [[package]]
@@ -2114,8 +2132,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gp-xml"
+version = "3.5.0"
+dependencies = [
+ "url",
+ "xmltree",
+]
+
+[[package]]
 name = "gpapi"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -2129,7 +2155,9 @@ dependencies = [
  "directories",
  "dns-lookup",
  "env_logger",
+ "file-rotate",
  "getrandom 0.4.3",
+ "gp-xml",
  "gtk",
  "humantime",
  "libloading 0.9.0",
@@ -2169,6 +2197,7 @@ dependencies = [
  "uuid",
  "uzers",
  "whoami",
+ "windows-sys 0.61.2",
  "x509-cert",
  "xmltree",
  "zeroize",
@@ -2176,7 +2205,7 @@ dependencies = [
 
 [[package]]
 name = "gpauth"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "anyhow",
  "auth",
@@ -2184,7 +2213,6 @@ dependencies = [
  "common",
  "compile-time",
  "gpapi",
- "home",
  "log",
  "serde_json",
  "tauri",
@@ -2195,7 +2223,7 @@ dependencies = [
 
 [[package]]
 name = "gpclient"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2226,7 +2254,7 @@ dependencies = [
 
 [[package]]
 name = "gpgui-helper"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2247,24 +2275,26 @@ dependencies = [
 
 [[package]]
 name = "gphip"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "anyhow",
  "askama",
  "chrono",
  "gpapi",
+ "log",
  "netdev",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "uuid",
  "uzers",
+ "windows",
  "xmltree",
 ]
 
 [[package]]
 name = "gpservice"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2273,6 +2303,7 @@ dependencies = [
  "common",
  "compile-time",
  "env_logger",
+ "file-rotate",
  "futures",
  "getrandom 0.4.3",
  "gpapi",
@@ -2293,13 +2324,15 @@ dependencies = [
  "tokio-tungstenite 0.30.0",
  "tokio-util",
  "uuid",
+ "windows-service",
+ "windows-sys 0.61.2",
  "xz2",
  "zeroize",
 ]
 
 [[package]]
 name = "gptunnel"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "gpapi",
  "log",
@@ -2311,9 +2344,17 @@ dependencies = [
 
 [[package]]
 name = "gpvpnc"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
+ "base64 0.23.1",
+ "ipnet",
  "log",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "uuid",
+ "windows-sys 0.61.2",
+ "winreg 0.56.0",
 ]
 
 [[package]]
@@ -2429,15 +2470,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
 dependencies = [
  "digest 0.11.3",
-]
-
-[[package]]
-name = "home"
-version = "0.5.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
-dependencies = [
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2815,6 +2847,9 @@ name = "ipnet"
 version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "is-docker"
@@ -3825,16 +3860,18 @@ dependencies = [
 
 [[package]]
 name = "openconnect"
-version = "3.4.0"
+version = "3.5.0"
 dependencies = [
  "autotools",
  "cc",
  "fs_extra",
+ "gp-xml",
  "is_executable",
  "libc",
  "log",
  "pkg-config",
  "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6731,6 +6768,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "widestring"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6881,6 +6924,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-service"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "857224b3b211c6f3616921f081ee54721ee3ad2ace2fac6a6337e032f7b4dcf2"
+dependencies = [
+ "bitflags 2.13.2",
+ "widestring",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "windows-strings"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6903,6 +6957,15 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
+dependencies = [
+ "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "windows-sys"
+version = "0.59.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
 ]
@@ -7071,6 +7134,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "winreg"
+version = "0.55.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb5a765337c50e9ec252c2069be9bf91c7df47afb103b642ba3a53bf8101be97"
+dependencies = [
+ "cfg-if",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

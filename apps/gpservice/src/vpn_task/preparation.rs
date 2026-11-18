@@ -30,7 +30,7 @@ pub(super) struct ConnectionResources {
 /// the complete ledger and its retained identity resources to the service.
 pub(crate) async fn prepare_connection(
   request: ConnectRequest,
-  brokered_macos: bool,
+  restricted_desktop: bool,
   cancellation: CancellationToken,
 ) -> anyhow::Result<PreparedConnection> {
   let mode = request.args().packet_delivery().clone();
@@ -77,11 +77,16 @@ pub(crate) async fn prepare_connection(
     };
     check()?;
     let args = setup_request.args();
-    let identity = super::prepare_identity(args, brokered_macos || non_tunnel)?;
-    let directory = brokered_macos.then(|| std::path::Path::new("/var/run/com.yuezk.gpgui"));
+    let identity = super::prepare_identity(args, restricted_desktop || non_tunnel)?;
+    #[cfg(target_os = "macos")]
+    let directory = restricted_desktop.then(|| std::path::PathBuf::from("/var/run/com.yuezk.gpgui"));
+    #[cfg(windows)]
+    let directory = Some(common::paths::service_private_dir());
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let directory: Option<std::path::PathBuf> = None;
     let identity_files = identity
       .as_ref()
-      .map(|identity| identity.write_files(directory))
+      .map(|identity| identity.write_files(directory.as_deref()))
       .transpose()?;
     let host = args.host_identity().context("Authenticated host identity is missing")?;
     let profile = crate::hip_source::profile(
@@ -181,8 +186,8 @@ mod tests {
   use gpapi::{gateway::Gateway, service::vpn_state::ConnectInfo};
 
   #[tokio::test]
-  async fn brokered_macos_and_non_tunnel_identity_reject_path_handoff() {
-    for (brokered_macos, non_tunnel) in [(true, false), (false, true), (true, true)] {
+  async fn restricted_desktop_and_non_tunnel_identity_reject_path_handoff() {
+    for (restricted_desktop, non_tunnel) in [(true, false), (false, true), (true, true)] {
       let gateway = Gateway::new("fixture".into(), "gateway.example.com".into());
       let request = super::super::test_connect_request(ConnectInfo::new("portal.example.com".into(), gateway, vec![]))
         .with_certificate(Some("/identity.pem".into()));
@@ -192,7 +197,7 @@ mod tests {
         wire["plan"]["members"][0]["authentication"]["connection_type"] = serde_json::json!("internal");
       }
       let request = serde_json::from_value(wire).unwrap();
-      let error = prepare_connection(request, brokered_macos, CancellationToken::new())
+      let error = prepare_connection(request, restricted_desktop, CancellationToken::new())
         .await
         .err()
         .unwrap();

@@ -23,10 +23,6 @@ deps: {
     origin: "security/gnutls"
     version: "*"
   }
-  "libayatana-appindicator": {
-    origin: "devel/libayatana-appindicator"
-    version: "*"
-  }
   "liblz4": {
     origin: "archivers/liblz4"
     version: "*"

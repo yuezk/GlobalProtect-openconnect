@@ -173,6 +173,12 @@ pub fn collect_profile_with_control(
     Some(identity) => identity.clone(),
     None => collect_with_host_id_and_control(host_id_override, control)?,
   };
+  #[cfg(windows)]
+  let identity = if builder.client_os == ClientOs::Windows {
+    windows::native_profile_identity(identity, host_id_override)?
+  } else {
+    identity
+  };
   let runtime_os = runtime_client_os();
   // Preserve the old behavior: only probe the native version when reporting it.
   let (os_version, software_version) = if builder.client_os == runtime_os {
@@ -181,7 +187,8 @@ pub fn collect_profile_with_control(
     (defaults::os_version(runtime_os), defaults::software_version(runtime_os))
   };
   control.check()?;
-  Ok(builder.build(HostSnapshot {
+  // The builder may carry cached hardware identity; use the resolved profile identity.
+  Ok(builder.host_identity(identity.clone()).build(HostSnapshot {
     runtime_os,
     identity,
     os_version,

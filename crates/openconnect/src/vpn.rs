@@ -1,7 +1,10 @@
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, OwnedFd};
+#[cfg(windows)]
+use std::os::windows::io::{AsRawHandle, OwnedHandle};
 use std::{
   ffi::{CStr, CString, c_char},
   fmt, io,
-  os::fd::{AsRawFd, OwnedFd},
   sync::{Arc, Mutex, RwLock},
 };
 
@@ -37,7 +40,8 @@ pub(crate) fn session_info_from_raw(raw: *const ffi::VpnSessionInfoRaw) -> VpnSe
   let raw = unsafe { &*raw };
   let warning_message =
     unsafe { optional_c_string(raw.lifetime_warning_message) }.filter(|message| !message.is_empty());
-  let user_expires = positive_i64_to_u32(raw.user_expires).or_else(|| positive_i64_to_u32(raw.auth_expiration));
+  let user_expires =
+    positive_i64_to_u32(raw.user_expires.into()).or_else(|| positive_i64_to_u32(raw.auth_expiration.into()));
 
   VpnSessionInfo {
     lifetime_secs: positive_i64_to_u32(raw.lifetime_secs as i64),
@@ -73,12 +77,12 @@ struct Cancellation {
 #[derive(Default)]
 struct CancellationState {
   requested: bool,
-  command_fd: Option<i32>,
+  command_fd: Option<ffi::CommandHandle>,
   statistics_pending: bool,
 }
 
 impl Cancellation {
-  fn attach(&self, fd: i32) -> bool {
+  fn attach(&self, fd: ffi::CommandHandle) -> bool {
     let mut state = self.state.lock().unwrap();
     state.command_fd = Some(fd);
     state.requested
@@ -150,7 +154,10 @@ pub struct Vpn {
   pub(crate) network_configuration_handler: Option<Arc<NetworkConfigurationHandler>>,
   interface: Option<CString>,
   script_tun: bool,
+  #[cfg(unix)]
   script_tun_launch: Option<ScriptTunLaunch>,
+  #[cfg(windows)]
+  script_tun_pipe: Option<OwnedHandle>,
 
   certificate: Option<CString>,
   sslkey: Option<CString>,
@@ -232,7 +239,9 @@ impl Vpn {
     }
     self.callback.write().unwrap().replace(Box::new(on_connected));
     let mut options = self.build_connect_options();
+    #[cfg(unix)]
     let mut argv = Vec::new();
+    #[cfg(unix)]
     let launch = self.script_tun_launch.as_ref().map(|launch| {
       argv.push(launch.program.as_ptr());
       argv.extend(launch.arguments.iter().map(|s| s.as_ptr()));
@@ -245,7 +254,10 @@ impl Vpn {
       }
     });
     // Both the borrowed launch record and argv remain alive through native connect.
-    options.script_tun_launch = launch.as_ref().map_or(std::ptr::null(), |launch| launch);
+    #[cfg(unix)]
+    {
+      options.script_tun_launch = launch.as_ref().map_or(std::ptr::null(), |launch| launch);
+    }
     let environment = match self.hip_source.as_ref() {
       HipSource::Script(script) => ffi::script_environment(script),
       _ => Vec::new(),
@@ -269,7 +281,7 @@ impl Vpn {
     }
   }
 
-  pub(crate) fn on_connected(&self, pipe_fd: i32, session_info: VpnSessionInfo) {
+  pub(crate) fn on_connected(&self, pipe_fd: ffi::CommandHandle, session_info: VpnSessionInfo) {
     info!("Connected to VPN, pipe_fd: {}", pipe_fd);
 
     if let Some(callback) = self.callback.write().unwrap().take() {
@@ -277,7 +289,7 @@ impl Vpn {
     }
   }
 
-  pub(crate) fn attach_command_pipe(&self, fd: i32) -> bool {
+  pub(crate) fn attach_command_pipe(&self, fd: ffi::CommandHandle) -> bool {
     self.cancellation.attach(fd)
   }
 
@@ -311,9 +323,15 @@ impl Vpn {
         .network_configuration_handler
         .as_ref()
         .map(|_| ffi::configure_network as _),
-      interface: Self::option_to_ptr(&self.interface),
+      interface_name: Self::option_to_ptr(&self.interface),
       script_tun: self.script_tun as u32,
       script_tun_launch: std::ptr::null(),
+      #[cfg(windows)]
+      script_tun_pipe: self
+        .script_tun_pipe
+        .as_ref()
+        .map(|handle| handle.as_raw_handle() as isize)
+        .unwrap_or(-1),
 
       certificate: Self::option_to_ptr(&self.certificate),
       sslkey: Self::option_to_ptr(&self.sslkey),
@@ -366,6 +384,7 @@ impl fmt::Display for VpnError {
 
 impl std::error::Error for VpnError {}
 
+#[cfg(unix)]
 struct ScriptTunLaunch {
   program: CString,
   arguments: Vec<CString>,
@@ -381,7 +400,10 @@ pub struct VpnBuilder {
   script_is_path: bool,
   interface: Option<String>,
   script_tun: bool,
+  #[cfg(unix)]
   script_tun_launch: Option<ScriptTunLaunch>,
+  #[cfg(windows)]
+  script_tun_pipe: Option<OwnedHandle>,
 
   user_agent: Option<String>,
   os: Option<String>,
@@ -416,7 +438,10 @@ impl VpnBuilder {
       script_is_path: false,
       interface: None,
       script_tun: false,
+      #[cfg(unix)]
       script_tun_launch: None,
+      #[cfg(windows)]
+      script_tun_pipe: None,
 
       user_agent: None,
       os: None,
@@ -469,6 +494,7 @@ impl VpnBuilder {
     self
   }
 
+  #[cfg(unix)]
   pub fn script_tun_program(
     mut self,
     program: &str,
@@ -493,6 +519,19 @@ impl VpnBuilder {
       control: Mutex::new(Some(inherited)),
     });
     Ok(self)
+  }
+
+  /// Deliver packets through a connected Windows message-mode pipe.
+  ///
+  /// # Safety
+  /// The handle must use overlapped I/O and must not be associated with an IOCP.
+  /// OpenConnect duplicates it and owns its own completion events; attaching a
+  /// Tokio/Mio handle would send native OVERLAPPED completions into that reactor.
+  #[cfg(windows)]
+  pub unsafe fn script_tun_pipe(mut self, pipe: OwnedHandle) -> Self {
+    self.script_tun = true;
+    self.script_tun_pipe = Some(pipe);
+    self
   }
 
   pub fn script_tun(mut self, script_tun: bool) -> Self {
@@ -596,7 +635,15 @@ impl VpnBuilder {
       }
       return Ok(None);
     }
+    #[cfg(unix)]
     if self.script_tun_launch.is_some() {
+      return Ok(None);
+    }
+    #[cfg(windows)]
+    if self.script_tun_pipe.is_some() {
+      if self.script.is_some() || !self.script_tun {
+        return Err(VpnError::new("Packet pipe conflicts with script options".into()));
+      }
       return Ok(None);
     }
     let script = match &self.script {
@@ -618,6 +665,7 @@ impl VpnBuilder {
   }
 
   pub fn build(self) -> Result<Vpn, VpnError> {
+    #[cfg(unix)]
     if self.script_tun_launch.is_some() && !self.script_tun {
       return Err(VpnError::new("Child identity requires script-tun".into()));
     }
@@ -642,7 +690,10 @@ impl VpnBuilder {
       network_configuration_handler: self.network_configuration_handler,
       interface: self.interface.as_deref().map(Self::to_cstring),
       script_tun: self.script_tun,
+      #[cfg(unix)]
       script_tun_launch: self.script_tun_launch,
+      #[cfg(windows)]
+      script_tun_pipe: self.script_tun_pipe,
 
       certificate: self.certificate.as_deref().map(Self::to_cstring),
       sslkey: self.sslkey.as_deref().map(Self::to_cstring),
@@ -774,7 +825,10 @@ mod tests {
       network_configuration_handler: None,
       interface: None,
       script_tun: false,
+      #[cfg(unix)]
       script_tun_launch: None,
+      #[cfg(windows)]
+      script_tun_pipe: None,
       certificate: None,
       sslkey: None,
       key_password: None,
@@ -1078,6 +1132,7 @@ mod tests {
 }
 
 #[unsafe(no_mangle)]
+#[cfg(unix)]
 extern "C" fn vpn_script_started(data: *mut std::ffi::c_void) {
   // Native setup has forked or failed; only the child may retain this endpoint.
   let vpn = unsafe { &*(data as *const Vpn) };

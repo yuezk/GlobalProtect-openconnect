@@ -174,15 +174,21 @@ async fn unreachable_gateway_keeps_cached_cookie() {
 
 #[tokio::test]
 async fn gateway_closing_without_response_keeps_cached_cookie() {
-  closed_connection_keeps_cached_cookie(false).await;
+  closed_connection_keeps_cached_cookie(false, false).await;
 }
 
 #[tokio::test]
 async fn portal_closing_without_response_keeps_cached_cookie() {
-  closed_connection_keeps_cached_cookie(true).await;
+  closed_connection_keeps_cached_cookie(true, false).await;
 }
 
-async fn closed_connection_keeps_cached_cookie(portal_discovery: bool) {
+#[tokio::test]
+async fn partial_responses_keep_cached_cookie() {
+  closed_connection_keeps_cached_cookie(false, true).await;
+  closed_connection_keeps_cached_cookie(true, true).await;
+}
+
+async fn closed_connection_keeps_cached_cookie(portal_discovery: bool, partial_body: bool) {
   let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
   let origin = format!("http://{}", listener.local_addr().unwrap());
   let worker = tokio::spawn(async move {
@@ -203,8 +209,14 @@ async fn closed_connection_keeps_cached_cookie(portal_discovery: bool) {
           .unwrap();
       }
       let (mut stream, _) = listener.accept().await.unwrap();
-      // Read the complete request, then close without sending HTTP headers.
-      read_request(&mut stream).await
+      let request = read_request(&mut stream).await;
+      if partial_body {
+        stream
+          .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n<response>")
+          .await
+          .unwrap();
+      }
+      request
     })
     .await
     .expect("Connection-closing fixture timed out")
@@ -248,7 +260,11 @@ async fn closed_connection_keeps_cached_cookie(portal_discovery: bool) {
   let Some(gpapi::error::PortalError::NetworkError(network)) = error.downcast_ref() else {
     panic!("Expected a network error, got {error:?}");
   };
-  assert!(network.is_request());
+  if partial_body {
+    assert!(network.is_body() || network.is_decode());
+  } else {
+    assert!(network.is_request());
+  }
   assert!(!network.is_connect());
   assert!(!network.is_timeout());
   assert!(cache.exists(), "an unanswered request must not delete the cookie cache");
