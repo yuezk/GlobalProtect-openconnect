@@ -29,8 +29,8 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         pname = "globalprotect-openconnect";
         version = cargoToml.workspace.package.version;
-        releaseTag = "v3.4.0";
-        releaseVersion = "3.4.0";
+        releaseTag = "v3.5.0";
+        releaseVersion = "3.5.0";
 
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
@@ -55,8 +55,8 @@
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
         gpguiHashes = {
-          x86_64 = "sha256-2qZQICnK5fa18suhnqeYnDI1z+SGqXJa1ZXI2NhfQP0=";
-          aarch64 = "sha256-iOM3+Qte/6C4Gs/e9jVvx5DtBFq7DG2PNDCsGwPMeY0=";
+          x86_64 = "sha256-nA6+URV5FafIynXFQL7YmimhVU0sYEuaYqQ4I9YZ5eY=";
+          aarch64 = "sha256-gPuz6UV7Xir0WKZac8ZsEw8mjN92wRdidbHu5FjS1cw=";
         };
 
         gpguiArchive = pkgs.fetchurl {
@@ -70,8 +70,8 @@
         };
 
         binaryHashes = {
-          x86_64 = "sha256-hBnfMAS3qEby9Dyc3ysH8tdGQwarXqo9xtY1gbN8gJI=";
-          aarch64 = "sha256-lW1yQQD1G633tdBGBhVEAEQvMtnntK3mMU9M69x9ID0=";
+          x86_64 = "sha256-l8NrsyiLfYTcALybjOPVnJMLL8Qe2q1jGrwnDu4Grg8=";
+          aarch64 = "sha256-+vSsvbqXhoEnxz8dxm/Qq0P5Ve/0HDLs2WnLsTszsgw=";
         };
 
         binaryArchive = pkgs.fetchurl {
@@ -86,6 +86,7 @@
 
         linuxRuntimeDependencies = with pkgs; [
           glib-networking
+          libayatana-appindicator
           xdg-utils
         ];
 
@@ -173,6 +174,7 @@
             webkitgtk_4_1
             glib-networking
             libsecret
+            libayatana-appindicator
           ];
 
         installNixosPolkitRule = ''
