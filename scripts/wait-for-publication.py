@@ -84,7 +84,7 @@ def rpm_packages(base_url):
     return ET.fromstring(unpack(content, location))
 
 
-def rpm_present(base_url, package, version, arch, release_matches):
+def rpm_present(base_url, package, version, arch, release_matches, *, sha256=None):
     namespace = {"rpm": "http://linux.duke.edu/metadata/common"}
     for entry in rpm_packages(base_url).findall("rpm:package", namespace):
         info = entry.find("rpm:version", namespace)
@@ -92,6 +92,10 @@ def rpm_present(base_url, package, version, arch, release_matches):
                 entry.findtext("rpm:arch", namespaces=namespace) != arch or
                 info.get("ver") != version or not release_matches(info.get("rel", ""))):
             continue
+        if sha256 is not None:
+            digest = entry.find("rpm:checksum[@type='sha256']", namespace)
+            if digest is None or digest.text != sha256:
+                continue
         return True
     return False
 
@@ -251,16 +255,23 @@ class Copr:
                 raise Pending(f"Copr {chroot}: {status['state']}; {link}")
             base = build["repo_url"].rstrip("/") + "/" + chroot
             arch = chroot.rsplit("-", 1)[1]
-            packages = api(urljoin(status["result_url"], "results.json"))["packages"]
-            package = next((item for item in packages
-                            if item["name"] == args.package and item["version"] == args.version
-                            and item["arch"] == arch
-                            and (item["release"] == args.revision
-                                 or item["release"].startswith(args.revision + "."))), None)
-            if package is None:
-                raise Failed(f"Copr build {args.build_id} has no requested package for {chroot}")
+            # Pulp labels the signed RPM with the producing build and chroot.
+            artifacts = api("https://packages.redhat.com/api/pulp/public-copr/api/v3/content/rpm/packages/",
+                            pulp_label_select=f"build_id={args.build_id},chroot={chroot}",
+                            name=args.package, version=args.version, arch=arch, fields="release,sha256")
+            if not artifacts["count"]:
+                raise Pending(f"Waiting for the signed RPM from Copr build {args.build_id} for {chroot}")
+            if artifacts["count"] != 1:
+                raise Failed(f"Ambiguous RPMs from Copr build {args.build_id} for {chroot}")
+            artifact = artifacts["results"][0]
+            release = artifact["release"]
+            if release != args.revision and not release.startswith(args.revision + "."):
+                raise Failed(f"Copr build {args.build_id} has an unexpected RPM revision for {chroot}")
+            digest = artifact["sha256"]
+            if not digest or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise Failed(f"Missing signed RPM checksum for Copr build {args.build_id} for {chroot}")
             if not rpm_present(base, args.package, args.version, arch,
-                               lambda release: release == package["release"]):
+                               lambda value: value == release, sha256=digest):
                 raise Pending(f"Waiting for Copr build {args.build_id} in {base}")
         return f"Copr build {args.build_id}: {len(build['chroots'])} targets built and published; {link}"
 
