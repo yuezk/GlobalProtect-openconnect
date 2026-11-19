@@ -270,7 +270,21 @@ fn init_logger(cli: &Cli) {
 }
 
 pub async fn run() {
+  #[cfg(not(windows))]
   let cli = Cli::parse();
+  #[cfg(windows)]
+  let cli = match gpapi::process::auth_bootstrap::receive_arguments().await {
+    Ok(Some(args)) => Cli::parse_from(
+      std::env::args_os()
+        .take(1)
+        .chain(args.into_iter().map(std::ffi::OsString::from)),
+    ),
+    Ok(None) => Cli::parse(),
+    Err(error) => {
+      eprintln!("Could not read Windows authentication launch arguments: {error}");
+      std::process::exit(1);
+    }
+  };
 
   #[cfg(any(windows, target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   if let Some(CliCommand::AuthCallback { callback }) = &cli.command {

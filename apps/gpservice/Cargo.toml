@@ -23,8 +23,6 @@ serde_json.workspace = true
 env_logger.workspace = true
 log.workspace = true
 compile-time.workspace = true
-xz2 = "0.1"
-tar = "0.4"
 thiserror.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 zeroize.workspace = true
@@ -33,6 +31,8 @@ getrandom = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["fs", "socket", "user"] }
+tar = "0.4"
+xz2 = "0.1"
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))'.dependencies]
 mac_address = "1.2.1"

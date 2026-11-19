@@ -36,7 +36,7 @@ impl Drop for Environment {
 fn invalid(message: &str) -> io::Error {
   io::Error::new(io::ErrorKind::InvalidInput, message)
 }
-fn wide(value: &OsStr) -> io::Result<Vec<u16>> {
+pub(super) fn wide(value: &OsStr) -> io::Result<Vec<u16>> {
   let value: Vec<_> = value.encode_wide().collect();
   if value.contains(&0) {
     return Err(invalid("Windows process strings cannot contain NUL"));
@@ -63,12 +63,15 @@ fn quote(argument: &[u16], output: &mut Vec<u16>) {
   output.extend(std::iter::repeat_n(b'\\' as u16, backslashes * 2));
   output.push(b'"' as u16);
 }
-fn command_line(program: &[u16], arguments: &[String]) -> io::Result<Vec<u16>> {
+pub(super) fn command_line<'a>(
+  program: &[u16],
+  arguments: impl IntoIterator<Item = &'a OsStr>,
+) -> io::Result<Vec<u16>> {
   let mut output = Vec::new();
   quote(program, &mut output);
   for argument in arguments {
     output.push(b' ' as u16);
-    quote(&wide(OsStr::new(argument))?, &mut output);
+    quote(&wide(argument)?, &mut output);
   }
   output.push(0);
   if output.len() > 32767 {
@@ -90,7 +93,10 @@ fn compare(left: &[u16], right: &[u16]) -> std::cmp::Ordering {
   unsafe { CompareStringOrdinal(left.as_ptr(), left.len() as i32, right.as_ptr(), right.len() as i32, 1) }
     .cmp(&CSTR_EQUAL)
 }
-fn user_environment(token: BorrowedHandle<'_>, variables: &[(&str, &str)]) -> io::Result<Vec<u16>> {
+pub(super) fn user_environment<'a>(
+  token: BorrowedHandle<'_>,
+  variables: impl IntoIterator<Item = (&'a OsStr, &'a OsStr)>,
+) -> io::Result<Vec<u16>> {
   let mut pointer = ptr::null_mut();
   if unsafe { CreateEnvironmentBlock(&mut pointer, token.as_raw_handle(), 0) } == 0 {
     return Err(io::Error::last_os_error());
@@ -109,11 +115,11 @@ fn user_environment(token: BorrowedHandle<'_>, variables: &[(&str, &str)]) -> io
     }
   }
   for (name, value) in variables {
-    if name.is_empty() || name.contains('=') {
+    let name = wide(name)?;
+    if name.is_empty() || name.contains(&(b'=' as u16)) {
       return Err(invalid("Invalid worker environment name"));
     }
-    let name = wide(OsStr::new(name))?;
-    let value = wide(OsStr::new(value))?;
+    let value = wide(value)?;
     entries.retain(|entry| compare(key(entry), &name) != std::cmp::Ordering::Equal);
     let mut entry = name;
     entry.push(b'=' as u16);
@@ -145,9 +151,14 @@ impl UserProcess {
       return Err(invalid("Windows worker executable must be absolute"));
     }
     let mut executable = wide(program.as_os_str())?;
-    let mut command = command_line(&executable, arguments)?;
+    let mut command = command_line(&executable, arguments.iter().map(OsStr::new))?;
     executable.push(0);
-    let mut environment = user_environment(token, variables)?;
+    let mut environment = user_environment(
+      token,
+      variables
+        .iter()
+        .map(|(name, value)| (OsStr::new(name), OsStr::new(value))),
+    )?;
     let directory = program.parent().ok_or_else(|| invalid("Worker directory is missing"))?;
     let mut directory = wide(directory.as_os_str())?;
     directory.push(0);
@@ -286,7 +297,7 @@ mod tests {
       "&|<>",
     ]
     .map(String::from);
-    let command = command_line(&program, &arguments).unwrap();
+    let command = command_line(&program, arguments.iter().map(OsStr::new)).unwrap();
     let mut count = 0;
     unsafe {
       let parsed = CommandLineToArgvW(command.as_ptr(), &mut count);

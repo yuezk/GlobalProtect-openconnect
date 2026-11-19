@@ -178,6 +178,8 @@ impl ConnectHandler<'_> {
           }
         }
 
+        #[cfg(windows)]
+        let auth_launcher = auth_launcher.with_windows_cli_launch();
         let cred = auth_launcher.cancellation(&self.cancellation).launch().await?;
         self.check_cancelled()?;
         Ok(cred)

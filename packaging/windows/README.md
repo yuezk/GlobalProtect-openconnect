@@ -9,7 +9,10 @@
 
 `TARGET_ARCH` is `x64` or `arm64` and must match every executable and DLL in
 the payload. Each installer accepts only its native Windows architecture. ARM64
-requires Windows 11; x64 requires Windows 10 build 19041 or newer.
+requires Windows 11. x64 requires Windows 10 version 1809 (build 17763) or
+later, or Windows Server 2019 or later with Desktop Experience.
+On Windows N, install the [Media Feature Pack for your Windows version](https://support.microsoft.com/en-us/windows/experience/platform-variants/media-feature-pack-list-for-windows-n-editions)
+before running setup.
 
 The native library build accepts `scripts/build-openconnect-windows.ps1 -TunnelType 'GP Connect'`
 (the default). This passes OpenConnect's `--with-wintun-tunnel-type` build option;
@@ -20,7 +23,8 @@ selected type. The gateway-based connection name is unchanged.
 match the payload's `build-info.json`. `DISPLAY_VERSION` is the full release
 identity, including the snapshot build when applicable. The payload must contain matching
 `gpgui.exe`, `gpauth.exe`, `gpservice.exe`, their DLL dependency closure, the
-vendor-signed `wintun.dll`, `licenses`, and `build-info.json`. The NSIS compiler
+vendor-signed `wintun.dll`, `licenses`, and `build-info.json`. The `cli` folder
+contains `gpclient.exe` and its application-local DLLs. The NSIS compiler
 adds the generated uninstaller; it is not a separately built executable.
 
 The installer, extraction progress and uninstaller use the shared Windows icon
@@ -97,3 +101,13 @@ cannot host a Windows service. The latter must fail service startup, restore A's
 files and uninstall metadata, and leave A's service running. Also check held
 runtime files, active GUI/auth windows, Wintun-signature failure, and concurrent
 installer attempts. Do not run failure fixtures against a live company VPN.
+
+The installer includes `GP Connect\cli\gpclient.exe`. From an administrator
+PowerShell, connect to your portal and press Ctrl+C to disconnect.
+
+```powershell
+& "$env:ProgramFiles\GP Connect\cli\gpclient.exe" connect vpn.example.com
+```
+
+Embedded SAML sign-in from an elevated terminal requires an interactive Windows
+desktop under the same account with UAC enabled and the WebView2 Runtime.

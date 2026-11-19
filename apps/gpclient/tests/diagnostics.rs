@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use std::{os::unix::fs::PermissionsExt, process::Stdio, time::Duration};
 
 use tokio::process::Command;

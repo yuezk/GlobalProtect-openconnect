@@ -4,11 +4,7 @@ use gpapi::{collection::CollectionControl, process::collection::CollectorCommand
 use std::io;
 
 pub(super) fn collect(commands: &CollectorCommands<'_>, control: &dyn CollectionControl) -> io::Result<WindowsReport> {
-  let executable = std::env::current_exe()?;
-  let helper = executable
-    .parent()
-    .ok_or_else(|| io::Error::other("Application directory is unavailable"))?
-    .join("gp-posture.exe");
+  let helper = gpapi::windows::application_directory()?.join("gp-posture.exe");
   let output = commands
     .run_executable(&helper, &[])?
     .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Windows posture helper is not installed"))?;

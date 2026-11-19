@@ -2,11 +2,18 @@ use std::ffi::OsStr;
 
 use openconnect::{Vpn, VpnBuilder};
 
-use crate::connect::ConnectArgs;
+use crate::connect::{ConnectArgs, ConnectHandler};
 
-pub(crate) fn builder(server: &str, cookie: &str, args: &ConnectArgs) -> VpnBuilder {
-  let configured_script = std::env::var_os("GP_VPNC_SCRIPT");
-  configure_builder(server, cookie, args, configured_script.as_deref())
+impl ConnectHandler<'_> {
+  pub(in crate::connect) fn vpn_builder(&self, server: &str, cookie: &str) -> anyhow::Result<VpnBuilder> {
+    let configured_script = std::env::var_os("GP_VPNC_SCRIPT");
+    Ok(configure_builder(
+      server,
+      cookie,
+      self.args,
+      configured_script.as_deref(),
+    ))
+  }
 }
 
 fn configure_builder(server: &str, cookie: &str, args: &ConnectArgs, configured_script: Option<&OsStr>) -> VpnBuilder {

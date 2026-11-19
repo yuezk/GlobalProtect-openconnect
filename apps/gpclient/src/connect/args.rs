@@ -13,6 +13,7 @@ pub(crate) struct ConnectArgs {
   #[arg(help = "The portal server to connect to")]
   pub(super) server: String,
 
+  #[cfg(unix)]
   #[arg(
     long,
     conflicts_with = "cookie_only",
@@ -20,6 +21,7 @@ pub(crate) struct ConnectArgs {
   )]
   pub(crate) background: bool,
 
+  #[cfg(unix)]
   #[arg(
     long,
     conflicts_with_all = ["background", "cookie_only"],
@@ -27,6 +29,7 @@ pub(crate) struct ConnectArgs {
   )]
   pub(crate) dashboard: bool,
 
+  #[cfg(unix)]
   #[arg(
     long,
     requires = "background",
@@ -61,18 +64,21 @@ pub(crate) struct ConnectArgs {
   )]
   pub(super) cookie_cache: Option<String>,
 
+  #[cfg(unix)]
   #[arg(long, short, help = "The VPNC script to use", required_if_eq("script_tun", "true"))]
   pub(super) script: Option<String>,
 
   #[arg(long, short, help = "The IFNAME for tunnel interface")]
   pub(super) interface: Option<String>,
 
+  #[cfg(unix)]
   #[arg(long, short = 'S', help = "Pass traffic to '--script' program, not tun")]
   pub(super) script_tun: bool,
 
   #[arg(long, help = "Connect the server as a gateway, instead of a portal")]
   pub(super) as_gateway: bool,
 
+  #[cfg(unix)]
   #[arg(
     long,
     help = "Enable HIP (Host Information Profile), optionally specify a custom executable",
@@ -81,6 +87,11 @@ pub(crate) struct ConnectArgs {
   )]
   pub(super) hip: Option<String>,
 
+  #[cfg(windows)]
+  #[arg(long, help = "Generate a HIP (Host Information Profile) report")]
+  pub(super) hip: bool,
+
+  #[cfg(unix)]
   #[arg(
     long,
     help = "Run a custom HIP executable as this user; otherwise inherit the process user"
@@ -100,9 +111,11 @@ pub(crate) struct ConnectArgs {
   #[arg(short = 'p', long, help = "The key passphrase of the private key")]
   pub(super) key_password: Option<String>,
 
+  #[cfg(unix)]
   #[arg(long, hide = true)]
   pub(super) csd_user: Option<String>,
 
+  #[cfg(unix)]
   #[arg(long, hide = true)]
   pub(super) csd_wrapper: Option<String>,
 
@@ -188,7 +201,7 @@ pub(crate) struct ConnectArgs {
             VPN tunnel. Outputs two lines: COOKIE='<value>' and HOST='<gateway>'. Combine with \
             --cookie-cache to avoid re-authenticating when the portal session is still valid."
   )]
-  pub(super) cookie_only: bool,
+  pub(crate) cookie_only: bool,
 }
 
 pub(super) fn build_os_profile(args: &ConnectArgs) -> OsProfile {
@@ -207,17 +220,19 @@ pub(super) fn build_os_profile_with_host_id(args: &ConnectArgs, host_id: Option<
 }
 
 pub(super) fn cookie_cache_path(args: &ConnectArgs) -> Option<PathBuf> {
-  args.cookie_cache.as_deref().map(|path| {
+  args.cookie_cache.as_deref().and_then(|path| {
     let custom = (!path.is_empty()).then_some(path);
     cookie_store::cookie_path(custom)
   })
 }
 
 pub(super) fn warn_deprecated_connect_args(args: &ConnectArgs) {
+  #[cfg(unix)]
   if args.csd_user.is_some() {
     warn!("Deprecated option --csd-user will be removed; use --hip-user instead");
   }
 
+  #[cfg(unix)]
   if args.csd_wrapper.is_some() {
     warn!("Deprecated option --csd-wrapper will be removed; use --hip instead");
   }
@@ -231,7 +246,7 @@ pub(super) fn warn_deprecated_connect_args(args: &ConnectArgs) {
   }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
   use super::*;
 

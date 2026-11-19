@@ -34,5 +34,6 @@ Depends:
   libsecret-1-0,
   gnome-keyring,
   xdg-utils,
-Description: A GUI client for GlobalProtect VPN
- A GUI client for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method.
+Description: Graphical client for GlobalProtect VPN
+ GP Connect uses OpenConnect to connect to GlobalProtect VPN servers.
+ It supports single sign-on (SSO).

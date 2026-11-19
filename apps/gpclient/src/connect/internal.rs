@@ -14,7 +14,7 @@ use gpapi::{
 };
 use log::{info, warn};
 
-use super::ConnectHandler;
+use super::{ConnectHandler, internal_output::InternalOutput};
 
 impl ConnectHandler<'_> {
   pub(super) async fn connect_internal_gateways(
@@ -26,6 +26,7 @@ impl ConnectHandler<'_> {
     first_session: super::gateway::GatewayLoginSession,
     remaining: &[&Gateway],
   ) -> anyhow::Result<()> {
+    #[cfg(unix)]
     ensure!(
       self.background.is_none(),
       "--background requires a VPN tunnel; internal non-tunnel sessions must run in the foreground"
@@ -70,11 +71,18 @@ impl ConnectHandler<'_> {
     }
     self.check_cancelled()?;
     let modes = authenticated.iter().map(|(_, session)| session.authentication.mode());
+    self.enter_non_tunnel_mode(modes)?;
+    self.run_internal_session(config, &authenticated).await
+  }
+
+  fn enter_non_tunnel_mode(&self, modes: impl Iterator<Item = SessionMode>) -> anyhow::Result<()> {
     ensure!(
       internal_session_mode(modes)? == SessionMode::NonTunnel,
       "Expected non-tunnel authentication"
     );
-    self.run_internal_session(config, &authenticated).await
+    #[cfg(windows)]
+    drop(self.shared_args.system_tunnel.take());
+    Ok(())
   }
 
   async fn run_internal_session(
@@ -112,18 +120,7 @@ impl ConnectHandler<'_> {
     let source = Arc::new(source);
     let validate_network = network.clone();
     let validate_detection = detection.clone();
-    let members = crate::dashboard::InternalMembers::default();
-    let dashboard_members = members.clone();
-    let (established_tx, established_rx) = tokio::sync::oneshot::channel();
-    let established_tx = std::sync::Mutex::new(Some(established_tx));
-    let mut dashboard = if self.args.dashboard {
-      Some(crate::dashboard::Dashboard::prepare(
-        authenticated[0].0.server().to_owned(),
-        cancellation.clone(),
-      )?)
-    } else {
-      None
-    };
+    let (output, observe_status) = InternalOutput::prepare(self, authenticated[0].0.server())?;
     let callbacks = SessionCallbacks {
       produce_report: Arc::new(move |request, control| {
         control.check()?;
@@ -165,16 +162,10 @@ impl ConnectHandler<'_> {
               "Internal network — authenticated: {} (IPv4: {:?}, IPv6: {:?})",
               member.gateway, member.client_ip, member.client_ipv6
             );
-            if let Some(established) = established_tx.lock().unwrap().take() {
-              let _ = established.send(());
-            }
           }
           state => info!("Internal gateway {}: {state:?}", member.gateway),
         }
-        members.lock().unwrap().insert(
-          member.gateway.server().to_owned(),
-          format!("{}: {:?}", member.gateway, member.maintenance),
-        );
+        observe_status(&member);
       }),
       validate_network: Arc::new(move |cancellation| {
         let network = validate_network.clone();
@@ -204,43 +195,20 @@ impl ConnectHandler<'_> {
 
     // The PID spans maintenance and cleanup, including initialization before the
     // first successful HIP exchange. The outer handler owns final session logout.
+    #[cfg(unix)]
     self.pid_written.store(
       super::gateway::write_pid_file(self.shared_args.lock_file),
       std::sync::atomic::Ordering::SeqCst,
     );
     let mut sessions = self.sessions.take();
-    let mut dashboard_error = None;
-    let result = {
-      let maintenance = maintain_non_tunnel_sessions(&mut sessions, policy, callbacks, cancellation, async move {
-        network_signal.await.unwrap_or(SessionEndReason::NetworkChanged)
-      });
-      tokio::pin!(maintenance);
-      tokio::select! {
-        result = &mut maintenance => result,
-        established = established_rx => {
-          if established.is_ok() {
-            if let Some(dashboard) = &mut dashboard {
-              if let Err(error) = dashboard.start_internal(dashboard_members) {
-                self.cancellation.cancel();
-                dashboard_error = Some(error);
-              }
-            }
-          }
-          maintenance.await
-        }
-      }
-    };
-    if let Some(dashboard) = &mut dashboard {
-      if let Err(error) = dashboard.finish() {
-        dashboard_error = Some(error);
-      }
-    }
+    let maintenance = maintain_non_tunnel_sessions(&mut sessions, policy, callbacks, cancellation, async move {
+      network_signal.await.unwrap_or(SessionEndReason::NetworkChanged)
+    });
+    let (result, output_result) = output.run(maintenance).await;
     self.sessions.replace(sessions);
     monitor_cancel.cancel();
     monitor.await.context("Internal network monitor failed")?;
-    if let Some(error) = dashboard_error {
-      return Err(error);
-    }
+    output_result?;
     match result? {
       SessionExit::Disconnected => Ok(()),
       SessionExit::Failed(reason) => bail!("Internal session ended: {reason:?}. Connect again to authenticate."),
@@ -254,8 +222,7 @@ impl ConnectHandler<'_> {
   }
 }
 
-fn internal_session_mode(modes: impl Iterator<Item = SessionMode>) -> anyhow::Result<SessionMode> {
-  let mut modes = modes;
+fn internal_session_mode(mut modes: impl Iterator<Item = SessionMode>) -> anyhow::Result<SessionMode> {
   let mode = modes.next().context("No internal gateway authenticated successfully")?;
   ensure!(
     modes.all(|candidate| candidate == mode),
@@ -276,9 +243,39 @@ mod tests {
       internal_session_mode([SessionMode::NonTunnel, SessionMode::NonTunnel].into_iter()).unwrap(),
       SessionMode::NonTunnel
     );
-    assert_eq!(
-      internal_session_mode([SessionMode::Tunnel].into_iter()).unwrap(),
-      SessionMode::Tunnel
+  }
+
+  #[cfg(windows)]
+  #[test]
+  #[ignore = "requires the installed Windows machine tunnel directory and administrator privileges"]
+  fn internal_maintenance_releases_the_machine_tunnel() {
+    use crate::{cli::SharedArgs, connect::ConnectArgs};
+    use clap::Parser;
+    use gpvpnc::windows::SystemTunnel;
+
+    #[derive(Parser)]
+    struct TestArgs {
+      #[command(flatten)]
+      connect: ConnectArgs,
+    }
+    let args = TestArgs::parse_from(["test", "portal.example.com"]);
+    let verbose = gpapi::clap::InfoLevelVerbosity::new(0, 0);
+    let shared = SharedArgs {
+      ignore_tls_errors: false,
+      system_tunnel: Some(SystemTunnel::acquire().unwrap()).into(),
+      verbose: &verbose,
+      log_format: gpapi::log_format::LogFormat::Text,
+    };
+    let handler = ConnectHandler::new(&args.connect, &shared);
+    assert!(
+      handler
+        .enter_non_tunnel_mode([SessionMode::Tunnel].into_iter())
+        .is_err()
     );
+    assert!(SystemTunnel::try_acquire().unwrap().is_none());
+    handler
+      .enter_non_tunnel_mode([SessionMode::NonTunnel].into_iter())
+      .unwrap();
+    assert!(SystemTunnel::try_acquire().unwrap().is_some());
   }
 }

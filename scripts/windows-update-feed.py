@@ -96,7 +96,7 @@ def generate(args: argparse.Namespace) -> None:
         item = ET.SubElement(channel, "item")
         ET.SubElement(item, "title").text = f"GP Connect {display_version}"
         ET.SubElement(item, "description").text = "\n".join(release["highlights"])
-        minimum = "10.0.22000" if payload.architecture == "arm64" else "10.0.19041"
+        minimum = "10.0.22000" if payload.architecture == "arm64" else "10.0.17763"
         ET.SubElement(item, f"{{{SPARKLE}}}minimumSystemVersion").text = minimum
         ET.SubElement(item, "enclosure", {
             "url": payload.installer_url, "length": str(length), "type": "application/octet-stream",

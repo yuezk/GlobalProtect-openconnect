@@ -217,7 +217,7 @@ impl<'a> GuiLauncher<'a> {
             use super::rendering_recovery::{GbmBufferFailure, RecoveryState};
             let mut recovery = RecoveryState::default();
             let mut program = program;
-            let (mut child, start_result) = loop {
+            let (child, start_result) = loop {
               service_input.write_all(&[DESKTOP_SWITCH_BEGIN]).await?;
               pending = true;
               let credential = super::desktop_launcher::read_credential(service_output).await?

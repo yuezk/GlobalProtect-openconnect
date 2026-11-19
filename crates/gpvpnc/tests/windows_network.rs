@@ -235,12 +235,18 @@ fn assert_dns_policy(active: bool) {
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $expected = [int]$env:GP_TEST_EXPECTED_DNS_POLICIES
-$configured = @(Get-DnsClientNrptRule | Where-Object { $_.Namespace -contains '.gp-connect-test.invalid' })
-$effective = @(Get-DnsClientNrptPolicy | Where-Object { $_.Namespace -contains '.gp-connect-test.invalid' })
-if ($configured.Count -ne $expected -or $effective.Count -ne $expected) { throw 'Unexpected configured or effective VPN DNS policy' }
-if ($expected) {
-  $servers = @($configured[0].NameServers)
-  if ($servers -notcontains '198.18.0.53' -or $servers -notcontains 'fd42:1235::53') { throw 'VPN DNS server families are missing' }
+$configured = @(Get-DnsClientNrptRule)
+$effective = @(Get-DnsClientNrptPolicy)
+foreach ($namespace in '.gp-connect-test.invalid', '.second-gp-connect-test.invalid') {
+  $rules = @($configured | Where-Object { $_.Namespace -contains $namespace })
+  $policies = @($effective | Where-Object { $_.Namespace -contains $namespace })
+  if ($rules.Count -ne $expected -or $policies.Count -ne $expected) {
+    throw "Unexpected configured or effective VPN DNS policy for $namespace"
+  }
+  if ($expected) {
+    $servers = @($rules[0].NameServers)
+    if ($servers -notcontains '198.18.0.53' -or $servers -notcontains 'fd42:1235::53') { throw "VPN DNS server families are missing for $namespace" }
+  }
 }
 "#;
   let powershell =
@@ -251,6 +257,22 @@ if ($expected) {
     .output()
     .unwrap();
   assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+}
+
+fn global_search_list() -> Vec<u8> {
+  let powershell =
+    PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/WindowsPowerShell/v1.0/powershell.exe");
+  let output = std::process::Command::new(powershell)
+    .args([
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "$ErrorActionPreference = 'Stop'; (Get-DnsClientGlobalSetting).SuffixSearchList | ConvertTo-Json -Compress",
+    ])
+    .output()
+    .unwrap();
+  assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+  output.stdout
 }
 
 #[test]
@@ -274,10 +296,17 @@ fn installs_and_restores_native_network_configuration() -> Result<(), Box<dyn st
   let recovery_key = format!(r"SOFTWARE\GP Connect\Tests\Network{}", uuid::Uuid::new_v4().simple());
   assert_dns_policy(false);
   let before = state(index);
+  let original_search_list = global_search_list();
   {
     let mut network = NetworkConfigurator::new(&recovery_key)?;
     network.configure("connect", &environment)?;
     let during = state(index);
+    assert!(during.iter().any(|row| row == "dns-domain gp-connect-test.invalid"));
+    assert!(
+      during
+        .iter()
+        .any(|row| row == "dns-search gp-connect-test.invalid,second-gp-connect-test.invalid")
+    );
     assert!(during.iter().any(|row| row == "address 192.0.2.2/24"));
     assert!(during.iter().any(|row| row == "address fd42:1234::2/64"));
     assert!(
@@ -298,10 +327,14 @@ fn installs_and_restores_native_network_configuration() -> Result<(), Box<dyn st
     assert_ne!(best_route("198.51.100.1").InterfaceIndex, index);
     println!("PASS: IPv4/IPv6 addresses, split routes, resolver routes and MTU installed");
     assert_dns_policy(true);
+    gpvpnc::windows::recover(&format!(r"{recovery_key}-other"))?;
+    assert_dns_policy(true);
+    assert_eq!(global_search_list(), original_search_list);
     network.configure("disconnect", &[])?;
   }
   assert_eq!(before, state(index), "Network state was not restored");
   assert_dns_policy(false);
+  assert_eq!(global_search_list(), original_search_list);
   println!("PASS: disconnect restored addresses, routes and interface settings");
   {
     let mut network = NetworkConfigurator::new(&recovery_key)?;
@@ -324,6 +357,7 @@ fn installs_and_restores_native_network_configuration() -> Result<(), Box<dyn st
   println!("PASS: partial setup failure rolled back its physical gateway route");
   drop(adapter);
   assert_crash_recovery(&recovery_key)?;
+  assert_eq!(global_search_list(), original_search_list);
   winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE).delete_subkey(&recovery_key)?;
   Ok(())
 }
@@ -347,8 +381,14 @@ fn environment(index: u32) -> Vec<(String, Option<String>)> {
     ("CISCO_IPV6_SPLIT_INC_0_ADDR", "2001:db8:1234::".into()),
     ("CISCO_IPV6_SPLIT_INC_0_MASKLEN", "64".into()),
     ("INTERNAL_IP4_DNS", "198.18.0.53 fd42:1235::53".into()),
-    ("CISCO_DEF_DOMAIN", "gp-connect-test.invalid".into()),
-    ("CISCO_SPLIT_DNS", "gp-connect-test.invalid".into()),
+    (
+      "CISCO_DEF_DOMAIN",
+      "gp-connect-test.invalid,second-gp-connect-test.invalid".into(),
+    ),
+    (
+      "CISCO_SPLIT_DNS",
+      "gp-connect-test.invalid,second-gp-connect-test.invalid".into(),
+    ),
   ];
   pairs
     .into_iter()

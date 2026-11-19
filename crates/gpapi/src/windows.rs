@@ -1,6 +1,10 @@
 //! Windows user identity and private local IPC.
 use std::os::windows::io::{AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
-use std::{io, ptr};
+use std::{
+  env, io,
+  path::{Path, PathBuf},
+  ptr,
+};
 mod pipes;
 pub use pipes::{PacketPipe, connect_service_admission, connect_service_worker, create_service_admission_pipe};
 use tokio::net::windows::named_pipe::NamedPipeServer;
@@ -20,6 +24,54 @@ pub fn current_user_sid() -> io::Result<String> {
     CloseHandle(token);
     result
   }
+}
+
+/// Locate bundled Windows helpers relative to the installed executable.
+pub fn application_directory() -> std::io::Result<PathBuf> {
+  let executable = env::current_exe()?;
+  let directory = executable
+    .parent()
+    .ok_or_else(|| std::io::Error::other("Application directory is unavailable"))?;
+  if directory
+    .file_name()
+    .is_some_and(|name| name.eq_ignore_ascii_case("cli"))
+    && executable
+      .file_name()
+      .is_some_and(|name| name.eq_ignore_ascii_case("gpclient.exe"))
+  {
+    return directory
+      .parent()
+      .map(Path::to_path_buf)
+      .ok_or_else(|| std::io::Error::other("GP Connect installation directory is unavailable"));
+  }
+  Ok(directory.to_path_buf())
+}
+
+pub fn is_elevated() -> io::Result<bool> {
+  let mut token = ptr::null_mut();
+  if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+    return Err(io::Error::last_os_error());
+  }
+  let token = unsafe { OwnedHandle::from_raw_handle(token) };
+  Ok(token_u32(token.as_handle(), windows_sys::Win32::Security::TokenElevation)? != 0)
+}
+
+pub(crate) fn token_u32(token: BorrowedHandle<'_>, field: i32) -> io::Result<u32> {
+  let mut value = 0u32;
+  let mut length = 0;
+  if unsafe {
+    GetTokenInformation(
+      token.as_raw_handle(),
+      field,
+      (&mut value as *mut u32).cast(),
+      4,
+      &mut length,
+    )
+  } == 0
+  {
+    return Err(io::Error::last_os_error());
+  }
+  Ok(value)
 }
 
 /// An authenticated pipe client's primary token, retained for its user-session worker.
@@ -111,7 +163,7 @@ pub fn process_user_sid(pid: u32) -> io::Result<String> {
   }
 }
 
-unsafe fn token_user_sid(token: windows_sys::Win32::Foundation::HANDLE) -> io::Result<String> {
+pub(crate) unsafe fn token_user_sid(token: windows_sys::Win32::Foundation::HANDLE) -> io::Result<String> {
   unsafe {
     let mut length = 0;
     GetTokenInformation(token, TokenUser, ptr::null_mut(), 0, &mut length);

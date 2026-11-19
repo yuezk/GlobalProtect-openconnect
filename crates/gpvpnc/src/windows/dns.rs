@@ -1,5 +1,5 @@
 //! Adapter DNS settings and Windows name-resolution policy scoped to this connection.
-use super::configuration::Configuration;
+use super::{SystemTunnel, configuration::Configuration};
 use base64::Engine;
 use serde_json::json;
 use std::{
@@ -23,6 +23,7 @@ pub(super) struct Installed {
   guid: GUID,
   snapshot: Option<Snapshot>,
   tag: Option<String>,
+  tunnel: Option<SystemTunnel>,
 }
 fn check(status: u32) -> io::Result<()> {
   if status == 0 {
@@ -77,7 +78,7 @@ impl Snapshot {
   }
 }
 impl Installed {
-  pub fn apply(configuration: &Configuration) -> io::Result<Self> {
+  pub fn apply(configuration: &Configuration, recovery_key: &str, tunnel: Option<&SystemTunnel>) -> io::Result<Self> {
     let mut luid = NET_LUID_LH::default();
     let mut guid = GUID::default();
     check(unsafe { ConvertInterfaceIndexToLuid(configuration.interface, &mut luid) })?;
@@ -86,6 +87,7 @@ impl Installed {
       guid,
       snapshot: Some(Snapshot::capture(guid)?),
       tag: None,
+      tunnel: tunnel.cloned(),
     };
     Snapshot {
       domain: configuration.domains.first().cloned().unwrap_or_default(),
@@ -105,9 +107,13 @@ impl Installed {
           .map(|domain| format!(".{}", domain.trim_matches('.')))
           .collect()
       };
-      let tag = format!("GPConnect:{}", uuid::Uuid::new_v4());
+      let tag = match tunnel {
+        Some(_) => format!("GPConnect:{}", uuid::Uuid::new_v4()),
+        None => journal_tag(recovery_key),
+      };
       installed.tag = Some(tag.clone());
       policy(
+        tunnel,
         json!({"operation":"add", "tag":tag, "namespaces":namespaces, "servers":configuration.servers.iter().map(ToString::to_string).collect::<Vec<_>>()}),
       )?;
     }
@@ -116,7 +122,7 @@ impl Installed {
   pub fn restore(&mut self) -> io::Result<()> {
     let mut failure = None;
     if let Some(tag) = self.tag.take() {
-      if let Err(error) = policy(json!({"operation":"remove", "tag":tag})) {
+      if let Err(error) = policy(self.tunnel.as_ref(), json!({"operation":"remove", "tag":tag})) {
         log::warn!("Could not remove VPN DNS policy: {error}");
         failure = Some(error);
       }
@@ -140,21 +146,36 @@ impl Drop for Installed {
 
 /// A crashed service cannot run Drop. Remove only GP Connect's tagged policies
 /// before accepting a new connection; adapter rows disappear with Wintun itself.
-pub(super) fn clear_stale_policies() -> io::Result<()> {
-  policy(json!({"operation":"clear-stale"}))
+pub(super) fn clear_stale_policies(tunnel: &SystemTunnel) -> io::Result<()> {
+  policy(Some(tunnel), json!({"operation":"clear-stale"}))
 }
-fn policy(request: serde_json::Value) -> io::Result<()> {
+// Keep isolated journals outside the GPConnect:* namespace used by system recovery.
+fn journal_tag(recovery_key: &str) -> String {
+  format!("GPConnectJournal:{recovery_key}")
+}
+
+pub(super) fn remove_journal_policy(recovery_key: &str) -> io::Result<()> {
+  policy(None, json!({"operation":"remove", "tag":journal_tag(recovery_key)}))
+}
+
+fn policy(tunnel: Option<&SystemTunnel>, request: serde_json::Value) -> io::Result<()> {
   const SCRIPT: &str = include_str!("dns-policy.ps1");
   let encoded = base64::engine::general_purpose::STANDARD
     .encode(SCRIPT.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<_>>());
   let root =
     std::env::var_os("SystemRoot").ok_or_else(|| io::Error::other("Windows system directory is unavailable"))?;
   let executable = std::path::PathBuf::from(root).join("System32/WindowsPowerShell/v1.0/powershell.exe");
+  // The script produces no standard output. Use that handle to give the worker
+  // a copy of the lease so it keeps ownership if the tunnel process dies.
+  let stdout = match tunnel {
+    Some(tunnel) => Stdio::from(tunnel.duplicate_lock()?),
+    None => Stdio::null(),
+  };
   let mut child = Command::new(executable)
     .args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &encoded])
     .creation_flags(CREATE_NO_WINDOW)
     .stdin(Stdio::piped())
-    .stdout(Stdio::null())
+    .stdout(stdout)
     .stderr(Stdio::piped())
     .spawn()?;
   let input = child

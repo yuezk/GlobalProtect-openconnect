@@ -8,6 +8,32 @@ use super::*;
 
 const MAX_ADDRESSES: usize = 64;
 
+#[cfg(not(windows))]
+fn native_helper() -> anyhow::Result<PathBuf> {
+  Ok(common::binary_paths::gpclient())
+}
+
+#[cfg(windows)]
+fn native_helper() -> anyhow::Result<PathBuf> {
+  windows_native_helper(&crate::windows::application_directory()?)
+}
+
+#[cfg(windows)]
+fn windows_native_helper(directory: &std::path::Path) -> anyhow::Result<PathBuf> {
+  let installed = directory.join(r"cli\gpclient.exe");
+  if installed.is_file() {
+    return Ok(installed);
+  }
+  // Every Windows package includes build metadata. A missing bundled helper
+  // in that layout is a package error, even when a development override exists.
+  ensure!(
+    !directory.join("build-info.json").try_exists()?,
+    "The GP Connect package is missing its resolver helper: {}",
+    installed.display()
+  );
+  Ok(common::binary_paths::gpclient())
+}
+
 #[doc(hidden)]
 pub fn detect_in_helper(address: std::net::IpAddr, hostname: &str) -> anyhow::Result<bool> {
   super::detection::validate_target(address, hostname)?;
@@ -27,7 +53,7 @@ pub(in crate::session) async fn detect(
     "--hostname".into(),
     hostname.into(),
   ];
-  let output = run_helper(common::binary_paths::gpclient(), args, cancellation.clone()).await?;
+  let output = run_helper(native_helper()?, args, cancellation.clone()).await?;
   serde_json::from_slice(&output).context("Invalid internal detection helper response")
 }
 
@@ -68,14 +94,7 @@ pub(super) async fn resolve(
   if disable_ipv6 {
     args.push("--disable-ipv6".into());
   }
-  run_resolver(
-    common::binary_paths::gpclient(),
-    args,
-    port,
-    disable_ipv6,
-    cancellation.clone(),
-  )
-  .await
+  run_resolver(native_helper()?, args, port, disable_ipv6, cancellation.clone()).await
 }
 
 async fn run_resolver(
@@ -146,6 +165,26 @@ fn validate_addresses(addresses: &[SocketAddr], port: u16, disable_ipv6: bool) -
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[cfg(windows)]
+  #[test]
+  fn packaged_resolver_requires_the_bundled_cli() {
+    let package = tempfile::tempdir().unwrap();
+    let directory = package.path();
+    assert_eq!(
+      windows_native_helper(directory).unwrap(),
+      common::binary_paths::gpclient()
+    );
+
+    std::fs::write(directory.join("build-info.json"), "{}").unwrap();
+    let helper = directory.join(r"cli\gpclient.exe");
+    let error = windows_native_helper(directory).unwrap_err().to_string();
+    assert!(error.contains(&helper.display().to_string()), "{error}");
+
+    std::fs::create_dir(directory.join("cli")).unwrap();
+    std::fs::write(&helper, "").unwrap();
+    assert_eq!(windows_native_helper(directory).unwrap(), helper);
+  }
 
   #[tokio::test]
   async fn actual_helper_output_is_validated_before_admission() {

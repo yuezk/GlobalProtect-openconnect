@@ -284,7 +284,7 @@ impl Observation {
 /// One native tunnel's negotiated state and optional sampler. The connection
 /// owner must join `Vpn::connect` before calling `stop`.
 pub struct TunnelMonitor {
-  vpn: Arc<Vpn>,
+  vpn: Mutex<Option<Arc<Vpn>>>,
   observation: Mutex<Observation>,
   updates: watch::Sender<TunnelUpdate>,
   wake: Arc<Notify>,
@@ -302,14 +302,14 @@ impl TunnelMonitor {
     let observation = Observation::new();
     let (updates, _) = watch::channel(observation.project(Instant::now()));
     let monitor = Arc::new(Self {
-      vpn,
+      vpn: Mutex::new(Some(vpn.clone())),
       observation: Mutex::new(observation),
       updates,
       wake: Arc::new(Notify::new()),
       worker: Mutex::new(None),
     });
     let observer = Arc::downgrade(&monitor);
-    monitor.vpn.set_tunnel_observer(move |event| {
+    vpn.set_tunnel_observer(move |event| {
       on_event(&event);
       if let Some(monitor) = observer.upgrade() {
         monitor.observe(event);
@@ -347,7 +347,9 @@ impl TunnelMonitor {
     observation.finish(Instant::now());
     self.publish(&observation);
     drop(observation);
-    self.vpn.clear_tunnel_observer();
+    if let Some(vpn) = self.vpn.lock().unwrap().take() {
+      vpn.clear_tunnel_observer();
+    }
     self.wake.notify_one();
   }
 
@@ -405,7 +407,11 @@ impl TunnelMonitor {
       }
       return true;
     }
-    match self.vpn.request_statistics() {
+    let vpn = self.vpn.lock().unwrap();
+    let Some(vpn) = vpn.as_ref() else {
+      return false;
+    };
+    match vpn.request_statistics() {
       Ok(true) => {
         observation.pending = Some(RequestStamp {
           generation: observation.generation,
@@ -431,7 +437,9 @@ impl TunnelMonitor {
 
 impl Drop for TunnelMonitor {
   fn drop(&mut self) {
-    self.vpn.clear_tunnel_observer();
+    if let Some(vpn) = self.vpn.get_mut().unwrap().take() {
+      vpn.clear_tunnel_observer();
+    }
     if let Some(worker) = self.worker.get_mut().unwrap().take() {
       worker.abort();
     }
@@ -467,6 +475,29 @@ fn millis(duration: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[tokio::test]
+  async fn finished_monitor_keeps_telemetry_without_owning_native_resources() {
+    let owner = Arc::new(());
+    let lease = Arc::downgrade(&owner);
+    let vpn = Arc::new(
+      Vpn::builder("vpn.example.com", "cookie")
+        .network_configuration_handler(move |_| {
+          let _owner = &owner;
+          Ok(())
+        })
+        .build()
+        .unwrap(),
+    );
+    let monitor = TunnelMonitor::attach(vpn.clone());
+    monitor.stop().await;
+    drop(vpn);
+    assert!(
+      lease.upgrade().is_none(),
+      "finished telemetry retained the network owner"
+    );
+    let _ = monitor.subscribe();
+  }
 
   fn connected(now: Instant) -> Observation {
     let mut observation = Observation::new();

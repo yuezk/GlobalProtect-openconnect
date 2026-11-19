@@ -32,6 +32,8 @@ pub struct SamlAuthLauncher<'a> {
   cancellation: CancellationToken,
   server: &'a str,
   auth_executable: Option<&'a str>,
+  #[cfg(windows)]
+  windows_cli: bool,
   gateway: bool,
   saml_request: Option<&'a str>,
   os: Option<&'a str>,
@@ -65,6 +67,8 @@ impl<'a> SamlAuthLauncher<'a> {
       cancellation: CancellationToken::new(),
       server,
       auth_executable: None,
+      #[cfg(windows)]
+      windows_cli: false,
       gateway: false,
       saml_request: None,
       os: None,
@@ -91,6 +95,12 @@ impl<'a> SamlAuthLauncher<'a> {
       dmabuf_disabled: false,
       desktop_compatibility_graphics: false,
     }
+  }
+
+  #[cfg(windows)]
+  pub fn with_windows_cli_launch(mut self) -> Self {
+    self.windows_cli = true;
+    self
   }
 
   pub fn desktop_compatibility_graphics(mut self) -> Self {
@@ -297,6 +307,12 @@ impl<'a> SamlAuthLauncher<'a> {
       .auth_executable
       .map(PathBuf::from)
       .unwrap_or_else(binary_paths::gpauth);
+    #[cfg(windows)]
+    let program = if self.windows_cli {
+      crate::windows::application_directory()?.join("gpauth.exe")
+    } else {
+      program
+    };
     let auth_cmd = self.build_command(&program);
 
     let mut command = auth_cmd.into_non_root()?.into_std();
@@ -317,6 +333,8 @@ impl<'a> SamlAuthLauncher<'a> {
     let detect_gbm_failure = can_use_shared_memory && !use_shared_memory;
     let stdin = auth_stdin(self.browser);
     let cancellation = self.cancellation.clone();
+    #[cfg(windows)]
+    let windows_cli = self.windows_cli;
     let output = tokio::task::spawn_blocking(move || {
       #[cfg(feature = "logger")]
       let stderr = crate::logger::diagnostic_writer();
@@ -351,6 +369,8 @@ impl<'a> SamlAuthLauncher<'a> {
         },
         &mut stderr,
         stdin,
+        #[cfg(windows)]
+        windows_cli,
       );
       std::io::Write::flush(&mut stderr)?;
       if gbm_failed.get() && !cancellation.is_cancelled() {

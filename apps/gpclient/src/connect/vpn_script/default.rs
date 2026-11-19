@@ -1,9 +1,13 @@
 use openconnect::{Vpn, VpnBuilder};
 
-use crate::connect::ConnectArgs;
+use crate::connect::ConnectHandler;
 
-pub(crate) fn builder(server: &str, cookie: &str, args: &ConnectArgs) -> VpnBuilder {
-  Vpn::builder(server, cookie)
-    .script(args.script.clone())
-    .script_tun(args.script_tun)
+impl ConnectHandler<'_> {
+  pub(in crate::connect) fn vpn_builder(&self, server: &str, cookie: &str) -> anyhow::Result<VpnBuilder> {
+    Ok(
+      Vpn::builder(server, cookie)
+        .script(self.args.script.clone())
+        .script_tun(self.args.script_tun),
+    )
+  }
 }
