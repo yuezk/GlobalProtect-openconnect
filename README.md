@@ -1,6 +1,6 @@
 # GlobalProtect-openconnect
 
-A GlobalProtect VPN client built on OpenConnect. GP Connect runs on Windows, macOS, Linux, FreeBSD, and OpenBSD. Command-line tools (`gpclient`) are available on macOS, Linux, and BSD.
+A GlobalProtect VPN client built on OpenConnect. GP Connect runs on Windows, macOS, Linux, FreeBSD, and OpenBSD.
 
 > **Disclaimer**: GP Connect is an independent third-party client for GlobalProtect VPN networks. It is not affiliated with or endorsed by Palo Alto Networks, Inc.
 
@@ -94,16 +94,9 @@ Run `gpclient --help` or `gpclient <command> --help` to view all available comma
 
 ### Windows
 
-Download the matching EXE installer from [GitHub Releases](https://github.com/yuezk/GlobalProtect-openconnect/releases/latest):
-
-- **x64**: Windows 10 version 2004 (build 19041) or later.
-- **ARM64**: Windows 11.
-
-Run the installer and confirm installation. It installs GP Connect and its background VPN service for all users; administrator access is required. Open GP Connect from the Start menu as your normal user.
-
-The installer and application executables are signed by **Tangramly, LLC**. Embedded sign-in uses Microsoft Edge WebView2 Runtime. You can also use your system browser from Settings.
-
-GP Connect checks for updates in the app. Uninstall it from Windows Settings; your app settings are kept. The Windows package contains the desktop app and service, without the `gpclient` command-line tool.
+1. Download the **x64** or **ARM64** installer for your PC from [GitHub Releases](https://github.com/yuezk/GlobalProtect-openconnect/releases/latest).
+2. Run the installer and approve the administrator prompt.
+3. Open **GP Connect** from the Start menu.
 
 ### macOS
 
@@ -168,7 +161,7 @@ Download the latest `.apk` package from the [releases](https://github.com/yuezk/
 sudo apk add --allow-untrusted globalprotect-openconnect-*.apk
 ```
 
-*(Requires `community` repository enabled for WebKitGTK and AppIndicator dependencies).*
+*(Requires the `community` repository for WebKitGTK dependencies).*
 
 ### FreeBSD
 

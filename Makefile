@@ -362,7 +362,6 @@ init-debian: clean-debian tarball
 	# Remove the GUI dependencies if neither GUI component is included
 	if [ $(INCLUDE_GUI) -eq 0 ] && [ $(BUILD_GUI_HELPER) -eq 0 ]; then \
 		sed -i "/libsecret-1-0/d" .build/deb/$(PKG)/debian/control; \
-		sed -i "/libayatana-appindicator3-1/d" .build/deb/$(PKG)/debian/control; \
 		sed -i "/gnome-keyring/d" .build/deb/$(PKG)/debian/control; \
 	fi
 
@@ -475,7 +474,6 @@ init-apk: clean-apk tarball
 
 	# Remove the GUI dependencies if neither GUI component is included
 	if [ $(INCLUDE_GUI) -eq 0 ] && [ $(BUILD_GUI_HELPER) -eq 0 ]; then \
-		sed -i "/^\tlibayatana-appindicator$$/d" .build/apk/APKBUILD; \
 		sed -i "/^\tlibsecret$$/d" .build/apk/APKBUILD; \
 	fi
 

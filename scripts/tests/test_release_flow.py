@@ -144,9 +144,15 @@ class PromotionTests(unittest.TestCase):
             repo, origin, artifact = root / 'repo', root / 'origin.git', root / 'artifact'
             initialize(repo)
             write_version(repo)
+            hashes = 'gpguiHashes = { x86_64 = "old-gui-x64"; aarch64 = "old-gui-arm64"; };\n' \
+                     'binaryHashes = { x86_64 = "old-cli-x64"; aarch64 = "old-cli-arm64"; };\n'
+            with (repo / 'flake.nix').open('a') as flake:
+                flake.write('packageSetting = "original";\n' + hashes)
             old = commit(repo, '3.1')
             git(repo, 'switch', '-c', 'release/next')
             write_version(repo, '3.2.0', '3.1.0')
+            with (repo / 'flake.nix').open('a') as flake:
+                flake.write('packageSetting = "released";\n' + hashes)
             (repo / 'feature').write_text('released product feature')
             release = commit(repo, '3.2 source')
             git(repo, 'tag', 'v3.2.0')
@@ -158,6 +164,8 @@ class PromotionTests(unittest.TestCase):
             git(repo, 'push', 'origin', 'main', 'v3.2.0')
             artifact.mkdir()
             write_version(artifact, '3.2.0')
+            with (artifact / 'flake.nix').open('a') as flake:
+                flake.write('packageSetting = "original";\n' + hashes.replace('old-', 'new-'))
             (artifact / 'release-candidate.json').write_text(json.dumps({'version': '3.2.0', 'releaseTag': 'v3.2.0'}))
             result = subprocess.run(['bash', str(ROOT / 'scripts/prepare-release-promotion.sh'),
                                      'v3.2.0', str(artifact)], cwd=repo, capture_output=True, text=True)
@@ -168,6 +176,9 @@ class PromotionTests(unittest.TestCase):
             self.assertEqual(git(repo, 'show', f'{old}:Cargo.toml'), '[workspace.package]\nversion = "3.1.0"')
             self.assertTrue((repo / 'infrastructure').exists())
             self.assertTrue((repo / 'feature').exists())
+            promoted = (repo / 'flake.nix').read_text()
+            self.assertIn('packageSetting = "released";', promoted)
+            self.assertIn(hashes.replace('old-', 'new-'), promoted)
             self.assertEqual(git(repo, 'rev-list', '--parents', '-1', 'HEAD^').split()[1:], [main, release])
             self.assertEqual(git(repo, 'diff', '--name-only', 'HEAD^', 'HEAD'), 'flake.nix')
             self.assertEqual(git(repo, 'status', '--porcelain'), '')

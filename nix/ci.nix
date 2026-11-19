@@ -43,7 +43,6 @@ in {
   prebuilt = assert prebuiltPackage.version == sourcePackage.version; prebuiltPackage;
   module = assert modulePackage.version == sourcePackage.version;
     assert builtins.elem modulePackage hostSystem.config.environment.systemPackages;
-    assert hostSystem.config.services.ayatana-indicators.enable;
     assert hostSystem.config.security.polkit.enable;
     assert hostSystem.config.security.wrappers.pkexec.enable;
     assert hostSystem.config.security.wrappers.pkexec.setuid;
