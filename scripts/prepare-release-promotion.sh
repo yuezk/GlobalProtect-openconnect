@@ -37,7 +37,30 @@ PY
 branch="chore/promote-$tag"
 git switch -c "$branch" origin/main
 git merge --ff --no-edit "$release_sha"
-cp "$artifact_dir/flake.nix" "$artifact_dir/flake.lock" .
+# The artifact may come from older main sources; preserve the released package logic.
+python3 - "$artifact_dir/flake.nix" <<'PY'
+import re, sys
+from pathlib import Path
+
+artifact = Path(sys.argv[1]).read_text()
+path = Path('flake.nix')
+promoted = path.read_text()
+fields = [(name, rf'(\b{name}\s*=\s*")([^"]+)(")')
+          for name in ('releaseTag', 'releaseVersion')]
+for block in ('gpguiHashes', 'binaryHashes'):
+    for arch in ('x86_64', 'aarch64'):
+        fields.append((f'{block}.{arch}', rf'(\b{block}\s*=\s*\{{[^}}]*?\b{arch}\s*=\s*")([^"]+)(")'))
+for name, pattern in fields:
+    values = re.findall(pattern, artifact)
+    if len(values) != 1:
+        raise SystemExit(f'Expected exactly one {name} in the flake artifact')
+    value = values[0][1]
+    promoted, count = re.subn(pattern, lambda match: match[1] + value + match[3], promoted)
+    if count != 1:
+        raise SystemExit(f'Expected exactly one {name} in the release flake')
+path.write_text(promoted)
+PY
+cp "$artifact_dir/flake.lock" .
 python3 "$script_dir/validate-release-version.py" --version "${tag#v}"
 # Check against Cargo too: overriding the expectation above is only for artifacts.
 python3 "$script_dir/validate-release-version.py"

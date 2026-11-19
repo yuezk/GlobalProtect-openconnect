@@ -112,7 +112,6 @@ jobs:
               in
               assert builtins.elem package
                 hostSystem.config.environment.systemPackages;
-              assert hostSystem.config.services.ayatana-indicators.enable;
               package
             '
 

@@ -86,7 +86,6 @@
 
         linuxRuntimeDependencies = with pkgs; [
           glib-networking
-          libayatana-appindicator
           xdg-utils
         ];
 
@@ -174,7 +173,6 @@
             webkitgtk_4_1
             glib-networking
             libsecret
-            libayatana-appindicator
           ];
 
         installNixosPolkitRule = ''
@@ -326,7 +324,6 @@
 
           config = lib.mkIf cfg.enable {
             environment.systemPackages = [ cfg.package ];
-            services.ayatana-indicators.enable = lib.mkDefault true;
             security.polkit = {
               enable = true;
             } // lib.optionalAttrs (options.security.polkit ? enablePkexecWrapper) {
