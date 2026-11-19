@@ -14,10 +14,13 @@ if ($PSVersionTable.PSEdition -eq 'Desktop') {
 }
 if (![Environment]::Is64BitProcess) { throw 'Run the GP Connect installer with 64-bit PowerShell.' }
 $destination = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'GP Connect'
-$state = Join-Path $env:ProgramData 'GP Connect'
+$programData = [Environment]::GetFolderPath('CommonApplicationData')
+$state = Join-Path $programData 'GP Connect'
+$private = Join-Path $state 'Private'
+$tunnelLock = $null
 $serviceName = 'GPConnect'
 $serviceBinary = Join-Path $destination 'gpservice.exe'
-$shortcutPath = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\GP Connect.lnk'
+$shortcutPath = Join-Path $programData 'Microsoft\Windows\Start Menu\Programs\GP Connect.lnk'
 $uninstallKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GPConnect'
 $recoveryKey = 'HKLM:\SOFTWARE\GP Connect\NetworkRecovery'
 $publicAcl = 'O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FRFX;;;BU)'
@@ -52,8 +55,13 @@ function Set-DirectoryAcl([string]$Path, [string]$Descriptor) {
 function Wait-ForApplications {
   $deadline = [DateTime]::UtcNow.AddSeconds(30)
   do {
-    $running = @(Get-CimInstance Win32_Process -Filter "Name='gpgui.exe' OR Name='gpauth.exe'" |
-      Where-Object { $_.ExecutablePath -in @((Join-Path $destination 'gpgui.exe'), (Join-Path $destination 'gpauth.exe')) })
+    $clientPath = Join-Path $destination 'cli\gpclient.exe'
+    $guiPaths = @((Join-Path $destination 'gpgui.exe'), (Join-Path $destination 'gpauth.exe'))
+    $running = @(Get-CimInstance Win32_Process -Filter "Name='gpgui.exe' OR Name='gpauth.exe' OR Name='gpclient.exe'")
+    if ($running.ExecutablePath -contains $clientPath) {
+      throw 'Close gpclient.exe before installing or removing GP Connect.'
+    }
+    $running = @($running | Where-Object { $_.ExecutablePath -in $guiPaths })
     if (!$running.Count) { return }
     if ([DateTime]::UtcNow -ge $deadline) {
       throw 'Quit GP Connect and finish or cancel sign-in in all Windows sessions, then try again.'
@@ -91,7 +99,8 @@ function Wait-ForRuntimeRelease {
   $deadline = [DateTime]::UtcNow.AddSeconds(30)
   do {
     $locked = $false
-    foreach ($file in Get-ChildItem -LiteralPath $destination -File | Where-Object { $_.Extension -in @('.exe', '.dll') }) {
+    $directories = @($destination, (Join-Path $destination 'cli')) | Where-Object { Test-Path -LiteralPath $_ -PathType Container }
+    foreach ($file in Get-ChildItem -LiteralPath $directories -File | Where-Object { $_.Extension -in @('.exe', '.dll') }) {
       try {
         $stream = [IO.File]::Open($file.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
         $stream.Dispose()
@@ -103,12 +112,24 @@ function Wait-ForRuntimeRelease {
   } while ($true)
 }
 
+function Open-TunnelLock {
+  Set-DirectoryAcl $private $privateAcl
+  $path = Join-Path $private 'system-tunnel.lock'
+  try { return [IO.File]::Open($path, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
+  catch [IO.IOException] {
+    if (($_.Exception.GetBaseException().HResult -band 0xffff) -eq 32) {
+      throw 'A GP Connect system tunnel is active. Disconnect it before running setup.'
+    }
+    throw
+  }
+}
+
 function Assert-NetworkClean {
   $records = @()
   if (Test-Path $recoveryKey) { $records = @((Get-Item $recoveryKey).GetValueNames() | Where-Object { $_ -like 'Route-*' }) }
   $policies = @(Get-DnsClientNrptRule | Where-Object { $_.Comment -like 'GPConnect:*' })
   if ($records.Count -or $policies.Count) {
-    throw 'VPN network cleanup is incomplete. Restart GP Connect before trying again.'
+    throw 'VPN network cleanup is incomplete. Start or restart the GPConnect service before trying again.'
   }
 }
 
@@ -119,7 +140,7 @@ function Invoke-ServiceCommand([string[]]$Arguments) {
 
 function Set-MachineState {
   Set-DirectoryAcl $state $publicAcl
-  Set-DirectoryAcl (Join-Path $state 'Private') $privateAcl
+  Set-DirectoryAcl $private $privateAcl
   foreach ($name in @('gpservice.lock', 'gpservice.log')) {
     $path = Join-Path $state $name
     if (Test-Path -LiteralPath $path) {
@@ -281,7 +302,7 @@ try {
     if ($source -eq $destination -or $source.StartsWith($destination + '\', [StringComparison]::OrdinalIgnoreCase)) {
       throw 'Install from an extracted package outside the application folder.'
     }
-    foreach ($name in @('gpservice.exe', 'gpauth.exe', 'gpgui.exe', 'gp-posture.exe', 'libopenconnect-5.dll', 'wintun.dll', 'build-info.json')) {
+    foreach ($name in @('gpservice.exe', 'gpauth.exe', 'gpgui.exe', 'gp-posture.exe', 'libopenconnect-5.dll', 'wintun.dll', 'build-info.json', 'cli\gpclient.exe', 'cli\libopenconnect-5.dll', 'cli\wintun.dll')) {
       if (!(Test-Path -LiteralPath (Join-Path $source $name) -PathType Leaf)) { throw "Missing Windows package file: $name" }
     }
     $info = Get-Content -LiteralPath (Join-Path $source 'build-info.json') -Raw | ConvertFrom-Json
@@ -294,14 +315,30 @@ try {
     if ($info.product -ne 'GP Connect' -or $info.architecture -notin @('x64','arm64') -or $info.architecture -ne $architecture -or !$Version -or $info.version -ne $Version) {
       throw 'The package version or architecture does not match this installer.'
     }
-    if (![Environment]::Is64BitProcess -or [Environment]::OSVersion.Version.Build -lt 19041) {
-      throw 'GP Connect requires Windows 10 build 19041 or newer.'
-    }
-    if ($architecture -eq 'arm64' -and [Environment]::OSVersion.Version.Build -lt 22000) {
+    $build = [Environment]::OSVersion.Version.Build
+    if ($architecture -eq 'arm64' -and $build -lt 22000) {
       throw 'GP Connect for ARM64 requires Windows 11.'
     }
+    if ($architecture -eq 'x64' -and $build -lt 17763) {
+      throw 'GP Connect for x64 requires Windows 10 version 1809 or later.'
+    }
+    if ((Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name InstallationType) -eq 'Server Core') {
+      throw 'GP Connect requires Windows Server with Desktop Experience.'
+    }
+    foreach ($library in @('mfplat.dll', 'mfreadwrite.dll')) {
+      if (!(Test-Path -LiteralPath (Join-Path ([Environment]::SystemDirectory) $library) -PathType Leaf)) {
+        throw 'GP Connect requires Media Foundation. On Windows N, install the Media Feature Pack, then run setup again.'
+      }
+    }
+    $cliDirectory = Join-Path $source 'cli'
+    Assert-RegularDirectory $cliDirectory
+    foreach ($item in Get-ChildItem -LiteralPath $cliDirectory -Force) {
+      if ($item.PSIsContainer -or ($item.Name -ne 'gpclient.exe' -and $item.Extension -ne '.dll')) {
+        throw "Unexpected Windows CLI runtime file: $($item.Name)"
+      }
+    }
     $payload = @(Get-ChildItem -LiteralPath $source -Force | Where-Object {
-      ($_.PSIsContainer -and $_.Name -eq 'licenses') -or
+      ($_.PSIsContainer -and $_.Name -in @('licenses', 'cli')) -or
       (!$_.PSIsContainer -and ($_.Extension -eq '.dll' -or
         $_.Name -in @('gpservice.exe', 'gpauth.exe', 'gpgui.exe', 'gp-posture.exe', 'uninstall.exe', 'build-info.json')))
     })
@@ -356,6 +393,12 @@ try {
     if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'WireGuard LLC') {
       throw 'The package requires the vendor-signed Wintun driver DLL.'
     }
+    foreach ($dll in Get-ChildItem (Join-Path $stage 'cli') -File -Filter '*.dll') {
+      $shared = Join-Path $stage $dll.Name
+      if ((Test-Path -LiteralPath $shared) -and (Get-FileHash $shared).Hash -ne (Get-FileHash $dll.FullName).Hash) {
+        throw "The Windows CLI runtime file differs from the application copy: $($dll.Name)"
+      }
+    }
     if ((Test-Path -LiteralPath $destination) -and !$existing) { throw 'The service is not registered. Repair the existing installation before updating.' }
     if ($existing -and !(Test-Path -LiteralPath $destination)) { throw 'The registered installation is missing. Restore its files before updating.' }
     if (Test-Path $uninstallKey) {
@@ -368,6 +411,9 @@ try {
     if ($existing) {
       $serviceStopped = $true
       Stop-InstalledService
+    }
+    $tunnelLock = Open-TunnelLock
+    if ($existing) {
       Assert-NetworkClean
       Wait-ForRuntimeRelease
     }
@@ -382,6 +428,7 @@ try {
     } else { Set-Service -Name $serviceName -StartupType Automatic }
     Invoke-ServiceCommand @('failure', $serviceName, 'reset=', '86400', 'actions=', 'restart/3000/restart/10000/none/0')
     Set-InstallationMetadata $Version
+    $tunnelLock.Dispose(); $tunnelLock = $null
     Start-InstalledService
     $committed = $true
     if ($oldMoved) { Remove-Item -LiteralPath $backup -Recurse -Force; $oldMoved = $false }
@@ -395,6 +442,7 @@ try {
     Wait-ForApplications
     $serviceStopped = $true
     Stop-InstalledService
+    $tunnelLock = Open-TunnelLock
     Assert-NetworkClean
     Wait-ForRuntimeRelease
     # Move first: a locked runtime aborts while its registration and files are intact.
@@ -418,6 +466,7 @@ try {
       if ($oldMoved) { Move-Item -LiteralPath $backup -Destination $destination; $oldMoved = $false }
       if ($createdService) { Invoke-ServiceCommand @('delete', $serviceName) }
       if ($newMoved) { Restore-InstallationMetadata }
+      if ($tunnelLock) { $tunnelLock.Dispose(); $tunnelLock = $null }
       if ($existing -and $serviceStopped -and $wasRunning) { Start-InstalledService }
     } catch {
       Write-Host "Could not restore GP Connect: $($_.Exception.Message)"
@@ -428,6 +477,7 @@ try {
   Write-Host "Details: $(Join-Path $state 'installer.log')"
   throw $failure
 } finally {
+  if ($tunnelLock) { $tunnelLock.Dispose() }
   if ($stage -and (Test-Path -LiteralPath $stage)) {
     try { Remove-Item -LiteralPath $stage -Recurse -Force } catch { Write-Warning "Could not remove temporary files: $stage" }
   }

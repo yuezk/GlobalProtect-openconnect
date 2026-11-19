@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.6.0
+
+- Added command-line VPN connections on Windows x64 and ARM64.
+- Added support for Windows 10 1809 and Windows Server 2019 with Desktop Experience.
+- Improved light and dark theme contrast and fixed the tray icon on older Windows versions.
+- Simplified log access and feedback in Diagnostics.
+
 ## 3.5.0
 
 ### Added

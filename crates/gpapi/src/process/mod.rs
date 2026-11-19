@@ -39,3 +39,15 @@ pub mod rendering_recovery;
 #[cfg(windows)]
 #[path = "windows/user_process.rs"]
 pub mod user_process;
+
+#[cfg(windows)]
+#[path = "windows/desktop_auth.rs"]
+mod desktop_auth;
+
+#[cfg(windows)]
+#[path = "windows/auth_bootstrap.rs"]
+pub mod auth_bootstrap;
+
+#[cfg(windows)]
+#[path = "windows/console_input.rs"]
+mod console_input;

@@ -1,12 +1,12 @@
-use std::{
-  fs,
-  path::Path,
-  sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-  },
+use std::sync::{
+  Arc, Mutex,
+  atomic::{AtomicBool, Ordering},
 };
+#[cfg(unix)]
+use std::{fs, path::Path};
 
+#[cfg(unix)]
+use gpapi::process::users::get_user_by_name;
 use gpapi::{
   clap::report,
   cookie_store,
@@ -15,19 +15,22 @@ use gpapi::{
   gp_params::GpParams,
   os_profile::OsProfile,
   portal::{PortalConfig, prelogin},
-  process::users::get_user_by_name,
   session::{GatewayAuthentication, SessionMode},
 };
 use inquire::Text;
 use log::{Level, info, warn};
-use openconnect::{HipScript, HipSource, VpnBuilder};
+#[cfg(unix)]
+use openconnect::HipScript;
+use openconnect::{HipSource, VpnBuilder};
 use tokio::{runtime::Handle, task::JoinHandle};
 
 use crate::session::{
   SessionContextInput, build_session_context, session_info_from_vpn, spawn_session_runtime_with_info,
 };
 
-use super::{ConnectHandler, args::cookie_cache_path, vpn_script};
+#[cfg(unix)]
+use super::tunnel_output::TunnelOutput;
+use super::{ConnectHandler, args::cookie_cache_path};
 
 const OPENCONNECT_INTERRUPTED_EXIT_CODE: i32 = -4;
 
@@ -452,7 +455,10 @@ impl ConnectHandler<'_> {
       disable_ipv6: self.args.disable_ipv6,
       extension_auth: Some(extension_auth),
     });
-    let vpn_builder = vpn_script::builder(gateway, cookie, self.args)
+    let vpn_builder = self
+      .vpn_builder(gateway, cookie)
+      .map_err(GatewayConnectError::before_establishment)?;
+    let vpn_builder = vpn_builder
       .interface(self.args.interface.clone())
       .certificate(certificate)
       .sslkey(sslkey)
@@ -487,21 +493,8 @@ impl ConnectHandler<'_> {
     let disconnect_requested_on_signal = Arc::clone(&disconnect_requested);
     let cancellation = self.cancellation.clone();
 
-    let mut background_stdio = self
-      .background
-      .as_ref()
-      .map(|background| background.redirect_stdio())
-      .transpose()
-      .map_err(GatewayConnectError::before_establishment)?;
-
-    let mut dashboard = if self.args.dashboard {
-      Some(
-        crate::dashboard::Dashboard::prepare(gateway.to_owned(), self.cancellation.clone())
-          .map_err(GatewayConnectError::before_establishment)?,
-      )
-    } else {
-      None
-    };
+    #[cfg(unix)]
+    let mut output = TunnelOutput::prepare(self, gateway).map_err(GatewayConnectError::before_establishment)?;
     let monitor = gptunnel::TunnelMonitor::attach(vpn.clone());
 
     let disconnect_task = tokio::spawn(async move {
@@ -511,7 +504,9 @@ impl ConnectHandler<'_> {
       vpn_clone.disconnect();
     });
 
+    #[cfg(unix)]
     let lock_file_on_connect = self.shared_args.lock_file.to_path_buf();
+    #[cfg(unix)]
     let pid_written = self.pid_written.clone();
     let log_format = self.shared_args.log_format;
     let session_cancellation = self.cancellation.clone();
@@ -523,6 +518,7 @@ impl ConnectHandler<'_> {
           return;
         }
         tunnel_established_on_connect.store(true, Ordering::SeqCst);
+        #[cfg(unix)]
         pid_written.store(write_pid_file(&lock_file_on_connect), Ordering::SeqCst);
         let _ = established_tx.send(());
 
@@ -536,7 +532,6 @@ impl ConnectHandler<'_> {
         session_task_on_connect.lock().unwrap().replace(task);
       })
     });
-    let mut output_error = None;
     let connect_result = tokio::select! {
       result = &mut worker => result,
       established = established_rx => {
@@ -550,23 +545,8 @@ impl ConnectHandler<'_> {
               self.logout_gateway(&server).await;
             }
           }, || {
-            if let Some(dashboard) = &mut dashboard {
-              if let Err(error) = dashboard.start_tunnel(monitor.clone()) {
-                self.cancellation.cancel();
-                output_error = Some(error);
-              }
-            }
-            if let (Some(background), Some(stdio)) = (&self.background, &mut background_stdio) {
-              let detach = if self.pid_written.load(Ordering::SeqCst) {
-                background.detach(stdio)
-              } else {
-                Err(anyhow::anyhow!("Cannot detach without a writable PID lock file"))
-              };
-              if let Err(error) = detach {
-                self.cancellation.cancel();
-                output_error = Some(error);
-              }
-            }
+            #[cfg(unix)]
+            output.ready(monitor.clone());
           }).await
         } else {
           (&mut worker).await
@@ -574,11 +554,8 @@ impl ConnectHandler<'_> {
       }
     };
     monitor.stop().await;
-    if let Some(dashboard) = &mut dashboard {
-      if let Err(error) = dashboard.finish() {
-        output_error = Some(error);
-      }
-    }
+    #[cfg(unix)]
+    let output_result = output.finish();
     let tunnel_established = tunnel_established.load(Ordering::SeqCst);
     disconnect_task.abort();
     let _ = disconnect_task.await;
@@ -589,15 +566,15 @@ impl ConnectHandler<'_> {
       let _ = task.await;
     }
 
-    if let Some(error) = output_error {
-      return Err(GatewayConnectError::after_establishment(error));
-    }
+    #[cfg(unix)]
+    output_result.map_err(GatewayConnectError::after_establishment)?;
 
     let disconnect_requested = disconnect_requested.load(Ordering::SeqCst);
     let connect_result = connect_result.map_err(|error| GatewayConnectError::after_establishment(error.into()))?;
     classify_openconnect_result(connect_result, tunnel_established, disconnect_requested)
   }
 
+  #[cfg(unix)]
   pub(super) fn hip_source(&self, profile: OsProfile) -> anyhow::Result<HipSource> {
     let user = self.determine_hip_user();
     let script = self.args.hip.as_ref().or(self.args.csd_wrapper.as_ref());
@@ -605,19 +582,7 @@ impl ConnectHandler<'_> {
       Some(path) if !path.is_empty() => Ok(HipSource::Script(HipScript::new(path.clone(), get_uid(&user)?)?)),
       Some(_) => {
         anyhow::ensure!(user.is_none(), "--hip-user requires an explicit HIP script");
-        Ok(HipSource::Generator(Arc::new(move |request, control| {
-          let input = gphip::ReportInput {
-            profile: profile.clone(),
-            context: gphip::ReportContext::Connected {
-              cookie: request.cookie.clone(),
-              client_ip: request.client_ip.clone(),
-              client_ipv6: request.client_ipv6.clone(),
-              md5: request.md5.clone(),
-            },
-          };
-          gphip::generate_report_with_control(&input, &|| control.check())
-            .map_err(|error| error.downcast::<std::io::Error>().unwrap_or_else(std::io::Error::other))
-        })))
+        Ok(generated_hip(profile))
       }
       None => {
         anyhow::ensure!(user.is_none(), "--hip-user requires an explicit HIP script");
@@ -626,6 +591,16 @@ impl ConnectHandler<'_> {
     }
   }
 
+  #[cfg(windows)]
+  pub(super) fn hip_source(&self, profile: OsProfile) -> anyhow::Result<HipSource> {
+    Ok(if self.args.hip {
+      generated_hip(profile)
+    } else {
+      HipSource::Disabled
+    })
+  }
+
+  #[cfg(unix)]
   fn determine_hip_user(&self) -> Option<String> {
     if let Some(hip_user) = &self.args.hip_user {
       return Some(hip_user.clone());
@@ -633,6 +608,22 @@ impl ConnectHandler<'_> {
 
     self.args.csd_user.clone()
   }
+}
+
+fn generated_hip(profile: OsProfile) -> HipSource {
+  HipSource::Generator(Arc::new(move |request, control| {
+    let input = gphip::ReportInput {
+      profile: profile.clone(),
+      context: gphip::ReportContext::Connected {
+        cookie: request.cookie.clone(),
+        client_ip: request.client_ip.clone(),
+        client_ipv6: request.client_ipv6.clone(),
+        md5: request.md5.clone(),
+      },
+    };
+    gphip::generate_report_with_control(&input, &|| control.check())
+      .map_err(|error| error.downcast::<std::io::Error>().unwrap_or_else(std::io::Error::other))
+  }))
 }
 
 async fn wait_for_tunnel_exit(
@@ -678,10 +669,17 @@ fn classify_openconnect_result(
   }
 }
 
+#[cfg(unix)]
 fn direct_gateway_command(gateway: &str) -> String {
   format!("gpauth --gateway {gateway} | sudo gpclient connect {gateway} --as-gateway --cookie-on-stdin")
 }
 
+#[cfg(windows)]
+fn direct_gateway_command(gateway: &str) -> String {
+  format!("gpclient.exe connect {gateway} --as-gateway")
+}
+
+#[cfg(unix)]
 pub(super) fn write_pid_file(lock_file: &Path) -> bool {
   let pid = std::process::id();
 
@@ -694,6 +692,7 @@ pub(super) fn write_pid_file(lock_file: &Path) -> bool {
   }
 }
 
+#[cfg(unix)]
 fn get_uid(user: &Option<String>) -> anyhow::Result<Option<u32>> {
   user
     .as_ref()
@@ -710,7 +709,7 @@ fn apply_os_profile(builder: VpnBuilder, profile: &OsProfile) -> VpnBuilder {
     .user_agent(Some(profile.user_agent().to_string()))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
   use super::*;
 

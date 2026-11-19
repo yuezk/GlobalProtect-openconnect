@@ -66,7 +66,7 @@ class WindowsFeedTests(unittest.TestCase):
                 self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}os"), f"windows-{payload.architecture}")
                 self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}installerArguments"), "/UPDATE")
                 self.assertEqual(enclosure.get(f"{{{feed.SPARKLE}}}version"), "3.4.0")
-                minimum = "10.0.22000" if payload.architecture == "arm64" else "10.0.19041"
+                minimum = "10.0.22000" if payload.architecture == "arm64" else "10.0.17763"
                 self.assertEqual(item.findtext(f"{{{feed.SPARKLE}}}minimumSystemVersion"), minimum)
             self.assertEqual(json.loads((args.output / "latest.json").read_text())["stable"]["platforms"], ["windows"])
 

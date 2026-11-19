@@ -18,25 +18,27 @@ clap.workspace = true
 env_logger.workspace = true
 inquire = "0.9"
 log.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+compile-time.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+directories.workspace = true
 nix = { version = "0.31", features = ["fs", "signal", "process", "poll", "term"] }
 ratatui = { version = "=0.30.2", default-features = false, features = ["crossterm", "unstable-rendered-line-info"] }
 crossterm = { version = "0.29", features = ["use-dev-tty"] }
 strip-ansi-escapes = "0.2"
-tokio = { workspace = true, features = ["rt-multi-thread"] }
-tokio-util.workspace = true
 sysinfo.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-whoami.workspace = true
-directories.workspace = true
-compile-time.workspace = true
 uzers.workspace = true
+whoami.workspace = true
 
 [features]
 default = ["webview-auth"]
 webview-auth = ["gpapi/webview-auth"]
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
 gpvpnc = { path = "../../crates/gpvpnc" }
 
 [dev-dependencies]

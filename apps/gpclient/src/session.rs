@@ -75,8 +75,7 @@ async fn run_session_runtime(session_ctx: SessionContext, mut session_info: Sess
 
     tokio::time::sleep(schedule.delay).await;
 
-    crate::dashboard::session_notice(Level::Warn, &schedule.message);
-    report(log_format, Level::Warn, &format!("\nWARNING: {}", schedule.message));
+    report_session_notice(log_format, Level::Warn, &schedule.message);
 
     if !schedule.should_auto_extend {
       info!("Session extension is not allowed by the gateway");
@@ -91,8 +90,7 @@ async fn run_session_runtime(session_ctx: SessionContext, mut session_info: Sess
           return;
         };
 
-        crate::dashboard::session_notice(Level::Info, "Session extended.");
-        report(log_format, Level::Info, "Session extended.");
+        report_session_notice(log_format, Level::Info, "Session extended.");
         session_info = next_session_info;
       }
       Err(err) => {
@@ -105,6 +103,16 @@ async fn run_session_runtime(session_ctx: SessionContext, mut session_info: Sess
         return;
       }
     }
+  }
+}
+
+fn report_session_notice(log_format: LogFormat, level: Level, message: &str) {
+  #[cfg(unix)]
+  crate::dashboard::session_notice(level, message);
+  if level == Level::Warn {
+    report(log_format, level, &format!("\nWARNING: {message}"));
+  } else {
+    report(log_format, level, message);
   }
 }
 
@@ -147,6 +155,48 @@ mod tests {
       allow_extend_session,
       ..Default::default()
     }
+  }
+
+  #[cfg(windows)]
+  #[test]
+  fn expiry_warning_is_reported_once() {
+    const CHILD: &str = "GP_TEST_SESSION_WARNING_CHILD";
+    const WARNING: &str = "Session expires soon";
+    if std::env::var_os(CHILD).is_some() {
+      env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .format(gpapi::log_format::write_json_record)
+        .init();
+      let context = SessionContext::new(
+        "vpn.example.test".to_owned(),
+        "vpn.example.test".to_owned(),
+        SessionRequestArgs::new("synthetic".to_owned()),
+      );
+      let session = sample_session_info(Some(unix_timestamp() + 30), false);
+      tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap()
+        .block_on(run_session_runtime(context, session, LogFormat::Json));
+      return;
+    }
+
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+      .args([
+        "--exact",
+        "session::tests::expiry_warning_is_reported_once",
+        "--nocapture",
+      ])
+      .env(CHILD, "1")
+      .output()
+      .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(
+      stderr.lines().filter(|line| line.contains(WARNING)).count(),
+      1,
+      "{stderr}"
+    );
   }
 
   #[test]

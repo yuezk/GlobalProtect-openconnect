@@ -8,6 +8,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::credential::AuthCookieCredential;
 
+#[cfg(unix)]
+#[path = "cookie_store/unix.rs"]
+mod platform;
+#[cfg(windows)]
+#[path = "cookie_store/windows.rs"]
+mod platform;
+
 const STORE_VERSION: u32 = 1;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -45,16 +52,15 @@ impl StoredCookie {
   }
 }
 
-pub fn cookie_path(custom: Option<&str>) -> PathBuf {
-  if let Some(p) = custom {
-    return PathBuf::from(p);
+pub fn cookie_path(custom: Option<&str>) -> Option<PathBuf> {
+  match custom {
+    Some(path) => Some(PathBuf::from(path)),
+    None => platform::default_path(),
   }
-  let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-  PathBuf::from(home).join(".config/gpclient/cookie.json")
 }
 
 pub fn load(path: &Path, server: &str, host_id: &str) -> Option<StoredCookie> {
-  let bytes = fs::read(path).ok()?;
+  let bytes = zeroize::Zeroizing::new(platform::decode(fs::read(path).ok()?).ok()?);
   let stored: StoredCookie = serde_json::from_slice(&bytes).ok()?;
   if stored.version != STORE_VERSION || stored.server != server || stored.host_id != host_id {
     return None;
@@ -67,72 +73,18 @@ pub fn save(path: &Path, stored: &StoredCookie) -> anyhow::Result<()> {
     .parent()
     .ok_or_else(|| anyhow::anyhow!("cookie path has no parent directory"))?;
   fs::create_dir_all(parent)?;
-  set_private_dir_permissions(parent)?;
+  platform::prepare_directory(parent)?;
 
   let mut tmp = tempfile::NamedTempFile::new_in(parent)?;
-  tmp.write_all(&serde_json::to_vec(stored)?)?;
+  tmp.write_all(&platform::encode(serde_json::to_vec(stored)?)?)?;
   tmp.flush()?;
-  set_private_file_permissions(tmp.path())?;
+  platform::prepare_file(tmp.path())?;
   tmp.persist(path)?;
   Ok(())
 }
 
 pub fn clear(path: &Path) {
   let _ = fs::remove_file(path);
-}
-
-use permissions::{set_private_dir_permissions, set_private_file_permissions};
-
-mod permissions {
-  use std::path::Path;
-
-  #[cfg(unix)]
-  mod unix {
-    use std::{fs, os::unix::fs::PermissionsExt, path::Path};
-
-    pub(super) fn set_private_dir(path: &Path) -> anyhow::Result<()> {
-      fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-      Ok(())
-    }
-
-    pub(super) fn set_private_file(path: &Path) -> anyhow::Result<()> {
-      fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-      Ok(())
-    }
-
-    #[cfg(test)]
-    pub(super) fn file_mode(path: &Path) -> Option<u32> {
-      Some(fs::metadata(path).ok()?.permissions().mode() & 0o777)
-    }
-  }
-
-  pub(super) fn set_private_dir_permissions(path: &Path) -> anyhow::Result<()> {
-    #[cfg(unix)]
-    unix::set_private_dir(path)?;
-    #[cfg(not(unix))]
-    let _ = path;
-    Ok(())
-  }
-
-  pub(super) fn set_private_file_permissions(path: &Path) -> anyhow::Result<()> {
-    #[cfg(unix)]
-    unix::set_private_file(path)?;
-    #[cfg(not(unix))]
-    let _ = path;
-    Ok(())
-  }
-
-  #[cfg(test)]
-  pub(super) fn file_mode(path: &Path) -> Option<u32> {
-    #[cfg(unix)]
-    return unix::file_mode(path);
-
-    #[cfg(not(unix))]
-    {
-      let _ = path;
-      None
-    }
-  }
 }
 
 #[cfg(test)]
@@ -149,6 +101,24 @@ mod tests {
     )
   }
 
+  #[cfg(windows)]
+  #[test]
+  fn windows_cookie_cache_uses_profile_storage_and_protects_credentials() {
+    let default_path = cookie_path(None).unwrap();
+    assert!(default_path.starts_with(PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap())));
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cookie.json");
+    save(&path, &sample()).unwrap();
+    let bytes = fs::read(&path).unwrap();
+    assert!(
+      !bytes
+        .windows(b"prelogon-auth".len())
+        .any(|part| part == b"prelogon-auth")
+    );
+    assert!(load(&path, "vpn.example.com", "host-1").is_some());
+  }
+
   #[test]
   fn roundtrip_and_mode_0600() {
     let dir = tempfile::tempdir().unwrap();
@@ -156,8 +126,10 @@ mod tests {
     let s = sample();
     save(&path, &s).unwrap();
 
-    if let Some(mode) = permissions::file_mode(&path) {
-      assert_eq!(mode, 0o600, "cookie file must be mode 0600, got {:o}", mode);
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
     }
 
     let loaded = load(&path, "vpn.example.com", "host-1").unwrap();

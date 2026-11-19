@@ -1,12 +1,21 @@
 mod args;
 mod credential;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod flow_tests;
 mod gateway;
 mod internal;
+#[cfg(unix)]
+#[path = "internal_output/unix.rs"]
+mod internal_output;
+#[cfg(windows)]
+#[path = "internal_output/windows.rs"]
+mod internal_output;
+#[cfg(unix)]
+mod tunnel_output;
 mod vpn_script;
 
 use std::cell::RefCell;
+#[cfg(unix)]
 use std::sync::{
   Arc,
   atomic::{AtomicBool, Ordering},
@@ -46,7 +55,9 @@ pub(crate) struct ConnectHandler<'a> {
   auth_attempt_fixture: RefCell<credential::AuthAttemptFixture>,
   auth_recovery: RefCell<gpapi::process::rendering_recovery::RecoveryState>,
   sessions: RefCell<GatewaySessions>,
+  #[cfg(unix)]
   pid_written: Arc<AtomicBool>,
+  #[cfg(unix)]
   background: Option<crate::background::BackgroundWorker>,
 }
 
@@ -72,11 +83,14 @@ impl<'a> ConnectHandler<'a> {
       auth_attempt_fixture: Default::default(),
       auth_recovery: RefCell::default(),
       sessions: RefCell::default(),
+      #[cfg(unix)]
       pid_written: Arc::default(),
+      #[cfg(unix)]
       background: None,
     }
   }
 
+  #[cfg(unix)]
   pub(crate) fn with_background(mut self, background: Option<crate::background::BackgroundWorker>) -> Self {
     self.background = background;
     self
@@ -134,6 +148,7 @@ impl<'a> ConnectHandler<'a> {
     } else {
       sessions.logout().await;
     }
+    #[cfg(unix)]
     if self.pid_written.load(Ordering::SeqCst) {
       if let Err(error) = std::fs::remove_file(self.shared_args.lock_file) {
         warn!("Failed to remove PID file: {error}");

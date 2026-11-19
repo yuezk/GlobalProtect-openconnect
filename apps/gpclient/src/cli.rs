@@ -1,8 +1,10 @@
+#[cfg(unix)]
 use std::{
   path::{Path, PathBuf},
   str::FromStr,
 };
 
+#[cfg(unix)]
 use anyhow::bail;
 use clap::{Parser, Subcommand};
 use gpapi::{
@@ -10,16 +12,21 @@ use gpapi::{
   log_format::{LogFormat, write_json_record},
 };
 use log::info;
+#[cfg(unix)]
 use sysinfo::{Pid, System};
+#[cfg(unix)]
 use tokio::fs;
 
+#[cfg(unix)]
 use crate::{
   GP_CLIENT_LOCK_FILE,
-  connect::{ConnectArgs, ConnectHandler},
   diagnostics::DiagnosticsArgs,
   disconnect::{DisconnectArgs, DisconnectHandler},
-  hip::{HipArgs, HipHandler},
   launch_gui::{LaunchGuiArgs, LaunchGuiHandler},
+};
+use crate::{
+  connect::{ConnectArgs, ConnectHandler},
+  hip::{HipArgs, HipHandler},
 };
 
 const VERSION: &str = concat!(
@@ -33,7 +40,10 @@ const VERSION: &str = concat!(
 
 pub(crate) struct SharedArgs<'a> {
   pub(crate) ignore_tls_errors: bool,
+  #[cfg(unix)]
   pub(crate) lock_file: &'a Path,
+  #[cfg(windows)]
+  pub(crate) system_tunnel: std::cell::RefCell<Option<gpvpnc::windows::SystemTunnel>>,
   pub(crate) verbose: &'a InfoLevelVerbosity,
   pub(crate) log_format: LogFormat,
 }
@@ -42,12 +52,15 @@ pub(crate) struct SharedArgs<'a> {
 enum CliCommand {
   #[command(about = "Connect to a portal server")]
   Connect(Box<ConnectArgs>),
+  #[cfg(unix)]
   #[command(about = "Disconnect from the server")]
   Disconnect(DisconnectArgs),
+  #[cfg(unix)]
   #[command(about = "Launch the GUI")]
   LaunchGui(LaunchGuiArgs),
   #[command(about = "Generate HIP report")]
   Hip(HipArgs),
+  #[cfg(unix)]
   #[command(about = "Collect system diagnostics for a bug report without connecting to a VPN")]
   Diagnostics(DiagnosticsArgs),
   #[command(hide = true)]
@@ -89,11 +102,12 @@ struct Cli {
   #[command(subcommand)]
   command: CliCommand,
 
-  #[cfg(not(target_os = "macos"))]
+  #[cfg(all(unix, not(target_os = "macos")))]
   #[arg(long, hide = true)]
   fix_openssl: bool,
   #[arg(long, help = "Ignore the TLS errors")]
   ignore_tls_errors: bool,
+  #[cfg(unix)]
   #[arg(
     long,
     global = true,
@@ -102,6 +116,7 @@ struct Cli {
   )]
   lock_file: PathBuf,
 
+  #[cfg(unix)]
   #[arg(long, hide = true, global = true)]
   background_worker_fd: Option<i32>,
 
@@ -128,6 +143,7 @@ impl Args for Cli {
 }
 
 impl Cli {
+  #[cfg(unix)]
   fn can_run_alongside_client(&self) -> bool {
     match &self.command {
       CliCommand::Connect(_) => false,
@@ -136,6 +152,7 @@ impl Cli {
     }
   }
 
+  #[cfg(unix)]
   async fn is_running(&self) -> bool {
     let Ok(c) = fs::read_to_string(&self.lock_file).await else {
       return false;
@@ -156,50 +173,67 @@ impl Cli {
   }
 
   async fn run(&self) -> anyhow::Result<()> {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(all(unix, not(target_os = "macos")))]
     if self.fix_openssl
       && !(matches!(&self.command, CliCommand::Connect(args) if args.background) && self.background_worker_fd.is_none())
     {
       log::warn!("--fix-openssl is deprecated and has no effect. It will be removed in a future release.");
     }
 
-    if let CliCommand::Connect(args) = &self.command {
-      if args.dashboard {
-        crate::dashboard::validate(self.log_format)?;
+    #[cfg(unix)]
+    let background_worker = {
+      if let CliCommand::Connect(args) = &self.command {
+        if args.dashboard {
+          crate::dashboard::validate(self.log_format)?;
+        }
       }
-    }
-    if self.background_worker_fd.is_some() && !matches!(&self.command, CliCommand::Connect(args) if args.background) {
-      bail!("Background worker requires connect --background");
-    }
-    if let CliCommand::Diagnostics(args) = &self.command {
-      return args.run(VERSION).await;
-    }
+      if self.background_worker_fd.is_some() && !matches!(&self.command, CliCommand::Connect(args) if args.background) {
+        bail!("Background worker requires connect --background");
+      }
+      if let CliCommand::Diagnostics(args) = &self.command {
+        return args.run(VERSION).await;
+      }
 
-    // check if an instance is running
-    if !self.can_run_alongside_client() && self.is_running().await {
-      bail!("Another instance of the client is already running");
-    }
+      // check if an instance is running
+      if !self.can_run_alongside_client() && self.is_running().await {
+        bail!("Another instance of the client is already running");
+      }
 
-    let background_worker = if let CliCommand::Connect(args) = &self.command {
-      if args.background {
-        let log_file = args
-          .log_file
-          .as_deref()
-          .unwrap_or_else(|| Path::new("/var/log/gpclient.log"));
-        match self.background_worker_fd {
-          Some(fd) => Some(crate::background::BackgroundWorker::new(fd, log_file)?),
-          None => return crate::background::start(log_file, self.log_format).await,
+      if let CliCommand::Connect(args) = &self.command {
+        if args.background {
+          let log_file = args
+            .log_file
+            .as_deref()
+            .unwrap_or_else(|| Path::new("/var/log/gpclient.log"));
+          match self.background_worker_fd {
+            Some(fd) => Some(crate::background::BackgroundWorker::new(fd, log_file)?),
+            None => return crate::background::start(log_file, self.log_format).await,
+          }
+        } else {
+          None
         }
       } else {
         None
       }
-    } else {
-      None
+    };
+    #[cfg(windows)]
+    let system_tunnel = match &self.command {
+      CliCommand::Connect(args) if !args.cookie_only => {
+        anyhow::ensure!(
+          gpapi::windows::is_elevated()?,
+          "Run gpclient connect from an administrator terminal"
+        );
+        Some(gpvpnc::windows::SystemTunnel::acquire()?)
+      }
+      _ => None,
     };
 
     let shared_args = SharedArgs {
       ignore_tls_errors: self.ignore_tls_errors,
+      #[cfg(unix)]
       lock_file: &self.lock_file,
+      #[cfg(windows)]
+      system_tunnel: system_tunnel.into(),
       verbose: &self.verbose,
       log_format: self.log_format,
     };
@@ -210,14 +244,17 @@ impl Cli {
 
     match &self.command {
       CliCommand::Connect(args) => {
-        ConnectHandler::new(args, &shared_args)
-          .with_background(background_worker)
-          .handle()
-          .await
+        let handler = ConnectHandler::new(args, &shared_args);
+        #[cfg(unix)]
+        let handler = handler.with_background(background_worker);
+        handler.handle().await
       }
+      #[cfg(unix)]
       CliCommand::Disconnect(args) => DisconnectHandler::new(args, shared_args.lock_file).handle().await,
+      #[cfg(unix)]
       CliCommand::LaunchGui(args) => LaunchGuiHandler::new(args).handle().await,
       CliCommand::Hip(args) => HipHandler::new(args).handle().await,
+      #[cfg(unix)]
       CliCommand::Diagnostics(_) => unreachable!("diagnostics is dispatched before VPN setup"),
       CliCommand::DetectInternalHost { address, hostname } => {
         let internal = gpapi::session::desktop::network::native::detect_in_helper(*address, hostname)?;
@@ -250,17 +287,20 @@ fn build_logger(cli: &Cli) -> env_logger::Builder {
   builder
 }
 
-pub(crate) async fn run() {
-  let cli = Cli::parse();
-
+fn initialize_logger(cli: &Cli) {
+  #[cfg(unix)]
   if matches!(&cli.command, CliCommand::Connect(args) if args.dashboard) {
-    let logger = build_logger(&cli).build();
+    let logger = build_logger(cli).build();
     log::set_max_level(logger.filter());
     log::set_boxed_logger(Box::new(crate::dashboard::NoticeLogger::new(logger))).expect("failed to initialize logger");
-  } else {
-    build_logger(&cli).init();
+    return;
   }
+  build_logger(cli).init();
+}
 
+pub(crate) async fn run() {
+  let cli = Cli::parse();
+  initialize_logger(&cli);
   info!("gpclient started: {}", VERSION);
 
   if let Err(err) = cli.run().await {
@@ -269,7 +309,7 @@ pub(crate) async fn run() {
   }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
   use std::{
     io::Write,
@@ -360,7 +400,7 @@ mod tests {
   fn diagnostics_accepts_output_options_and_runs_alongside_the_client() {
     let cli = Cli::try_parse_from([
       "gpclient",
-      #[cfg(not(target_os = "macos"))]
+      #[cfg(all(unix, not(target_os = "macos")))]
       "--fix-openssl",
       "diagnostics",
       "--json",
@@ -591,5 +631,33 @@ mod tests {
       serde_json::from_str::<serde_json::Value>(out.trim()).is_err(),
       "text output should not be JSON: {out:?}"
     );
+  }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+  use super::*;
+
+  #[test]
+  fn terminal_auth_and_generated_hip_are_available() {
+    assert!(Cli::try_parse_from(["gpclient", "connect", "vpn.example.com", "--cookie-only", "--hip"]).is_ok());
+  }
+
+  #[test]
+  fn unix_only_workflows_are_unavailable() {
+    for flag in [
+      "--background",
+      "--dashboard",
+      "--lock-file",
+      "--script",
+      "--hip-user",
+      "--script-tun",
+    ] {
+      assert!(
+        Cli::try_parse_from(["gpclient", "connect", "vpn.example.com", flag]).is_err(),
+        "{flag}"
+      );
+    }
+    assert!(Cli::try_parse_from(["gpclient", "disconnect"]).is_err());
   }
 }

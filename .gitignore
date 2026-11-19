@@ -19,3 +19,5 @@ result
 
 # Packages & test assets
 *.ipa
+
+__pycache__
