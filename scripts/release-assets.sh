@@ -20,6 +20,11 @@ elif [ "$SELECTION" != "all" ]; then
   SELECTION=tag
 fi
 
+# The follow-up distro-package workflow uses "all" for its own package artifacts.
+if [[ "$SELECTION" != "all" ]]; then
+  "$SCRIPT_DIR/verify-linux-nsh-assets.sh" "$ARTIFACT_DIR" --actions
+fi
+
 case "$SELECTION" in
   snapshot|all)
     printf '%s\n' "$ARTIFACT_DIR"/artifact-*/*

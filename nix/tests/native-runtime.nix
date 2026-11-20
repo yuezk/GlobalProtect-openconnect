@@ -61,6 +61,7 @@ pkgs.testers.runNixOSTest {
         return machine.succeed("su - alice -c " + shlex.quote(command))
 
     # Exercise real host pkexec, private credential pipes and launcher cancellation.
+    as_alice("mkdir -p ~/.config/gpclient && echo gpgui > ~/.config/gpclient/gui")
     command = "GP_GUI_BINARY=${guiProbe} " + package + "/bin/gpclient --lock-file /tmp/gp-client.lock launch-gui"
     as_alice(command + " > /tmp/gp-client-output 2>&1 & echo $! > /tmp/gp-client-pid")
     try:

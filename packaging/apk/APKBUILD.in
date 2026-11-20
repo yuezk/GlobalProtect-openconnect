@@ -45,6 +45,8 @@ source="$pkgname-$pkgver.tar.gz"
 builddir="$srcdir/$pkgname-$pkgver"
 install="$pkgname.post-deinstall"
 options="!check"
+# GTK4 is loaded only by the optional Native Shell. Keep dependency tracing for the rest of the package.
+somask="libgtk-4.so.1 libgraphene-1.0.so.0"
 
 build() {
 	cd "$builddir"
@@ -64,6 +66,7 @@ package() {
 
 	make install \
 		DESTDIR="$pkgdir" \
+		INCLUDE_GUI="${INCLUDE_GUI:-0}" \
 		BUILD_GUI_HELPER="${BUILD_GUI_HELPER:-1}"
 }
 

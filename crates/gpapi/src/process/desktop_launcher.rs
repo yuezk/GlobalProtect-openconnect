@@ -24,26 +24,48 @@ use crate::service::transport::{MAX_CREDENTIAL_FRAME, SessionCredential};
 /// Owns the desktop GUI and its privileged service without leaving the desktop session.
 pub struct DesktopLauncher<'a> {
   version: &'a str,
+  #[cfg(target_os = "linux")]
+  interface: Option<crate::gui::GuiVariant>,
   minimized: bool,
   log_file: Option<String>,
 }
 
 impl<'a> DesktopLauncher<'a> {
-  /// Bring an already-running GUI to the foreground through its service.
-  pub async fn activate_existing() -> anyhow::Result<()> {
-    let endpoint = crate::utils::endpoint::http_endpoint().await?;
-    crate::utils::request::client_builder()
-      .build()?
-      .post(format!("{endpoint}/active-gui"))
-      .send()
-      .await?
-      .error_for_status()?;
-    Ok(())
+  /// Plain launches raise the existing window. Explicit selections require a cold launch.
+  pub async fn activate_or_reject_existing(&self) -> anyhow::Result<bool> {
+    let Ok(endpoint) = crate::utils::endpoint::http_endpoint().await else {
+      return Ok(false);
+    };
+    let client = crate::utils::request::client_builder().no_proxy().build()?;
+    #[cfg(target_os = "linux")]
+    if self.interface.is_some() {
+      let response = client.get(format!("{endpoint}/health")).send().await;
+      ensure!(
+        !response.is_ok_and(|r| r.status().is_success()),
+        "GP Connect is already running. Quit GP Connect and run this command again."
+      );
+      return Ok(false);
+    }
+    Ok(
+      client
+        .post(format!("{endpoint}/active-gui"))
+        .send()
+        .await
+        .is_ok_and(|r| r.status().is_success()),
+    )
+  }
+
+  #[cfg(target_os = "linux")]
+  pub fn interface(mut self, interface: Option<crate::gui::GuiVariant>) -> Self {
+    self.interface = interface;
+    self
   }
 
   pub fn new(version: &'a str) -> Self {
     Self {
       version,
+      #[cfg(target_os = "linux")]
+      interface: None,
       minimized: false,
       log_file: None,
     }
@@ -87,6 +109,8 @@ impl<'a> DesktopLauncher<'a> {
     let result = {
       let operation = async {
         let mut minimized = self.minimized;
+        #[cfg(target_os = "linux")]
+        let mut explicit_interface = self.interface;
         let mut expecting_renewal = false;
         loop {
           let credential = tokio::select! {
@@ -119,15 +143,27 @@ impl<'a> DesktopLauncher<'a> {
           if let Some(path) = &self.log_file {
             envs.insert("GP_LOG_FILE".into(), path.clone());
           }
-          let launcher = GuiLauncher::new(self.version, Arc::new(credential), crate::gui::preferred()?)
-            .envs(envs)
-            .minimized(minimized);
           #[cfg(not(target_os = "linux"))]
           let mut unexpected = [0];
           // Program resolution may launch the WebKit download helper. Keep it under
           // the same cancellation, service ownership and recovery budget as gpgui.
           let outcome = {
             let attempt = async {
+              #[cfg(target_os = "linux")]
+              let variant = {
+                let requested = match explicit_interface {
+                  Some(variant) => Some(variant),
+                  None => crate::gui::saved_preference()?,
+                };
+                super::nsh_runtime::select(requested, &mut input, &mut output)
+                  .await
+                  .context(super::nsh_runtime::TAURI_RECOVERY)?
+              };
+              #[cfg(not(target_os = "linux"))]
+              let variant = crate::gui::GuiVariant::Tauri;
+              let launcher = GuiLauncher::new(self.version, Arc::new(credential), variant)
+                .envs(envs)
+                .minimized(minimized);
               let program = launcher
                 .resolve_program(&cancellation, crate::gui::GuiTheme::System)
                 .await?;
@@ -137,6 +173,7 @@ impl<'a> DesktopLauncher<'a> {
                   &program,
                   &cancellation,
                   &switch_listener.listener,
+                  &mut explicit_interface,
                   &mut input,
                   &mut output,
                 )

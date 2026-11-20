@@ -47,7 +47,7 @@ path = Path('flake.nix')
 promoted = path.read_text()
 fields = [(name, rf'(\b{name}\s*=\s*")([^"]+)(")')
           for name in ('releaseTag', 'releaseVersion')]
-for block in ('gpguiHashes', 'binaryHashes'):
+for block in ('gpguiHashes', 'nshHashes', 'binaryHashes'):
     for arch in ('x86_64', 'aarch64'):
         fields.append((f'{block}.{arch}', rf'(\b{block}\s*=\s*\{{[^}}]*?\b{arch}\s*=\s*")([^"]+)(")'))
 for name, pattern in fields:

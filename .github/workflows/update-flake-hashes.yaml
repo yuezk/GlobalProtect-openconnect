@@ -62,6 +62,15 @@ jobs:
           }, indent=2) + '\n')
           PYRELEASE
 
+      - name: Verify all published Native Shell downloads before promotion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.release_tag }}
+        run: |
+          gh release download "$RELEASE_TAG" --repo yuezk/GlobalProtect-openconnect \
+            --pattern 'gpgui-nsh_*.bin.tar.xz*' --dir "$RUNNER_TEMP/nsh-release"
+          scripts/verify-linux-nsh-assets.sh "$RUNNER_TEMP/nsh-release"
+
       - name: Install Nix
         uses: cachix/install-nix-action@v31
 

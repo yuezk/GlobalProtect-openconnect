@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.7.0 (unreleased)
+
+- Linux now opens Native Shell by default on supported systems, including Alpine. Upgrades keep your saved interface choice.
+- To choose an interface after quitting GP Connect, run `gpclient launch-gui --interface tauri` or `gpclient launch-gui --interface nsh`.
+
 ## 3.6.0
 
 - Added command-line VPN connections on Windows x64 and ARM64.

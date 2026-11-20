@@ -1,4 +1,4 @@
-//! Checks the generic Linux NSH runtime before offering a download.
+//! Selects the Linux GUI using its installed or package-managed runtime.
 //! Runs in the desktop supervisor, which does not load either GUI's GTK runtime.
 use std::{ffi::OsStr, os::raw::c_uint};
 
@@ -12,10 +12,66 @@ use libloading::{
 const MIN_GTK_MINOR: u32 = 14;
 
 #[cfg(target_os = "linux")]
+pub(super) const TAURI_RECOVERY: &str = "To use Tauri, run: gpclient launch-gui --interface tauri";
+
+#[cfg(target_os = "linux")]
+pub(super) async fn select(
+  requested: Option<crate::gui::GuiVariant>,
+  service_input: &mut (impl tokio::io::AsyncWrite + Unpin),
+  service_output: &mut (impl tokio::io::AsyncRead + Unpin),
+) -> anyhow::Result<crate::gui::GuiVariant> {
+  use crate::{gui::GuiVariant, service::transport::DESKTOP_GUI_INSTALLER};
+  use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+  if requested == Some(GuiVariant::Tauri) {
+    return Ok(GuiVariant::Tauri);
+  }
+
+  let runtime = if crate::gui::NATIVE_SHELL_SUPPORTED {
+    service_input.write_all(&[DESKTOP_GUI_INSTALLER]).await?;
+    match service_output.read_u8().await? {
+      0 => check(),
+      // The package installer provides and wraps NSH's dependencies (e.g. NixOS).
+      1 => Ok(()),
+      _ => anyhow::bail!("Invalid GUI installer capability response"),
+    }
+  } else {
+    Err(anyhow::anyhow!("Native Shell is unavailable for this platform."))
+  };
+
+  match runtime {
+    Ok(()) => Ok(GuiVariant::Nsh),
+    Err(err) if requested.is_some() => Err(err),
+    Err(err) => {
+      log::info!("Selecting Tauri: {err:#}");
+      Ok(GuiVariant::Tauri)
+    }
+  }
+}
+
+#[cfg(target_os = "linux")]
 pub(super) fn check() -> anyhow::Result<()> {
   check_gtk(OsStr::new("libgtk-4.so.1"))?;
+  #[cfg(target_env = "gnu")]
+  {
+    // glibc returns a static, NUL-terminated runtime version string.
+    let version = unsafe { std::ffi::CStr::from_ptr(nix::libc::gnu_get_libc_version()) };
+    check_glibc_version(version.to_str()?)?;
+  }
   load_library(OsStr::new("libgnutls.so.30"), "GnuTLS 3")?;
   load_library(OsStr::new("libdbus-1.so.3"), "D-Bus")?;
+  Ok(())
+}
+
+#[cfg(any(all(target_os = "linux", target_env = "gnu"), test))]
+fn check_glibc_version(version: &str) -> anyhow::Result<()> {
+  let mut parts = version.split('.');
+  let major = parts.next().and_then(|part| part.parse::<u32>().ok());
+  let minor = parts.next().and_then(|part| part.parse::<u32>().ok());
+  ensure!(
+    major.zip(minor).is_some_and(|version| version >= (2, 39)),
+    "Native Shell requires glibc 2.39 or later. This system reports glibc {version}."
+  );
   Ok(())
 }
 
@@ -54,6 +110,21 @@ fn check_gtk(path: &OsStr) -> anyhow::Result<()> {
 pub(super) mod tests {
   use super::*;
   use std::{fs, process::Command};
+
+  #[test]
+  fn requires_glibc_2_39_or_later() {
+    for version in ["2.9", "2.38", "unknown"] {
+      assert!(
+        check_glibc_version(version)
+          .unwrap_err()
+          .to_string()
+          .contains("glibc 2.39")
+      );
+    }
+    for version in ["2.39", "2.39.1", "2.40", "3.0"] {
+      check_glibc_version(version).unwrap();
+    }
+  }
 
   pub(in crate::process) fn gtk_fixture(directory: &std::path::Path, minor: u32) -> std::path::PathBuf {
     let source = directory.join(format!("gtk-{minor}.c"));

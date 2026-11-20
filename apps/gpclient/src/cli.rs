@@ -487,6 +487,25 @@ mod tests {
   }
 
   #[test]
+  #[cfg(target_os = "linux")]
+  fn launch_gui_interface_accepts_minimized_launch_but_not_an_auth_callback() {
+    for variant in ["tauri", "nsh"] {
+      assert!(Cli::try_parse_from(["gpclient", "launch-gui", "--interface", variant, "--minimized"]).is_ok());
+      assert!(
+        Cli::try_parse_from([
+          "gpclient",
+          "launch-gui",
+          "--interface",
+          variant,
+          "globalprotectcallback:token"
+        ])
+        .is_err()
+      );
+    }
+    assert!(Cli::try_parse_from(["gpclient", "launch-gui", "--interface", "unknown"]).is_err());
+  }
+
+  #[test]
   #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
   fn launch_gui_rejects_callback_with_minimized() {
     assert!(Cli::try_parse_from(["gpclient", "launch-gui", "globalprotectcallback:token", "--minimized",]).is_err());

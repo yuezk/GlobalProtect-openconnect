@@ -5,10 +5,11 @@ cd "$root"
 temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT HUP INT TERM
 mkdir -p "$temp/release"
-for binary in gpclient gpauth gpservice gpgui gpgui-helper gp-vpnc-script-installer gp-hip-script-installer; do
+for binary in gpclient gpauth gpservice gpgui gpgui-nsh gpgui-helper gp-vpnc-script-installer gp-hip-script-installer; do
     printf '#!/bin/sh\nexit 0\n' > "$temp/release/$binary"
     chmod 755 "$temp/release/$binary"
 done
+echo 'ICU4X license fixture' > "$temp/release/ICU4X-LICENSE.txt"
 mkdir -p "$temp/client-release"
 cp "$temp/release/gpclient" "$temp/client-release/"
 make install-gpclient-unix PREFIX='/custom/gp install' DESTDIR="$temp/client-stage" \
@@ -19,7 +20,7 @@ test -x "$installed/libexec/gpclient/vpnc-script"
 test "$(find "$installed" -type f | wc -l | tr -d ' ')" = 2
 for platform in linux bsd; do
     stage="$temp/$platform-stage"
-    make "install-$platform" PREFIX=/custom/gp DESTDIR="$stage" \
+    make "install-$platform" PREFIX=/custom/gp DESTDIR="$stage" INCLUDE_GUI=1 NSH_BUNDLE_DIR="$temp/release" \
         CARGO_RELEASE_DIR="$temp/release" GPGUI_BINARY="$temp/release/gpgui" > "$temp/$platform.log"
     installed="$stage/custom/gp"
     test -x "$installed/bin/gpclient"
@@ -35,8 +36,11 @@ for platform in linux bsd; do
     ! grep -F "$stage" "$installed/share/applications/gpgui.desktop"
     if [ "$platform" = bsd ]; then
         test ! -d "$installed/lib/NetworkManager"
+        test ! -e "$installed/bin/gpgui-nsh"
     else
         test -x "$installed/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down"
+        test -x "$installed/bin/gpgui-nsh"
+        cmp "$temp/release/ICU4X-LICENSE.txt" "$installed/share/licenses/globalprotect-openconnect/ICU4X-LICENSE.txt"
     fi
     runtime="$stage/var/lib/gpclient"
     if [ "$platform" = bsd ]; then
@@ -60,6 +64,12 @@ for platform in linux bsd; do
     test -f "$installed/libexec/gpclient/unrelated"
     test -f "$runtime/scripts/unrelated"
 done
+if make install-linux INCLUDE_GUI=1 PREFIX=/usr DESTDIR="$temp/missing-nsh" \
+    GPGUI_BINARY="$temp/release/gpgui" NSH_BUNDLE_DIR="$temp/absent" \
+    CARGO_RELEASE_DIR="$temp/release" > "$temp/missing-nsh.log" 2>&1; then
+    echo 'FAIL: bundled package installation succeeded without Native Shell' >&2
+    exit 1
+fi
 mv "$temp/release/gpclient" "$temp/release/gpclient.saved"
 if make install-linux PREFIX=/custom/gp DESTDIR="$temp/missing-client-stage" \
     CARGO_RELEASE_DIR="$temp/release" > "$temp/missing-client.log" 2>&1; then

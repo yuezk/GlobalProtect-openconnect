@@ -35,6 +35,7 @@ Requires:       xdg-utils
 Conflicts:      globalprotect-openconnect-snapshot
 
 %global debug_package %{nil}
+%global __requires_exclude_from ^%{_bindir}/gpgui-nsh$
 
 %description
 A GUI for GlobalProtect VPN, based on OpenConnect, supports the SSO authentication method.
@@ -57,14 +58,17 @@ fi
 %build
 # The injected RUSTFLAGS could fail the build
 unset RUSTFLAGS
-make build
+make build INCLUDE_GUI=%{?include_gui}%{!?include_gui:0}
 
 %install
-%make_install
+%make_install INCLUDE_GUI=%{?include_gui}%{!?include_gui:0}
 
 %files
 %defattr(-,root,root)
 %{_bindir}/*
+%if 0%{?include_gui}
+%license %{_datadir}/licenses/%{name}/ICU4X-LICENSE.txt
+%endif
 %{_libexecdir}/gpclient/vpnc-script
 %{_libexecdir}/gpclient/gp-hip-script-installer
 %{_libexecdir}/gpclient/gp-vpnc-script-installer
