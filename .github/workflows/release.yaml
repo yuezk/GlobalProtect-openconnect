@@ -127,19 +127,26 @@ jobs:
       # LIBXML2_STATIC is needed to avoid the dynamic linking issue on different distros
       run: |
         docker run --rm \
-          -v $(pwd)/build-${{ matrix.package }}:/workspace \
+          -v "$PWD/build-${{ matrix.package }}:/workspace" \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -e LIBXML2_STATIC=1 \
           -e INCLUDE_GUI=1 \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2
 
+    - name: Checkout package verification script
+      uses: actions/checkout@v6
+      with:
+        path: .ci
+        sparse-checkout: scripts
+        persist-credentials: false
     - name: Install ${{ matrix.package }} package in Docker
       run: |
         docker run --rm \
+          -v "$PWD/.ci/scripts/verify-linux-package.sh:/verify-linux-package.sh:ro" \
           -e COREPACK_INTEGRITY_KEYS=0 \
-          -v $(pwd)/build-${{ matrix.package }}:/workspace \
+          -v "$PWD/build-${{ matrix.package }}:/workspace" \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \
-          bash install.sh
+          bash -ec 'bash install.sh && bash /verify-linux-package.sh "$1"' _ "${{ matrix.package }}"
 
     - name: Upload ${{ matrix.package }} package
       uses: actions/upload-artifact@v7

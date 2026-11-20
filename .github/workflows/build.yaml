@@ -311,14 +311,19 @@ jobs:
     if: ${{ !(startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.channel == 'stable')) }}
     needs:
     - tarball
+    - build-gpgui-glibc
+    - build-gpgui-musl
+    - build-gpgui-nsh
     strategy:
       fail-fast: false
       matrix:
         os:
           - runner: ubuntu-latest
             arch: amd64
+            uname: x86_64
           - runner: ubuntu-24.04-arm
             arch: ubuntu-24.04-arm
+            uname: aarch64
         package: [deb, rpm, pkg, apk, binary, ubuntu-rolling]
     runs-on: ${{ matrix.os.runner }}
     name: build-gp (${{ matrix.package }}, ${{ matrix.os.arch }})
@@ -332,22 +337,41 @@ jobs:
       with:
         name: artifact-source
         path: build-gp-${{ matrix.package }}
+    - name: Download Tauri for this package
+      uses: actions/download-artifact@v8
+      with:
+        name: artifact-gpgui${{ matrix.package == 'apk' && '-musl' || '' }}-${{ matrix.os.arch }}
+        path: gui-assets
+    - name: Download Native Shell for this package
+      uses: actions/download-artifact@v8
+      with:
+        name: artifact-gpgui-nsh${{ matrix.package == 'apk' && '-musl' || '' }}-${{ matrix.os.uname }}
+        path: gui-assets
     - name: Build ${{ matrix.package }} package in Docker
       # LIBXML2_STATIC is needed to avoid the dynamic linking issue on different distros
       run: |
         docker run --rm \
           -e COREPACK_INTEGRITY_KEYS=0 \
           -e LIBXML2_STATIC=1 \
-          -v $(pwd)/build-gp-${{ matrix.package }}:/workspace \
+          -e INCLUDE_GUI=1 \
+          -e GUI_ASSET_BASE=file:///gui-assets \
+          -v "$PWD/gui-assets:/gui-assets:ro" \
+          -v "$PWD/build-gp-${{ matrix.package }}:/workspace" \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2
+    - name: Checkout package verification script
+      uses: actions/checkout@v6
+      with:
+        path: .ci
+        sparse-checkout: scripts
+        persist-credentials: false
     - name: Install ${{ matrix.package }} package in Docker
       run: |
         docker run --rm \
+          -v "$PWD/.ci/scripts/verify-linux-package.sh:/verify-linux-package.sh:ro" \
           -e COREPACK_INTEGRITY_KEYS=0 \
-          -e GPGUI_INSTALLED=0 \
-          -v $(pwd)/build-gp-${{ matrix.package }}:/workspace \
+          -v "$PWD/build-gp-${{ matrix.package }}:/workspace" \
           yuezk/gpdev:${{ matrix.package }}-builder-tauri2 \
-          bash install.sh
+          bash -ec 'bash install.sh && bash /verify-linux-package.sh "$1"' _ "${{ matrix.package }}"
     # Don't upload package for ubuntu-rolling because it's duplicate of deb package
     - name: Upload ${{ matrix.package }} package
       if: ${{ matrix.package != 'ubuntu-rolling' }}
@@ -498,16 +522,18 @@ jobs:
       WINDOWS_UPDATE_PRIVATE_KEY: ${{ secrets.WINDOWS_UPDATE_PRIVATE_KEY }}
 
   nix-source:
-    needs: [validate-inputs, build-gpgui-glibc]
+    needs: [validate-inputs, build-gpgui-glibc, build-gpgui-nsh]
     strategy:
       fail-fast: false
       matrix:
         platform:
           - runner: ubuntu-latest
             system: x86_64-linux
+            nsh_arch: x86_64
             artifact_arch: amd64
           - runner: ubuntu-24.04-arm
             system: aarch64-linux
+            nsh_arch: aarch64
             artifact_arch: ubuntu-24.04-arm
     runs-on: ${{ matrix.platform.runner }}
     name: nix-source (${{ matrix.platform.system }})
@@ -527,6 +553,11 @@ jobs:
         with:
           name: artifact-gpgui-${{ matrix.platform.artifact_arch }}
           path: nix-artifacts/gui
+      - name: Download current Native Shell artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact-gpgui-nsh-${{ matrix.platform.nsh_arch }}
+          path: nix-artifacts/nsh
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Configure current source and GUI inputs
@@ -535,6 +566,9 @@ jobs:
           gui_archive=$(find "$PWD/nix-artifacts/gui" -name '*.bin.tar.xz' -type f)
           test -f "$gui_archive"
           echo "GP_GUI_ARCHIVE=$gui_archive" >> "$GITHUB_ENV"
+          nsh_archive="$PWD/nix-artifacts/nsh/gpgui-nsh_${{ matrix.platform.nsh_arch }}.bin.tar.xz"
+          test -f "$nsh_archive"
+          echo "GP_NSH_ARCHIVE=$nsh_archive" >> "$GITHUB_ENV"
       - name: Build source package
         run: |
           nix build --impure --file gp/nix/ci.nix source \
@@ -547,16 +581,18 @@ jobs:
             --extra-experimental-features "nix-command flakes" --print-build-logs
 
   nix-prebuilt:
-    needs: [validate-inputs, build-gp, build-gpgui-glibc]
+    needs: [validate-inputs, build-gp, build-gpgui-glibc, build-gpgui-nsh]
     strategy:
       fail-fast: false
       matrix:
         platform:
           - runner: ubuntu-latest
             system: x86_64-linux
+            nsh_arch: x86_64
             artifact_arch: amd64
           - runner: ubuntu-24.04-arm
             system: aarch64-linux
+            nsh_arch: aarch64
             artifact_arch: ubuntu-24.04-arm
         nixpkgs: [locked, nixos-25.11, nixos-26.05, nixpkgs-unstable]
     runs-on: ${{ matrix.platform.runner }}
@@ -582,6 +618,11 @@ jobs:
         with:
           name: artifact-gpgui-${{ matrix.platform.artifact_arch }}
           path: nix-artifacts/gui
+      - name: Download current Native Shell artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact-gpgui-nsh-${{ matrix.platform.nsh_arch }}
+          path: nix-artifacts/nsh
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Configure current artifact inputs
@@ -593,6 +634,9 @@ jobs:
           test -f "$gui_archive"
           echo "GP_BINARY_ARCHIVE=$binary_archive" >> "$GITHUB_ENV"
           echo "GP_GUI_ARCHIVE=$gui_archive" >> "$GITHUB_ENV"
+          nsh_archive="$PWD/nix-artifacts/nsh/gpgui-nsh_${{ matrix.platform.nsh_arch }}.bin.tar.xz"
+          test -f "$nsh_archive"
+          echo "GP_NSH_ARCHIVE=$nsh_archive" >> "$GITHUB_ENV"
       - name: Build package through host NixOS module
         run: |
           nix build --impure --file gp/nix/ci.nix module \
@@ -603,10 +647,20 @@ jobs:
         run: |
           nix build --impure --file gp/nix/ci.nix prebuilt \
             --extra-experimental-features "nix-command flakes" --print-build-logs
+      - name: Install and run downloaded Native Shell through the Nix installer
+        if: matrix.nixpkgs == 'locked'
+        run: |
+          gui_archive="$GP_NSH_ARCHIVE"
+          target="$RUNNER_TEMP/nix-gui-install/gpgui-nsh"
+          mkdir -p "$(dirname "$target")"
+          checksum=$(sha256sum "$gui_archive" | cut -d ' ' -f1)
+          result/libexec/gpclient/gp-gui-installer "$gui_archive" "$checksum" "$target"
+          test -L "$target"
+          test "$("$target" --version)" = "$(result/bin/gpgui-nsh --version)"
       - name: Test prebuilt runtime in NixOS
         if: matrix.nixpkgs == 'locked' && matrix.platform.system == 'x86_64-linux'
         run: |
-          nix build --impure --file gp/nix/ci.nix runtime-prebuilt \
+          nix build --impure --file gp/nix/ci.nix runtime-prebuilt graphical-prebuilt \
             --extra-experimental-features "nix-command flakes" --print-build-logs
 
   build-macos:

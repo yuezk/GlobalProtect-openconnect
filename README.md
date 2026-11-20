@@ -88,7 +88,9 @@ Run `gpclient --help` or `gpclient <command> --help` to view all available comma
   ```
 
 > [!TIP]
-> **On Linux, try Native Shell for lower memory usage.** Switch between Native Shell and Tauri in **Settings → General → Interface**.
+> On Linux, GP Connect uses Native Shell when your system supports it. Your saved interface choice takes priority. Switch while disconnected in **Settings → General → Interface**.
+>
+> If the window stays blank, fully quit GP Connect and run `gpclient launch-gui --interface tauri`. To select Native Shell, use `--interface nsh`. The choice is saved when the interface starts.
 
 ## Installation
 
@@ -252,7 +254,7 @@ sudo make install
 
 - [Rust](https://www.rust-lang.org/tools/install) 1.91 or later
 - Build tools: `make`, `pkg-config`, `autoconf`, `automake`, `libtool`, `gettext`
-- Libraries: `gmp`, `gnutls`, `nettle`, `libxml2`, `zlib`, `lz4`, `p11-kit`, `libsecret`, and `webkit2gtk-4.1` (or GTK 4 for Native Shell)
+- Libraries: `gmp`, `gnutls`, `nettle`, `libxml2`, `zlib`, `lz4`, `p11-kit`, `libsecret`, and `webkit2gtk-4.1` for the embedded sign-in window and download helper. Native Shell also requires GTK 4.14 or later. The generic glibc build requires glibc 2.39 or later
 - Polkit (`pkexec`) for privileged tunnel setup
 
 *(For FreeBSD and OpenBSD instructions, see [Building from Source on FreeBSD and OpenBSD](docs/bsd-source-build.md)).*
@@ -269,7 +271,7 @@ sudo make install
 **Build Options:**
 
 - `INCLUDE_GUI=1` – Download and install the matching desktop application bundle.
-- `BUILD_WEBVIEW_AUTH=0` – Build `gpauth` without embedded browser authentication (uses external browser or manual mode).
+- `BUILD_WEBVIEW_AUTH=0` – Disable embedded browser authentication in both `gpclient` and `gpauth`. External-browser and manual sign-in remain available.
 - `BUILD_GUI_HELPER=0` – Skip building the helper UI.
 
 ## Troubleshooting

@@ -27,13 +27,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
+        platform:
           - runner: ubuntu-24.04
             arch: x86_64
           - runner: ubuntu-24.04-arm
             arch: aarch64
-    runs-on: ${{ matrix.runner }}
-    name: build (${{ matrix.arch }})
+        suffix: ['', '-musl']
+    runs-on: ${{ matrix.platform.runner }}
+    name: build (${{ matrix.platform.arch }}${{ matrix.suffix }})
     timeout-minutes: 90
     env:
       CARGO_INCREMENTAL: '0'
@@ -62,6 +63,7 @@ jobs:
           ref: ${{ inputs.gpgui_ref }}
           path: source/gpgui
       - name: Install Ubuntu 24.04 dependencies
+        if: matrix.suffix == ''
         run: |
           sudo apt-get update
           sudo apt-get install -y autoconf automake gettext libtool pkg-config \
@@ -69,8 +71,10 @@ jobs:
             libgnutls28-dev liblz4-dev libwayland-dev libxkbcommon-dev libdbus-1-dev
           pkg-config --exists gtk4 gnutls dbus-1 wayland-client xkbcommon
       - name: Install the NSH compiler
+        if: matrix.suffix == ''
         run: rustup toolchain install 1.97.0 --profile minimal
       - name: Cache public crate downloads
+        if: matrix.suffix == ''
         uses: actions/cache@v5
         with:
           path: |
@@ -79,33 +83,39 @@ jobs:
           key: nsh-crates-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('source/gpgui/apps/desktop-nsh/Cargo.lock') }}
           restore-keys: nsh-crates-${{ runner.os }}-${{ runner.arch }}-
       - name: Build and package Native Shell
+        env:
+          LIBC_SUFFIX: ${{ matrix.suffix }}
         run: |
           trap 'code=$?; if [ "$code" -ne 0 ]; then echo "::error::Native Shell build failed; diagnostics suppressed."; fi' EXIT
           (
             set -euo pipefail
-            cd source/gpgui
-            cargo +1.97.0 build --manifest-path apps/desktop-nsh/Cargo.toml --locked \
-              --release --bin gpgui-nsh --target-dir target
-            target/release/gpgui-nsh --version
-            version="$(cargo +1.97.0 metadata --manifest-path apps/desktop-nsh/Cargo.toml --no-deps --format-version 1 \
-              | jq -r '.packages[] | select(.name == "gpgui-nsh") | .version')"
-            directory="gpgui-nsh_$version"
-            archive="gpgui-nsh_$(uname -m).bin.tar.xz"
-            mkdir -p ".build/package/$directory"
-            cp target/release/gpgui-nsh ".build/package/$directory/"
-            cp apps/desktop-nsh/ICU4X-LICENSE.txt ".build/package/$directory/ICU4X-LICENSE.txt"
-            if ldd target/release/gpgui-nsh | grep -q 'libicu'; then
-              echo "The release executable must not depend on ICU4C." >&2
-              exit 1
+            if [[ "$LIBC_SUFFIX" == "-musl" ]]; then
+              docker run --rm --user root -v "$PWD/source:/source" -w /source/gpgui \
+                -e GPGUI_BUILD_VERSION -e GPGUI_GIT_COMMIT -e GPGUI_UPDATE_CHANNEL \
+                -e GPGUI_LICENSE_SIGNING_KEYS -e CARGO_INCREMENTAL -e CARGO_BUILD_JOBS \
+                yuezk/gpdev:gpgui-alpine-builder-tauri2 bash -ec '
+                  apk add --no-cache clang clang-dev gtk4.0-dev dbus-dev wayland-dev libxkbcommon-dev
+                  rustup toolchain install 1.97.0 --profile minimal
+                  ../gp/scripts/build-linux-nsh.sh
+                '
+            else
+              cd source/gpgui
+              ../gp/scripts/build-linux-nsh.sh
             fi
-            tar -cJf ".build/package/$archive" -C .build/package "$directory"
-            sha256sum ".build/package/$archive" | cut -d ' ' -f 1 > ".build/package/$archive.sha256"
           ) >/dev/null 2>&1
           echo "Native Shell build and version check passed."
+      - name: Verify musl archive on Alpine
+        if: matrix.suffix == '-musl'
+        run: |
+          docker run --rm -v "$PWD/source/gpgui/.build/package:/assets:ro" alpine:3.23 sh -ec '
+            apk add --no-cache gtk4.0 gnutls dbus-libs libgcc xz
+            tar -xJf "/assets/gpgui-nsh_$(uname -m)-musl.bin.tar.xz"
+            ./gpgui-nsh_*/gpgui-nsh --version >/dev/null 2>&1
+          '
       - name: Upload Native Shell
         uses: actions/upload-artifact@v7
         with:
-          name: artifact-gpgui-nsh-${{ matrix.arch }}
+          name: artifact-gpgui-nsh${{ matrix.suffix }}-${{ matrix.platform.arch }}
           if-no-files-found: error
           path: |
             source/gpgui/.build/package/*.bin.tar.xz

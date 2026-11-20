@@ -4,6 +4,7 @@ use specta::Type;
 use std::path::PathBuf;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[serde(rename_all = "kebab-case")]
 pub enum GuiVariant {
   #[default]
@@ -77,21 +78,23 @@ fn preference_path(name: &str) -> anyhow::Result<PathBuf> {
   Ok(dirs.config_dir().join(name))
 }
 
-pub fn preferred() -> anyhow::Result<GuiVariant> {
-  #[cfg(target_os = "linux")]
-  {
-    match std::fs::read_to_string(preference_path("gui")?) {
-      Ok(value) => match value.trim() {
-        "gpgui" => Ok(GuiVariant::Tauri),
-        "gpgui-nsh" => Ok(GuiVariant::Nsh),
-        _ => anyhow::bail!("Invalid GUI preference"),
-      },
-      Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(GuiVariant::Tauri),
-      Err(error) => Err(error.into()),
-    }
+pub const NATIVE_SHELL_SUPPORTED: bool = cfg!(all(
+  target_os = "linux",
+  any(target_arch = "x86_64", target_arch = "aarch64"),
+  any(target_env = "gnu", target_env = "musl")
+));
+
+#[cfg(target_os = "linux")]
+pub(crate) fn saved_preference() -> anyhow::Result<Option<GuiVariant>> {
+  match std::fs::read_to_string(preference_path("gui")?) {
+    Ok(value) => match value.trim() {
+      "gpgui" => Ok(Some(GuiVariant::Tauri)),
+      "gpgui-nsh" => Ok(Some(GuiVariant::Nsh)),
+      _ => anyhow::bail!("Invalid GUI preference"),
+    },
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+    Err(error) => Err(error.into()),
   }
-  #[cfg(not(target_os = "linux"))]
-  Ok(GuiVariant::Tauri)
 }
 
 #[cfg(target_os = "linux")]

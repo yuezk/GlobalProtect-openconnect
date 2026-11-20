@@ -4,7 +4,7 @@ use std::{io::Read, sync::Arc};
 use anyhow::{Context, bail};
 use gpapi::{
   clap::InfoLevelVerbosity,
-  gui::GuiTheme,
+  gui::{GuiTheme, GuiVariant, NATIVE_SHELL_SUPPORTED},
   service::transport::{MAX_CREDENTIAL_FRAME, SessionCredential},
   utils::env_utils,
 };
@@ -30,8 +30,8 @@ struct Cli {
 
   #[arg(long, default_value = env!("CARGO_PKG_VERSION"), help = "The version of the GUI")]
   gui_version: String,
-  #[arg(long, default_value = "tauri", value_parser = ["tauri", "nsh"])]
-  gui_variant: String,
+  #[arg(long, value_enum, default_value_t = GuiVariant::Tauri)]
+  gui_variant: GuiVariant,
 
   #[arg(long, value_enum, default_value = "system", help = "Window appearance")]
   theme: GuiTheme,
@@ -44,20 +44,15 @@ impl Cli {
   fn run(&self) -> anyhow::Result<()> {
     let credential = self.read_credential()?;
     let credential_lease = monitor_credential_lease().context("Failed to monitor service credential lifetime")?;
-    let variant = if self.gui_variant == "nsh" {
-      gpapi::gui::GuiVariant::Nsh
-    } else {
-      gpapi::gui::GuiVariant::Tauri
-    };
     anyhow::ensure!(
-      variant != gpapi::gui::GuiVariant::Nsh || cfg!(target_os = "linux"),
-      "Native Shell is available only on Linux"
+      self.gui_variant != GuiVariant::Nsh || NATIVE_SHELL_SUPPORTED,
+      "Native Shell is unavailable for this platform"
     );
     let app = App::new(
       Arc::new(credential),
       credential_lease,
       &self.gui_version,
-      variant,
+      self.gui_variant,
       self.theme,
     );
 

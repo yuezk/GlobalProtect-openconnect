@@ -8,7 +8,9 @@ install:
 	install -Dm755 artifacts/usr/bin/gpgui-helper $(DESTDIR)/usr/bin/gpgui-helper
 
 	if [ -f artifacts/usr/bin/gpgui ]; then \
-		install -Dm755 artifacts/usr/bin/gpgui $(DESTDIR)/usr/bin/gpgui; \
+		install -Dm755 artifacts/usr/bin/gpgui $(DESTDIR)/usr/bin/gpgui && \
+		install -Dm755 artifacts/usr/bin/gpgui-nsh $(DESTDIR)/usr/bin/gpgui-nsh && \
+		install -Dm644 artifacts/usr/share/licenses/globalprotect-openconnect/ICU4X-LICENSE.txt $(DESTDIR)/usr/share/licenses/globalprotect-openconnect/ICU4X-LICENSE.txt; \
 	fi
 
 	install -Dm755 artifacts/usr/libexec/gpclient/vpnc-script $(DESTDIR)/usr/libexec/gpclient/vpnc-script
@@ -37,6 +39,7 @@ uninstall:
 	rm -f $(DESTDIR)/usr/bin/gpauth
 	rm -f $(DESTDIR)/usr/bin/gpgui-helper
 	rm -f $(DESTDIR)/usr/bin/gpgui
+	rm -f $(DESTDIR)/usr/bin/gpgui-nsh $(DESTDIR)/usr/share/licenses/globalprotect-openconnect/ICU4X-LICENSE.txt
 
 	rm -f $(DESTDIR)/usr/libexec/gpclient/vpnc-script
 	rm -f $(DESTDIR)/usr/libexec/gpclient/gp-vpnc-script-installer

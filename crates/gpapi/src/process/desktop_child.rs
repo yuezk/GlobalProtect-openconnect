@@ -5,7 +5,7 @@ use super::{
     is_crash_exit,
   },
 };
-use crate::service::transport::SessionCredential;
+use crate::{gui::GuiVariant, service::transport::SessionCredential};
 use anyhow::Context;
 use std::{
   cell::Cell,
@@ -23,10 +23,11 @@ pub(super) async fn launch_desktop_child(
   envs: Option<&HashMap<String, String>>,
   credential: &SessionCredential,
   cancellation: &CancellationToken,
-  detect_gbm_failure: bool,
+  interface: Option<GuiVariant>,
 ) -> anyhow::Result<ExitStatus> {
-  let retry_eligible = eligible_with_inheritance(&command, envs.is_none());
-  let detect_gbm_failure = detect_gbm_failure && allows_shared_memory_override(&command, envs.is_none());
+  let retry_eligible = interface != Some(GuiVariant::Nsh) && eligible_with_inheritance(&command, envs.is_none());
+  let detect_gbm_failure =
+    interface == Some(GuiVariant::Tauri) && allows_shared_memory_override(&command, envs.is_none());
   let log_file = match envs {
     Some(envs) => envs.get("GP_LOG_FILE").map(PathBuf::from),
     None => std::env::var_os("GP_LOG_FILE").map(PathBuf::from),

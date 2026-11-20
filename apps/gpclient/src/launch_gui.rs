@@ -24,6 +24,14 @@ pub(crate) struct LaunchGuiArgs {
     help = "The external-browser authentication callback URL"
   )]
   callback: Option<String>,
+  #[cfg(target_os = "linux")]
+  #[arg(
+    long,
+    value_enum,
+    conflicts_with = "callback",
+    help = "Launch this interface and remember it for future launches"
+  )]
+  interface: Option<gpapi::gui::GuiVariant>,
   #[arg(long, help = "Launch the GUI minimized")]
   minimized: bool,
 }
@@ -61,7 +69,10 @@ impl<'a> LaunchGuiHandler<'a> {
       return forward_auth_callback(callback);
     }
 
-    if DesktopLauncher::activate_existing().await.is_ok() {
+    let launcher = DesktopLauncher::new(env!("CARGO_PKG_VERSION")).minimized(self.args.minimized);
+    #[cfg(target_os = "linux")]
+    let launcher = launcher.interface(self.args.interface);
+    if launcher.activate_or_reject_existing().await? {
       info!("The GUI is already running");
       return Ok(());
     }
@@ -71,11 +82,7 @@ impl<'a> LaunchGuiHandler<'a> {
 
     info!("Log file: {}", log_file_path);
 
-    let exit_status = DesktopLauncher::new(env!("CARGO_PKG_VERSION"))
-      .minimized(self.args.minimized)
-      .log_file(&log_file_path)
-      .launch()
-      .await?;
+    let exit_status = launcher.log_file(&log_file_path).launch().await?;
 
     info!("Service exited with status: {}", exit_status);
 

@@ -21,6 +21,7 @@ SOURCE_COMMIT_VALUE := $(shell \
 		git rev-parse --short=9 HEAD 2>/dev/null || printf unknown; \
 	fi)
 GUI_LIBC_SUFFIX ?= $(shell ldd --version 2>&1 | grep -qi musl && echo -musl || true)
+GUI_ASSET_BASE ?= https://github.com/yuezk/GlobalProtect-openconnect/releases/download/$(RELEASE_TAG)
 REVISION ?= 1
 RPM_SOURCE ?= %{name}.tar.gz
 
@@ -33,16 +34,21 @@ PUBLISH ?= 0
 # Indicates whether to build the GUI components
 BUILD_GUI_HELPER ?= 1
 
-# Indicates whether to build embedded webview auth support into gpauth
+# Build embedded webview authentication support into gpclient and gpauth
 BUILD_WEBVIEW_AUTH ?= 1
+ifneq ($(BUILD_WEBVIEW_AUTH),1)
+AUTH_FEATURE_ARGS = --no-default-features
+endif
+
 ifeq ($(shell uname -s),Linux)
 PREFIX ?= /usr
-GPGUI_BINARY ?= $(wildcard .build/gpgui/gpgui_*/gpgui)
+GPGUI_BINARY ?= .build/gpgui/gpgui_$(VERSION)/gpgui
 else ifeq ($(shell uname -s)-$(shell uname -m),Darwin-arm64)
 PREFIX ?= /opt/homebrew
 else
 PREFIX ?= /usr/local
 endif
+NSH_BUNDLE_DIR = .build/gpgui/gpgui-nsh_$(VERSION)
 BSD_FLAVOR ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
 GPGUI_BINARY ?= ../gpgui/target/release/gpgui
 
@@ -109,9 +115,14 @@ download-gui:
 	if [ $(INCLUDE_GUI) -eq 1 ]; then \
 		echo "Downloading GlobalProtect GUI..."; \
 		mkdir -p .build/gpgui; \
-		curl -sSL https://github.com/yuezk/GlobalProtect-openconnect/releases/download/$(RELEASE_TAG)/gpgui_$(shell uname -m)$(GUI_LIBC_SUFFIX).bin.tar.xz \
-			-o .build/gpgui/gpgui_$(shell uname -m)$(GUI_LIBC_SUFFIX).bin.tar.xz; \
-		tar -xJf .build/gpgui/*.tar.xz -C .build/gpgui; \
+		set -e; cd .build/gpgui; \
+		for gui in gpgui gpgui-nsh; do \
+			archive="$${gui}_$(shell uname -m)$(GUI_LIBC_SUFFIX).bin.tar.xz"; \
+			curl -fsSL "$(GUI_ASSET_BASE)/$$archive" -o "$$archive"; \
+			digest=$$(curl -fsSL "$(GUI_ASSET_BASE)/$$archive.sha256"); \
+			printf '%s  %s\n' "$$digest" "$$archive" | sha256sum -c -; \
+			tar -xJf "$$archive"; \
+		done; \
 	else \
 		echo "Skipping GlobalProtect GUI download (INCLUDE_GUI=0)"; \
 	fi
@@ -128,14 +139,7 @@ build-rs:
 		rm -vf rust-toolchain.toml; \
 	fi
 
-	$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice
-
-	# Build gpauth with or without embedded webview auth support
-	if [ $(BUILD_WEBVIEW_AUTH) -eq 1 ]; then \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpauth; \
-	else \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpauth --no-default-features; \
-	fi
+	$(CARGO) build $(CARGO_BUILD_ARGS) $(AUTH_FEATURE_ARGS) -p gpclient -p gpservice -p gpauth
 
 	# Only build the GUI components if BUILD_GUI_HELPER is set to 1
 	if [ $(BUILD_GUI_HELPER) -eq 1 ]; then \
@@ -197,6 +201,12 @@ install-unix: install-gpclient-unix
 	done
 
 install-linux: install-unix
+ifeq ($(INCLUDE_GUI),1)
+	test -x "$(GPGUI_BINARY)"
+	install -m 755 "$(NSH_BUNDLE_DIR)/gpgui-nsh" "$(DESTDIR)$(PREFIX)/bin/gpgui-nsh"
+	install -d "$(DESTDIR)$(PREFIX)/share/licenses/$(PKG_NAME)"
+	install -m 644 "$(NSH_BUNDLE_DIR)/ICU4X-LICENSE.txt" "$(DESTDIR)$(PREFIX)/share/licenses/$(PKG_NAME)/"
+endif
 	@echo "Installing Linux integration under $(PREFIX)..."
 	set -e; for file in share/applications/gpgui.desktop \
 		share/applications/gpgui-helper.desktop \
@@ -327,6 +337,8 @@ uninstall-unix:
 	rmdir "$(DESTDIR)$(PREFIX)/libexec/gpclient" 2>/dev/null || true
 
 uninstall-linux: uninstall-unix
+	rm -f "$(DESTDIR)$(PREFIX)/bin/gpgui-nsh" "$(DESTDIR)$(PREFIX)/share/licenses/$(PKG_NAME)/ICU4X-LICENSE.txt"
+	rmdir "$(DESTDIR)$(PREFIX)/share/licenses/$(PKG_NAME)" 2>/dev/null || true
 	rm -f "$(DESTDIR)$(PREFIX)/lib/NetworkManager/dispatcher.d/pre-down.d/gpclient.down" \
 		"$(DESTDIR)$(PREFIX)/lib/NetworkManager/dispatcher.d/gpclient-nm-hook"
 	rm -f "$(DESTDIR)/var/lib/gpclient/gpgui" \
@@ -429,7 +441,7 @@ rpm: init-rpm tarball
 	rpmdev-setuptree
 
 	cp .build/tarball/${PKG}.tar.gz $(HOME)/rpmbuild/SOURCES/${PKG_NAME}.tar.gz
-	rpmbuild -ba .build/rpm/globalprotect-openconnect.spec
+	rpmbuild --define "include_gui $(INCLUDE_GUI)" -ba .build/rpm/globalprotect-openconnect.spec
 
 	# Copy RPM package from build directory
 	cp $(HOME)/rpmbuild/RPMS/$(shell uname -m)/$(PKG_NAME)*.rpm .build/rpm
@@ -499,7 +511,7 @@ binary: clean-binary tarball
 	mkdir -p .build/binary/$(PKG_NAME)_$(VERSION)/artifacts
 
 	make -C .build/binary/${PKG} build INCLUDE_GUI=$(INCLUDE_GUI)
-	make -C .build/binary/${PKG} install DESTDIR=$(PWD)/.build/binary/$(PKG_NAME)_$(VERSION)/artifacts
+	make -C .build/binary/${PKG} install INCLUDE_GUI=$(INCLUDE_GUI) DESTDIR=$(PWD)/.build/binary/$(PKG_NAME)_$(VERSION)/artifacts
 
 	cp packaging/binary/Makefile.in .build/binary/$(PKG_NAME)_$(VERSION)/Makefile
 

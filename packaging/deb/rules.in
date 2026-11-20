@@ -11,3 +11,7 @@ export PATH := /usr/lib/rust-@RUST_VERSION@/bin:/usr/local/cargo/bin:$(PATH)
 	which cargo
 	which rustc
 	dh $@ --no-parallel
+
+# Native Shell checks its optional runtime on launch.
+override_dh_shlibdeps:
+	dh_shlibdeps -X/bin/gpgui-nsh

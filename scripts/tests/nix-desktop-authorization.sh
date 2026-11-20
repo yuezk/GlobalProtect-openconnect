@@ -45,3 +45,4 @@ check_authorization() {
 check_authorization "$package_path/bin/gpclient" launch-gui --minimized
 check_authorization "$package_path/bin/gpclient" --lock-file "$test_workspace/client.lock" launch-gui
 check_authorization "$package_path/bin/gpgui" --minimized
+check_authorization "$package_path/bin/gpgui-nsh" --minimized

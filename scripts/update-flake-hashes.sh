@@ -81,11 +81,15 @@ release_url() {
 
 gpgui_x86_64_hash="$(prefetch_hash "$(release_url "gpgui_x86_64.bin.tar.xz")")"
 gpgui_aarch64_hash="$(prefetch_hash "$(release_url "gpgui_aarch64.bin.tar.xz")")"
+nsh_x86_64_hash="$(prefetch_hash "$(release_url "gpgui-nsh_x86_64.bin.tar.xz")")"
+nsh_aarch64_hash="$(prefetch_hash "$(release_url "gpgui-nsh_aarch64.bin.tar.xz")")"
 binary_x86_64_hash="$(prefetch_hash "$(release_url "globalprotect-openconnect_${version}_x86_64.bin.tar.xz")")"
 binary_aarch64_hash="$(prefetch_hash "$(release_url "globalprotect-openconnect_${version}_aarch64.bin.tar.xz")")"
 
 GPGUI_X86_64_HASH="$gpgui_x86_64_hash" \
 GPGUI_AARCH64_HASH="$gpgui_aarch64_hash" \
+NSH_X86_64_HASH="$nsh_x86_64_hash" \
+NSH_AARCH64_HASH="$nsh_aarch64_hash" \
 BINARY_X86_64_HASH="$binary_x86_64_hash" \
 BINARY_AARCH64_HASH="$binary_aarch64_hash" \
 RELEASE_TAG="$release_tag" \
@@ -95,12 +99,16 @@ perl -0pi -e '
   s|(releaseVersion = ")[^"]+(";)|$1 . $ENV{"RELEASE_VERSION"} . $2|e;
   s|(gpguiHashes = \{\n\s*x86_64 = ")[^"]+(";)|$1 . $ENV{"GPGUI_X86_64_HASH"} . $2|e;
   s|(gpguiHashes = \{\n\s*x86_64 = "[^"]+";\n\s*aarch64 = ")[^"]+(";)|$1 . $ENV{"GPGUI_AARCH64_HASH"} . $2|e;
+  s|(nshHashes = \{\n\s*x86_64 = ")[^"]+(";)|$1 . $ENV{"NSH_X86_64_HASH"} . $2|e;
+  s|(nshHashes = \{\n\s*x86_64 = "[^"]+";\n\s*aarch64 = ")[^"]+(";)|$1 . $ENV{"NSH_AARCH64_HASH"} . $2|e;
   s|(binaryHashes = \{\n\s*x86_64 = ")[^"]+(";)|$1 . $ENV{"BINARY_X86_64_HASH"} . $2|e;
   s|(binaryHashes = \{\n\s*x86_64 = "[^"]+";\n\s*aarch64 = ")[^"]+(";)|$1 . $ENV{"BINARY_AARCH64_HASH"} . $2|e;
 ' "$FLAKE_FILE"
 
 grep -F "$gpgui_x86_64_hash" "$FLAKE_FILE" > /dev/null
 grep -F "$gpgui_aarch64_hash" "$FLAKE_FILE" > /dev/null
+grep -F "$nsh_x86_64_hash" "$FLAKE_FILE" > /dev/null
+grep -F "$nsh_aarch64_hash" "$FLAKE_FILE" > /dev/null
 grep -F "$binary_x86_64_hash" "$FLAKE_FILE" > /dev/null
 grep -F "$binary_aarch64_hash" "$FLAKE_FILE" > /dev/null
 grep -F "releaseTag = \"$release_tag\";" "$FLAKE_FILE" > /dev/null
