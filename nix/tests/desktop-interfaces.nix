@@ -1,7 +1,7 @@
 { pkgs, package, module }:
 let
-  testPython = pkgs.python3.withPackages (ps: [ ps.pyatspi ]);
-  typelibs = pkgs.lib.makeSearchPath "lib/girepository-1.0" [ pkgs.at-spi2-core pkgs.glib ];
+  testPython = pkgs.python3.withPackages (ps: [ ps.pyatspi ps.pygobject3 ]);
+  typelibs = pkgs.lib.makeSearchPath "lib/girepository-1.0" [ pkgs.at-spi2-core pkgs.glib.out ];
   chooseTauri = pkgs.writeScript "choose-tauri" ''
     #!${testPython}/bin/python3
     import pyatspi
@@ -50,6 +50,8 @@ pkgs.testers.runNixOSTest {
         environment = "export DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus GTK_A11Y=atspi; "
         return "su - alice -c " + shlex.quote(environment + command)
 
+    accessibility_env = "GI_TYPELIB_PATH=${typelibs} "
+    machine.succeed(as_alice(accessibility_env + "${testPython}/bin/python3 -c 'import pyatspi'"))
     machine.wait_until_succeeds(as_alice("xdotool getdisplaygeometry"))
     # Leave loopback available for the local privileged service.
     machine.succeed("for dev in /sys/class/net/*; do dev=$(basename \"$dev\"); [ \"$dev\" = lo ] || ip link set \"$dev\" down; done")
@@ -73,7 +75,7 @@ pkgs.testers.runNixOSTest {
         timeout=timedelta(seconds=60),
     )
     machine.screenshot("native-shell-settings")
-    machine.wait_until_succeeds(as_alice("GI_TYPELIB_PATH=${typelibs} ${chooseTauri}"))
+    machine.wait_until_succeeds(as_alice(accessibility_env + "${chooseTauri}"), timeout=timedelta(seconds=60))
     wait_for_gui("gpgui")
     machine.succeed(as_alice("grep -Fx gpgui ~/.config/gpclient/gui"))
     machine.succeed(as_alice("kill -TERM $(cat ~/gp-launch.pid)"))
