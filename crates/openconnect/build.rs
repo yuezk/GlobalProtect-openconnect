@@ -115,6 +115,7 @@ fn build_openconnect(deps_dir: &PathBuf, out_dir: &PathBuf) -> PathBuf {
     .without("libpcsclite", None)
     .without("libpskc", None)
     .without("gssapi", None)
+    .with("builtin-json", None)
     .with("gnutls", None)
     .without("openssl", None)
     .with("gnutls-tss2", Some("no"))
