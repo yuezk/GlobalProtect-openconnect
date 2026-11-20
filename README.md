@@ -181,13 +181,21 @@ doas pkg_add -D unsigned ./globalprotect-openconnect-*-openbsd-*.tgz
 
 ### Gentoo
 
-Available via the `guru` repository:
+Add the overlay:
 
 ```bash
-sudo eselect repository enable guru
-sudo emerge --sync guru
-sudo emerge --ask net-vpn/GlobalProtect-openconnect
+sudo emerge --ask app-eselect/eselect-repository dev-vcs/git
+sudo eselect repository add yuezk git https://github.com/yuezk/gentoo-overlay.git
+sudo emerge --sync yuezk
 ```
+
+Install the prebuilt package (glibc):
+
+```bash
+sudo emerge --ask net-vpn/globalprotect-openconnect-bin::yuezk
+```
+
+For a source build, use `net-vpn/globalprotect-openconnect::yuezk`. If Portage requests keyword or USE flag changes, review and apply them, then rerun the install command.
 
 ### NixOS
 
