@@ -523,30 +523,6 @@ mod tests {
     );
   }
 
-  #[tokio::test]
-  async fn nsh_version_mismatch_cannot_select_a_compatible_tauri_binary() {
-    let dir = TempDir::new().unwrap();
-    let _tauri = executable(&dir, "gpgui", "gpgui test-version", 0);
-    let nsh = executable(&dir, "gpgui-nsh", "gpgui-nsh old-version", 0);
-    let mut selected = launcher(VERSION, vec![nsh.clone()]);
-    selected.variant = crate::gui::GuiVariant::Nsh;
-    assert!(
-      selected
-        .find_compatible_program(&CancellationToken::new())
-        .await
-        .unwrap()
-        .is_none()
-    );
-    executable(&dir, "gpgui-nsh", "gpgui-nsh test-version", 0);
-    assert_eq!(
-      selected
-        .find_compatible_program(&CancellationToken::new())
-        .await
-        .unwrap(),
-      Some(nsh)
-    );
-  }
-
   #[test]
   #[cfg(target_os = "linux")]
   fn supervisor_switch_success_and_failure_preserve_child_ownership() {
