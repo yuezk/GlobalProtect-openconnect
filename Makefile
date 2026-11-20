@@ -34,8 +34,12 @@ PUBLISH ?= 0
 # Indicates whether to build the GUI components
 BUILD_GUI_HELPER ?= 1
 
-# Indicates whether to build embedded webview auth support into gpauth
+# Build embedded webview authentication support into gpclient and gpauth
 BUILD_WEBVIEW_AUTH ?= 1
+ifneq ($(BUILD_WEBVIEW_AUTH),1)
+AUTH_FEATURE_ARGS = --no-default-features
+endif
+
 ifeq ($(shell uname -s),Linux)
 PREFIX ?= /usr
 GPGUI_BINARY ?= .build/gpgui/gpgui_$(VERSION)/gpgui
@@ -135,14 +139,7 @@ build-rs:
 		rm -vf rust-toolchain.toml; \
 	fi
 
-	$(CARGO) build $(CARGO_BUILD_ARGS) -p gpclient -p gpservice
-
-	# Build gpauth with or without embedded webview auth support
-	if [ $(BUILD_WEBVIEW_AUTH) -eq 1 ]; then \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpauth; \
-	else \
-		$(CARGO) build $(CARGO_BUILD_ARGS) -p gpauth --no-default-features; \
-	fi
+	$(CARGO) build $(CARGO_BUILD_ARGS) $(AUTH_FEATURE_ARGS) -p gpclient -p gpservice -p gpauth
 
 	# Only build the GUI components if BUILD_GUI_HELPER is set to 1
 	if [ $(BUILD_GUI_HELPER) -eq 1 ]; then \

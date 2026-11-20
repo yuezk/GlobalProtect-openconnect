@@ -271,7 +271,7 @@ sudo make install
 **Build Options:**
 
 - `INCLUDE_GUI=1` – Download and install the matching desktop application bundle.
-- `BUILD_WEBVIEW_AUTH=0` – Build `gpauth` without embedded browser authentication (uses external browser or manual mode).
+- `BUILD_WEBVIEW_AUTH=0` – Disable embedded browser authentication in both `gpclient` and `gpauth`. External-browser and manual sign-in remain available.
 - `BUILD_GUI_HELPER=0` – Skip building the helper UI.
 
 ## Troubleshooting
