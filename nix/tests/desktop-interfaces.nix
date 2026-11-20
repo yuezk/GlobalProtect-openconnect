@@ -1,7 +1,11 @@
 { pkgs, package, module }:
 let
   testPython = pkgs.python3.withPackages (ps: [ ps.pyatspi ps.pygobject3 ]);
-  typelibs = pkgs.lib.makeSearchPath "lib/girepository-1.0" [ pkgs.at-spi2-core pkgs.glib.out ];
+  typelibs = pkgs.lib.makeSearchPath "lib/girepository-1.0" [
+    pkgs.at-spi2-core
+    pkgs.glib.out
+    pkgs.gobject-introspection
+  ];
   chooseTauri = pkgs.writeScript "choose-tauri" ''
     #!${testPython}/bin/python3
     import pyatspi
