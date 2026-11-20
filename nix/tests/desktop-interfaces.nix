@@ -41,6 +41,7 @@ pkgs.testers.runNixOSTest {
   };
 
   testScript = ''
+    from datetime import timedelta
     import shlex
 
     machine.start()
@@ -66,8 +67,11 @@ pkgs.testers.runNixOSTest {
     launch()
     wait_for_gui("gpgui-nsh")
     machine.succeed(as_alice("test ! -e ~/.config/gpclient/gui"))
-    machine.succeed(as_alice("xdotool search --onlyvisible --name '^GP Connect$' windowactivate --sync key ctrl+comma"))
-    machine.wait_until_succeeds(as_alice("xdotool search --onlyvisible --name '^GP Connect Settings$'"))
+    machine.succeed(as_alice("${pkgs.glib.bin}/bin/gapplication action com.yuezk.gpgui settings"))
+    machine.wait_until_succeeds(
+        as_alice("xdotool search --onlyvisible --name '^GP Connect Settings$'"),
+        timeout=timedelta(seconds=60),
+    )
     machine.screenshot("native-shell-settings")
     machine.wait_until_succeeds(as_alice("GI_TYPELIB_PATH=${typelibs} ${chooseTauri}"))
     wait_for_gui("gpgui")
