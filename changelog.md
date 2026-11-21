@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 3.7.1
 
 ### Added
 
-- Show a desktop notification on Windows and Linux when the VPN disconnects unexpectedly and automatic reconnection does not restore it.
+- Show a desktop notification on Windows, Linux, FreeBSD, and OpenBSD when the VPN disconnects unexpectedly and automatic reconnect fails.
 
 ### Fixed
 
