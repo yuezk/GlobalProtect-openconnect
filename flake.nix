@@ -29,8 +29,8 @@
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         pname = "globalprotect-openconnect";
         version = cargoToml.workspace.package.version;
-        releaseTag = "v3.6.0";
-        releaseVersion = "3.6.0";
+        releaseTag = "v3.7.0";
+        releaseVersion = "3.7.0";
 
         toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
@@ -55,8 +55,8 @@
         cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
 
         gpguiHashes = {
-          x86_64 = "sha256-cWFOqjDpzGSWLZgiDVeEYJMGAMrdfiB15Q6geKSVEEg=";
-          aarch64 = "sha256-e66fokdJk6/vr1B/6hX37Lt+7OPnXZP+D2N5ht/yM4o=";
+          x86_64 = "sha256-eIvocMn4j+CiA1FMuib1/BvMEw4kcO5h4zAhbSHXFf0=";
+          aarch64 = "sha256-pBH7KccAAnxLcCD5+wJxEAwpdu+QRHHncrytwoBgzh4=";
         };
 
         gpguiArchive = pkgs.fetchurl {
@@ -69,9 +69,33 @@
           archive = gpguiArchive;
         };
 
+        nshHashes = {
+          x86_64 = "sha256-STlK1Wtx840a0TtIgxXJDINnVmfiedSNVcapGF154dY=";
+          aarch64 = "sha256-HekBfUrlRavNzA+1g6EvxN4iiGDevEv0stsVEyL6Ejk=";
+        };
+
+        nshArchive = pkgs.fetchurl {
+          url = "https://github.com/yuezk/GlobalProtect-openconnect/releases/download/${releaseTag}/gpgui-nsh_${cpu}.bin.tar.xz";
+          hash = nshHashes.${cpu};
+        };
+
+        installNativeShell = archive: version:
+          let nsh = import ./nix/gui-package.nix {
+            inherit pkgs version;
+            src = archive;
+            binaryName = "gpgui-nsh";
+          };
+          in ''
+            # A direct invocation hands off to gpclient in the enclosing package.
+            makeWrapper ${nsh}/bin/gpgui-nsh "$out/bin/gpgui-nsh" \
+              --set-default GP_CLIENT_BINARY "$out/bin/gpclient"
+            install -Dm644 ${nsh}/share/licenses/gpgui-nsh/ICU4X-LICENSE.txt \
+              "$out/share/licenses/globalprotect-openconnect/ICU4X-LICENSE.txt"
+          '';
+
         binaryHashes = {
-          x86_64 = "sha256-gK8VWHw1VbXE7wHU1wGYw4fQ0khk24JWUwAQk+47WF8=";
-          aarch64 = "sha256-nqSuIW1fz742+2rF0QpnN8hswFm5lezC9JEOMs/8OHM=";
+          x86_64 = "sha256-1YFxjH6+garb/bneZRqVHAOfPQGBEvWaruAk573bZhc=";
+          aarch64 = "sha256-RnXdAcS2UWKwhWtlGSLs8fM4u2iRLx0w6SR42sOX9yk=";
         };
 
         binaryArchive = pkgs.fetchurl {
@@ -99,7 +123,13 @@
               config = {};
               overlays = [];
             };
-            inherit archive checksum binaryName;
+            inherit binaryName;
+            src = builtins.path {
+              path = builtins.toPath archive;
+              name = "''${binaryName}.tar.xz";
+              recursive = false;
+              sha256 = checksum;
+            };
             version = "${version}";
           }
         '';
@@ -191,7 +221,7 @@
           EOF
         '';
 
-        fromSource = lib.makeOverridable ({ gui ? gpgui }: naersk'.buildPackage {
+        fromSource = lib.makeOverridable ({ gui ? gpgui, nativeShellArchive ? nshArchive }: naersk'.buildPackage {
           inherit pname version;
           SNAPSHOT = lib.boolToString (releaseTag == "snapshot");
           src = assert lib.assertMsg
@@ -238,6 +268,7 @@
           runtimeDependencies = lib.optionals pkgs.stdenv.isLinux linuxRuntimeDependencies;
 
           preFixup = nativeRuntimeWrapping;
+          postFixup = lib.optionalString pkgs.stdenv.isLinux (installNativeShell nativeShellArchive version);
 
           postInstall = ''
             make install PREFIX="$out" ${lib.optionalString pkgs.stdenv.isLinux ''GPGUI_BINARY="${gui}/gpgui"''}
@@ -253,6 +284,7 @@
 
         prebuilt = lib.makeOverridable ({
           binaries ? binaryPackage,
+          nativeShellArchive ? nshArchive,
           gui ? gpgui,
           version ? releaseVersion,
         }: pkgs.stdenv.mkDerivation {
@@ -269,6 +301,7 @@
           buildInputs = linuxBuildInputs;
           runtimeDependencies = linuxRuntimeDependencies;
           preFixup = nativeRuntimeWrapping;
+          postFixup = installNativeShell nativeShellArchive version;
 
           installPhase = ''
             runHook preInstall
@@ -282,6 +315,8 @@
               cp -r artifacts/usr/lib $out/lib
             fi
 
+            # The Native Shell archive gets its own GTK4 wrapper in postFixup.
+            rm -f "$out/bin/gpgui-nsh"
             install -Dm755 ${gui}/gpgui $out/bin/gpgui
 
             ${rewriteVpncScriptToolPaths}

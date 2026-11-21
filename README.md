@@ -1,8 +1,8 @@
 # GlobalProtect-openconnect
 
-A GlobalProtect VPN client built on OpenConnect. GP Connect runs on Windows, macOS, Linux, FreeBSD, and OpenBSD.
+**GP Connect** is a GlobalProtect VPN client built on OpenConnect. The desktop app runs on Windows, macOS, Linux, FreeBSD, and OpenBSD. The command-line client is `gpclient`.
 
-> **Disclaimer**: GP Connect is an independent third-party client for GlobalProtect VPN networks. It is not affiliated with or endorsed by Palo Alto Networks, Inc.
+[Features](#features) · [Installation](#installation) · [Usage](#usage) · [Troubleshooting](#troubleshooting) · [Building from source](#building-from-source)
 
 <p align="center">
   <picture>
@@ -12,109 +12,71 @@ A GlobalProtect VPN client built on OpenConnect. GP Connect runs on Windows, mac
   </picture>
 </p>
 
-> **Inspired by** [gp-saml-gui](https://github.com/dlenski/gp-saml-gui)
-
-## Table of Contents
-
-- [Features](#features)
-- [Usage](#usage)
-  - [Command-Line Interface](#command-line-interface)
-  - [Graphical User Interface](#graphical-user-interface)
-- [Installation](#installation)
-  - [Windows](#windows)
-  - [macOS](#macos)
-  - [Debian / Ubuntu](#debian--ubuntu)
-  - [Arch Linux / Manjaro](#arch-linux--manjaro)
-  - [Fedora / RHEL](#fedora--rhel)
-  - [openSUSE](#opensuse)
-  - [Alpine Linux](#alpine-linux)
-  - [FreeBSD](#freebsd)
-  - [OpenBSD](#openbsd)
-  - [Gentoo](#gentoo)
-  - [NixOS](#nixos)
-  - [Docker](#docker)
-  - [Other Distributions](#other-distributions)
-- [Building from Source](#building-from-source)
-- [Troubleshooting](#troubleshooting)
-- [NetworkManager Integration](#networkmanager-integration)
-- [Licensing](#licensing)
+GP Connect is an independent project. It is not affiliated with or endorsed by Palo Alto Networks, Inc.
 
 ## Features
 
-- **Multi-Platform** – Windows (x64 and ARM64), macOS (Apple silicon), Linux, FreeBSD, and OpenBSD
-- **Dual Interfaces** – Desktop GUI (**GP Connect**) and terminal CLI (`gpclient`, on macOS, Linux, and BSD)
-- **Native Shell on Linux** – Ultra-low-memory native desktop GUI alongside the webview interface
-- **Flexible Routing** – Full System VPN tunnel or local SOCKS5 proxy mode
-- **Modern Authentication** – SAML / SSO, MFA, FIDO2 (YubiKey), client certificates, and external browser login
-- **Automated HIP Reports** – Built-in HIP report generation or custom scripts
-- **Multi-Portal & Direct Gateway** – Manage multiple saved portals or connect directly to a gateway
-- **Desktop Integration** – Theme-aware system tray icon, auto-connect on launch, and reconnect on wake
-
-## Usage
-
-### Command-Line Interface
-
-On macOS, Linux, and BSD, the open-source `gpclient` CLI handles authentication, connection lifecycle, and HIP generation:
-
-```bash
-# Connect to a portal server
-sudo gpclient connect <portal>
-
-# Connect using browser authentication (SSO / SAML)
-sudo gpclient connect <portal> --browser
-
-# Connect directly to a gateway server
-sudo gpclient connect <gateway> --as-gateway
-
-# Connect with automatic HIP report generation
-sudo gpclient connect <portal> --hip
-
-# Headless / remote server authentication (prints auth URL to open in any browser)
-sudo gpclient connect <portal> --browser manual
-
-# Disconnect
-sudo gpclient disconnect
-```
-
-Run `gpclient --help` or `gpclient <command> --help` to view all available commands and options.
-
-### Graphical User Interface
-
-- **Windows**: Open **GP Connect** from the Start menu.
-- **macOS**: Open **GP Connect** from Applications.
-- **Linux / BSD**: Launch GP Connect from your application menu or run:
-  ```bash
-  gpclient launch-gui
-  ```
-
-> [!TIP]
-> **On Linux, try Native Shell for lower memory usage.** Switch between Native Shell and Tauri in **Settings → General → Interface**.
+- Browser-based SSO and MFA, including security keys supported by the identity provider. Client certificates are also supported.
+- System VPN tunnel or local SOCKS5 and HTTP proxies for individual applications.
+- Multiple saved portals and direct gateway connections.
+- Built-in host information profile (HIP) reporting and support for custom HIP scripts.
+- System tray controls and automatic connection on launch.
+- Native Shell, a lightweight desktop interface for supported Linux systems.
 
 ## Installation
 
+| Platform | Installation instructions |
+| --- | --- |
+| Windows and macOS | [Windows](#windows) · [macOS](#macos) |
+| Linux | [Alpine](#alpine-linux) · [Arch / Manjaro](#arch-linux--manjaro) · [Debian / Ubuntu](#debian--ubuntu) · [Fedora / RHEL](#fedora--rhel) · [Gentoo](#gentoo) · [NixOS](#nixos) · [openSUSE](#opensuse) · [Other distributions](#other-distributions) |
+| BSD | [FreeBSD](#freebsd) · [OpenBSD](#openbsd) |
+| Container | [Docker](#docker) |
+
 ### Windows
 
-1. Download the **x64** or **ARM64** installer for your PC from [GitHub Releases](https://github.com/yuezk/GlobalProtect-openconnect/releases/latest).
-2. Run the installer and approve the administrator prompt.
-3. Open **GP Connect** from the Start menu.
+Download the Windows installer for [x64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/GPConnect_3.7.0_windows-x64-setup.exe) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/GPConnect_3.7.0_windows-arm64-setup.exe). Run it and approve the administrator prompt.
 
 ### macOS
 
-Requires Apple silicon and macOS 13+. Includes both GP Connect and the `gpclient` CLI.
+Requires Apple silicon and macOS 13+.
 
-#### Option 1: Homebrew (Recommended)
+#### Homebrew
 
 ```bash
 brew install --cask yuezk/gp-connect/gp-connect
 ```
 
-#### Option 2: DMG Installer
+#### DMG installer
 
-Download the `.dmg` from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page and drag GP Connect into Applications.
+Open the [Apple silicon DMG](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/GPConnect_3.7.0_arm64.dmg) and drag GP Connect into Applications.
+
+### Alpine Linux
+
+Download the APK for [x86_64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect-3.7.0-r1-x86_64.apk) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect-3.7.0-r1-aarch64.apk).
+
+```bash
+sudo apk add --allow-untrusted globalprotect-openconnect-*.apk
+```
+
+Enable the Alpine `community` repository for WebKitGTK.
+
+### Arch Linux / Manjaro
+
+Install the stable package from the Extra repository.
+
+```bash
+sudo pacman -S globalprotect-openconnect
+```
+
+For the development version from the main branch, use the AUR package.
+
+```bash
+yay -S globalprotect-openconnect-git
+```
 
 ### Debian / Ubuntu
 
-#### Option 1: PPA (Recommended)
+#### Ubuntu PPA
 
 ```bash
 sudo add-apt-repository ppa:yuezk/globalprotect-openconnect
@@ -122,22 +84,12 @@ sudo apt-get update
 sudo apt-get install globalprotect-openconnect
 ```
 
-#### Option 2: DEB Package
+#### Debian or Ubuntu release package
 
-Download the latest `.deb` from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page:
+Download the DEB for [amd64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0-1_amd64.deb) or [arm64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0-1_arm64.deb).
 
 ```bash
 sudo apt install ./globalprotect-openconnect_*.deb
-```
-
-### Arch Linux / Manjaro
-
-```bash
-# Official Extra repository
-sudo pacman -S globalprotect-openconnect
-
-# AUR (git main)
-yay -S globalprotect-openconnect-git
 ```
 
 ### Fedora / RHEL
@@ -147,36 +99,6 @@ Enable the COPR repository:
 ```bash
 sudo dnf copr enable yuezk/globalprotect-openconnect
 sudo dnf install globalprotect-openconnect
-```
-
-### openSUSE
-
-Packages are available on the [openSUSE Build Service](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect). Follow the [OBS instructions](https://software.opensuse.org/download.html?project=home%3Ayuezk&package=globalprotect-openconnect) for your distribution.
-
-### Alpine Linux
-
-Download the latest `.apk` package from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page:
-
-```bash
-sudo apk add --allow-untrusted globalprotect-openconnect-*.apk
-```
-
-*(Requires the `community` repository for WebKitGTK dependencies).*
-
-### FreeBSD
-
-Download the latest FreeBSD package from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page:
-
-```bash
-sudo pkg install ./globalprotect-openconnect-*-freebsd-*.pkg
-```
-
-### OpenBSD
-
-Download the latest OpenBSD package from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page:
-
-```bash
-doas pkg_add -D unsigned ./globalprotect-openconnect-*-openbsd-*.tgz
 ```
 
 ### Gentoo
@@ -189,13 +111,15 @@ sudo eselect repository add yuezk git https://github.com/yuezk/gentoo-overlay.gi
 sudo emerge --sync yuezk
 ```
 
-Install the prebuilt package (glibc):
+On glibc systems, install the prebuilt package:
 
 ```bash
 sudo emerge --ask net-vpn/globalprotect-openconnect-bin::yuezk
 ```
 
-For a source build, use `net-vpn/globalprotect-openconnect::yuezk`. If Portage requests keyword or USE flag changes, review and apply them, then rerun the install command.
+The source package is `net-vpn/globalprotect-openconnect::yuezk`.
+
+If Portage requests keyword or USE flag changes, review and apply them, then rerun the install command.
 
 ### NixOS
 
@@ -224,27 +148,85 @@ Apply changes:
 sudo nixos-rebuild switch
 ```
 
+### openSUSE
+
+Packages are available on the [openSUSE Build Service](https://build.opensuse.org/package/show/home:yuezk/globalprotect-openconnect). Follow the [OBS instructions](https://software.opensuse.org/download.html?project=home%3Ayuezk&package=globalprotect-openconnect) for your distribution.
+
+### Other Distributions
+
+Requires glibc 2.39 or later. Download the archive for [x86_64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0_x86_64.bin.tar.xz) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0_aarch64.bin.tar.xz).
+
+```bash
+tar -xJf globalprotect-openconnect_*.bin.tar.xz
+cd globalprotect-openconnect_3.7.0
+sudo make install
+```
+
+### FreeBSD
+
+Download the [FreeBSD package for amd64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect-3.7.0-freebsd-amd64.pkg).
+
+```bash
+sudo pkg install ./globalprotect-openconnect-*-freebsd-*.pkg
+```
+
+### OpenBSD
+
+Download the [OpenBSD package for amd64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect-3.7.0-openbsd-amd64.tgz).
+
+```bash
+doas pkg_add -D unsigned ./globalprotect-openconnect-*-openbsd-*.tgz
+```
+
 ### Docker
 
-Run the CLI client in an official Alpine container:
+Run the CLI in the project’s Alpine container. Replace `vpn.example.com` with your portal address.
 
 ```bash
 docker run --rm -it --cap-add=NET_ADMIN --device=/dev/net/tun \
   yuezk/globalprotect-openconnect:latest \
-  connect <portal> --browser manual
+  connect vpn.example.com --browser manual
 ```
 
-*(Add `--network host` on Linux if VPN routes should apply to the host network).*
+On Linux, add `--network host` to apply VPN routes to the host network.
 
-### Other Distributions
+## Usage
 
-Download `globalprotect-openconnect_${version}_${arch}.bin.tar.xz` from the [releases](https://github.com/yuezk/GlobalProtect-openconnect/releases) page:
+### Desktop
 
-```bash
-tar -xJf globalprotect-openconnect_*.bin.tar.xz
-cd globalprotect-openconnect_*
-sudo make install
+Open **GP Connect**, enter your GlobalProtect portal address, and sign in. On Linux and BSD, you can also launch the app with `gpclient launch-gui`.
+
+### Command line
+
+On Linux, BSD, or macOS with Homebrew, replace `vpn.example.com` with your portal address. Use `doas` instead of `sudo` on OpenBSD.
+
+```sh
+sudo gpclient connect vpn.example.com
 ```
+
+| Command | Action |
+| --- | --- |
+| `sudo gpclient disconnect` | Disconnect |
+| `sudo gpclient connect vpn.example.com --browser` | Sign in with a browser |
+| `sudo gpclient connect gateway.example.com --as-gateway` | Connect directly to a gateway |
+| `sudo gpclient connect vpn.example.com --hip` | Connect with HIP reporting enabled |
+
+See `gpclient connect --help` for all connection options.
+
+### Connecting over SSH
+
+For portals that allow external-browser sign-in, run this command on the remote host:
+
+```sh
+sudo gpclient connect vpn.example.com --browser manual
+```
+
+Open the printed URL in a browser that can reach the remote host. After signing in, paste the callback URL into the SSH terminal.
+
+## Troubleshooting
+
+- **Blank Linux window.** Quit GP Connect and run `gpclient launch-gui --interface tauri`. To switch back, quit and rerun with `--interface nsh`.
+- **Reporting a problem.** Run `gpclient diagnostics` and include the relevant output in your issue. See the [diagnostics guide](docs/diagnostics.md) for details.
 
 ## Building from Source
 
@@ -252,10 +234,10 @@ sudo make install
 
 - [Rust](https://www.rust-lang.org/tools/install) 1.91 or later
 - Build tools: `make`, `pkg-config`, `autoconf`, `automake`, `libtool`, `gettext`
-- Libraries: `gmp`, `gnutls`, `nettle`, `libxml2`, `zlib`, `lz4`, `p11-kit`, `libsecret`, and `webkit2gtk-4.1` (or GTK 4 for Native Shell)
+- Libraries: `gmp`, `gnutls`, `nettle`, `libxml2`, `zlib`, `lz4`, `p11-kit`, `libsecret`, and `webkit2gtk-4.1` for the embedded sign-in window and download helper. Native Shell also requires GTK 4.14 or later.
 - Polkit (`pkexec`) for privileged tunnel setup
 
-*(For FreeBSD and OpenBSD instructions, see [Building from Source on FreeBSD and OpenBSD](docs/bsd-source-build.md)).*
+For BSD build requirements, see [Building from Source on FreeBSD and OpenBSD](docs/bsd-source-build.md).
 
 ### Build Steps
 
@@ -269,13 +251,8 @@ sudo make install
 **Build Options:**
 
 - `INCLUDE_GUI=1` – Download and install the matching desktop application bundle.
-- `BUILD_WEBVIEW_AUTH=0` – Build `gpauth` without embedded browser authentication (uses external browser or manual mode).
+- `BUILD_WEBVIEW_AUTH=0` – Disable embedded browser authentication in both `gpclient` and `gpauth`. External-browser and manual sign-in remain available.
 - `BUILD_GUI_HELPER=0` – Skip building the helper UI.
-
-## Troubleshooting
-
-- **Headless / Remote Login**: When running without a desktop display or over SSH, use `--browser manual`. Open the printed URL in any browser and paste the callback URL back into the terminal.
-- **Diagnostics**: If you encounter issues, run `gpclient diagnostics` or follow the [diagnostics guide](docs/diagnostics.md) when opening an issue.
 
 ## NetworkManager Integration
 
@@ -301,3 +278,7 @@ sudo make install
 | [gpclient](./apps/gpclient) | Application | [GPL-3.0](./apps/gpclient/LICENSE) |
 | [gpauth](./apps/gpauth) | Application | [GPL-3.0](./apps/gpauth/LICENSE) |
 | [gpgui-helper](./apps/gpgui-helper) | Application | [GPL-3.0](./apps/gpgui-helper/LICENSE) |
+
+## Acknowledgments
+
+Inspired by [gp-saml-gui](https://github.com/dlenski/gp-saml-gui).

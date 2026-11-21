@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.7.0
+
+- Linux now opens Native Shell by default on supported systems, including Alpine. Upgrades keep your saved interface choice.
+- To choose an interface after quitting GP Connect, run `gpclient launch-gui --interface tauri` or `gpclient launch-gui --interface nsh`.
+- Linux packages include both Native Shell and Tauri so you can switch interfaces without a separate download.
+- The README now documents source and prebuilt installation from the Gentoo overlay.
+- Source builds with `BUILD_WEBVIEW_AUTH=0` disable embedded browser sign-in in both `gpclient` and `gpauth`.
+
 ## 3.6.0
 
 - Added command-line VPN connections on Windows x64 and ARM64.

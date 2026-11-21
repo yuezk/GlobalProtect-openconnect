@@ -42,22 +42,17 @@ const GUI_LIBC_SUFFIX: &str = "-musl";
 const GUI_LIBC_SUFFIX: &str = "";
 
 fn gui_asset_name(variant: gpapi::gui::GuiVariant) -> Option<String> {
+  gui_asset_name_for(variant, std::env::consts::OS, std::env::consts::ARCH, GUI_LIBC_SUFFIX)
+}
+
+fn gui_asset_name_for(variant: gpapi::gui::GuiVariant, os: &str, arch: &str, libc_suffix: &str) -> Option<String> {
+  if os == "linux" && matches!(arch, "x86_64" | "aarch64") {
+    return Some(format!("{}_{arch}{libc_suffix}.bin.tar.xz", variant.binary_name()));
+  }
   if variant == gpapi::gui::GuiVariant::Nsh {
-    return nsh_asset_name_for(std::env::consts::OS, std::env::consts::ARCH);
+    return None;
   }
-  gui_asset_name_for(std::env::consts::OS, std::env::consts::ARCH, GUI_LIBC_SUFFIX)
-}
-
-fn nsh_asset_name_for(os: &str, arch: &str) -> Option<String> {
-  match (os, arch) {
-    ("linux", "x86_64" | "aarch64") => Some(format!("gpgui-nsh_{arch}.bin.tar.xz")),
-    _ => None,
-  }
-}
-
-fn gui_asset_name_for(os: &str, arch: &str, libc_suffix: &str) -> Option<String> {
   let name = match (os, arch) {
-    ("linux", "x86_64" | "aarch64") => format!("gpgui_{arch}{libc_suffix}.bin.tar.xz"),
     ("freebsd", "x86_64") => "gpgui_freebsd_amd64.bin.tar.xz".to_owned(),
     ("freebsd", "aarch64") => "gpgui_freebsd_arm64.bin.tar.xz".to_owned(),
     ("openbsd", "x86_64") => "gpgui_openbsd_amd64.bin.tar.xz".to_owned(),
@@ -506,6 +501,7 @@ impl GuiUpdater {
 
 #[cfg(test)]
 mod tests {
+  use gpapi::gui::GuiVariant;
   use gpapi::service::{
     transport::{ClientPrelude, NoiseResponder},
     vpn_env::{HostInfo, VpnEnv},
@@ -519,36 +515,36 @@ mod tests {
   #[test]
   fn selects_platform_specific_gui_assets() {
     assert_eq!(
-      gui_asset_name_for("linux", "x86_64", ""),
+      gui_asset_name_for(GuiVariant::Tauri, "linux", "x86_64", ""),
       Some("gpgui_x86_64.bin.tar.xz".to_owned())
     );
     assert_eq!(
-      gui_asset_name_for("linux", "aarch64", "-musl"),
+      gui_asset_name_for(GuiVariant::Tauri, "linux", "aarch64", "-musl"),
       Some("gpgui_aarch64-musl.bin.tar.xz".to_owned())
     );
     assert_eq!(
-      gui_asset_name_for("freebsd", "x86_64", ""),
+      gui_asset_name_for(GuiVariant::Tauri, "freebsd", "x86_64", ""),
       Some("gpgui_freebsd_amd64.bin.tar.xz".to_owned())
     );
     assert_eq!(
-      gui_asset_name_for("openbsd", "aarch64", ""),
+      gui_asset_name_for(GuiVariant::Tauri, "openbsd", "aarch64", ""),
       Some("gpgui_openbsd_arm64.bin.tar.xz".to_owned())
     );
-    assert_eq!(gui_asset_name_for("macos", "aarch64", ""), None);
+    assert_eq!(gui_asset_name_for(GuiVariant::Tauri, "macos", "aarch64", ""), None);
   }
 
   #[test]
   fn nsh_assets_are_linux_only_and_use_the_nsh_binary_archive() {
     assert_eq!(
-      nsh_asset_name_for("linux", "x86_64"),
+      gui_asset_name_for(GuiVariant::Nsh, "linux", "x86_64", ""),
       Some("gpgui-nsh_x86_64.bin.tar.xz".into())
     );
     assert_eq!(
-      nsh_asset_name_for("linux", "aarch64"),
-      Some("gpgui-nsh_aarch64.bin.tar.xz".into())
+      gui_asset_name_for(GuiVariant::Nsh, "linux", "aarch64", "-musl"),
+      Some("gpgui-nsh_aarch64-musl.bin.tar.xz".into())
     );
     for os in ["freebsd", "openbsd", "macos"] {
-      assert_eq!(nsh_asset_name_for(os, "x86_64"), None);
+      assert_eq!(gui_asset_name_for(GuiVariant::Nsh, os, "x86_64", ""), None);
     }
   }
 

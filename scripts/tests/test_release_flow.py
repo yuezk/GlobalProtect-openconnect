@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import os
@@ -80,7 +81,7 @@ class ReleaseVersionTests(unittest.TestCase):
             write_version(root, '3.2.0')
             package = root / 'result'
             (package / 'bin').mkdir(parents=True)
-            for name in ('gpclient', 'gpservice', 'gpauth', 'gpgui'):
+            for name in ('gpclient', 'gpservice', 'gpauth', 'gpgui', 'gpgui-nsh'):
                 tool = package / 'bin' / name
                 tool.write_text(f'#!/bin/sh\necho "{name} 3.2.0 (PRIVATE_IDENTITY)"\n')
                 tool.chmod(0o755)
@@ -88,6 +89,44 @@ class ReleaseVersionTests(unittest.TestCase):
             (package / 'bin/gpgui').write_text('#!/bin/sh\necho "gpgui 3.1.0 PRIVATE_DETAIL"\n')
             with self.assertRaisesRegex(ValueError, 'gpgui'):
                 versions.validate(root, package=package)
+
+
+class LinuxNshAssetsTests(unittest.TestCase):
+    def test_releases_require_both_architectures_and_libcs_with_matching_checksums(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            assets = []
+            for arch in ('x86_64', 'aarch64'):
+                for suffix in ('', '-musl'):
+                    directory = root / f'artifact-gpgui-nsh{suffix}-{arch}'
+                    directory.mkdir()
+                    archive = directory / f'gpgui-nsh_{arch}{suffix}.bin.tar.xz'
+                    archive.write_bytes(archive.name.encode())
+                    sidecar = archive.with_name(archive.name + '.sha256')
+                    sidecar.write_text(hashlib.sha256(archive.read_bytes()).hexdigest() + '\n')
+                    assets.extend((archive, sidecar))
+
+            for channel in ('snapshot', 'v3.7.0'):
+                command = [ROOT / 'scripts/release-assets.sh', channel, root]
+                valid = subprocess.run(command, capture_output=True, text=True, check=True)
+                self.assertEqual(set(valid.stdout.splitlines()), {str(asset) for asset in assets})
+                for asset in assets:
+                    data = asset.read_bytes()
+                    asset.unlink()
+                    self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0, asset.name)
+                    asset.write_bytes(data)
+                archive = assets[0]
+                data = archive.read_bytes()
+                archive.write_bytes(b'corrupt')
+                self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+                archive.write_bytes(data)
+
+            for asset in assets:
+                asset.rename(root / asset.name)
+            verify_published = [ROOT / 'scripts/verify-linux-nsh-assets.sh', root]
+            subprocess.run(verify_published, capture_output=True, check=True)
+            (root / assets[-1].name).unlink()
+            self.assertNotEqual(subprocess.run(verify_published, capture_output=True).returncode, 0)
 
 
 class BuildIdentityTests(unittest.TestCase):
@@ -145,6 +184,7 @@ class PromotionTests(unittest.TestCase):
             initialize(repo)
             write_version(repo)
             hashes = 'gpguiHashes = { x86_64 = "old-gui-x64"; aarch64 = "old-gui-arm64"; };\n' \
+                     'nshHashes = { x86_64 = "old-nsh-x64"; aarch64 = "old-nsh-arm64"; };\n' \
                      'binaryHashes = { x86_64 = "old-cli-x64"; aarch64 = "old-cli-arm64"; };\n'
             with (repo / 'flake.nix').open('a') as flake:
                 flake.write('packageSetting = "original";\n' + hashes)

@@ -40,7 +40,7 @@ def validate(root, version=None, release_tag=None, package=None, base_ref=None):
         if tuple(map(int, expected.split("."))) < tuple(map(int, base.split("."))):
             raise ValueError("candidate release is older than the main base")
     if package:
-        for name in ("gpclient", "gpservice", "gpauth", "gpgui"):
+        for name in ("gpclient", "gpservice", "gpauth", "gpgui", "gpgui-nsh"):
             result = subprocess.run([str(package / "bin" / name), "--version"],
                                     capture_output=True, text=True, check=True)
             # Keep private source identity and other command output out of logs.

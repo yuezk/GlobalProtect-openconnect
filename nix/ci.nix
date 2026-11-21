@@ -18,9 +18,13 @@ let
     '';
   binaries = unpack "gp-ci-binaries" "GP_BINARY_ARCHIVE";
   gui = unpack "gp-ci-gui" "GP_GUI_ARCHIVE";
-  sourcePackage = gp.packages.${system}.fromSource.override { inherit gui; };
+  nativeShellArchive = builtins.path {
+    path = builtins.toPath (builtins.getEnv "GP_NSH_ARCHIVE");
+    name = "gpgui-nsh.tar.xz";
+  };
+  sourcePackage = gp.packages.${system}.fromSource.override { inherit gui nativeShellArchive; };
   prebuiltInputs = {
-    inherit binaries gui;
+    inherit binaries gui nativeShellArchive;
     version = sourcePackage.version;
   };
   prebuiltPackage = gp.packages.${system}.prebuilt.override prebuiltInputs;
@@ -50,6 +54,11 @@ in {
   runtime-source = import ./tests/native-runtime.nix {
     inherit pkgs;
     package = sourcePackage;
+    module = gp.nixosModules.default;
+  };
+  graphical-prebuilt = import ./tests/desktop-interfaces.nix {
+    inherit pkgs;
+    package = prebuiltPackage;
     module = gp.nixosModules.default;
   };
   runtime-prebuilt = import ./tests/native-runtime.nix {

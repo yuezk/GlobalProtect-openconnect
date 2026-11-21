@@ -47,10 +47,6 @@ upload_files() {
   done
 }
 
-release_assets() {
-  "$SCRIPT_DIR/release-assets.sh" "$TAG"
-}
-
 release_assets_json() {
   retry_gh gh -R "$REPO" release view "$TAG" --json assets
 }
@@ -134,7 +130,6 @@ upload_file() {
 # Keep its tag fixed; only release assets advance with subsequent builds.
 # Preserve its macOS update assets when the current run does not replace them.
 release_snapshot() {
-  mapfile -t files < <(release_assets)
   local existing_assets
   local is_current
   local asset
@@ -201,10 +196,12 @@ release_tag() {
       --notes-file "$release_notes_file"
   fi
 
-  mapfile -t files < <(release_assets)
   GITHUB_REPOSITORY="$REPO" "$SCRIPT_DIR/upload-release-assets.sh" "$TAG" "${files[@]}"
   gh -R "$REPO" release edit "$TAG" --prerelease=false
 }
+
+asset_list=$("$SCRIPT_DIR/release-assets.sh" "$TAG")
+mapfile -t files <<<"$asset_list"
 
 if [[ $TAG == *"snapshot" ]]; then
   release_snapshot
