@@ -116,6 +116,11 @@ impl ConnectInfo {
 pub enum VpnState {
   ReconnectRequired(Box<ReconnectRequest>),
   Disconnected,
+  UnexpectedDisconnect {
+    attempt: u64,
+    owner: uuid::Uuid,
+    reason: Option<String>,
+  },
   Failed(String),
   Connecting(Box<ConnectInfo>),
   Connected(Box<ConnectedInfo>),

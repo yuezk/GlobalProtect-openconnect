@@ -733,7 +733,7 @@ mod tests {
 
 async fn watch_vpn_state(mut vpn_state_rx: watch::Receiver<VpnState>, ctx: Arc<WsServerContext>) {
   while vpn_state_rx.changed().await.is_ok() {
-    let vpn_state = vpn_state_rx.borrow().clone();
+    let vpn_state = vpn_state_rx.borrow_and_update().clone();
     ctx.send_event(WsEvent::VpnState(vpn_state)).await;
   }
 }

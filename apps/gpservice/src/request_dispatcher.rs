@@ -174,6 +174,12 @@ impl RequestDispatcher {
             .stop_non_tunnel_attachment(authority.session_id, authority.generation, connection_id)?;
         Ok(PendingDispatch::Drain(drain))
       }
+      WsRequest::AbandonReconnect { attempt } => {
+        let authority = authority
+          .ok_or_else(|| ServiceResult::rejected(ServiceErrorCode::InvalidRequest, "Connection session is missing"))?;
+        self.lifecycle.abandon_reconnect(attempt, authority.session_id);
+        Err(ServiceResult::Accepted)
+      }
       WsRequest::Disconnect(_) => Err(self.lifecycle.request_disconnect()),
       request => Ok(PendingDispatch::Other(request)),
     }
@@ -259,6 +265,7 @@ impl RequestDispatcher {
         ServiceResult::Accepted
       }
       WsRequest::Connect(_)
+      | WsRequest::AbandonReconnect { .. }
       | WsRequest::StopNonTunnelAttachment { .. }
       | WsRequest::Disconnect(_)
       | WsRequest::StoreEditedHipReportChunk(_)
