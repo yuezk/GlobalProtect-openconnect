@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.7.1
+
+### Added
+
+- Show a desktop notification on Windows, Linux, FreeBSD, and OpenBSD when the VPN disconnects unexpectedly and automatic reconnect fails.
+
+### Fixed
+
+- Make the Native Shell Close button visible in light mode and give it a consistent appearance across Linux themes.
+- Allow turning off Compatibility Graphics in the Tauri interface.
+
 ## 3.7.0
 
 - Linux now opens Native Shell by default on supported systems, including Alpine. Upgrades keep your saved interface choice.

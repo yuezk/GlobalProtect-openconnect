@@ -427,6 +427,7 @@ pub enum WsRequest {
   SetWindowsPatchInterest { enabled: bool },
   RefreshWindowsPatches { after: Option<u64> },
   Connect(Box<ConnectRequest>),
+  AbandonReconnect { attempt: u64 },
   Disconnect(DisconnectRequest),
   StopNonTunnelAttachment { connection_id: uuid::Uuid },
   StoreEditedHipReportChunk(StoreEditedHipReportChunkRequest),
