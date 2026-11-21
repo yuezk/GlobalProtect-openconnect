@@ -2,7 +2,13 @@
 
 **GP Connect** is a GlobalProtect VPN client built on OpenConnect. The desktop app runs on Windows, macOS, Linux, FreeBSD, and OpenBSD. The command-line client is `gpclient`.
 
-[Features](#features) · [Installation](#installation) · [Usage](#usage) · [Troubleshooting](#troubleshooting) · [Building from source](#building-from-source)
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#troubleshooting">Troubleshooting</a> ·
+  <a href="#building-from-source">Building from source</a>
+</p>
 
 <p align="center">
   <picture>
@@ -117,7 +123,7 @@ On glibc systems, install the prebuilt package:
 sudo emerge --ask net-vpn/globalprotect-openconnect-bin::yuezk
 ```
 
-The source package is `net-vpn/globalprotect-openconnect::yuezk`.
+The source package is `net-vpn/globalprotect-openconnect::yuezk`. For a headless installation, see the [CLI-only overlay instructions](https://github.com/yuezk/gentoo-overlay#cli-only).
 
 If Portage requests keyword or USE flag changes, review and apply them, then rerun the install command.
 
@@ -154,7 +160,7 @@ Packages are available on the [openSUSE Build Service](https://build.opensuse.or
 
 ### Other Distributions
 
-Requires glibc 2.39 or later. Download the archive for [x86_64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0_x86_64.bin.tar.xz) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0_aarch64.bin.tar.xz).
+Download the archive for [x86_64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0_x86_64.bin.tar.xz) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0_aarch64.bin.tar.xz).
 
 ```bash
 tar -xJf globalprotect-openconnect_*.bin.tar.xz
