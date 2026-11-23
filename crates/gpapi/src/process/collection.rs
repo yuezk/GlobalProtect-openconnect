@@ -127,7 +127,9 @@ pub fn command_path(require_root: bool) -> io::Result<std::ffi::OsString> {
   std::env::join_paths(directories).map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))
 }
 
-fn root_owned_path(path: &Path) -> bool {
+/// Whether `path` and every ancestor are root-owned, not symlinks, and not
+/// group/world-writable (unless a root-owned sticky ancestor protects them).
+pub fn root_owned_path(path: &Path) -> bool {
   path.ancestors().all(|part| {
     fs::symlink_metadata(part).is_ok_and(|metadata| {
       let mode = metadata.permissions().mode();

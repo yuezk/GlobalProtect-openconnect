@@ -9,6 +9,8 @@ use gpapi::collection::{CollectionBudget, CollectionControl};
 use gpapi::process::collection::CollectorCommands;
 use xmltree::Element;
 
+#[cfg(target_os = "linux")]
+mod bitdefender_unix;
 #[cfg(target_os = "macos")]
 mod domain_macos;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", test))]
@@ -355,6 +357,15 @@ struct ClamAvInfo {
   real_time_protection: bool,
 }
 
+/// Bitdefender Endpoint Security Tools (GravityZone). Engine and real-time
+/// protection are only available when `bduitool` can run as root.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+struct BitdefenderInfo {
+  version: String,
+  engine_version: Option<String>,
+  real_time_protection: Option<bool>,
+}
+
 struct SentinelInfo {
   version: String,
   real_time_protection: bool,
@@ -378,6 +389,7 @@ struct HostInfo {
   defender: Option<DefenderInfo>,
   clamav: Option<ClamAvInfo>,
   sentinel: Option<SentinelInfo>,
+  bitdefender: Option<BitdefenderInfo>,
   ufw: Option<UfwInfo>,
   windows_categories: Option<String>,
   windows_updates: Option<gpapi::hip::WindowsUpdateStatus>,
@@ -503,6 +515,7 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
       defender: None,
       clamav: None,
       sentinel: None,
+      bitdefender: None,
       ufw: None,
       windows_categories: None,
       windows_updates: None,
@@ -584,6 +597,10 @@ impl<'p, 'a> HostInfoCollector<'p, 'a> {
     #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
     if self.profile.client_os() == ClientOs::Linux && self.profile.is_native() {
       info.sentinel = sentinel_unix::detect(&commands)?;
+    }
+    #[cfg(target_os = "linux")]
+    if self.profile.client_os() == ClientOs::Linux && self.profile.is_native() {
+      info.bitdefender = bitdefender_unix::detect(&commands)?;
     }
     control.check()?;
     Ok(info)
@@ -1223,6 +1240,86 @@ mod tests {
     assert!(report.contains("osType=\"1\""));
     assert!(report.contains("<real-time-protection>yes</real-time-protection>"));
     assert_eq!(report.matches("name=\"Sentinel Agent\"").count(), 1);
+  }
+
+  fn render_linux_report_with_bitdefender(bitdefender: Option<BitdefenderInfo>) -> String {
+    let input = make_input(make_profile(ClientOs::Linux));
+    let cookie_params = HashMap::new();
+    let mut host_info = HostInfoCollector::new(&input.profile, &input, &cookie_params)
+      .collect_identity(&CollectionBudget::new(Duration::from_secs(10)))
+      .unwrap();
+    host_info.bitdefender = bitdefender;
+    let (generate_time, day, month, year) = get_current_time_components();
+    let report = HipReportTemplate {
+      client_version: input.profile.client_version(),
+      generate_time,
+      day,
+      month,
+      year,
+      user_name: "test-user",
+      host_info,
+      md5: "test-digest",
+    }
+    .render()
+    .unwrap();
+    let report = format_xml(&report).unwrap();
+    validate_edited_report(&report).unwrap();
+    report
+  }
+
+  fn bitdefender_product_info(report: &str) -> &str {
+    let start = report
+      .find("name=\"Bitdefender Endpoint Security Tools\"")
+      .expect("Bitdefender entry should render");
+    let end = start + report[start..].find("</ProductInfo>").unwrap();
+    &report[start..end]
+  }
+
+  #[test]
+  fn linux_report_renders_full_bitdefender_entry() {
+    let report = render_linux_report_with_bitdefender(Some(BitdefenderInfo {
+      version: "7.10.0".to_string(),
+      engine_version: Some("7.101851".to_string()),
+      real_time_protection: Some(true),
+    }));
+    assert!(report.contains(
+      "vendor=\"Bitdefender\" name=\"Bitdefender Endpoint Security Tools\" version=\"7.10.0\" defver=\"7.101851\" engver=\"7.101851\""
+    ));
+    let entry = bitdefender_product_info(&report);
+    assert!(entry.contains("prodType=\"3\" osType=\"1\""));
+    assert!(entry.contains("<real-time-protection>yes</real-time-protection>"));
+    assert!(entry.contains("<last-full-scan-time>n/a</last-full-scan-time>"));
+  }
+
+  #[test]
+  fn linux_report_renders_bitdefender_real_time_protection_off() {
+    let report = render_linux_report_with_bitdefender(Some(BitdefenderInfo {
+      version: "7.10.0".to_string(),
+      engine_version: Some("7.101851".to_string()),
+      real_time_protection: Some(false),
+    }));
+    assert!(bitdefender_product_info(&report).contains("<real-time-protection>no</real-time-protection>"));
+  }
+
+  #[test]
+  fn linux_report_renders_partial_bitdefender_entry() {
+    let report = render_linux_report_with_bitdefender(Some(BitdefenderInfo {
+      version: "7.10.0".to_string(),
+      engine_version: None,
+      real_time_protection: None,
+    }));
+    let entry = bitdefender_product_info(&report);
+    assert!(entry.contains("version=\"7.10.0\""));
+    assert!(!entry.contains("defver="));
+    assert!(!entry.contains("engver="));
+    assert!(!entry.contains("real-time-protection"));
+    assert!(entry.contains("<last-full-scan-time>n/a</last-full-scan-time>"));
+  }
+
+  #[test]
+  fn linux_report_omits_absent_bitdefender() {
+    let report = render_linux_report_with_bitdefender(None);
+    assert!(!report.contains("Bitdefender"));
   }
 
   #[test]
