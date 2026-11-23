@@ -76,6 +76,7 @@ impl LifecycleHandle {
     let cancellation = CancellationToken::new();
     admissions.current = Some(Admission {
       attempt,
+      restart,
       phase: AdmissionPhase::Preparing,
       stop_requested: false,
       cancellation: cancellation.clone(),
@@ -87,6 +88,19 @@ impl LifecycleHandle {
       cancellation,
       transferred: false,
     })
+  }
+
+  pub fn abandon_reconnect(&self, attempt: u64, owner: Uuid) {
+    let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
+    // A replacement that already owns admission will publish its own outcome.
+    if admissions.restart == Some((attempt, owner)) {
+      admissions.restart = None;
+      self.state.send_replace(VpnState::UnexpectedDisconnect {
+        attempt,
+        owner,
+        reason: None,
+      });
+    }
   }
 
   #[cfg(test)]
@@ -217,7 +231,7 @@ impl LifecycleHandle {
     true
   }
 
-  fn clear_attempt(&self, attempt: u64) {
+  fn clear_attempt(&self, attempt: u64, state: Option<VpnState>) {
     let completion = {
       let mut admissions = self.admissions.lock().expect("VPN lifecycle admissions mutex poisoned");
       let Some(admission) = admissions.current.as_ref() else {
@@ -225,6 +239,20 @@ impl LifecycleHandle {
       };
       if admission.attempt != attempt {
         return;
+      }
+      let state = match admission.restart {
+        Some((attempt, owner)) if !admission.stop_requested && !admissions.closed => {
+          let reason = match state {
+            Some(VpnState::Failed(reason)) => Some(reason),
+            _ => None,
+          };
+          Some(VpnState::UnexpectedDisconnect { attempt, owner, reason })
+        }
+        Some(_) if state.is_none() => Some(VpnState::Disconnected),
+        _ => state,
+      };
+      if let Some(state) = state {
+        self.state.send_replace(state);
       }
       let completion = Arc::clone(&admission.completion);
       admissions.current = None;
@@ -357,7 +385,7 @@ impl Drop for ConnectReservation {
   fn drop(&mut self) {
     if !self.transferred {
       self.cancellation.cancel();
-      self.lifecycle.clear_attempt(self.attempt);
+      self.lifecycle.clear_attempt(self.attempt, None);
       // A full queue already wakes the actor; a closed queue has no actor to wake.
       let _ = self.lifecycle.events.try_send(LifecycleEvent::PreparationReleased);
     }
@@ -375,6 +403,7 @@ struct Admissions {
 #[derive(Clone)]
 struct Admission {
   attempt: u64,
+  restart: Option<(u64, Uuid)>,
   phase: AdmissionPhase,
   stop_requested: bool,
   cancellation: CancellationToken,
@@ -444,6 +473,7 @@ struct ActiveAttempt {
   task: tokio::task::JoinHandle<()>,
   failure: Option<String>,
   reconnect_required: bool,
+  tunnel_established: bool,
 }
 
 pub(crate) struct VpnTask {
@@ -638,6 +668,7 @@ impl VpnTask {
       task,
       failure: None,
       reconnect_required: false,
+      tunnel_established: false,
     });
     if activated {
       self.send_state(VpnState::Connecting(Box::new(info)));
@@ -720,16 +751,20 @@ impl VpnTask {
     self.send_state(VpnState::Connected(Box::new(info.with_members(members, failures))));
   }
 
-  fn publish_connected(&self, attempt: u64, info: ConnectInfo, session_info: SessionInfo) {
+  fn publish_connected(&mut self, attempt: u64, info: ConnectInfo, session_info: SessionInfo) {
     let connected = VpnState::Connected(Box::new(ConnectedInfo::new(info, Some(session_info))));
-    let admissions = self
+    let mut admissions = self
       .lifecycle
       .admissions
       .lock()
       .expect("VPN lifecycle admissions mutex poisoned");
-    if admissions.current.as_ref().is_some_and(|admission| {
+    if let Some(admission) = admissions.current.as_mut().filter(|admission| {
       admission.attempt == attempt && admission.phase == AdmissionPhase::Active && !admission.stop_requested
     }) {
+      admission.restart = None;
+      if let Some(active) = self.active.as_mut().filter(|active| active.attempt == attempt) {
+        active.tunnel_established = true;
+      }
       self.send_state(connected);
     }
   }
@@ -777,17 +812,23 @@ impl VpnTask {
         admission.completion.completed.store(true, Ordering::Release);
         admission.completion.notify.notify_waiters();
       }
-    } else if let Some(reason) = active.failure {
-      self.send_state(VpnState::Failed(reason));
-      self.lifecycle.clear_attempt(attempt);
     } else {
-      self.finish_attempt(attempt);
+      let unexpectedly_ended = active
+        .session_id
+        .filter(|_| active.tunnel_established && !active.cancellation.is_cancelled());
+      let state = if let Some(owner) = unexpectedly_ended {
+        VpnState::UnexpectedDisconnect {
+          attempt,
+          owner,
+          reason: active.failure,
+        }
+      } else if let Some(reason) = active.failure {
+        VpnState::Failed(reason)
+      } else {
+        VpnState::Disconnected
+      };
+      self.lifecycle.clear_attempt(attempt, Some(state));
     }
-  }
-
-  fn finish_attempt(&self, attempt: u64) {
-    self.send_state(VpnState::Disconnected);
-    self.lifecycle.clear_attempt(attempt);
   }
 
   fn send_state(&self, state: VpnState) {
@@ -1067,6 +1108,7 @@ mod tests {
       task: tokio::spawn(async {}),
       failure: None,
       reconnect_required: false,
+      tunnel_established: false,
     });
     task.send_state(VpnState::Connecting(Box::new(info)));
     let mut member = gpapi::session::GatewaySessionSummary {
@@ -1085,6 +1127,126 @@ mod tests {
     task.publish_members(0, vec![member], vec![]);
     assert!(!matches!(*state_rx.borrow(), VpnState::Connected(_)));
     task.end_attempt(0).await;
+  }
+
+  #[tokio::test]
+  async fn unexpected_disconnect_requires_an_established_tunnel() {
+    for established in [false, true] {
+      let (state, observed) = watch::channel(VpnState::Disconnected);
+      let (mut task, lifecycle) = VpnTask::new(state, false, registry());
+      let owner = Uuid::new_v4();
+      let info = ConnectInfo::new(
+        "portal.example.com".into(),
+        gpapi::gateway::Gateway::new("vpn".into(), "vpn.example.com".into()),
+        vec![],
+      );
+      let reservation = lifecycle.reserve_connect(None).unwrap();
+      let cancellation = reservation.cancellation();
+      assert_eq!(
+        reservation.commit(
+          PreparedConnection::lifecycle_fixture(test_connect_request(info.clone())),
+          None,
+          None,
+          Some(owner),
+        ),
+        ServiceResult::Accepted
+      );
+      let _ = task.events.try_recv().unwrap();
+      assert!(lifecycle.activate_attempt(0));
+      task.active = Some(ActiveAttempt {
+        attempt: 0,
+        session_id: Some(owner),
+        info: info.clone(),
+        allow_extend_session: false,
+        cancellation,
+        task: tokio::spawn(async {}),
+        failure: None,
+        reconnect_required: false,
+        tunnel_established: false,
+      });
+      if established {
+        task.establish_attempt(0, VpnSessionInfo::default());
+        assert!(matches!(*observed.borrow(), VpnState::Connected(_)));
+      }
+      task.send_state(VpnState::Connecting(Box::new(info)));
+      task.end_attempt(0).await;
+      if established {
+        assert!(matches!(
+          *observed.borrow(),
+          VpnState::UnexpectedDisconnect { attempt: 0, owner: actual, .. } if actual == owner
+        ));
+      } else {
+        assert!(matches!(*observed.borrow(), VpnState::Disconnected));
+      }
+    }
+  }
+
+  #[test]
+  fn abandoning_reconnect_cannot_end_an_admitted_replacement() {
+    let (state, mut observed) = watch::channel(VpnState::Disconnected);
+    let (_task, lifecycle) = VpnTask::new(state, false, registry());
+    let owner = Uuid::new_v4();
+    let restart = (7, owner);
+    lifecycle.admissions.lock().unwrap().restart = Some(restart);
+
+    lifecycle.abandon_reconnect(7, Uuid::new_v4());
+    assert!(!observed.has_changed().unwrap());
+    let replacement = lifecycle.reserve_connect(Some(restart)).unwrap();
+    lifecycle.abandon_reconnect(7, owner);
+    assert!(!observed.has_changed().unwrap());
+
+    drop(replacement);
+    assert!(matches!(
+      *observed.borrow_and_update(),
+      VpnState::UnexpectedDisconnect { attempt: 7, owner: actual, .. } if actual == owner
+    ));
+    lifecycle.abandon_reconnect(7, owner);
+    assert!(!observed.has_changed().unwrap());
+  }
+
+  #[test]
+  fn abandoning_an_unclaimed_reconnect_reports_loss_and_rejects_late_admission() {
+    let (state, observed) = watch::channel(VpnState::Disconnected);
+    let (_task, lifecycle) = VpnTask::new(state, false, registry());
+    let owner = Uuid::new_v4();
+    lifecycle.admissions.lock().unwrap().restart = Some((7, owner));
+
+    lifecycle.abandon_reconnect(7, owner);
+    assert!(matches!(
+      *observed.borrow(),
+      VpnState::UnexpectedDisconnect { attempt: 7, owner: actual, .. } if actual == owner
+    ));
+    assert!(lifecycle.reserve_connect(Some((7, owner))).is_err());
+  }
+
+  #[test]
+  fn established_replacement_settles_the_original_reconnect() {
+    let (state, observed) = watch::channel(VpnState::Disconnected);
+    let (mut task, lifecycle) = VpnTask::new(state, false, registry());
+    let owner = Uuid::new_v4();
+    let info = ConnectInfo::new(
+      "portal.example.com".into(),
+      gpapi::gateway::Gateway::new("vpn".into(), "vpn.example.com".into()),
+      vec![],
+    );
+    lifecycle.admissions.lock().unwrap().restart = Some((7, owner));
+    let replacement = lifecycle.reserve_connect(Some((7, owner))).unwrap();
+    assert_eq!(
+      replacement.commit(
+        PreparedConnection::lifecycle_fixture(test_connect_request(info.clone())),
+        None,
+        None,
+        Some(owner),
+      ),
+      ServiceResult::Accepted
+    );
+    assert!(lifecycle.activate_attempt(0));
+    task.publish_connected(0, info, SessionInfo::default());
+    lifecycle.abandon_reconnect(7, owner);
+    assert!(matches!(*observed.borrow(), VpnState::Connected(_)));
+
+    lifecycle.clear_attempt(0, Some(VpnState::Disconnected));
+    assert!(matches!(*observed.borrow(), VpnState::Disconnected));
   }
 
   #[tokio::test]
@@ -1122,6 +1284,7 @@ mod tests {
       task: worker,
       failure: None,
       reconnect_required: false,
+      tunnel_established: true,
     });
     assert_eq!(lifecycle.request_disconnect(), ServiceResult::Accepted);
     let stop = task.events.recv().await.unwrap();
@@ -1169,6 +1332,7 @@ mod tests {
       task: tokio::spawn(async {}),
       failure: None,
       reconnect_required: false,
+      tunnel_established: false,
     });
     task.send_state(VpnState::Connecting(Box::new(
       task.active.as_ref().unwrap().info.clone(),
@@ -1220,7 +1384,7 @@ mod tests {
   fn late_established_event_is_ignored_after_disconnect_is_accepted() {
     let (vpn_state_tx, vpn_state_rx) = watch::channel(VpnState::Disconnected);
     let state_rx = vpn_state_rx.clone();
-    let (task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry());
+    let (mut task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry());
     let info = ConnectInfo::new(
       "portal.example.com".to_string(),
       gpapi::gateway::Gateway::new("vpn".to_string(), "vpn.example.com".to_string()),
@@ -1242,7 +1406,7 @@ mod tests {
   #[tokio::test]
   async fn disconnect_waiter_completes_for_its_attempt_before_a_later_connect() {
     let (vpn_state_tx, _vpn_state_rx) = watch::channel(VpnState::Disconnected);
-    let (task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry());
+    let (_task, lifecycle) = VpnTask::new(vpn_state_tx, false, registry());
     let request = || {
       test_connect_request(ConnectInfo::new(
         "portal.example.com".to_string(),
@@ -1261,7 +1425,7 @@ mod tests {
       tokio::task::yield_now().await;
     }
 
-    task.finish_attempt(0);
+    lifecycle.clear_attempt(0, Some(VpnState::Disconnected));
     assert!(matches!(
       lifecycle.submit_test_connection(request(), None, None, None),
       ServiceResult::Accepted

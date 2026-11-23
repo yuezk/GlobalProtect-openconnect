@@ -2,7 +2,13 @@
 
 **GP Connect** is a GlobalProtect VPN client built on OpenConnect. The desktop app runs on Windows, macOS, Linux, FreeBSD, and OpenBSD. The command-line client is `gpclient`.
 
-[Features](#features) · [Installation](#installation) · [Usage](#usage) · [Troubleshooting](#troubleshooting) · [Building from source](#building-from-source)
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#troubleshooting">Troubleshooting</a> ·
+  <a href="#building-from-source">Building from source</a>
+</p>
 
 <p align="center">
   <picture>
@@ -34,7 +40,7 @@ GP Connect is an independent project. It is not affiliated with or endorsed by P
 
 ### Windows
 
-Download the Windows installer for [x64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/GPConnect_3.7.0_windows-x64-setup.exe) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/GPConnect_3.7.0_windows-arm64-setup.exe). Run it and approve the administrator prompt.
+Download the Windows installer for [x64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/GPConnect_3.7.1_windows-x64-setup.exe) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/GPConnect_3.7.1_windows-arm64-setup.exe). Run it and approve the administrator prompt.
 
 ### macOS
 
@@ -48,11 +54,11 @@ brew install --cask yuezk/gp-connect/gp-connect
 
 #### DMG installer
 
-Open the [Apple silicon DMG](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/GPConnect_3.7.0_arm64.dmg) and drag GP Connect into Applications.
+Open the [Apple silicon DMG](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/GPConnect_3.7.1_arm64.dmg) and drag GP Connect into Applications.
 
 ### Alpine Linux
 
-Download the APK for [x86_64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect-3.7.0-r1-x86_64.apk) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect-3.7.0-r1-aarch64.apk).
+Download the APK for [x86_64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/globalprotect-openconnect-3.7.1-r1-x86_64.apk) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/globalprotect-openconnect-3.7.1-r1-aarch64.apk).
 
 ```bash
 sudo apk add --allow-untrusted globalprotect-openconnect-*.apk
@@ -86,7 +92,7 @@ sudo apt-get install globalprotect-openconnect
 
 #### Debian or Ubuntu release package
 
-Download the DEB for [amd64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0-1_amd64.deb) or [arm64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0-1_arm64.deb).
+Download the DEB for [amd64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/globalprotect-openconnect_3.7.1-1_amd64.deb) or [arm64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/globalprotect-openconnect_3.7.1-1_arm64.deb).
 
 ```bash
 sudo apt install ./globalprotect-openconnect_*.deb
@@ -117,7 +123,7 @@ On glibc systems, install the prebuilt package:
 sudo emerge --ask net-vpn/globalprotect-openconnect-bin::yuezk
 ```
 
-The source package is `net-vpn/globalprotect-openconnect::yuezk`.
+The source package is `net-vpn/globalprotect-openconnect::yuezk`. For a headless installation, see the [CLI-only overlay instructions](https://github.com/yuezk/gentoo-overlay#cli-only).
 
 If Portage requests keyword or USE flag changes, review and apply them, then rerun the install command.
 
@@ -154,17 +160,17 @@ Packages are available on the [openSUSE Build Service](https://build.opensuse.or
 
 ### Other Distributions
 
-Requires glibc 2.39 or later. Download the archive for [x86_64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0_x86_64.bin.tar.xz) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect_3.7.0_aarch64.bin.tar.xz).
+Download the archive for [x86_64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/globalprotect-openconnect_3.7.1_x86_64.bin.tar.xz) or [ARM64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/globalprotect-openconnect_3.7.1_aarch64.bin.tar.xz).
 
 ```bash
 tar -xJf globalprotect-openconnect_*.bin.tar.xz
-cd globalprotect-openconnect_3.7.0
+cd globalprotect-openconnect_3.7.1
 sudo make install
 ```
 
 ### FreeBSD
 
-Download the [FreeBSD package for amd64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect-3.7.0-freebsd-amd64.pkg).
+Download the [FreeBSD package for amd64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/globalprotect-openconnect-3.7.1-freebsd-amd64.pkg).
 
 ```bash
 sudo pkg install ./globalprotect-openconnect-*-freebsd-*.pkg
@@ -172,7 +178,7 @@ sudo pkg install ./globalprotect-openconnect-*-freebsd-*.pkg
 
 ### OpenBSD
 
-Download the [OpenBSD package for amd64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.0/globalprotect-openconnect-3.7.0-openbsd-amd64.tgz).
+Download the [OpenBSD package for amd64](https://github.com/yuezk/GlobalProtect-openconnect/releases/download/v3.7.1/globalprotect-openconnect-3.7.1-openbsd-amd64.tgz).
 
 ```bash
 doas pkg_add -D unsigned ./globalprotect-openconnect-*-openbsd-*.tgz
