@@ -12,21 +12,21 @@ pub(super) fn detect(commands: &CollectorCommands<'_>) -> io::Result<Option<Bitd
   let dir = Path::new(BITDEFENDER_DIR);
   if uzers::get_effective_uid() == 0 {
     let cli = dir.join("bin/bduitool");
-    if root_owned_path(&cli) {
-      let status = commands
-        .run_path(&cli, &["get", "ps"])?
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .as_deref()
-        .and_then(parse_product_status);
-      if status.is_some() {
-        return Ok(status);
-      }
+    let status = commands
+      .run_executable(&cli, &["get", "ps"])?
+      .filter(|output| output.status.success())
+      .and_then(|output| String::from_utf8(output.stdout).ok())
+      .as_deref()
+      .and_then(parse_product_status);
+    if status.is_some() {
+      return Ok(status);
     }
   }
 
-  let manifest = dir.join("etc/manifest.json");
-  if !root_owned_path(&manifest) {
+  let Ok(manifest) = dir.join("etc/manifest.json").canonicalize() else {
+    return Ok(None);
+  };
+  if !manifest.is_file() || !root_owned_path(&manifest) {
     return Ok(None);
   }
   let Ok(contents) = fs::read_to_string(&manifest) else {
